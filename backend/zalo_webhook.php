@@ -1,0 +1,1801 @@
+<?php
+// backend/zalo_webhook.php
+// Endpoint để nhận sự kiện từ Zalo Bot Platform
+
+require_once __DIR__ . '/db_connect.php';
+require_once __DIR__ . '/zalo_bot.php';
+require_once __DIR__ . '/webhook_logic.php';
+
+header("Content-Type: application/json");
+
+// 1. Đọc dữ liệu Payload & Headers từ Zalo (Đưa lên đầu để luôn ghi log)
+$rawBody = file_get_contents('php://input');
+$headerSecret = $_SERVER['HTTP_X_BOT_API_SECRET_TOKEN'] ?? $_SERVER['HTTP_X_ZALO_SECRET'] ?? '';
+
+$logFile = __DIR__ . '/webhook_log.txt';
+
+set_error_handler(function($errno, $errstr, $errfile, $errline) use ($logFile) {
+    @file_put_contents($logFile, date('[Y-m-d H:i:s]') . " PHP ERROR [$errno]: $errstr in $errfile line $errline\n\n", FILE_APPEND | LOCK_EX);
+});
+register_shutdown_function(function() use ($logFile) {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        @file_put_contents($logFile, date('[Y-m-d H:i:s]') . " FATAL ERROR: " . print_r($err, true) . "\n\n", FILE_APPEND | LOCK_EX);
+    }
+});
+
+if (file_exists($logFile) && @filesize($logFile) > 5 * 1024 * 1024) {
+    $bakFile = __DIR__ . '/webhook_log.bak.txt';
+    if (file_exists($bakFile)) {
+        @unlink($bakFile);
+    }
+    @rename($logFile, $bakFile);
+}
+@file_put_contents($logFile, date('[Y-m-d H:i:s]') . " [HeaderSecret: " . ($headerSecret ?: 'NONE') . "] PAYLOAD: " . $rawBody . "\n\n", FILE_APPEND | LOCK_EX);
+
+// 2. Lấy cấu hình Secret Token từ DB
+$secretToken = trim(get_system_setting($conn, 'zalo_webhook_secret'));
+
+// 3. Xác thực Secret Token (nếu có cấu hình secretToken và headerSecret không rỗng)
+if (!empty($secretToken)) {
+    if (!empty($headerSecret) && $headerSecret !== $secretToken) {
+        @file_put_contents($logFile, date('[Y-m-d H:i:s]') . " REJECTED 403: HeaderSecret mismatch ('$headerSecret' vs '$secretToken')\n\n", FILE_APPEND | LOCK_EX);
+        http_response_code(403);
+        echo json_encode(["message" => "Unauthorized"]);
+        exit;
+    }
+}
+
+$data = json_decode($rawBody, true);
+
+if (!$data || !isset($data['event_name'])) {
+    http_response_code(400);
+    echo json_encode(["message" => "Invalid payload"]);
+    exit;
+}
+// Lấy Bot Token một lần duy nhất từ DB
+$botToken = get_system_setting($conn, 'zalo_bot_token');
+
+$eventName = $data['event_name'] ?? '';
+
+if ($eventName === 'user_send_text' || $eventName === 'message.text.received') {
+    // Hỗ trợ cả 2 định dạng (Zalo OA chuẩn và Zalo Mini App)
+    $text = '';
+    $chatId = '';
+    $senderId = '';
+    $msgId = '';
+    $isOAMessage = false; // Phân biệt OA 1-on-1 vs Group Bot
+
+    if (isset($data['message']['text'])) {
+        $text = trim($data['message']['text']);
+        // ƯU TIÊN: message.chat.id trước (room chat_id cho Zalo Bot API)
+        $chatId = $data['message']['chat']['id'] ?? $data['result']['message']['chat']['id'] ?? $data['sender']['id'] ?? $data['message']['from']['id'] ?? '';
+        $senderId = $data['sender']['id'] ?? $data['message']['from']['id'] ?? $chatId;
+        $msgId = $data['message']['msg_id'] ?? $data['message']['id'] ?? '';
+        $isOAMessage = isset($data['sender']['id']) && $eventName === 'user_send_text';
+    } else if (isset($data['result']['message']['text'])) {
+        $text = trim($data['result']['message']['text']);
+        $chatId = $data['result']['message']['chat']['id'] ?? $data['result']['message']['from']['id'] ?? $data['sender']['id'] ?? '';
+        $senderId = $data['result']['message']['from']['id'] ?? $data['sender']['id'] ?? $chatId;
+        $msgId = $data['result']['message']['msg_id'] ?? '';
+        $isOAMessage = false;
+    }
+
+    // Hàm gửi tin nhắn phản hồi đa tầng (Bot API chatId -> Bot API senderId -> Zalo OA CS API)
+    $sendReply = function(string $message) use ($botToken, $chatId, $senderId, $isOAMessage, $conn) {
+        if (empty($message)) return false;
+
+        @file_put_contents(__DIR__ . '/webhook_log.txt', date('[Y-m-d H:i:s]') . " REPLY ATTEMPT: chatId=$chatId, senderId=$senderId, isOA=" . ($isOAMessage ? '1' : '0') . "\n", FILE_APPEND | LOCK_EX);
+
+        // 1. Nếu là tin nhắn từ Zalo OA và có token OA Access Token
+        if ($isOAMessage) {
+            $oaAccessToken = '';
+            try {
+                $oaAccessToken = get_system_setting($conn, 'zalo_oa_access_token');
+            } catch (\Throwable $e) {}
+
+            if (!empty($oaAccessToken)) {
+                $recipientId = !empty($senderId) ? $senderId : $chatId;
+                $oaPayload = json_encode([
+                    'recipient' => ['user_id' => $recipientId],
+                    'message'   => ['text' => $message]
+                ], JSON_UNESCAPED_UNICODE);
+                $ch = curl_init('https://openapi.zalo.me/v3.0/oa/message/cs');
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $oaPayload);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'access_token: ' . $oaAccessToken]);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                $res = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                @file_put_contents(__DIR__ . '/zalo_send_log.txt', date('[Y-m-d H:i:s]') . " Zalo OA Reply Target: $recipientId, HTTP: $httpCode, Res: $res\n", FILE_APPEND | LOCK_EX);
+                if ($httpCode >= 200 && $httpCode < 300) return true;
+            }
+        }
+
+        // 2. Gửi qua Zalo Bot Platform API dùng chatId (room ID)
+        if (!empty($chatId)) {
+            $ok = sendZaloMessage($botToken, $chatId, $message);
+            if ($ok) return true;
+        }
+
+        // 3. Dự phòng gửi qua Zalo Bot Platform API dùng senderId nếu khác chatId
+        if (!empty($senderId) && $senderId !== $chatId) {
+            $ok = sendZaloMessage($botToken, $senderId, $message);
+            if ($ok) return true;
+        }
+
+        return false;
+    };
+
+    $fromName = 'bạn'; // Zalo webhook user_send_text thường không kèm tên, dùng default
+
+    if (!empty($text) && !empty($chatId)) {
+        // Hỗ trợ loại bỏ phần @mention bot trong group chat (ví dụ: "@Bot IDEAS /report homqua")
+        if (strpos(trim($text), '@') === 0 && strpos($text, '/') !== false) {
+            $slashPos = strpos($text, '/');
+            $text = trim(substr($text, $slashPos));
+        }
+        $textLower = strtolower(trim($text));
+
+        // --- COMMAND LẤY CHAT ID ---
+        if ($textLower === '/chatid' || $textLower === '/id' || $textLower === '/info') {
+            if (!empty($botToken)) {
+                $zaloMsg = "💬 [ HỆ THỐNG IDEAS ]\n\n"
+                    . "• Chat ID của phòng này: $chatId\n\n"
+                    . "💡 Bạn có thể dùng Chat ID này điền vào cấu hình Zalo Admin Group Chat ID trong trang Cài Đặt của hệ thống để nhận các thông báo cảnh báo, duyệt ticket và báo cáo ngày.";
+                sendZaloMessage($botToken, $chatId, $zaloMsg);
+            }
+            exit;
+        }
+
+        // --- XỬ LÝ TEST COMMAND ---
+        if ($textLower === 'test_data' || $textLower === 'test_data_admin' || $textLower === 'test_report') {
+            if (!empty($botToken)) {
+                if ($textLower === 'test_data') {
+                    $zaloMsg = "[ THÔNG BÁO DATA MỚI ]\n\n"
+                        . "Chào bạn, hệ thống vừa phân bổ một khách hàng mới:\n\n"
+                        . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                        . "  • Tên KH: Nguyễn Khách Test\n"
+                        . "  • Số ĐT: 0987 654 321\n"
+                        . "  • Nguồn: Facebook Ads\n"
+                        . "  • Loại: Quan tâm dịch vụ\n\n"
+                        . "❖ GHI CHÚ:\n"
+                        . "  Khách gọi cần tư vấn gấp vào buổi sáng.\n\n"
+                        . "Báo lỗi Data tại đây: https://open.Ideas.test/...";
+                    sendZaloMessage($botToken, $chatId, $zaloMsg);
+                } else if ($textLower === 'test_data_admin') {
+                    $zaloMsg = "[ YÊU CẦU DUYỆT TICKET ]\n\n"
+                        . "Một nhân viên vừa gửi báo cáo lỗi Data:\n\n"
+                        . "❖ THÔNG TIN BÁO CÁO:\n"
+                        . "  • Sale báo cáo: Trần Sale Test\n"
+                        . "  • Khách hàng: Nguyễn Khách Test (0987654321)\n\n"
+                        . "❖ LÝ DO LỖI:\n"
+                        . "  Khách thuê bao, gọi 3 lần không bắt máy.\n\n"
+                        . "Vui lòng đăng nhập CRM để duyệt/từ chối Ticket này.";
+                    sendZaloMessage($botToken, $chatId, $zaloMsg);
+                } else if ($textLower === 'test_report') {
+                    $reportTime = get_system_setting($conn, 'zalo_daily_report_time') ?: '17:00';
+                    $reportTimeDisplay = date('H:i', strtotime($reportTime));
+                    $zaloMsg = "📊 [ BÁO CÁO TỔNG KẾT NGÀY ]\n"
+                        . "⏱️ Kỳ báo cáo: {$reportTimeDisplay} " . date('d/m/Y', strtotime('-1 day')) . " → {$reportTimeDisplay} " . date('d/m/Y') . "\n\n"
+                        . "📥 TỔNG QUAN CHIA SỐ:\n"
+                        . "  • Tổng số data: 4 data\n"
+                        . "    └─ 4 chia vòng\n"
+                        . "    └─ 0 bù\n"
+                        . "    └─ 1 nhắc lại\n\n"
+                        . "🎫 BÁO CÁO LỖI (TICKET):\n"
+                        . "  • Tổng ticket phát sinh: 2 ⚠️\n"
+                        . "    (Đã duyệt: 1 | Từ chối: 0 | Chờ duyệt: 1)\n\n"
+                        . "----------\n"
+                        . "💡 Gõ /report dd/mm hoặc /report dd/mm to dd/mm để xem báo cáo.\n"
+                        . "💡 Gõ /tools để xem thêm các câu lệnh nhanh.";
+                    sendZaloMessage($botToken, $chatId, $zaloMsg);
+                }
+            }
+
+            // Xóa phần gửi phản hồi và thoát vì đã gửi early termination ở trên
+            exit;
+        }
+        // --- KẾT THÚC TEST COMMAND ---
+
+        // --- XỬ LÝ COMMANDS BÁO CÁO NHANH (ADMIN ONLY) ---
+        if (strpos($textLower, '/tools') === 0 || strpos($textLower, '/report') === 0 || strpos($textLower, '/ticket') === 0 || strpos($textLower, '/sales') === 0 || strpos($textLower, '/accept') === 0 || strpos($textLower, '/reject') === 0 || strpos($textLower, '/round') === 0 || strpos($textLower, '/check') === 0 || strpos($textLower, '/week') === 0 || strpos($textLower, '/duyet') === 0 || strpos($textLower, '/tuchoi') === 0) {
+            // Kiểm tra phân quyền Admin
+            $isAdmin = false;
+            $adminRole = '';
+            $adminName = '';
+            $adminAccountId = 0;
+
+            $zaloAdminGroupChatId = get_system_setting($conn, 'zalo_admin_group_chat_id');
+            if (!empty($zaloAdminGroupChatId) && $chatId === $zaloAdminGroupChatId) {
+                $isAdmin = true;
+                $adminRole = 'admin';
+                $adminName = 'Group Admin';
+            } else {
+                $stmtCheck = $conn->prepare("SELECT id, name, role FROM accounts WHERE zalo_chat_id = ? LIMIT 1");
+                if ($stmtCheck) {
+                    $stmtCheck->bind_param("s", $chatId);
+                    $stmtCheck->execute();
+                    $resCheck = $stmtCheck->get_result();
+                    if ($resCheck && $rowCheck = $resCheck->fetch_assoc()) {
+                        $adminRole = $rowCheck['role'];
+                        if ($adminRole === 'admin' || $adminRole === 'superadmin' || $adminRole === 'assistant') {
+                            $isAdmin = true;
+                            $adminName = $rowCheck['name'] ?: 'Quản trị viên';
+                            $adminAccountId = (int) $rowCheck['id'];
+                        }
+                    }
+                    $stmtCheck->close();
+                }
+            }
+
+            if (!$isAdmin) {
+                sendZaloMessage($botToken, $chatId, "⚠️ Lỗi: Câu lệnh này chỉ dành cho Quản trị viên/Trợ lý đã xác thực Zalo trên hệ thống.");
+                exit;
+            }
+
+            if (strpos($textLower, '/accept') === 0 || strpos($textLower, '/reject') === 0 || strpos($textLower, '/duyet') === 0 || strpos($textLower, '/tuchoi') === 0) {
+                sendZaloMessage($botToken, $chatId, "⚠️ Chức năng duyệt/từ chối nhanh qua câu lệnh Zalo đã bị gỡ bỏ để đảm bảo bảo mật và chính xác. Vui lòng truy cập trang Quản trị (CRM) để xử lý.");
+                exit;
+            }
+
+            if (strpos($textLower, '/tools') === 0) {
+                $reportTime = get_system_setting($conn, 'zalo_daily_report_time') ?: '17:00';
+                $reportTimeDisplay = date('H:i', strtotime($reportTime));
+
+                $toolsMsg = "🛠️ [ DANH SÁCH LỆNH BÁO CÁO NHANH ] 🛠️\n"
+                    . "━━━━━━━━━━━━━━━━━━━━━\n"
+                    . "Chào $adminName, dưới đây là các câu lệnh bạn có thể sử dụng:\n\n"
+                    . "📈 1. BÁO CÁO PHÂN BỔ & TRA CỨU:\n"
+                    . "  • [/report] hoặc [/report homnay]: Báo cáo từ {$reportTimeDisplay} hôm qua đến hiện tại.\n"
+                    . "  • [/report homqua]: Báo cáo ngày hôm qua ({$reportTimeDisplay} hôm kia → {$reportTimeDisplay} hôm qua).\n"
+                    . "  • [/report dd/mm]: Báo cáo nguyên ngày dd/mm.\n"
+                    . "  • [/report dd/mm to dd/mm]: Báo cáo khoảng ngày.\n"
+                    . "  • [/weekreport <id_hoặc_email_tên>]: Xem báo cáo tuần của Sale cụ thể. 🆕\n"
+                    . "  • [/check <sdt_hoặc_email>]: Kiểm tra thông tin Lead (vòng, sale, ghi chú...).\n\n"
+                    . "🎫 2. QUẢN LÝ TICKET (BÁO LỖI):\n"
+                    . "  • [/ticket pending]: Xem danh sách ticket đang chờ duyệt.\n"
+                    . "  • [/ticket homnay]: Thống kê ticket phát sinh trong ngày.\n\n"
+                    . "👥 3. QUẢN LÝ NHÂN SỰ & HỆ THỐNG:\n"
+                    . "  • [/sales]: Xem trạng thái hoạt động của các tư vấn viên.\n"
+                    . "  • [/round]: Xem các vòng phân bổ đang hoạt động và Sale tiếp theo nhận số.\n"
+                    . "━━━━━━━━━━━━━━━━━━━━━";
+                sendZaloMessage($botToken, $chatId, $toolsMsg);
+                exit;
+            }
+
+            if (strpos($textLower, '/report') === 0) {
+                $cmdArg = trim(substr($text, 7)); // Bỏ qua "/report"
+                $startTimestamp = '';
+                $endTimestamp = '';
+                $windowLabel = '';
+
+                // Lấy giờ báo cáo hàng ngày từ cài đặt hệ thống
+                $reportTime = get_system_setting($conn, 'zalo_daily_report_time') ?: '17:00';
+
+                if (empty($cmdArg) || $cmdArg === 'homnay' || $cmdArg === 'today') {
+                    // Từ $reportTime ngày hôm trước (hoặc ngày hiện tại nếu trước $reportTime) đến hiện tại hoặc đến $reportTime hôm nay
+                    $currentTime = date('H:i');
+                    $startTimestamp = date('Y-m-d H:i:s', strtotime('yesterday ' . $reportTime));
+                    if ($currentTime >= $reportTime) {
+                        $endTimestamp = date('Y-m-d H:i:s', strtotime('today ' . $reportTime));
+                        $windowLabel = date('H:i d/m/Y', strtotime($startTimestamp)) . " → " . date('H:i d/m/Y', strtotime($endTimestamp));
+                    } else {
+                        $endTimestamp = date('Y-m-d H:i:s');
+                        $windowLabel = date('H:i d/m/Y', strtotime($startTimestamp)) . " → Hiện tại";
+                    }
+                } else if ($cmdArg === 'homqua' || $cmdArg === 'yesterday') {
+                    // Từ $reportTime hôm kia đến $reportTime hôm qua
+                    $startTimestamp = date('Y-m-d H:i:s', strtotime('yesterday -1 day ' . $reportTime));
+                    $endTimestamp = date('Y-m-d H:i:s', strtotime('yesterday ' . $reportTime));
+                    $windowLabel = date('H:i d/m/Y', strtotime($startTimestamp)) . " → " . date('H:i d/m/Y', strtotime($endTimestamp));
+                } else {
+                    // Parse date range dd/mm hoặc dd/mm to dd/mm
+                    $range = parseReportDateRange($cmdArg);
+                    if ($range) {
+                        $startTimestamp = $range['start'];
+                        $endTimestamp = $range['end'];
+                        $windowLabel = $range['label'];
+                    }
+                }
+
+                if (empty($startTimestamp) || empty($endTimestamp)) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Cú pháp ngày tháng không hợp lệ. Vui lòng gõ theo mẫu:\n- `/report 21/05` hoặc `/report 20/05 to 21/05`.\n- Hoặc gõ `/tools` để xem tất cả các lệnh.");
+                    exit;
+                }
+
+                $reportMsg = getReportByTimeWindow($conn, $startTimestamp, $endTimestamp, $windowLabel);
+                sendZaloMessage($botToken, $chatId, $reportMsg);
+                exit;
+            }
+
+            if (strpos($textLower, '/week') === 0) {
+                // Remove command prefix
+                $cmdArg = '';
+                if (strpos($textLower, '/weeklyreport') === 0) {
+                    $cmdArg = trim(substr($text, 13));
+                } else if (strpos($textLower, '/weekreport') === 0) {
+                    $cmdArg = trim(substr($text, 11));
+                } else {
+                    $cmdArg = trim(substr($text, 5)); // /week
+                }
+
+                if (empty($cmdArg)) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng nhập ID, Email hoặc Tên của Sale để xem báo cáo tuần. Ví dụ:\n• `/weekreport 5`\n• `/weekreport sale@gmail.com`\n• `/weekreport Nguyễn Văn A`\n\n💡 Gõ `/sales` để xem danh sách tư vấn viên và ID.");
+                    exit;
+                }
+
+                $salesMatched = [];
+
+                if (is_numeric($cmdArg)) {
+                    // Search by ID
+                    $stmtFind = $conn->prepare("SELECT id, name, email FROM consultants WHERE id = ? LIMIT 1");
+                    if ($stmtFind) {
+                        $stmtFind->bind_param("i", $cmdArg);
+                        $stmtFind->execute();
+                        $resFind = $stmtFind->get_result();
+                        if ($resFind && $rowFind = $resFind->fetch_assoc()) {
+                            $salesMatched[] = $rowFind;
+                        }
+                        $stmtFind->close();
+                    }
+                } else if (filter_var($cmdArg, FILTER_VALIDATE_EMAIL)) {
+                    // Search by email
+                    $stmtFind = $conn->prepare("SELECT id, name, email FROM consultants WHERE email = ? LIMIT 1");
+                    if ($stmtFind) {
+                        $stmtFind->bind_param("s", $cmdArg);
+                        $stmtFind->execute();
+                        $resFind = $stmtFind->get_result();
+                        if ($resFind && $rowFind = $resFind->fetch_assoc()) {
+                            $salesMatched[] = $rowFind;
+                        }
+                        $stmtFind->close();
+                    }
+                } else {
+                    // Search by name (wildcard)
+                    $searchTerm = "%" . $cmdArg . "%";
+                    $stmtFind = $conn->prepare("SELECT id, name, email FROM consultants WHERE name LIKE ?");
+                    if ($stmtFind) {
+                        $stmtFind->bind_param("s", $searchTerm);
+                        $stmtFind->execute();
+                        $resFind = $stmtFind->get_result();
+                        if ($resFind) {
+                            while ($rowFind = $resFind->fetch_assoc()) {
+                                $salesMatched[] = $rowFind;
+                            }
+                        }
+                        $stmtFind->close();
+                    }
+                }
+
+                if (empty($salesMatched)) {
+                    sendZaloMessage($botToken, $chatId, "❌ Không tìm thấy tư vấn viên nào khớp với thông tin: \"$cmdArg\"");
+                    exit;
+                }
+
+                if (count($salesMatched) > 1) {
+                    $disambigMsg = "⚠️ Tìm thấy nhiều tư vấn viên khớp với từ khóa của bạn:\n\n";
+                    foreach ($salesMatched as $s) {
+                        $disambigMsg .= "  • ID {$s['id']}: {$s['name']} ({$s['email']})\n";
+                    }
+                    $disambigMsg .= "\n💡 Vui lòng nhập chính xác ID hoặc Email để xem báo cáo. Ví dụ: `/weekreport {$salesMatched[0]['id']}`";
+                    sendZaloMessage($botToken, $chatId, $disambigMsg);
+                    exit;
+                }
+
+                // Exactly one consultant found
+                $sale = $salesMatched[0];
+
+                // Calculate time window for the report (last 7 days to now)
+                $startTimestamp = date('Y-m-d H:i:s', strtotime('-7 days'));
+                $endTimestamp = date('Y-m-d H:i:s');
+
+                $report = generateWeeklyReportMessage($conn, $sale, $startTimestamp, $endTimestamp);
+
+                // Prepend admin context header to the report message
+                $adminHeader = "📋 [ BÁO CÁO TUẦN CỦA SALE ] 📋\n"
+                    . "👤 Truy vấn: Admin $adminName\n"
+                    . "____\n";
+
+                $finalMsg = $adminHeader . $report['msg'];
+
+                sendZaloMessage($botToken, $chatId, $finalMsg);
+                exit;
+            }
+
+            if (strpos($textLower, '/ticket') === 0) {
+                $cmdArg = trim(substr($text, 7)); // Bỏ qua "/ticket"
+                if ($cmdArg === 'pending') {
+                    // Truy vấn ticket đang chờ duyệt
+                    $stmtTick = $conn->query("
+                        SELECT dr.id, c.name as sale_name, l.name as lead_name, dr.reason, dr.created_at 
+                        FROM data_reports dr 
+                        JOIN consultants c ON dr.consultant_id = c.id 
+                        JOIN leads l ON dr.lead_id = l.id 
+                        WHERE dr.status = 'pending' 
+                        ORDER BY dr.created_at ASC 
+                        LIMIT 5
+                    ");
+                    $tickMsg = "🎫 [ DANH SÁCH TICKET CHỜ DUYỆT ]\n\n";
+                    if ($stmtTick && $stmtTick->num_rows > 0) {
+                        $count = 1;
+                        while ($rowTick = $stmtTick->fetch_assoc()) {
+                            $tickMsg .= "$count. 🎫 Mã ticket: #" . $rowTick['id'] . "\n"
+                                . "   👤 Sale: " . $rowTick['sale_name'] . "\n"
+                                . "   👤 KH: " . $rowTick['lead_name'] . "\n"
+                                . "   📝 Lý do: " . $rowTick['reason'] . "\n"
+                                . "   🕒 Thời gian: " . date('d/m H:i', strtotime($rowTick['created_at'])) . "\n\n";
+                            $count++;
+                        }
+                    } else {
+                        $tickMsg .= "✅ Hiện không có ticket nào đang chờ duyệt.";
+                    }
+                    sendZaloMessage($botToken, $chatId, $tickMsg);
+                    exit;
+                } else if ($cmdArg === 'homnay' || $cmdArg === 'today') {
+                    // Thống kê ticket hôm nay từ 00:00 đến nay
+                    $todayStart = date('Y-m-d 00:00:00');
+                    $todayEnd = date('Y-m-d 23:59:59');
+
+                    $stmtStats = $conn->prepare("
+                        SELECT status, COUNT(*) as count 
+                        FROM data_reports 
+                        WHERE created_at >= ? AND created_at <= ? 
+                        GROUP BY status
+                    ");
+                    $statsMsg = "🎫 [ THỐNG KÊ TICKET HÔM NAY ]\n"
+                        . "🕒 Thời gian: " . date('d/m/Y') . "\n\n";
+                    if ($stmtStats) {
+                        $stmtStats->bind_param("ss", $todayStart, $todayEnd);
+                        $stmtStats->execute();
+                        $resStats = $stmtStats->get_result();
+
+                        $pending = 0;
+                        $approved = 0;
+                        $rejected = 0;
+                        while ($row = $resStats->fetch_assoc()) {
+                            if ($row['status'] === 'pending')
+                                $pending = $row['count'];
+                            if ($row['status'] === 'approved')
+                                $approved = $row['count'];
+                            if ($row['status'] === 'rejected')
+                                $rejected = $row['count'];
+                        }
+                        $stmtStats->close();
+
+                        $total = $pending + $approved + $rejected;
+                        $statsMsg .= "📊 Tổng ticket phát sinh: $total\n"
+                            . "  ⏳ Chờ duyệt: $pending\n"
+                            . "  ✅ Đã duyệt: $approved\n"
+                            . "  ❌ Đã từ chối: $rejected";
+                    } else {
+                        $statsMsg .= "⚠️ Lỗi truy vấn dữ liệu ticket.";
+                    }
+                    sendZaloMessage($botToken, $chatId, $statsMsg);
+                    exit;
+                } else {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng sử dụng `/ticket pending` hoặc `/ticket homnay`.");
+                    exit;
+                }
+            }
+
+            if (strpos($textLower, '/accept') === 0) {
+                if ($adminRole !== 'admin' && $adminRole !== 'superadmin') {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Lỗi: Câu lệnh duyệt ticket lỗi này yêu cầu quyền tối cao (Admin). Tài khoản Trợ lý của bạn không đủ đặc quyền.");
+                    exit;
+                }
+                $cmdArg = trim(substr($text, 7));
+                $ticketId = 0;
+                $customReason = '';
+                if (preg_match('/^#?(\d+)(?:\s+(.+))?$/s', $cmdArg, $matches)) {
+                    $ticketId = (int) $matches[1];
+                    $customReason = isset($matches[2]) ? trim($matches[2]) : '';
+                }
+
+                if ($ticketId <= 0) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng cung cấp mã ticket hợp lệ. Ví dụ: `/accept 12 [lý do]`.");
+                    exit;
+                }
+
+                $conn->begin_transaction();
+                try {
+                    // 1. Lấy thông tin report và CC email của vòng
+                    $stmt = $conn->prepare("
+                        SELECT r.lead_id, r.consultant_id, r.round_id, r.reason, r.status, dr.cc_emails
+                        FROM data_reports r
+                        LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+                        WHERE r.id = ? FOR UPDATE
+                    ");
+                    if (!$stmt) {
+                        throw new Exception("Lỗi truy vấn DB.");
+                    }
+                    $stmt->bind_param("i", $ticketId);
+                    $stmt->execute();
+                    $report = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+
+                    if (!$report) {
+                        throw new Exception("Không tìm thấy ticket lỗi mã #$ticketId.");
+                    }
+                    if ($report['status'] !== 'pending') {
+                        throw new Exception("Ticket #$ticketId đã được xử lý từ trước (Trạng thái hiện tại: " . $report['status'] . ").");
+                    }
+
+                    // Lý do duyệt nhanh qua Zalo
+                    if (!empty($customReason)) {
+                        $approval_reason = htmlspecialchars($customReason) . " (Duyệt qua Zalo bởi " . $adminName . ")";
+                    } else {
+                        $approval_reason = "Được duyệt nhanh qua Zalo bởi " . $adminName;
+                    }
+
+                    // 2. Cập nhật status báo cáo thành approved kèm lý do
+                    $updRep = $conn->prepare("UPDATE data_reports SET status='approved', approval_reason=?, resolved_by=?, resolved_at=(SELECT created_at FROM leads WHERE id=data_reports.lead_id) WHERE id=?");
+                    if (!$updRep) {
+                        throw new Exception("Lỗi chuẩn bị truy vấn cập nhật.");
+                    }
+                    $updRep->bind_param("ssi", $approval_reason, $adminName, $ticketId);
+                    $updRep->execute();
+                    $updRep->close();
+
+                    // 3. Cập nhật ghi chú của Lead và đánh dấu phân bổ lỗi
+                    $faultyMsg = "[LỖI - ĐÃ DUYỆT QUA ZALO]: " . $report['reason'] . " | Lý do duyệt: " . $approval_reason . " | Admin duyệt: " . $adminName . " | Thời gian: " . date('d/m/Y H:i:s');
+                    $updLead = $conn->prepare("UPDATE leads SET note = CONCAT(IFNULL(note, ''), '\n', ?) WHERE id=?");
+                    if (!$updLead) {
+                        throw new Exception("Lỗi cập nhật Lead.");
+                    }
+                    $updLead->bind_param("si", $faultyMsg, $report['lead_id']);
+                    $updLead->execute();
+                    $updLead->close();
+
+                    // Đánh dấu distribution_logs là error - chỉ áp dụng cho lượt đang hoạt động gần nhất
+                    $updLog = $conn->prepare("UPDATE distribution_logs SET status='error' WHERE lead_id=? AND assigned_to=? AND round_id=? AND status IN ('assigned', 'compensation') ORDER BY id DESC LIMIT 1");
+                    if (!$updLog) {
+                        throw new Exception("Lỗi cập nhật Distribution Logs.");
+                    }
+                    $updLog->bind_param("iii", $report['lead_id'], $report['consultant_id'], $report['round_id']);
+                    $updLog->execute();
+                    $updLog->close();
+
+                    // 4. Cộng thêm 1 lượt đền bù cho consultant trong vòng đó
+                    $updComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id=? AND consultant_id=?");
+                    if (!$updComp) {
+                        throw new Exception("Lỗi cập nhật Round Consultants.");
+                    }
+                    $updComp->bind_param("ii", $report['round_id'], $report['consultant_id']);
+                    $updComp->execute();
+                    $updComp->close();
+
+                    // Ghi log hành động admin
+                    $ip = $_SERVER['REMOTE_ADDR'] ?? 'Zalo Bot';
+                    $detailsJson = json_encode([
+                        'report_id' => $ticketId,
+                        'lead_id' => $report['lead_id'],
+                        'consultant_id' => $report['consultant_id'],
+                        'round_id' => $report['round_id'],
+                        'approval_reason' => $approval_reason
+                    ], JSON_UNESCAPED_UNICODE);
+                    $stmtLog = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (?, 'APPROVE_REPORT_ZALO', ?, ?)");
+                    if ($stmtLog) {
+                        $stmtLog->bind_param("iss", $adminAccountId, $detailsJson, $ip);
+                        $stmtLog->execute();
+                        $stmtLog->close();
+                        pruneAdminLogs($conn);
+                    }
+
+                    $conn->commit();
+                } catch (Exception $ex) {
+                    $conn->rollback();
+                    sendZaloMessage($botToken, $chatId, "❌ Lỗi: " . $ex->getMessage());
+                    exit;
+                }
+
+                // Gửi thông báo ngoài giao dịch DB
+                try {
+                    // Lấy thông tin Sale & Lead để gửi thông báo
+                    $consultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+                    $consultant = null;
+                    if ($consultStmt) {
+                        $consultStmt->bind_param("i", $report['consultant_id']);
+                        $consultStmt->execute();
+                        $consultant = $consultStmt->get_result()->fetch_assoc();
+                        $consultStmt->close();
+                    }
+
+                    $leadStmt = $conn->prepare("SELECT name, phone FROM leads WHERE id = ? LIMIT 1");
+                    $lead = null;
+                    if ($leadStmt) {
+                        $leadStmt->bind_param("i", $report['lead_id']);
+                        $leadStmt->execute();
+                        $lead = $leadStmt->get_result()->fetch_assoc();
+                        $leadStmt->close();
+                    }
+
+                    $cName = $consultant['name'] ?? 'Tư vấn viên';
+                    $lName = $lead['name'] ?? 'Khách hàng';
+                    $lPhone = $lead['phone'] ?? 'Không rõ';
+
+                    // Lấy danh sách Ticket Admins nhận thông báo
+                    $adminEmails = getTicketNotifyAdmins($conn);
+
+                    // Gửi thông báo xác nhận thành công cho Admin duyệt qua Zalo
+                    try {
+                        $successAdminMsg = "✅ Đã duyệt thành công ticket #$ticketId của Sale $cName.\n"
+                            . "• Khách hàng: $lName ($lPhone)\n"
+                            . "• Lý do lỗi: {$report['reason']}\n"
+                            . "• Hệ thống đã ghi nhận 1 lượt bù data cho Sale này.";
+                        sendZaloMessage($botToken, $chatId, $successAdminMsg);
+                    } catch (Exception $zAdminSuccessEx) {
+                        error_log("Error sending Zalo success message to admin: " . $zAdminSuccessEx->getMessage());
+                    }
+
+                    // [TẠM TẮT] Thông báo Zalo cho các Ticket Admins khác (tránh gửi lại cho admin thực hiện lệnh)
+                    /*
+                    if (!empty($botToken) && !empty($adminEmails)) {
+                        $adminChatIds = [];
+                        foreach ($adminEmails as $adm) {
+                            if (!empty($adm['zalo_chat_id']) && $adm['zalo_chat_id'] !== $chatId) {
+                                $adminChatIds[] = $adm['zalo_chat_id'];
+                            }
+                        }
+                        if (!empty($adminChatIds)) {
+                            try {
+                                $zaloAdminMsg = "[ THÔNG BÁO TICKET ĐÃ DUYỆT ]\n\n"
+                                    . "Admin $adminName đã duyệt nhanh ticket #$ticketId của Sale $cName qua Zalo.\n\n"
+                                    . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                                    . "  • Khách hàng: $lName ($lPhone)\n"
+                                    . "  • Lỗi báo cáo: {$report['reason']}\n\n"
+                                    . "❖ LÝ DO DUYỆT:\n"
+                                    . "  $approval_reason\n\n"
+                                    . "Lượt đền bù đã được ghi nhận cho Sale.";
+                                sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloAdminMsg, false);
+                            } catch (Exception $zEx2) {
+                                error_log("Error sending Zalo message to multiple admins in zalo_webhook: " . $zEx2->getMessage());
+                            }
+                        }
+                    }
+                    */
+
+                    // Thông báo qua Zalo Bot cho Sale
+                    if ($consultant && !empty($consultant['zalo_chat_id'])) {
+                        try {
+                            $zaloMsg = "[ TICKET ĐÃ ĐƯỢC DUYỆT ]\n\n"
+                                . "Chào $cName, báo cáo lỗi Data của bạn đã ĐƯỢC PHÊ DUYỆT bởi $adminName.\n\n"
+                                . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                                . "  • Khách hàng: $lName ($lPhone)\n"
+                                . "  • Lỗi bạn báo: {$report['reason']}\n\n"
+                                . "❖ LÝ DO DUYỆT:\n"
+                                . "  $approval_reason\n\n"
+                                . "Hệ thống đã ghi nhận 1 lượt đền bù. Bạn sẽ nhận được Data mới vào lần phân bổ tiếp theo.";
+                            sendZaloMessage($botToken, $consultant['zalo_chat_id'], $zaloMsg, false);
+                        } catch (Exception $zSaleEx) {
+                            error_log("Error sending Zalo message to sale in zalo_webhook: " . $zSaleEx->getMessage());
+                        }
+                    }
+
+                    // Thông báo qua Email cho Sale (kèm CC)
+                    if ($consultant && !empty($consultant['email'])) {
+                        try {
+                            require_once __DIR__ . '/mailer.php';
+
+                            // Gom danh sách CC (Round CC + Ticket Admins, lọc trùng và loại bỏ email của Sale nhận số)
+                            $ccEmailsArr = [];
+                            if (!empty($report['cc_emails'])) {
+                                $parts = explode(',', $report['cc_emails']);
+                                foreach ($parts as $p) {
+                                    $p = trim($p);
+                                    if (!empty($p) && filter_var($p, FILTER_VALIDATE_EMAIL)) {
+                                        $ccEmailsArr[] = strtolower($p);
+                                    }
+                                }
+                            }
+                            // [TẠM TẮT CC ADMIN]
+                            /*
+                            foreach ($adminEmails as $adm) {
+                                if (!empty($adm['email'])) {
+                                    $email = trim($adm['email']);
+                                    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                        $ccEmailsArr[] = strtolower($email);
+                                    }
+                                }
+                            }
+                            */
+                            $ccEmailsArr = array_unique($ccEmailsArr);
+                            $saleEmail = strtolower(trim($consultant['email']));
+                            $ccEmailsArr = array_filter($ccEmailsArr, fn($e) => $e !== $saleEmail);
+                            $ccString = implode(',', $ccEmailsArr);
+
+                            $emailSubj = "[BOT] Ticket Lỗi Data Đã Được Duyệt - $lName";
+                            $emailBody = "<h3>Báo cáo lỗi Data được phê duyệt</h3>
+                                          <p>Chào $cName,</p>
+                                          <p>Báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã được Quản trị viên <strong>$adminName</strong> duyệt thành công qua Zalo.</p>
+                                          <p><strong>Lý do duyệt:</strong> $approval_reason</p>
+                                          <p>Hệ thống đã tự động cộng 1 lượt đền bù cho bạn trong vòng phân bổ hiện tại.</p>";
+                            sendEmailNotification($consultant['email'], $emailSubj, 'Kết quả Báo cáo', $emailBody, $ccString);
+                        } catch (Exception $emailEx) {
+                            error_log("Error sending email in zalo_webhook /accept: " . $emailEx->getMessage());
+                        }
+                    }
+                } catch (Exception $notifyOuterEx) {
+                    error_log("Outer notification error in zalo_webhook /accept: " . $notifyOuterEx->getMessage());
+                }
+                exit;
+            }
+
+            if (strpos($textLower, '/reject') === 0) {
+                if ($adminRole !== 'admin' && $adminRole !== 'superadmin') {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Lỗi: Câu lệnh từ chối ticket lỗi này yêu cầu quyền tối cao (Admin). Tài khoản Trợ lý của bạn không đủ đặc quyền.");
+                    exit;
+                }
+                $cmdArg = trim(substr($text, 7));
+                $ticketId = 0;
+                $rejectReason = '';
+                if (preg_match('/^#?(\d+)(?:\s+(.+))?$/s', $cmdArg, $matches)) {
+                    $ticketId = (int) $matches[1];
+                    $rejectReason = isset($matches[2]) ? trim($matches[2]) : '';
+                }
+
+                if ($ticketId <= 0 || empty($rejectReason)) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng cung cấp mã ticket và lý do từ chối. Cú pháp: `/reject <mã_ticket> <lý do từ chối>` (Ví dụ: `/reject 12 Khách vẫn đổ chuông`).");
+                    exit;
+                }
+
+                $conn->begin_transaction();
+                try {
+                    // 1. Lấy thông tin report và CC email của vòng
+                    $stmt = $conn->prepare("
+                        SELECT r.lead_id, r.consultant_id, r.round_id, r.reason, r.status, dr.cc_emails
+                        FROM data_reports r
+                        LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+                        WHERE r.id = ? FOR UPDATE
+                    ");
+                    if (!$stmt) {
+                        throw new Exception("Lỗi truy vấn DB.");
+                    }
+                    $stmt->bind_param("i", $ticketId);
+                    $stmt->execute();
+                    $report = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+
+                    if (!$report) {
+                        throw new Exception("Không tìm thấy ticket lỗi mã #$ticketId.");
+                    }
+                    if ($report['status'] !== 'pending') {
+                        throw new Exception("Ticket #$ticketId đã được xử lý từ trước (Trạng thái hiện tại: " . $report['status'] . ").");
+                    }
+
+                    // Lý do từ chối qua Zalo
+                    $fullRejectReason = htmlspecialchars($rejectReason) . " (Từ chối qua Zalo bởi " . $adminName . ")";
+
+                    // 2. Cập nhật status báo cáo thành rejected kèm lý do
+                    $updRep = $conn->prepare("UPDATE data_reports SET status='rejected', reject_reason=?, resolved_by=?, resolved_at=(SELECT created_at FROM leads WHERE id=data_reports.lead_id) WHERE id=?");
+                    if (!$updRep) {
+                        throw new Exception("Lỗi chuẩn bị truy vấn cập nhật.");
+                    }
+                    $updRep->bind_param("ssi", $fullRejectReason, $adminName, $ticketId);
+                    $updRep->execute();
+                    $updRep->close();
+
+                    // 3. Cập nhật ghi chú của Lead và ghi log từ chối
+                    $faultyMsg = "[LỖI - ĐÃ TỪ CHỐI QUA ZALO]: " . $report['reason'] . " | Lý do từ chối: " . $fullRejectReason . " | Admin từ chối: " . $adminName . " | Thời gian: " . date('d/m/Y H:i:s');
+                    $updLead = $conn->prepare("UPDATE leads SET note = CONCAT(IFNULL(note, ''), '\n', ?) WHERE id=?");
+                    if (!$updLead) {
+                        throw new Exception("Lỗi cập nhật Lead.");
+                    }
+                    $updLead->bind_param("si", $faultyMsg, $report['lead_id']);
+                    $updLead->execute();
+                    $updLead->close();
+
+                    // Ghi log hành động admin
+                    $ip = $_SERVER['REMOTE_ADDR'] ?? 'Zalo Bot';
+                    $detailsJson = json_encode([
+                        'report_id' => $ticketId,
+                        'lead_id' => $report['lead_id'],
+                        'consultant_id' => $report['consultant_id'],
+                        'round_id' => $report['round_id'],
+                        'reject_reason' => $fullRejectReason
+                    ], JSON_UNESCAPED_UNICODE);
+                    $stmtLog = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (?, 'REJECT_REPORT_ZALO', ?, ?)");
+                    if ($stmtLog) {
+                        $stmtLog->bind_param("iss", $adminAccountId, $detailsJson, $ip);
+                        $stmtLog->execute();
+                        $stmtLog->close();
+                        pruneAdminLogs($conn);
+                    }
+
+                    $conn->commit();
+                } catch (Exception $ex) {
+                    $conn->rollback();
+                    sendZaloMessage($botToken, $chatId, "❌ Lỗi: " . $ex->getMessage());
+                    exit;
+                }
+
+                // Gửi thông báo ngoài giao dịch DB
+                try {
+                    // Lấy thông tin Sale & Lead để gửi thông báo
+                    $consultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+                    $consultant = null;
+                    if ($consultStmt) {
+                        $consultStmt->bind_param("i", $report['consultant_id']);
+                        $consultStmt->execute();
+                        $consultant = $consultStmt->get_result()->fetch_assoc();
+                        $consultStmt->close();
+                    }
+
+                    $leadStmt = $conn->prepare("SELECT name, phone FROM leads WHERE id = ? LIMIT 1");
+                    $lead = null;
+                    if ($leadStmt) {
+                        $leadStmt->bind_param("i", $report['lead_id']);
+                        $leadStmt->execute();
+                        $lead = $leadStmt->get_result()->fetch_assoc();
+                        $leadStmt->close();
+                    }
+
+                    $cName = $consultant['name'] ?? 'Tư vấn viên';
+                    $lName = $lead['name'] ?? 'Khách hàng';
+                    $lPhone = $lead['phone'] ?? 'Không rõ';
+
+                    // Lấy danh sách Ticket Admins nhận thông báo
+                    $adminEmails = getTicketNotifyAdmins($conn);
+
+                    // Gửi thông báo xác nhận thành công cho Admin từ chối qua Zalo
+                    try {
+                        $successAdminMsg = "❌ Đã từ chối ticket #$ticketId của Sale $cName.\n"
+                            . "• Khách hàng: $lName ($lPhone)\n"
+                            . "• Lỗi báo cáo: {$report['reason']}\n"
+                            . "• Lý do từ chối: $fullRejectReason";
+                        sendZaloMessage($botToken, $chatId, $successAdminMsg);
+                    } catch (Exception $zAdminSuccessEx) {
+                        error_log("Error sending Zalo success message to admin: " . $zAdminSuccessEx->getMessage());
+                    }
+
+                    // [TẠM TẮT] Thông báo Zalo cho các Ticket Admins khác (tránh gửi lại cho admin thực hiện lệnh)
+                    /*
+                    if (!empty($botToken) && !empty($adminEmails)) {
+                        $adminChatIds = [];
+                        foreach ($adminEmails as $adm) {
+                            if (!empty($adm['zalo_chat_id']) && $adm['zalo_chat_id'] !== $chatId) {
+                                $adminChatIds[] = $adm['zalo_chat_id'];
+                            }
+                        }
+                        if (!empty($adminChatIds)) {
+                            try {
+                                $zaloAdminMsg = "[ THÔNG BÁO TICKET ĐÃ TỪ CHỐI ]\n\n"
+                                    . "Admin $adminName đã TỪ CHỐI ticket #$ticketId của Sale $cName qua Zalo.\n\n"
+                                    . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                                    . "  • Khách hàng: $lName ($lPhone)\n"
+                                    . "  • Lỗi báo cáo: {$report['reason']}\n\n"
+                                    . "❖ LÝ DO TỪ CHỐI:\n"
+                                    . "  $fullRejectReason";
+                                sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloAdminMsg, false);
+                            } catch (Exception $zEx2) {
+                                error_log("Error sending Zalo message to multiple admins in zalo_webhook /reject: " . $zEx2->getMessage());
+                            }
+                        }
+                    }
+                    */
+
+                    // Thông báo qua Zalo Bot cho Sale
+                    if ($consultant && !empty($consultant['zalo_chat_id'])) {
+                        try {
+                            $zaloMsg = "[ TICKET ĐÃ BỊ TỪ CHỐI ]\n\n"
+                                . "Chào $cName, báo cáo lỗi Data của bạn đã BỊ TỪ CHỐI bởi $adminName.\n\n"
+                                . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                                . "  • Khách hàng: $lName ($lPhone)\n"
+                                . "  • Lỗi bạn báo: {$report['reason']}\n\n"
+                                . "❖ LÝ DO TỪ CHỐI:\n"
+                                . "  $fullRejectReason\n\n"
+                                . "Lượt đền bù KHÔNG được ghi nhận cho báo cáo này.";
+                            sendZaloMessage($botToken, $consultant['zalo_chat_id'], $zaloMsg, false);
+                        } catch (Exception $zSaleEx) {
+                            error_log("Error sending Zalo message to sale in zalo_webhook /reject: " . $zSaleEx->getMessage());
+                        }
+                    }
+
+                    // Thông báo qua Email cho Sale (kèm CC)
+                    if ($consultant && !empty($consultant['email'])) {
+                        try {
+                            require_once __DIR__ . '/mailer.php';
+
+                            $ccEmailsArr = [];
+                            if (!empty($report['cc_emails'])) {
+                                $parts = explode(',', $report['cc_emails']);
+                                foreach ($parts as $p) {
+                                    $p = trim($p);
+                                    if (!empty($p) && filter_var($p, FILTER_VALIDATE_EMAIL)) {
+                                        $ccEmailsArr[] = strtolower($p);
+                                    }
+                                }
+                            }
+                            // [TẠM TẮT CC ADMIN]
+                            /*
+                            foreach ($adminEmails as $adm) {
+                                if (!empty($adm['email'])) {
+                                    $email = trim($adm['email']);
+                                    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                        $ccEmailsArr[] = strtolower($email);
+                                    }
+                                }
+                            }
+                            */
+                            $ccEmailsArr = array_unique($ccEmailsArr);
+                            $saleEmail = strtolower(trim($consultant['email']));
+                            $ccEmailsArr = array_filter($ccEmailsArr, fn($e) => $e !== $saleEmail);
+                            $ccString = implode(',', $ccEmailsArr);
+
+                            $emailSubj = "[BOT] Ticket Lỗi Data Đã Bị Từ Chối - $lName";
+                            $emailBody = "<h3>Báo cáo lỗi Data bị từ chối</h3>
+                                          <p>Chào $cName,</p>
+                                          <p>Báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã bị Quản trị viên <strong>$adminName</strong> TỪ CHỐI qua Zalo.</p>
+                                          <p><strong>Lý do từ chối:</strong> $fullRejectReason</p>
+                                          <p>Hệ thống không đền bù data cho báo cáo này.</p>";
+                            sendEmailNotification($consultant['email'], $emailSubj, 'Kết quả Báo cáo', $emailBody, $ccString);
+                        } catch (Exception $emailEx) {
+                            error_log("Error sending email in zalo_webhook /reject: " . $emailEx->getMessage());
+                        }
+                    }
+                } catch (Exception $notifyOuterEx) {
+                    error_log("Outer notification error in zalo_webhook /reject: " . $notifyOuterEx->getMessage());
+                }
+                exit;
+            }
+
+            if (strpos($textLower, '/duyet') === 0) {
+                $cmdArg = trim(substr($text, 6)); // Bỏ qua "/duyet"
+                $leadId = 0;
+                if (preg_match('/^#?(\d+)$/', $cmdArg, $matches)) {
+                    $leadId = (int) $matches[1];
+                }
+
+                if ($leadId <= 0) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng cung cấp mã Lead hợp lệ. Ví dụ: `/duyet 12`.");
+                    exit;
+                }
+
+                $conn->begin_transaction();
+                try {
+                    // Fetch and lock lead
+                    $stmt = $conn->prepare("SELECT * FROM leads WHERE id = ? AND status = 'pending_approval' FOR UPDATE");
+                    if (!$stmt) {
+                        throw new Exception("Lỗi truy vấn DB.");
+                    }
+                    $stmt->bind_param("i", $leadId);
+                    $stmt->execute();
+                    $lead = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+
+                    if (!$lead) {
+                        throw new Exception("Lead #$leadId không tồn tại hoặc đã được xử lý từ trước.");
+                    }
+
+                    $targetRoundId = (int) $lead['target_round_id'];
+                    $assignedConsultantId = null;
+                    $status = 'unassigned';
+                    $message = 'Không khớp vòng phân bổ hoặc vòng không hoạt động.';
+
+                    $isFallbackAdmin = false;
+                    $fallbackAdminData = null;
+                    $fallbackCcEmails = '';
+
+                    // Run Round Robin assignment
+                    if ($targetRoundId > 0) {
+                        $assignResult = getNextConsultantInRound($conn, $targetRoundId);
+                        if ($assignResult) {
+                            $assignedConsultantId = $assignResult['id'];
+                            $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
+                            $message = $assignResult['is_compensation']
+                                ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.')
+                                : 'Được phân bổ tự động qua vòng xoay.';
+
+                            // Check work hours
+                            $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");
+                            if ($whStmt) {
+                                $whStmt->bind_param("i", $assignedConsultantId);
+                                $whStmt->execute();
+                                $whRes = $whStmt->get_result();
+                                if ($whRes && $whRow = $whRes->fetch_assoc()) {
+                                    $whStart = $whRow['work_start_time'] ?? '00:00';
+                                    $whEnd = $whRow['work_end_time'] ?? '23:59';
+                                    $workSchedule = $whRow['work_schedule'] ?? null;
+                                    $currentTime = date('H:i');
+                                    if (!isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $assignedConsultantId, $conn)) {
+                                        $status = 'pending_work_hours';
+                                        $message .= ' (Trì hoãn: ngoài khung giờ làm việc)';
+                                    }
+                                }
+                                $whStmt->close();
+                            }
+                        } else {
+                            $status = 'pending';
+                            $message = 'No active consultants in this round.';
+                        }
+                    } else {
+                        // Direct routing to Fallback Admin
+                        $fbSettings = get_system_setting($conn);
+
+                        $fbType = $fbSettings['fallback_type'] ?? 'round';
+                        $fbCc = $fbSettings['fallback_cc_email'] ?? '';
+
+                        if ($fbType === 'admin') {
+                            $fbAdminId = (int) ($fbSettings['fallback_admin_id'] ?? 0);
+                            if ($fbAdminId > 0) {
+                                $admStmt = $conn->prepare("SELECT id, name, email, zalo_chat_id FROM accounts WHERE id = ? AND (role = 'admin' OR role = 'superadmin') LIMIT 1");
+                                if ($admStmt) {
+                                    $admStmt->bind_param("i", $fbAdminId);
+                                    $admStmt->execute();
+                                    $admRes = $admStmt->get_result();
+                                    if ($admRes->num_rows > 0) {
+                                        $fallbackAdminData = $admRes->fetch_assoc();
+                                        $isFallbackAdmin = true;
+                                        $status = 'fallback';
+                                        $message = 'No matching rule. Routed directly to fallback Admin: ' . $fallbackAdminData['name'];
+                                        $fallbackCcEmails = $fbCc;
+                                    }
+                                    $admStmt->close();
+                                }
+                            }
+                        }
+                    }
+
+                    // Append admin note
+                    $adminNote = "\n[Duyệt Zalo Bot]: Phê duyệt phân bổ lead | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+                    $note = $lead['note'] . $adminNote;
+
+                    // Update Lead Table
+                    $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'passed' WHERE id = ?");
+                    if (!$updLead) {
+                        throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
+                    }
+                    $updLead->bind_param("isi", $assignedConsultantId, $note, $leadId);
+                    $updLead->execute();
+                    $updLead->close();
+
+                    // Log Distribution (Delete pending_approval logs and insert new log)
+                    $logMsg = $message . " (Admin phê duyệt qua Zalo)";
+                    $delStmt = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval'");
+                    $delStmt->bind_param("i", $leadId);
+                    $delStmt->execute();
+                    $delStmt->close();
+
+                    logDistribution($conn, $leadId, $assignedConsultantId, $targetRoundId ? $targetRoundId : null, $status, $logMsg, false);
+
+                    // Log Admin Action
+                    $detailsJson = json_encode([
+                        'lead_id' => $leadId,
+                        'name' => $lead['name'],
+                        'phone' => $lead['phone'],
+                        'assigned_to' => $assignedConsultantId,
+                        'round_id' => $targetRoundId
+                    ], JSON_UNESCAPED_UNICODE);
+
+                    $stmtLog = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (?, 'APPROVE_HELD_LEAD_ZALO', ?, 'Zalo Bot')");
+                    if ($stmtLog) {
+                        $stmtLog->bind_param("is", $adminAccountId, $detailsJson);
+                        $stmtLog->execute();
+                        $stmtLog->close();
+                        pruneAdminLogs($conn);
+                    }
+
+                    $conn->commit();
+                    triggerTwoWaySync($conn, $leadId);
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    sendZaloMessage($botToken, $chatId, "❌ Lỗi: " . $e->getMessage());
+                    exit;
+                }
+
+                // Send success message to Admin on Zalo
+                $assignedToName = 'Chưa xác định';
+                if ($isFallbackAdmin && $fallbackAdminData) {
+                    $assignedToName = $fallbackAdminData['name'] . ' (Fallback Admin)';
+                } else if ($assignedConsultantId > 0) {
+                    $stmtC = $conn->prepare("SELECT name FROM consultants WHERE id = ?");
+                    if ($stmtC) {
+                        $stmtC->bind_param("i", $assignedConsultantId);
+                        $stmtC->execute();
+                        $c = $stmtC->get_result()->fetch_assoc();
+                        if ($c)
+                            $assignedToName = $c['name'];
+                        $stmtC->close();
+                    }
+                }
+
+                $successMsg = "✅ Đã phê duyệt và phân bổ lead #$leadId thành công.\n"
+                    . "• Khách hàng: " . ($lead['name'] ?: 'Ẩn danh') . " (" . ($lead['phone'] ?: 'Không có') . ")\n"
+                    . "• Phân bổ đến: $assignedToName\n"
+                    . "• Trạng thái phân bổ: $status\n"
+                    . "• Chi tiết: $message";
+                sendZaloMessage($botToken, $chatId, $successMsg);
+
+                // Notifications to Sale/Admin outside transaction
+                try {
+                    require_once __DIR__ . '/mailer.php';
+                    require_once __DIR__ . '/zalo_bot.php';
+
+                    $ccEmails = '';
+                    $roundName = '';
+                    if ($targetRoundId > 0) {
+                        $stmtQ = $conn->prepare("SELECT round_name, cc_emails FROM distribution_rounds WHERE id = ?");
+                        if ($stmtQ) {
+                            $stmtQ->bind_param("i", $targetRoundId);
+                            $stmtQ->execute();
+                            $rData = $stmtQ->get_result()->fetch_assoc();
+                            $ccEmails = $rData['cc_emails'] ?? '';
+                            $roundName = $rData['round_name'] ?? '';
+                            $stmtQ->close();
+                        }
+                    }
+
+                    if ($isFallbackAdmin && $fallbackAdminData) {
+                        try {
+                            sendLeadAssignedEmailToSale(
+                                $fallbackAdminData['email'],
+                                $fallbackAdminData['name'],
+                                $lead['name'],
+                                $lead['phone'],
+                                $note,
+                                $lead['source'],
+                                $fallbackCcEmails,
+                                'Fallback Admin',
+                                $leadId,
+                                0,
+                                0
+                            );
+                        } catch (Exception $e) {
+                        }
+                        if (!empty($fallbackAdminData['zalo_chat_id'])) {
+                            try {
+                                sendLeadAssignedZaloMessageToAdmin(
+                                    $fallbackAdminData['zalo_chat_id'],
+                                    $fallbackAdminData['name'],
+                                    $lead['name'],
+                                    $lead['phone'],
+                                    $note,
+                                    $lead['source'],
+                                    $leadId,
+                                    $lead['email'],
+                                    $lead['type']
+                                );
+                            } catch (Exception $e) {
+                            }
+                        }
+                    } else if ($assignedConsultantId > 0 && $status !== 'pending_work_hours') {
+                        $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                        if ($stmtC) {
+                            $stmtC->bind_param("i", $assignedConsultantId);
+                            $stmtC->execute();
+                            $c = $stmtC->get_result()->fetch_assoc();
+                            $stmtC->close();
+                            if ($c) {
+                                try {
+                                    sendLeadAssignedEmailToSale($c['email'], $c['name'], $lead['name'], $lead['phone'], $note, $lead['source'], $ccEmails, $roundName, $leadId, $assignedConsultantId, $targetRoundId);
+                                } catch (Exception $e) {
+                                }
+                                try {
+                                    sendLeadAssignedZaloMessageToSale($assignedConsultantId, $c['name'], $lead['name'], $lead['phone'], $note, $lead['source'], $roundName, $leadId, $targetRoundId, $lead['email'], $lead['type']);
+                                } catch (Exception $e) {
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception $notifyEx) {
+                    error_log("Error sending notifications after zalo approve command: " . $notifyEx->getMessage());
+                }
+
+                exit;
+            }
+
+            if (strpos($textLower, '/tuchoi') === 0) {
+                $cmdArg = trim(substr($text, 7)); // Bỏ qua "/tuchoi"
+                $leadId = 0;
+                $reason = '';
+                if (preg_match('/^#?(\d+)(?:\s+(.+))?$/s', $cmdArg, $matches)) {
+                    $leadId = (int) $matches[1];
+                    $reason = isset($matches[2]) ? trim($matches[2]) : '';
+                }
+
+                if ($leadId <= 0 || empty($reason)) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng cung cấp mã lead và lý do từ chối. Cú pháp: `/tuchoi <mã_lead> <lý do từ chối>` (Ví dụ: `/tuchoi 12 Khách không có nhu cầu`).");
+                    exit;
+                }
+
+                $conn->begin_transaction();
+                try {
+                    $stmt = $conn->prepare("SELECT * FROM leads WHERE id = ? AND status = 'pending_approval' FOR UPDATE");
+                    if (!$stmt) {
+                        throw new Exception("Lỗi truy vấn DB.");
+                    }
+                    $stmt->bind_param("i", $leadId);
+                    $stmt->execute();
+                    $lead = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+
+                    if (!$lead) {
+                        throw new Exception("Lead #$leadId không tồn tại hoặc đã được xử lý từ trước.");
+                    }
+
+                    $config = getScreenerConfigForRound($conn, $lead['target_round_id']);
+                    $bsFallbackEnabled = 0;
+                    $bsFallbackRoundId = 0;
+                    if ($config) {
+                        $bsFallbackEnabled = !empty($config['below_standard_fallback_enabled']) ? 1 : 0;
+                        $bsFallbackRoundId = !empty($config['below_standard_fallback_round_id']) ? (int) $config['below_standard_fallback_round_id'] : 0;
+                    } else {
+                        $bsFallbackEnabled = (int) get_system_setting($conn, 'ai_screener_below_standard_fallback_enabled');
+                        $bsFallbackRoundId = (int) get_system_setting($conn, 'ai_screener_below_standard_fallback_round_id');
+                    }
+
+                    $rejectionResultText = '';
+                    $assignedToName = 'Không phân bổ';
+
+                    if ($bsFallbackEnabled === 1 && $bsFallbackRoundId > 0) {
+                        // Route to fallback round!
+                        $targetRoundId = $bsFallbackRoundId;
+                        $assignedConsultantId = null;
+                        $status = 'unassigned';
+                        $message = 'Không khớp vòng phân bổ hoặc vòng không hoạt động.';
+
+                        $assignResult = getNextConsultantInRound($conn, $targetRoundId);
+                        if ($assignResult) {
+                            $assignedConsultantId = $assignResult['id'];
+                            $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
+                            $message = $assignResult['is_compensation']
+                                ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.')
+                                : 'Được phân bổ tự động qua vòng xoay.';
+
+                            // Check work hours
+                            $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");
+                            if ($whStmt) {
+                                $whStmt->bind_param("i", $assignedConsultantId);
+                                $whStmt->execute();
+                                $whRes = $whStmt->get_result();
+                                if ($whRes && $whRow = $whRes->fetch_assoc()) {
+                                    $whStart = $whRow['work_start_time'] ?? '00:00';
+                                    $whEnd = $whRow['work_end_time'] ?? '23:59';
+                                    $workSchedule = $whRow['work_schedule'] ?? null;
+                                    $currentTime = date('H:i');
+                                    if (!isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $assignedConsultantId, $conn)) {
+                                        $status = 'pending_work_hours';
+                                        $message .= ' (Trì hoãn: ngoài khung giờ làm việc)';
+                                    }
+                                }
+                                $whStmt->close();
+                            }
+                        } else {
+                            $status = 'pending';
+                            $message = 'No active consultants in this round.';
+                        }
+
+                        $adminNote = "\n[Xác nhận dưới chuẩn Zalo Bot - Fallback]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+                        $note = $lead['note'] . $adminNote;
+
+                        $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed' WHERE id = ?");
+                        if (!$upd) {
+                            throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
+                        }
+                        $upd->bind_param("iisi", $targetRoundId, $assignedConsultantId, $note, $leadId);
+                        $upd->execute();
+                        $upd->close();
+
+                        $logMsg = $message . " (Admin xác nhận dưới chuẩn & Fallback qua Zalo)";
+                        $delStmt = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval'");
+                        $delStmt->bind_param("i", $leadId);
+                        $delStmt->execute();
+                        $delStmt->close();
+
+                        logDistribution($conn, $leadId, $assignedConsultantId, $targetRoundId, $status, $logMsg, false);
+
+                        // Log admin action
+                        $detailsJson = json_encode([
+                            'lead_id' => $leadId,
+                            'name' => $lead['name'],
+                            'phone' => $lead['phone'],
+                            'reason' => $reason . " (Fallback to round " . $targetRoundId . " via Zalo)"
+                        ], JSON_UNESCAPED_UNICODE);
+
+                        $stmtLog = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (?, 'REJECT_HELD_LEAD_ZALO', ?, 'Zalo Bot')");
+                        if ($stmtLog) {
+                            $stmtLog->bind_param("is", $adminAccountId, $detailsJson);
+                            $stmtLog->execute();
+                            $stmtLog->close();
+                            pruneAdminLogs($conn);
+                        }
+
+                        $conn->commit();
+                        triggerTwoWaySync($conn, $leadId);
+
+                        $rejectionResultText = "Chuyển tiếp đến Vòng dưới chuẩn (ID: $targetRoundId).";
+
+                        if ($assignedConsultantId > 0) {
+                            $stmtC = $conn->prepare("SELECT name FROM consultants WHERE id = ?");
+                            if ($stmtC) {
+                                $stmtC->bind_param("i", $assignedConsultantId);
+                                $stmtC->execute();
+                                $c = $stmtC->get_result()->fetch_assoc();
+                                if ($c)
+                                    $assignedToName = $c['name'];
+                                $stmtC->close();
+                            }
+                        }
+
+                        // Notifications outside transaction
+                        try {
+                            if ($assignedConsultantId && ($status === 'assigned' || $status === 'compensation')) {
+                                $ccEmails = '';
+                                $roundName = 'Vòng dưới chuẩn';
+                                $stmtQ = $conn->prepare("SELECT round_name, cc_emails FROM distribution_rounds WHERE id = ?");
+                                if ($stmtQ) {
+                                    $stmtQ->bind_param("i", $targetRoundId);
+                                    $stmtQ->execute();
+                                    $rData = $stmtQ->get_result()->fetch_assoc();
+                                    if ($rData) {
+                                        $ccEmails = $rData['cc_emails'] ?? '';
+                                        $roundName = $rData['round_name'] ?? 'Vòng dưới chuẩn';
+                                    }
+                                    $stmtQ->close();
+                                }
+
+                                $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                                if ($stmtC) {
+                                    $stmtC->bind_param("i", $assignedConsultantId);
+                                    $stmtC->execute();
+                                    $c = $stmtC->get_result()->fetch_assoc();
+                                    $stmtC->close();
+                                    if ($c) {
+                                        require_once __DIR__ . '/mailer.php';
+                                        require_once __DIR__ . '/zalo_bot.php';
+                                        try {
+                                            sendLeadAssignedEmailToSale($c['email'], $c['name'], $lead['name'], $lead['phone'], $note, $lead['source'], $ccEmails, $roundName, $leadId, $assignedConsultantId, $targetRoundId);
+                                        } catch (Exception $e) {
+                                        }
+                                        try {
+                                            sendLeadAssignedZaloMessageToSale($assignedConsultantId, $c['name'], $lead['name'], $lead['phone'], $note, $lead['source'], $roundName, $leadId, $targetRoundId, $lead['email'], $lead['type']);
+                                        } catch (Exception $e) {
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception $notifyEx) {
+                            error_log("Error sending notifications after reject_held_lead with fallback: " . $notifyEx->getMessage());
+                        }
+                    } else {
+                        // Reject completely
+                        $adminNote = "\n[Từ chối AI Zalo Bot]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+                        $note = $lead['note'] . $adminNote;
+
+                        $upd = $conn->prepare("UPDATE leads SET status = 'rejected', note = ? WHERE id = ?");
+                        if (!$upd) {
+                            throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
+                        }
+                        $upd->bind_param("si", $note, $leadId);
+                        $upd->execute();
+                        $upd->close();
+
+                        $logMsg = "Từ chối bởi Admin (qua Zalo): " . $reason;
+                        $chkLog = $conn->prepare("SELECT id FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval' LIMIT 1");
+                        $chkLog->bind_param("i", $leadId);
+                        $chkLog->execute();
+                        $logRow = $chkLog->get_result()->fetch_assoc();
+                        $chkLog->close();
+
+                        if ($logRow) {
+                            $updLog = $conn->prepare("UPDATE distribution_logs SET status = 'rejected', message = ? WHERE id = ?");
+                            $updLog->bind_param("si", $logMsg, $logRow['id']);
+                            $updLog->execute();
+                            $updLog->close();
+                        } else {
+                            logDistribution($conn, $leadId, null, $lead['target_round_id'] ? $lead['target_round_id'] : null, 'rejected', $logMsg, false, $lead['created_at']);
+                        }
+
+                        // Log admin action
+                        $detailsJson = json_encode([
+                            'lead_id' => $leadId,
+                            'name' => $lead['name'],
+                            'phone' => $lead['phone'],
+                            'reason' => $reason . " (Rejected entirely by Zalo)"
+                        ], JSON_UNESCAPED_UNICODE);
+
+                        $stmtLog = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (?, 'REJECT_HELD_LEAD_ZALO', ?, 'Zalo Bot')");
+                        if ($stmtLog) {
+                            $stmtLog->bind_param("is", $adminAccountId, $detailsJson);
+                            $stmtLog->execute();
+                            $stmtLog->close();
+                            pruneAdminLogs($conn);
+                        }
+
+                        $conn->commit();
+                        triggerTwoWaySync($conn, $leadId);
+
+                        $rejectionResultText = "Lead bị loại bỏ hoàn toàn (Không phân bổ).";
+                    }
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    sendZaloMessage($botToken, $chatId, "❌ Lỗi: " . $e->getMessage());
+                    exit;
+                }
+
+                // Send confirmation message to Admin on Zalo (outside transaction for reliability)
+                $successMsg = "❌ Đã từ chối lead #$leadId.\n"
+                    . "• Khách hàng: " . ($lead['name'] ?: 'Ẩn danh') . " (" . ($lead['phone'] ?: 'Không có') . ")\n"
+                    . "• Kết quả xử lý: $rejectionResultText\n"
+                    . "• Phân bổ đến: $assignedToName\n"
+                    . "• Lý do từ chối: $reason";
+                sendZaloMessage($botToken, $chatId, $successMsg);
+
+                exit;
+            }
+
+            if (strpos($textLower, '/sales') === 0) {
+                // Liệt kê các TVV đang hoạt động/off/leave
+                $resSales = $conn->query("
+                    SELECT name, status, leave_start, leave_end 
+                    FROM consultants 
+                    ORDER BY status ASC, name ASC
+                ");
+                $salesMsg = "👥 [ TRẠNG THÁI TƯ VẤN VIÊN ]\n\n";
+                if ($resSales && $resSales->num_rows > 0) {
+                    while ($rowS = $resSales->fetch_assoc()) {
+                        $statusStr = '';
+                        if ($rowS['status'] === 'active') {
+                            $statusStr = '🟢 Đang nhận số';
+                        } else if ($rowS['status'] === 'leave') {
+                            $leaveInfo = '';
+                            if (!empty($rowS['leave_start']) && !empty($rowS['leave_end'])) {
+                                $leaveInfo = ' (' . date('d/m', strtotime($rowS['leave_start'])) . ' → ' . date('d/m', strtotime($rowS['leave_end'])) . ')';
+                            }
+                            $statusStr = '🔴 Nghỉ phép' . $leaveInfo;
+                        } else {
+                            $statusStr = '⚪ Tạm ngưng';
+                        }
+                        $salesMsg .= "  👤 " . $rowS['name'] . ": $statusStr\n";
+                    }
+                } else {
+                    $salesMsg .= "❌ Không tìm thấy tư vấn viên nào trên hệ thống.";
+                }
+                sendZaloMessage($botToken, $chatId, $salesMsg);
+                exit;
+            }
+
+            if (strpos($textLower, '/round') === 0) {
+                // Liệt kê các vòng phân bổ đang hoạt động
+                $resRounds = $conn->query("
+                    SELECT id, round_name 
+                    FROM distribution_rounds 
+                    WHERE is_active = 1 
+                    ORDER BY id ASC
+                ");
+
+                $roundMsg = "🔄 [ TRẠNG THÁI VÒNG PHÂN BỔ ]\n\n";
+
+                if ($resRounds && $resRounds->num_rows > 0) {
+                    $roundCount = 1;
+                    while ($rowR = $resRounds->fetch_assoc()) {
+                        $roundId = (int) $rowR['id'];
+                        $roundName = $rowR['round_name'];
+
+                        // Lấy Sale tiếp theo dự kiến bằng hàm mô phỏng không ghi DB
+                        $nextSale = simulateNextConsultantInRound($conn, $roundId);
+
+                        $roundMsg .= "$roundCount. Vòng: $roundName\n";
+
+                        if ($nextSale) {
+                            $reason = 'Lượt xoay vòng';
+                            $details = '';
+                            if (intval($nextSale['compensation_count']) > 0) {
+                                $reason = 'Đền bù data lỗi';
+                                $details = ' (còn ' . $nextSale['compensation_count'] . ' lượt)';
+                            } else if (intval($nextSale['current_turn_remaining']) > 0) {
+                                $reason = 'Đang nhận số';
+                                $details = ' (còn ' . $nextSale['current_turn_remaining'] . ' data)';
+                            } else {
+                                $ratio = max(1, (int) ($nextSale['receive_ratio'] ?? 1));
+                                $skip = (int) ($nextSale['skip_count'] ?? 0);
+                                if ($ratio > 1) {
+                                    $details = " (Tỉ lệ: 1/{$ratio}, Bỏ qua: {$skip}/" . ($ratio - 1) . ")";
+                                } else {
+                                    $details = " (Tỉ lệ: 1/1)";
+                                }
+                            }
+                            $roundMsg .= "   ↳ Sale sắp tới: " . $nextSale['name'] . " - " . $reason . $details . "\n\n";
+                        } else {
+                            $roundMsg .= "   ↳ Sale sắp tới: Không có Sale hoạt động trong vòng này! ⚠️\n\n";
+                        }
+
+                        $roundCount++;
+                    }
+                    $roundMsg = rtrim($roundMsg);
+                } else {
+                    $roundMsg .= "✅ Hiện không có vòng phân bổ nào đang hoạt động.";
+                }
+
+                sendZaloMessage($botToken, $chatId, $roundMsg);
+                exit;
+            }
+
+            if (strpos($textLower, '/check') === 0) {
+                $cmdArg = trim(substr($text, 6)); // Bỏ qua "/check"
+                if (empty($cmdArg)) {
+                    sendZaloMessage($botToken, $chatId, "⚠️ Vui lòng nhập số điện thoại hoặc email để kiểm tra. Ví dụ:\n- `/check 0987654321`\n- `/check mail@example.com`\n- Gõ `/tools` để xem tất cả câu lệnh.");
+                    exit;
+                }
+
+                // Chuẩn hóa sđt hoặc email
+                $normalizedPhone = normalizePhone($cmdArg);
+                $emailSearch = $cmdArg;
+
+                // Truy vấn thông tin Lead và Sale
+                $stmtLead = $conn->prepare("
+                    SELECT l.id, l.phone, l.email, l.name, l.source, l.type, l.note, l.created_at, 
+                           c.name as sale_name
+                    FROM leads l 
+                    LEFT JOIN consultants c ON l.assigned_to = c.id 
+                    WHERE (l.phone = ? AND l.phone IS NOT NULL AND l.phone != '') 
+                       OR (l.email = ? AND l.email IS NOT NULL AND l.email != '')
+                    LIMIT 1
+                ");
+
+                if ($stmtLead) {
+                    $stmtLead->bind_param("ss", $normalizedPhone, $emailSearch);
+                    $stmtLead->execute();
+                    $resLead = $stmtLead->get_result();
+
+                    if ($resLead && $rowLead = $resLead->fetch_assoc()) {
+                        $leadId = (int) $rowLead['id'];
+
+                        // Lấy thông tin vòng phân bổ từ log phân bổ gần nhất
+                        $roundName = 'Chưa xác định';
+                        $distStatus = '';
+                        $receivedAt = '';
+                        $stmtLog = $conn->prepare("
+                            SELECT dr.round_name, dl.status, dl.received_at 
+                            FROM distribution_logs dl 
+                            LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id 
+                            WHERE dl.lead_id = ? 
+                            ORDER BY dl.id DESC 
+                            LIMIT 1
+                        ");
+                        if ($stmtLog) {
+                            $stmtLog->bind_param("i", $leadId);
+                            $stmtLog->execute();
+                            $resLog = $stmtLog->get_result();
+                            if ($resLog && $rowLog = $resLog->fetch_assoc()) {
+                                $roundName = $rowLog['round_name'];
+                                $distStatus = $rowLog['status'];
+                                $receivedAt = $rowLog['received_at'];
+
+                                if (empty($roundName) || $roundName === 'Chưa xác định') {
+                                    if ($distStatus === 'reminder') {
+                                        $roundName = 'Nhắc lại (Trùng số)';
+                                    } elseif ($distStatus === 'silent') {
+                                        $roundName = 'Đồng bộ ẩn (Không định tuyến)';
+                                    } elseif ($distStatus === 'assigned') {
+                                        $roundName = 'Chỉ định trực tiếp';
+                                    } elseif ($distStatus === 'no_consultant') {
+                                        $roundName = 'Không tìm thấy Sale';
+                                    }
+                                }
+                            }
+                            $stmtLog->close();
+                        }
+
+                        $checkMsg = "🔍 [ THÔNG TIN LEAD ]\n\n"
+                            . "👤 Khách hàng: " . ($rowLead['name'] ?: 'Chưa có tên') . "\n"
+                            . "📞 Số điện thoại: " . ($rowLead['phone'] ?: 'Không có') . "\n"
+                            . "✉️ Email: " . ($rowLead['email'] ?: 'Không có') . "\n"
+                            . "🌐 Nguồn: " . ($rowLead['source'] ?: 'Không có') . "\n"
+                            . "🏷️ Loại: " . ($rowLead['type'] ?: 'Không có') . "\n"
+                            . "🕒 Ngày tạo: " . date('d/m/Y H:i', strtotime($rowLead['created_at'])) . "\n\n"
+                            . "🔄 PHÂN BỔ:\n"
+                            . "  • Vòng: " . $roundName . "\n"
+                            . "  • Sale nhận: " . ($rowLead['sale_name'] ?: 'Chưa giao') . "\n";
+
+                        if (!empty($receivedAt)) {
+                            $checkMsg .= "  • Thời gian nhận: " . date('d/m/Y H:i:s', strtotime($receivedAt)) . "\n";
+                        }
+
+                        if (!empty($distStatus)) {
+                            $statusMap = [
+                                'success' => '✅ Thành công',
+                                'error' => '❌ Lỗi',
+                                'reminder' => '🔄 Nhắc lại',
+                                'silent' => '🔇 Đồng bộ ẩn',
+                                'assigned' => '👤 Chỉ định trực tiếp',
+                                'no_consultant' => '⚠️ Không có Sale nhận',
+                                'pending_work_hours' => '⏳ Chờ ngoài giờ',
+                                'fallback' => '⚠️ Fallback dự phòng'
+                            ];
+                            $statusEmoji = $statusMap[$distStatus] ?? $distStatus;
+                            $checkMsg .= "  • Trạng thái: " . $statusEmoji . "\n";
+                        }
+
+                        $checkMsg .= "\n📝 GHI CHÚ:\n" . ($rowLead['note'] ?: 'Không có ghi chú.');
+
+                        sendZaloMessage($botToken, $chatId, $checkMsg);
+                    } else {
+                        sendZaloMessage($botToken, $chatId, "❌ Không tìm thấy Lead nào trong hệ thống khớp với thông tin: \"$cmdArg\"");
+                    }
+                    $stmtLead->close();
+                } else {
+                    sendZaloMessage($botToken, $chatId, "❌ Lỗi hệ thống khi kiểm tra dữ liệu.");
+                }
+                exit;
+            }
+        }
+
+        // Cú pháp mới: hỗ trợ [ID] hoặc [Email] hoặc [ID]-[Email] / [ID] [Email]
+        $cleanText = trim($text);
+        if (strpos(strtolower($cleanText), '/start') === 0) {
+            $cleanText = trim(substr($cleanText, 6));
+        }
+
+        $userId = 0;
+        $email = '';
+        $targetType = ''; // 'admin', 'sale', or ''
+
+        if (preg_match('/^(a|admin|ad)[\-\s]*(\d+)$/i', $cleanText, $matches)) {
+            $targetType = 'admin';
+            $userId = (int) $matches[2];
+        } else if (preg_match('/^(s|sale|tvv)[\-\s]*(\d+)$/i', $cleanText, $matches)) {
+            $targetType = 'sale';
+            $userId = (int) $matches[2];
+        } else if (preg_match('/^(\d+)[\-\s]+([^\s]+)$/', $cleanText, $matches)) {
+            $userId = (int) $matches[1];
+            $email = strtolower(trim($matches[2]));
+        } else if (preg_match('/^connect[\s\-]+(\d+)$/i', $cleanText, $m)) {
+            $userId = (int) $m[1];
+            $targetType = ''; // CONNECT {id} -> tìm cả sale lẫn admin
+        } else if (preg_match('/^\d+$/', $cleanText)) {
+            $userId = (int) $cleanText;
+            $targetType = ''; // Nhập số thuần -> tìm cả sale lẫn admin
+        } else if (filter_var($cleanText, FILTER_VALIDATE_EMAIL)) {
+            $email = strtolower($cleanText);
+        }
+
+        if ($userId > 0 || !empty($email)) {
+            $linkedAny = false;
+            $successMessages = [];
+            $errorMsg = '';
+
+            // Lấy thông tin Zalo hiện tại của bot xem đã được liên kết với ai chưa
+            $existingSaleOwner = null;
+            $stmt = $conn->prepare("SELECT id, full_name AS name, email FROM users WHERE zalo_chat_id = ? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param("s", $chatId);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                if ($res && $res->num_rows > 0) {
+                    $existingSaleOwner = $res->fetch_assoc();
+                }
+                $stmt->close();
+            }
+
+            $existingAdminOwner = null;
+
+            // 1. Tìm trong hệ thống User
+            $sale = null;
+            $admin = null;
+
+            $stmtFind = null;
+            if ($userId > 0 && !empty($email)) {
+                $stmtFind = $conn->prepare("SELECT id, full_name AS name, email, role, zalo_chat_id FROM users WHERE id = ? AND email = ? LIMIT 1");
+                if ($stmtFind)
+                    $stmtFind->bind_param("is", $userId, $email);
+            } else if ($userId > 0) {
+                $stmtFind = $conn->prepare("SELECT id, full_name AS name, email, role, zalo_chat_id FROM users WHERE id = ? LIMIT 1");
+                if ($stmtFind)
+                    $stmtFind->bind_param("i", $userId);
+            } else {
+                $stmtFind = $conn->prepare("SELECT id, full_name AS name, email, role, zalo_chat_id FROM users WHERE email = ? LIMIT 1");
+                if ($stmtFind)
+                    $stmtFind->bind_param("s", $email);
+            }
+
+            if ($stmtFind && $stmtFind->execute()) {
+                $res = $stmtFind->get_result();
+                if ($res && $res->num_rows > 0) {
+                    $uRow = $res->fetch_assoc();
+                    $userRole = strtolower(trim($uRow['role'] ?? ''));
+                    $isSaleRole = ($userRole === 'sales' || $userRole === 'sale');
+                    
+                    // Check if user is registered in consultants table
+                    $isConsultant = false;
+                    $stmtC = $conn->prepare("SELECT id FROM consultants WHERE id = ? LIMIT 1");
+                    if ($stmtC) {
+                        $stmtC->bind_param("i", $uRow['id']);
+                        $stmtC->execute();
+                        $cRes = $stmtC->get_result();
+                        if ($cRes && $cRes->num_rows > 0) {
+                            $isConsultant = true;
+                        }
+                        $stmtC->close();
+                    }
+
+                    if ($isSaleRole || $isConsultant) {
+                        $sale = $uRow;
+                    } else {
+                        // User is non-sale: kindly notify that lead notification is for Sales only
+                        $userName = $uRow['name'] ?? 'Bạn';
+                        $userEmail = $uRow['email'] ?? '';
+                        $msgNonSale = "[ THÔNG BÁO HỆ THỐNG ]\n\nXin chào {$userName},\nTính năng kết nối Zalo Bot nhận thông báo phân bổ Data chỉ áp dụng cho bộ phận Tư vấn viên (Sale).\n\nTài khoản của bạn ({$userEmail}) thuộc phòng ban khác nên không cần liên kết nhận Data.\n\nBáo cáo tổng hợp quản trị vẫn được duy trì gửi tự động về Nhóm Zalo Admin của hệ thống.";
+                        $sendReply($msgNonSale);
+                        exit;
+                    }
+                }
+            }
+            if ($stmtFind)
+                $stmtFind->close();
+
+            if (!$sale) {
+                $info = $userId > 0 ? "ID: $userId" : "";
+                if (!empty($email)) {
+                    $info .= ($info ? " hoặc " : "") . "Email: $email";
+                }
+                $errorMsg = "[ THÔNG BÁO LỖI ]\nKhông tìm thấy tài khoản Tư vấn viên (Sale) phù hợp với thông tin ($info) trong hệ thống. Vui lòng kiểm tra lại!";
+            } else {
+                // Xử lý liên kết cho Sale
+                if (!empty($sale['zalo_chat_id'])) {
+                    if ($sale['zalo_chat_id'] === $chatId) {
+                        $successMessages[] = "Tư vấn viên: " . $sale['name'] . " (" . $sale['email'] . ") - Đã liên kết từ trước.";
+                        $linkedAny = true;
+                    } else {
+                        $errorMsg .= "[ THÔNG BÁO LỖI ]\nTài khoản Sale này (" . $sale['name'] . " - " . $sale['email'] . ") đã được liên kết với một Zalo khác rồi. Vui lòng báo Admin hỗ trợ hủy liên kết cũ để thực hiện lại.\n\n";
+                    }
+                } else {
+                    // Kiểm tra xem Zalo này đã liên kết với ai chưa
+                    if ($existingSaleOwner) {
+                        $errorMsg .= "[ THÔNG BÁO LỖI ]\nTài khoản Zalo này đã được liên kết với một Tư vấn viên khác trên hệ thống (" . $existingSaleOwner['name'] . " - " . $existingSaleOwner['email'] . "). Vui lòng báo Admin để hỗ trợ.\n\n";
+                    } else {
+                        $stmtUpdate = $conn->prepare("UPDATE users SET zalo_chat_id = ? WHERE id = ?");
+                        if ($stmtUpdate) {
+                            $stmtUpdate->bind_param("si", $chatId, $sale['id']);
+                            if ($stmtUpdate->execute()) {
+                                $linkedAny = true;
+                                $successMessages[] = "Tư vấn viên: " . $sale['name'] . " - Email: " . $sale['email'];
+                                $existingSaleOwner = $sale;
+                                // Đồng bộ sang bảng consultants
+                                $stmtUpdateCons = $conn->prepare("UPDATE consultants SET zalo_chat_id = ? WHERE id = ?");
+                                if ($stmtUpdateCons) {
+                                    $stmtUpdateCons->bind_param("si", $chatId, $sale['id']);
+                                    $stmtUpdateCons->execute();
+                                    $stmtUpdateCons->close();
+                                }
+                            } else {
+                                $errorMsg .= "[ THÔNG BÁO LỖI ] Lỗi cập nhật CSDL: " . $stmtUpdate->error . "\n\n";
+                            }
+                            $stmtUpdate->close();
+                        }
+                    }
+                }
+            }
+
+            if ($linkedAny) {
+                $msg = "[ HỆ THỐNG IDEAS DATA ]\n\n"
+                    . "Chúc mừng bạn đã xác thực hệ thống thành công:\n";
+                foreach ($successMessages as $sm) {
+                    $msg .= "  • $sm\n";
+                }
+                $msg .= "\nTừ bây giờ hệ thống sẽ tự động gửi thông báo qua Zalo này.";
+                if (!empty($errorMsg)) {
+                    $msg .= "\n\nLưu ý thêm:\n" . trim($errorMsg);
+                }
+                $sendReply($msg);
+            } else {
+                $sendReply(trim($errorMsg));
+            }
+        } else {
+            // Hướng dẫn lại
+            $guideMsg = "[ HỆ THỐNG IDEAS DATA ]\n\n"
+                . "Chào $fromName!\n"
+                . "Để liên kết tài khoản nhận dữ liệu tự động, vui lòng soạn tin nhắn theo cú pháp đơn giản:\n\n"
+                . "- Nhập mã ID của bạn (Ví dụ: 12)\n"
+                . "- Hoặc nhập địa chỉ Email của bạn (Ví dụ: nguyenvanan@gmail.com)\n\n"
+                . "Chúc bạn làm việc hiệu quả!";
+            $sendReply($guideMsg);
+        }
+    }
+}
+
+// Luôn phản hồi 200 OK cho Webhook
+echo json_encode(["message" => "Success"]);
+exit;

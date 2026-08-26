@@ -1,0 +1,1041 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '../contexts/LanguageContext';
+import { User, Key, Eye, EyeOff, Save, ShieldAlert, Shield, Mail, Activity, Clock, Settings, ChevronDown, ChevronUp, LogOut, Edit3, Package, Check, X, Building2 } from 'lucide-react';
+import { SignaturePadModal } from '../components/ui/SignaturePadModal';
+import { AssignedAssetsSection, type AssignedAsset } from '../components/ui/AssignedAssetsSection';
+import { fetchAPI } from '../utils/api';
+import { compressToWebP } from '../utils/imageCompress';
+import { useAuth } from '../contexts/AuthContext';
+import { Avatar } from '../components/ui/Avatar';
+import toast from 'react-hot-toast';
+import { StatRowSkeleton } from '../components/ui/Skeleton';
+import { withRouterFreezer } from '../components/RouterFreezer';
+import styles from './EntityDrawer.module.css';
+
+const PersonalAccountInner = () => {
+  const { t } = useLanguage();
+  const { user, login, logout, updateUser } = useAuth();
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResetAccountTab = () => {
+      setActiveTab('' as any);
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('reset-account-tab', handleResetAccountTab);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('reset-account-tab', handleResetAccountTab);
+    };
+  }, []);
+  
+  const [activeTab, setActiveTab] = useState<'profile' | 'assets' | 'password' | 'activity'>('profile');
+  const [loading, setLoading] = useState(false);
+  
+  // Profile State
+  const [profileData, setProfileData] = useState({
+    name: '',
+    email: '',
+    avatar: '',
+    phone: '',
+    dob: '',
+    gender: '',
+    citizen_id: '',
+    address: '',
+    bank_name: '',
+    bank_account: '',
+    bio: ''
+  });
+  
+  // Password State
+  const [showOldPass, setShowOldPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [passData, setPassData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+
+  // Activity Logs State
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
+  const [expandedLogs, setExpandedLogs] = useState<Record<number, boolean>>({});
+
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(user?.signature_url || null);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [myAssets, setMyAssets] = useState<AssignedAsset[]>([]);
+
+  useEffect(() => {
+    if (user) {
+      const u = user as any;
+      setProfileData(prev => ({
+        ...prev,
+        name: u.name || u.full_name || '',
+        email: u.email || u.username || '',
+        avatar: u.avatar || u.avatar_url || '',
+        phone: u.phone || '',
+        dob: u.dob || '',
+        gender: u.gender || '',
+        citizen_id: u.citizen_id || '',
+        address: u.address || '',
+        bank_name: u.bank_name || '',
+        bank_account: u.bank_account || '',
+        bio: u.bio || ''
+      }));
+      setSignatureUrl(user.signature_url || null);
+
+      // Fetch consultant profile to sync full db fields
+      fetchAPI('consultant-profile').then(res => {
+        if (res.success && res.data) {
+          const d = res.data;
+          let addrText = d.address || '';
+          try {
+            const parsed = JSON.parse(addrText);
+            if (parsed && parsed.erp_profile) {
+              addrText = parsed.erp_profile.address_text || addrText;
+            }
+          } catch(e) {}
+
+          setProfileData(prev => ({
+            ...prev,
+            name: d.name || d.full_name || prev.name,
+            email: d.email || prev.email,
+            avatar: d.avatar || d.avatar_url || prev.avatar,
+            phone: d.phone || prev.phone,
+            dob: d.dob || prev.dob,
+            gender: d.gender || prev.gender,
+            citizen_id: d.citizen_id || prev.citizen_id,
+            address: addrText || prev.address,
+            bank_name: d.bank_name || prev.bank_name,
+            bank_account: d.bank_account || prev.bank_account,
+            bio: d.bio || prev.bio
+          }));
+          if (d.signature_url) {
+            setSignatureUrl(d.signature_url);
+          }
+        }
+      }).catch(() => {});
+
+      let parsedAssets: AssignedAsset[] = [];
+      if (Array.isArray(u?.assigned_assets)) {
+        parsedAssets = u.assigned_assets;
+      } else if (u?.extra_fields_json) {
+        try {
+          const extra = typeof u.extra_fields_json === 'string' ? JSON.parse(u.extra_fields_json) : u.extra_fields_json;
+          if (extra.erp_profile?.assigned_assets) {
+            parsedAssets = extra.erp_profile.assigned_assets;
+          } else if (extra.assigned_assets) {
+            parsedAssets = extra.assigned_assets;
+          }
+        } catch (e) {}
+      }
+      setMyAssets(parsedAssets);
+    }
+  }, [user]);
+
+  const handleSaveSignatureInProfile = async (newSigUrl: string) => {
+    setSignatureUrl(newSigUrl);
+    const res = await fetchAPI('update_profile', {
+      method: 'POST',
+      body: JSON.stringify({ signature_url: newSigUrl })
+    });
+    if (res.success) {
+      updateUser({ signature_url: newSigUrl });
+    } else {
+      throw new Error(res.message || t('Lỗi lưu chữ ký'));
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'activity') {
+      const fetchLogs = async () => {
+        setLoadingLogs(true);
+        try {
+          const res = await fetchAPI('get_my_activity_logs');
+          if (res.success) {
+            setActivityLogs(res.data || []);
+          }
+        } catch (err) {
+          console.error(t('Lỗi khi tải lịch sử hoạt động:'), err);
+        } finally {
+          setLoadingLogs(false);
+        }
+      };
+      fetchLogs();
+    }
+  }, [activeTab]);
+
+  const toggleExpand = (logId: number) => {
+    setExpandedLogs(prev => ({ ...prev, [logId]: !prev[logId] }));
+  };
+
+  const formatLogDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const hh = pad(d.getHours());
+    const mm = pad(d.getMinutes());
+    const ss = pad(d.getSeconds());
+    const dd = pad(d.getDate());
+    const mMonth = pad(d.getMonth() + 1);
+    const yyyy = d.getFullYear();
+    return `${hh}:${mm}:${ss} ${dd}-${mMonth}-${yyyy}`;
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error(t('Vui lòng chọn file hình ảnh hợp lệ.'));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(t('Kích thước ảnh không được vượt quá 5MB.'));
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const compressedFile = await compressToWebP(file);
+      const fd = new FormData();
+      fd.append('avatar', compressedFile);
+
+      const oldAvatar = profileData.avatar || '';
+      const query = `upload_avatar&old_avatar=${encodeURIComponent(oldAvatar)}`;
+      const res = await fetchAPI(query, {
+        method: 'POST',
+        body: fd
+      });
+
+      if (res.success && res.url) {
+        setProfileData(prev => ({ ...prev, avatar: res.url }));
+        if (user) {
+          const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
+          login(token, { ...user, avatar: res.url } as any);
+        }
+        toast.success(t('Tải ảnh đại diện lên thành công!'));
+      } else {
+        toast.error(res.message || t('Lỗi khi tải ảnh lên'));
+      }
+    } catch (err: any) {
+      toast.error(t('Lỗi kết nối: ') + err.message);
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profileData.name) {
+      toast.error(t('Tên không được để trống'));
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetchAPI('update_profile', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: profileData.name,
+          avatar: profileData.avatar,
+          phone: profileData.phone || null,
+          dob: profileData.dob || null,
+          gender: profileData.gender || null,
+          citizen_id: profileData.citizen_id || null,
+          address: profileData.address || null,
+          bank_name: profileData.bank_name || null,
+          bank_account: profileData.bank_account || null,
+          bio: profileData.bio || null
+        })
+      });
+      if (res.success) {
+        toast.success(t('Cập nhật thông tin thành công!'));
+        const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
+        if (user) {
+          login(token, {
+            ...user,
+            name: profileData.name,
+            full_name: profileData.name,
+            avatar: profileData.avatar,
+            avatar_url: profileData.avatar,
+            phone: profileData.phone,
+            dob: profileData.dob,
+            gender: profileData.gender,
+            citizen_id: profileData.citizen_id,
+            address: profileData.address,
+            bank_name: profileData.bank_name,
+            bank_account: profileData.bank_account,
+            bio: profileData.bio
+          } as any);
+        }
+      } else {
+        toast.error(res.message || t('Lỗi cập nhật'));
+      }
+    } catch (err: any) {
+      toast.error(err.message || t('Lỗi hệ thống'));
+    }
+    setLoading(false);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passData.oldPassword || !passData.newPassword || !passData.confirmPassword) {
+      toast.error(t('Vui lòng nhập đầy đủ thông tin'));
+      return;
+    }
+    if (passData.newPassword !== passData.confirmPassword) {
+      toast.error(t('Mật khẩu mới không khớp'));
+      return;
+    }
+    const isLongEnough = passData.newPassword.length >= 8;
+    const hasLetter = /[A-Za-z]/.test(passData.newPassword);
+    const hasDigit = /\d/.test(passData.newPassword);
+    if (!isLongEnough || !hasLetter || !hasDigit) {
+      toast.error(t('Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm cả chữ và số'));
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetchAPI('auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ old_password: passData.oldPassword, new_password: passData.newPassword })
+      });
+      if (res.success) {
+        toast.success(t('Đổi mật khẩu thành công!'));
+        setPassData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        toast.error(res.message || t('Lỗi khi đổi mật khẩu'));
+      }
+    } catch (err: any) {
+      toast.error(err.message || t('Lỗi hệ thống'));
+    }
+    setLoading(false);
+  };
+
+  const getRoleBadge = (role: string) => {
+    switch (role?.toLowerCase()) {
+      case 'superadmin':
+        return { label: 'Super Admin', color: 'var(--color-primary)', bg: 'rgba(189, 29, 45, 0.1)' };
+      case 'admin':
+        return { label: 'Admin', color: '#dc2626', bg: 'rgba(220, 38, 38, 0.1)' };
+      case 'director':
+        return { label: 'Director', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' };
+      case 'manager':
+        return { label: 'Manager', color: '#2563eb', bg: 'rgba(37, 99, 235, 0.1)' };
+      case 'assistant':
+        return { label: 'Assistant', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+      case 'sale_admin':
+      case 'saleadmin':
+        return { label: 'Sale Admin', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' };
+      case 'sale':
+      case 'sales':
+        return { label: 'Sales', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' };
+      case 'hr':
+        return { label: 'HR', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' };
+      case 'accountant':
+        return { label: 'Accountant', color: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.1)' };
+      case 'marketing':
+        return { label: 'Marketing', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' };
+      default:
+        return { label: role || 'User', color: '#4b5563', bg: 'rgba(75, 85, 99, 0.1)' };
+    }
+  };
+
+  const badge = getRoleBadge(user?.role || '');
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      
+      {/* Title */}
+      <div>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text)', margin: 0 }}>
+          {t('Tài khoản cá nhân')}
+        </h1>
+        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+          {t('Quản lý thông tin hồ sơ cá nhân, đổi mật khẩu và xem lịch sử hoạt động.')}
+        </p>
+      </div>
+
+      <div className={styles.drawerBody} style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        minHeight: isMobile ? 'auto' : '600px',
+        background: 'var(--color-surface)',
+        borderRadius: '16px',
+        border: '1px solid var(--color-border)',
+        boxShadow: 'var(--shadow-sm)',
+        overflow: 'hidden'
+      }}>
+        
+        {/* Left Column: Sidebar with Avatar & Vertical Tabs */}
+        <div className={styles.sidebarTabs} style={{
+          width: isMobile ? '100%' : '280px',
+          borderRight: isMobile ? 'none' : '1px solid var(--color-border)',
+          borderBottom: isMobile ? '1px solid var(--color-border)' : 'none',
+          padding: isMobile ? '1.5rem 1rem' : '2rem 1.5rem',
+          background: 'var(--color-bg-light)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.25rem',
+          flexShrink: 0
+        }}>
+          {/* Avatar block */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ display: 'inline-block', position: 'relative', marginBottom: '1.25rem' }}>
+              <Avatar src={profileData.avatar} name={profileData.name || 'User'} size={96} />
+              {isUploadingAvatar && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600 }}>{t('Tải...')}</span>
+                </div>
+              )}
+            </div>
+
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-text)', margin: '0 0 6px 0' }}>
+              {profileData.name || user?.username}
+            </h2>
+            
+            <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '16px', fontSize: '0.72rem', fontWeight: 700, color: badge.color, backgroundColor: badge.bg, marginBottom: '1.25rem' }}>
+              {badge.label}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem', textAlign: 'left' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Mail size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{t('Email liên kết')}</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', wordBreak: 'break-all' }}>{profileData.email}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Clock size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{t('Quyền truy cập')}</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>{badge.label} System Access</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '1.5rem' }}>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="btn outline sm"
+                style={{ width: '100%', fontSize: '0.75rem', height: '34px' }}
+                disabled={isUploadingAvatar}
+              >
+                {t('Thay đổi ảnh đại diện')}
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarUpload}
+                accept="image/*"
+                style={{ display: 'none' }}
+              />
+            </div>
+          </div>
+
+          {/* Navigation Buttons Stacked Vertically / Horizontally */}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'row' : 'column', 
+            gap: '6px', 
+            borderTop: isMobile ? 'none' : '1px solid var(--color-border)', 
+            paddingTop: isMobile ? '0' : '1.5rem',
+            overflowX: isMobile ? 'auto' : 'visible',
+            scrollbarWidth: 'none',
+            width: '100%',
+            flexShrink: 0
+          }} className="hide-scrollbar">
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`${styles.sidebarTabBtn} ${activeTab === 'profile' ? styles.active : ''}`}
+              style={{
+                width: isMobile ? 'auto' : '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 14px', borderRadius: '8px', fontSize: '0.8125rem', whiteSpace: 'nowrap', flexShrink: 0
+              }}
+            >
+              <User size={16} />
+              <span>{t('Thông tin hồ sơ')}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('assets')}
+              className={`${styles.sidebarTabBtn} ${activeTab === 'assets' ? styles.active : ''}`}
+              style={{
+                width: isMobile ? 'auto' : '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 14px', borderRadius: '8px', fontSize: '0.8125rem', whiteSpace: 'nowrap', flexShrink: 0
+              }}
+            >
+              <Package size={16} />
+              <span>{t('Tài sản cấp phát')}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('password')}
+              className={`${styles.sidebarTabBtn} ${activeTab === 'password' ? styles.active : ''}`}
+              style={{
+                width: isMobile ? 'auto' : '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 14px', borderRadius: '8px', fontSize: '0.8125rem', whiteSpace: 'nowrap', flexShrink: 0
+              }}
+            >
+              <Key size={16} />
+              <span>{t('Mật khẩu & Bảo mật')}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`${styles.sidebarTabBtn} ${activeTab === 'activity' ? styles.active : ''}`}
+              style={{
+                width: isMobile ? 'auto' : '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 14px', borderRadius: '8px', fontSize: '0.8125rem', whiteSpace: 'nowrap', flexShrink: 0
+              }}
+            >
+              <Activity size={16} />
+              <span>{t('Lịch sử hoạt động')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Profile details Content Area */}
+        <div className={styles.contentArea} style={{
+          flex: 1,
+          padding: isMobile ? '1.5rem 0 1rem 0' : '2.5rem',
+          background: 'var(--color-surface)',
+          overflowY: isMobile ? 'visible' : 'auto'
+        }}>
+            {/* Tab 1: Profile */}
+            {activeTab === 'profile' && (
+              <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+                {/* Section 1: Basic info */}
+                <div>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 1rem 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <User size={16} color="var(--color-primary)" />
+                    {t('Thông tin cơ bản')}
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Họ và tên')} <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.name}
+                        onChange={e => setProfileData({ ...profileData, name: e.target.value })}
+                        placeholder={t("Nhập họ và tên...")}
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Email / Tên đăng nhập')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.email}
+                        disabled
+                        style={{ height: '40px', cursor: 'not-allowed', backgroundColor: 'var(--color-bg-light)', color: 'var(--color-text-muted)' }}
+                      />
+                      <small style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: '4px', display: 'block' }}>
+                        {t('Tên đăng nhập không thể thay đổi sau khi tạo để bảo mật vết hệ thống.')}
+                      </small>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Số điện thoại')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.phone}
+                        onChange={e => setProfileData({ ...profileData, phone: e.target.value })}
+                        placeholder="09xx xxx xxx"
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Giới tính')}</label>
+                      <select
+                        className="form-input"
+                        value={profileData.gender}
+                        onChange={e => setProfileData({ ...profileData, gender: e.target.value })}
+                        style={{ height: '40px' }}
+                      >
+                        <option value="">{t('-- Chọn giới tính --')}</option>
+                        <option value="male">{t('Nam')}</option>
+                        <option value="female">{t('Nữ')}</option>
+                        <option value="other">{t('Khác')}</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày sinh')}</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={profileData.dob}
+                        onChange={e => setProfileData({ ...profileData, dob: e.target.value })}
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('CCCD / Hộ chiếu')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.citizen_id}
+                        onChange={e => setProfileData({ ...profileData, citizen_id: e.target.value })}
+                        placeholder="Số CCCD..."
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Address & Bank */}
+                <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 1rem 0', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Building2 size={16} color="var(--color-primary)" />
+                    {t('Địa chỉ & Tài khoản ngân hàng')}
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group" style={{ gridColumn: isMobile ? 'span 1' : 'span 2', margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Địa chỉ thường trú / Liên hệ')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.address}
+                        onChange={e => setProfileData({ ...profileData, address: e.target.value })}
+                        placeholder={t("Nhập địa chỉ đầy đủ...")}
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngân hàng')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.bank_name}
+                        onChange={e => setProfileData({ ...profileData, bank_name: e.target.value })}
+                        placeholder="MBBank, Vietcombank, Techcombank..."
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600 }}>{t('Số tài khoản ngân hàng')}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={profileData.bank_account}
+                        onChange={e => setProfileData({ ...profileData, bank_account: e.target.value })}
+                        placeholder="0123456789..."
+                        style={{ height: '40px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Bio */}
+                <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Giới thiệu bản thân (Bio)')}</label>
+                    <textarea
+                      className="form-input"
+                      rows={3}
+                      style={{ resize: 'vertical' }}
+                      value={profileData.bio}
+                      onChange={e => setProfileData({ ...profileData, bio: e.target.value })}
+                      placeholder={t("Nhập một vài dòng giới thiệu về bản thân...")}
+                    />
+                  </div>
+                </div>
+
+                {/* Section 4: Signature */}
+                <div className="form-group" style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem', margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{t('Chữ ký Điện tử Cá nhân')}</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSignatureModal(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#BD1D2D',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Edit3 size={14} />
+                      {signatureUrl ? t('Thay đổi chữ ký mẫu') : t('Tạo chữ ký mẫu')}
+                    </button>
+                  </label>
+
+                  {signatureUrl ? (
+                    <div style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: '120px',
+                      maxHeight: '150px',
+                      backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                      backgroundSize: '12px 12px'
+                    }}>
+                      <img 
+                        src={signatureUrl ? (signatureUrl.startsWith('http') || signatureUrl.startsWith('data:') ? signatureUrl : `https://myerp.ideas.edu.vn/backend/${signatureUrl.replace(/^\/+/, '')}`) : ''} 
+                        alt="Chữ ký mẫu" 
+                        style={{ maxHeight: '110px', objectFit: 'contain' }} 
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => setShowSignatureModal(true)}
+                      style={{
+                        border: '2px dashed var(--color-border)',
+                        borderRadius: '8px',
+                        padding: '32px 20px',
+                        minHeight: '120px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        color: 'var(--color-text-muted)',
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        background: 'var(--color-bg-light)',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {t('Chưa thiết lập chữ ký mẫu. Bấm vào đây để vẽ hoặc tải ảnh chữ ký.')}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border-light)', paddingTop: '1.5rem' }}>
+                  <button type="submit" className="btn primary" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 20px', height: '40px', fontWeight: 700 }} disabled={loading}>
+                    <Save size={16} /> {loading ? t('Đang lưu...') : t('Lưu thay đổi')}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Tab: Assets */}
+            {activeTab === 'assets' && (
+              <AssignedAssetsSection
+                assets={myAssets}
+                onChange={() => {}}
+                readOnly={true}
+              />
+            )}
+
+            {/* Tab 2: Password */}
+            {activeTab === 'password' && (() => {
+              const newPass = passData.newPassword || '';
+              const confirmPass = passData.confirmPassword || '';
+              const isLongEnough = newPass.length >= 8;
+              const hasLetter = /[A-Za-z]/.test(newPass);
+              const hasDigit = /\d/.test(newPass);
+              const isStrong = isLongEnough && hasLetter && hasDigit;
+
+              const isConfirmTouched = confirmPass.length > 0;
+              const isConfirmMatch = isConfirmTouched && confirmPass === newPass;
+
+              return (
+                <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.06)', borderLeft: '4px solid #3b82f6', padding: '1rem', borderRadius: '6px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                    <Shield size={20} color="#2563eb" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <h4 style={{ color: '#1d4ed8', fontSize: '0.875rem', fontWeight: 700, margin: '0 0 4px 0' }}>{t('Yêu cầu mật khẩu bảo mật')}</h4>
+                      <p style={{ color: 'var(--color-text)', fontSize: '0.8125rem', margin: '0 0 8px 0', lineHeight: 1.5 }}>
+                        {t('Mật khẩu mới phải có tối thiểu 8 ký tự, bao gồm cả chữ cái và chữ số để đảm bảo an toàn tài khoản.')}
+                      </p>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '0.75rem' }}>
+                        <span style={{ color: isLongEnough ? '#059669' : '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: isLongEnough ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.04)', padding: '2px 8px', borderRadius: '4px' }}>
+                          {isLongEnough ? <Check size={13} color="#059669" /> : '○'} {t('Tối thiểu 8 ký tự')}
+                        </span>
+                        <span style={{ color: hasLetter ? '#059669' : '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: hasLetter ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.04)', padding: '2px 8px', borderRadius: '4px' }}>
+                          {hasLetter ? <Check size={13} color="#059669" /> : '○'} {t('Chứa chữ cái (a-z, A-Z)')}
+                        </span>
+                        <span style={{ color: hasDigit ? '#059669' : '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: hasDigit ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.04)', padding: '2px 8px', borderRadius: '4px' }}>
+                          {hasDigit ? <Check size={13} color="#059669" /> : '○'} {t('Chứa chữ số (0-9)')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Mật khẩu hiện tại')} <span style={{ color: '#ef4444' }}>*</span></label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showOldPass ? 'text' : 'password'}
+                        className="form-input"
+                        value={passData.oldPassword}
+                        onChange={e => setPassData({ ...passData, oldPassword: e.target.value })}
+                        placeholder={t("Nhập mật khẩu hiện tại...")}
+                        style={{ paddingRight: '45px', height: '40px' }}
+                      />
+                      <button type="button" onClick={() => setShowOldPass(!showOldPass)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                        {showOldPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Mật khẩu mới')} <span style={{ color: '#ef4444' }}>*</span></label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showNewPass ? 'text' : 'password'}
+                        className="form-input"
+                        value={passData.newPassword}
+                        onChange={e => setPassData({ ...passData, newPassword: e.target.value })}
+                        placeholder={t("Tối thiểu 8 ký tự gồm cả chữ và số...")}
+                        style={{
+                          paddingRight: '45px',
+                          height: '40px',
+                          borderColor: newPass.length > 0 ? (isStrong ? '#10b981' : '#f59e0b') : undefined
+                        }}
+                      />
+                      <button type="button" onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                        {showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Xác nhận mật khẩu mới')} <span style={{ color: '#ef4444' }}>*</span></label>
+                    <input
+                      type={showNewPass ? 'text' : 'password'}
+                      className="form-input"
+                      value={passData.confirmPassword}
+                      onChange={e => setPassData({ ...passData, confirmPassword: e.target.value })}
+                      placeholder={t("Nhập lại mật khẩu mới...")}
+                      style={{
+                        height: '40px',
+                        borderColor: isConfirmTouched ? (isConfirmMatch ? '#10b981' : '#ef4444') : undefined,
+                        boxShadow: isConfirmTouched ? (isConfirmMatch ? '0 0 0 1px #10b981' : '0 0 0 1px #ef4444') : undefined
+                      }}
+                    />
+                    {isConfirmTouched && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        marginTop: '6px',
+                        color: isConfirmMatch ? '#059669' : '#dc2626'
+                      }}>
+                        {isConfirmMatch ? (
+                          <><Check size={14} color="#059669" /> {t('Mật khẩu xác nhận trùng khớp')}</>
+                        ) : (
+                          <><X size={14} color="#dc2626" /> {t('Mật khẩu xác nhận không trùng khớp')}</>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border-light)', paddingTop: '1.5rem' }}>
+                    <button
+                      type="submit"
+                      className="btn primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 20px', height: '40px', fontWeight: 700 }}
+                      disabled={loading || !passData.oldPassword || !isStrong || !isConfirmMatch}
+                    >
+                      <Save size={16} /> {loading ? t('Đang cập nhật...') : t('Đổi mật khẩu')}
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
+
+            {/* Tab 3: Activity Logs */}
+            {activeTab === 'activity' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {loadingLogs ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <StatRowSkeleton />
+                    <StatRowSkeleton />
+                    <StatRowSkeleton />
+                  </div>
+                ) : activityLogs.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--color-text-muted)' }}>
+                    {t('Chưa có hoạt động nào được ghi nhận.')}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '500px', overflowY: 'auto' }} className="custom-scrollbar">
+                      {activityLogs
+                        .slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+                        .map((log: any) => {
+                          const action = (log.action || '').toUpperCase();
+                          let logTitle = t('Thao tác quản trị');
+                          if (action.includes('PASSWORD')) {
+                            logTitle = t('Thay đổi mật khẩu');
+                          } else if (action.includes('PROFILE') || action.includes('AVATAR')) {
+                            logTitle = t('Cập nhật thông tin cá nhân');
+                          } else if (action.includes('LEAD_BLACKLIST') || action.includes('BLOCK_LEAD')) {
+                            logTitle = t('Quản lý danh sách đen');
+                          } else if (action.includes('HELD_LEAD') || action.includes('REJECT_HELD_LEAD')) {
+                            logTitle = t('Kiểm soát dữ liệu trùng');
+                          }
+
+                          const isExpanded = expandedLogs[log.id] || false;
+
+                          return (
+                            <div 
+                              key={log.id} 
+                              style={{ 
+                                padding: '16px', 
+                                background: 'var(--color-bg-light)', 
+                                border: '1px solid var(--color-border-light)', 
+                                borderRadius: '12px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <div style={{
+                                  background: 'var(--color-primary)',
+                                  color: 'white',
+                                  borderRadius: '50%',
+                                  width: '32px',
+                                  height: '32px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}>
+                                  {(() => {
+                                    const act = action.toLowerCase();
+                                    if (act.includes('password')) return <Key size={14} />;
+                                    if (act.includes('profile') || act.includes('avatar')) return <User size={14} />;
+                                    return <Settings size={14} />;
+                                  })()}
+                                </div>
+
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                    <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                                      {logTitle}
+                                    </h4>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <Clock size={12} /> {formatLogDate(log.created_at)}
+                                    </span>
+                                  </div>
+                                  <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', margin: '4px 0 0', lineHeight: 1.4 }}>
+                                    Hành động: <code style={{ padding: '2px 6px', background: 'var(--color-surface)', borderRadius: 4, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-primary)' }}>{log.action}</code>
+                                  </p>
+                                </div>
+                              </div>
+
+                              {log.details && (
+                                <div style={{ marginTop: '4px', borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px' }}>
+                                  <button
+                                    onClick={() => toggleExpand(log.id)}
+                                    style={{ background: 'none', border: 'none', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    {isExpanded ? <><ChevronUp size={12} /> {t('Thu gọn chi tiết')}</> : <><ChevronDown size={12} /> {t('Xem chi tiết')}</>}
+                                  </button>
+                                  
+                                  {isExpanded && (
+                                    <pre style={{
+                                      marginTop: '8px',
+                                      background: 'var(--color-surface)',
+                                      border: '1px solid var(--color-border)',
+                                      borderRadius: '8px',
+                                      padding: '12px',
+                                      fontFamily: 'monospace',
+                                      fontSize: '0.75rem',
+                                      color: 'var(--color-text-light)',
+                                      overflowX: 'auto',
+                                      whiteSpace: 'pre-wrap',
+                                      margin: 0
+                                    }}>
+                                      {log.details}
+                                    </pre>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Pagination */}
+                    {activityLogs.length > ITEMS_PER_PAGE && (
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '1rem' }}>
+                        <button
+                          type="button"
+                          className="btn outline sm"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        >
+                          ← {t('Trước')}
+                        </button>
+                        <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                          {t('Trang')} {currentPage} / {Math.ceil(activityLogs.length / ITEMS_PER_PAGE)}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn outline sm"
+                          disabled={currentPage >= Math.ceil(activityLogs.length / ITEMS_PER_PAGE)}
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(activityLogs.length / ITEMS_PER_PAGE)))}
+                        >
+                          {t('Sau')} →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'center' }}>
+            <button
+              type="button"
+              onClick={() => logout()}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                padding: '12px 20px',
+                borderRadius: '12px',
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#ef4444',
+                fontWeight: 700,
+                fontSize: '0.9375rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <LogOut size={18} />
+              {t('Đăng xuất tài khoản')}
+            </button>
+          </div>
+        </div>
+
+      </div>
+      <SignaturePadModal
+        isOpen={showSignatureModal}
+        onClose={() => setShowSignatureModal(false)}
+        onSave={handleSaveSignatureInProfile}
+        initialSignatureUrl={signatureUrl}
+      />
+    </div>
+  );
+};
+
+export const PersonalAccount = withRouterFreezer(PersonalAccountInner, '/account');

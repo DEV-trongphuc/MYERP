@@ -1,0 +1,994 @@
+<?php
+// backend/controllers/ProjectController.php
+
+class ProjectController {
+    private PDO $db;
+
+    public function __construct(PDO $db) {
+        $this->db = $db;
+    }
+
+    private function requireProjectAccess(array $auth, int $projectId): void {
+        $stmtProj = $this->db->prepare("SELECT tenant_id, created_by, manager_ids FROM projects WHERE id = ?");
+        $stmtProj->execute([$projectId]);
+        $proj = $stmtProj->fetch(PDO::FETCH_ASSOC);
+        if (!$proj) {
+            respond(404, null, 'Dự án không tồn tại', false);
+        }
+        if ((int)$proj['tenant_id'] !== (int)$auth['tenant_id']) {
+            respond(403, null, 'Bạn không có quyền truy cập dự án này', false);
+        }
+
+        // Bypass if project creator or project manager (GĐKD Dự án)
+        if ($proj['created_by'] && (int)$proj['created_by'] === (int)$auth['user_id']) {
+            return;
+        }
+        if (!empty($proj['manager_ids'])) {
+            $mIds = array_filter(array_map('intval', explode(',', $proj['manager_ids'])));
+            if (in_array((int)$auth['user_id'], $mIds, true)) {
+                return;
+            }
+        }
+
+        $isRosterRestricted = in_array($auth['role'], ['sale', 'sales', 'manager'], true);
+        if (!$isRosterRestricted) {
+            return;
+        }
+
+        // Check if user is in roster for this project
+        $stmt = $this->db->prepare("
+            SELECT 1 FROM project_roster WHERE project_id = ? AND user_id = ?
+            UNION
+            SELECT 1 FROM projects WHERE id = ? AND (created_by = ? OR FIND_IN_SET(?, manager_ids))
+        ");
+        $stmt->execute([$projectId, $auth['user_id'], $projectId, $auth['user_id'], $auth['user_id']]);
+        if (!$stmt->fetch()) {
+            respond(403, null, 'Bạn không thuộc roster của dự án này để truy cập tài liệu', false);
+        }
+    }
+
+    private function requireProjectEditPermission(array $auth, int $projectId): void {
+        $stmtProj = $this->db->prepare("SELECT created_by, manager_ids FROM projects WHERE id = ?");
+        $stmtProj->execute([$projectId]);
+        $proj = $stmtProj->fetch(PDO::FETCH_ASSOC);
+        
+        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        if ($proj) {
+            if ($proj['created_by'] && (int)$proj['created_by'] === (int)$auth['user_id']) {
+                $isAuthorized = true;
+            }
+            if (!empty($proj['manager_ids'])) {
+                $mIds = array_filter(array_map('intval', explode(',', $proj['manager_ids'])));
+                if (in_array((int)$auth['user_id'], $mIds, true)) {
+                    $isAuthorized = true;
+                }
+            }
+        }
+
+        if (!$isAuthorized) {
+            $isManagerOrLeader = ($auth['role'] === 'manager');
+            if (!$isManagerOrLeader) {
+                $stmtLeader = $this->db->prepare("SELECT 1 FROM teams WHERE leader_id = ? LIMIT 1");
+                $stmtLeader->execute([(int)$auth['user_id']]);
+                if ($stmtLeader->fetch()) {
+                    $isManagerOrLeader = true;
+                }
+            }
+
+            if ($isManagerOrLeader) {
+                $stmtRoster = $this->db->prepare("SELECT 1 FROM project_roster WHERE project_id = ? AND user_id = ? LIMIT 1");
+                $stmtRoster->execute([$projectId, (int)$auth['user_id']]);
+                if ($stmtRoster->fetch()) {
+                    $isAuthorized = true;
+                }
+            }
+        }
+
+        if (!$isAuthorized) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa dự án này', false);
+        }
+        $this->requireProjectAccess($auth, $projectId);
+    }
+
+    public function index(array $auth): void {
+        $role = $auth['role'];
+        $uid = (int)$auth['user_id'];
+        
+        $where = "WHERE p.tenant_id = ?";
+        $params = [$auth['tenant_id']];
+        
+        $bypassRoster = (int)($_GET['bypass_roster'] ?? 0);
+        $isRosterRestricted = in_array($role, ['sale', 'sales', 'manager'], true);
+        if ($isRosterRestricted && !$bypassRoster) {
+            $where .= " AND (
+                p.id IN (SELECT project_id FROM project_roster WHERE user_id = ?)
+                OR FIND_IN_SET(?, p.manager_ids)
+                OR p.created_by = ?
+            )";
+            $params[] = $uid;
+            $params[] = $uid;
+            $params[] = $uid;
+        }
+
+        $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 0;
+        $limit = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 0;
+
+        if ($page > 0 && $limit > 0) {
+            // Count total
+            $stmtCount = $this->db->prepare("SELECT COUNT(*) FROM projects p $where");
+            $stmtCount->execute($params);
+            $total = (int)$stmtCount->fetchColumn();
+
+            $offset = ($page - 1) * $limit;
+            $stmt = $this->db->prepare("
+                SELECT p.*,
+                       (SELECT COUNT(*) FROM project_roster WHERE project_id = p.id) as roster_count,
+                       (SELECT COUNT(*) FROM project_documents WHERE project_id = p.id) as doc_count
+                FROM projects p
+                $where
+                ORDER BY p.created_at DESC
+                LIMIT $offset, $limit
+            ");
+            $stmt->execute($params);
+            $projects = $stmt->fetchAll();
+
+            respond(200, [
+                'data' => $projects,
+                'total' => $total,
+                'page' => $page,
+                'limit' => $limit
+            ], 'Lấy danh sách dự án thành công');
+        } else {
+            $stmt = $this->db->prepare("
+                SELECT p.*,
+                       (SELECT COUNT(*) FROM project_roster WHERE project_id = p.id) as roster_count,
+                       (SELECT COUNT(*) FROM project_documents WHERE project_id = p.id) as doc_count
+                FROM projects p
+                $where
+                ORDER BY p.created_at DESC
+            ");
+            $stmt->execute($params);
+            $projects = $stmt->fetchAll();
+            respond(200, $projects, 'Lấy danh sách dự án thành công');
+        }
+    }
+
+    public function show(array $auth, int $id): void {
+        $tenantId = $auth['tenant_id'] ?? 1;
+
+        $stmt = $this->db->prepare("SELECT p.* FROM projects p WHERE p.id = ?");
+        $stmt->execute([$id]);
+        $project = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$project) {
+            respond(404, null, 'Dự án không tồn tại', false);
+        }
+
+        // Fetch roster
+        try {
+            $rStmt = $this->db->prepare("
+                SELECT u.id, u.name as full_name, u.email, u.role, u.avatar_url
+                FROM users u
+                JOIN project_roster pr ON u.id = pr.user_id
+                WHERE pr.project_id = ?
+            ");
+            $rStmt->execute([$id]);
+            $project['roster'] = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $project['roster'] = [];
+        }
+
+        // Fetch documents
+        try {
+            $dStmt = $this->db->prepare("
+                SELECT id, name, file_path, file_size, mime_type, created_at
+                FROM project_documents
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+            ");
+            $dStmt->execute([$id]);
+            $project['documents'] = $dStmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $project['documents'] = [];
+        }
+
+        respond(200, $project, 'Lấy chi tiết dự án thành công');
+    }
+
+    private function generateUniqueCode(string $projectName): string {
+        // Lấy chữ cái đầu của các từ
+        $words = explode(' ', preg_replace('/\s+/', ' ', trim($projectName)));
+        $initials = '';
+        foreach ($words as $w) {
+            $char = mb_substr($w, 0, 1);
+            if (preg_match('/[a-zA-Z0-9]/', $char)) {
+                $initials .= strtoupper($char);
+            }
+        }
+        // Loại bỏ dấu tiếng Việt để có mã sạch
+        $initials = iconv('UTF-8', 'ASCII//TRANSLIT', $initials);
+        $initials = preg_replace('/[^A-Z0-9]/', '', strtoupper($initials));
+
+        if (empty($initials)) {
+            $initials = 'PROJ';
+        }
+
+        $code = $initials;
+        $counter = 1;
+        while (true) {
+            $stmt = $this->db->prepare("SELECT id FROM projects WHERE code = ?");
+            $stmt->execute([$code]);
+            if (!$stmt->fetch()) {
+                return $code;
+            }
+            $code = $initials . $counter;
+            $counter++;
+        }
+    }
+
+    public function store(array $auth): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
+        $b = getBody();
+        $name = trim($b['name'] ?? '');
+        $code = trim($b['code'] ?? '');
+        $desc = trim($b['description'] ?? '');
+        $status = trim($b['status'] ?? 'active');
+        $location = trim($b['location'] ?? '');
+        $developer = trim($b['developer'] ?? '');
+        $document_ids = trim($b['document_ids'] ?? '');
+        $campaign_ids = trim($b['campaign_ids'] ?? '');
+        $progress_percent = isset($b['progress_percent']) ? (int)$b['progress_percent'] : 0;
+        $construction_status = trim($b['construction_status'] ?? 'Chưa khởi công');
+        $legal_status = trim($b['legal_status'] ?? 'Đang hoàn thiện pháp lý');
+        $scale_block_count = isset($b['scale_block_count']) ? (int)$b['scale_block_count'] : 1;
+        $scale_unit_count = isset($b['scale_unit_count']) ? (int)$b['scale_unit_count'] : 100;
+        $handover_year = isset($b['handover_year']) ? (int)$b['handover_year'] : 2026;
+
+        if (!$name) {
+            respond(422, null, 'Tên dự án là bắt buộc', false);
+        }
+
+        // Tự động sinh mã nếu trống
+        if (empty($code)) {
+            $code = $this->generateUniqueCode($name);
+        }
+
+        // Check unique code
+        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ?");
+        $stmtCheck->execute([$code]);
+        if ($stmtCheck->fetch()) {
+            respond(400, null, 'Mã dự án đã tồn tại', false);
+        }
+
+        $manager_ids = trim($b['manager_ids'] ?? '');
+        $folder_path = trim($b['folder_path'] ?? '');
+        $reference_url = trim($b['reference_url'] ?? '');
+        $campaign_sharing_mode = trim($b['campaign_sharing_mode'] ?? 'independent');
+        if (!in_array($campaign_sharing_mode, ['public', 'project_members', 'independent'], true)) {
+            $campaign_sharing_mode = 'independent';
+        }
+
+        $stmt = $this->db->prepare("
+            INSERT INTO projects (tenant_id, name, code, description, status, location, developer, document_ids, campaign_ids, progress_percent, construction_status, legal_status, scale_block_count, scale_unit_count, handover_year, manager_ids, folder_path, reference_url, campaign_sharing_mode, created_by) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$auth['tenant_id'], $name, $code, $desc, $status, $location, $developer, $document_ids, $campaign_ids, $progress_percent, $construction_status, $legal_status, $scale_block_count, $scale_unit_count, $handover_year, $manager_ids, $folder_path, $reference_url, $campaign_sharing_mode, $auth['user_id']]);
+        $newId = $this->db->lastInsertId();
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE_PROJECT', 'project', $newId, "Tạo dự án: $name ($code)");
+
+        // Update campaigns to link to this new project
+        $campaignIdsArray = isset($b['campaign_ids_array']) && is_array($b['campaign_ids_array']) 
+            ? array_filter(array_map('intval', $b['campaign_ids_array'])) 
+            : [];
+            
+        if (empty($campaignIdsArray) && !empty($campaign_ids)) {
+            $campNames = array_filter(array_map('trim', explode(',', $campaign_ids)));
+            if (!empty($campNames)) {
+                $inClause = implode(',', array_fill(0, count($campNames), '?'));
+                $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE name IN ($inClause)");
+                $stmtC->execute($campNames);
+                $campaignIdsArray = $stmtC->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            }
+        }
+
+        if (!empty($campaignIdsArray)) {
+            $inClause = implode(',', array_fill(0, count($campaignIdsArray), '?'));
+            $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE id IN ($inClause)");
+            $stmtSet->execute(array_merge([$newId], $campaignIdsArray));
+        }
+
+        respond(200, ['id' => $newId, 'code' => $code], 'Tạo dự án thành công');
+    }
+
+    public function update(array $auth, int $id): void {
+        $this->requireProjectEditPermission($auth, $id);
+
+        $b = getBody();
+        $name = trim($b['name'] ?? '');
+        $code = trim($b['code'] ?? '');
+        $desc = trim($b['description'] ?? '');
+        $status = trim($b['status'] ?? 'active');
+        $location = trim($b['location'] ?? '');
+        $developer = trim($b['developer'] ?? '');
+        $document_ids = trim($b['document_ids'] ?? '');
+        $campaign_ids = trim($b['campaign_ids'] ?? '');
+        $progress_percent = isset($b['progress_percent']) ? (int)$b['progress_percent'] : 0;
+        $construction_status = trim($b['construction_status'] ?? 'Chưa khởi công');
+        $legal_status = trim($b['legal_status'] ?? 'Đang hoàn thiện pháp lý');
+        $scale_block_count = isset($b['scale_block_count']) ? (int)$b['scale_block_count'] : 1;
+        $scale_unit_count = isset($b['scale_unit_count']) ? (int)$b['scale_unit_count'] : 100;
+        $handover_year = isset($b['handover_year']) ? (int)$b['handover_year'] : 2026;
+
+        if (!$name) {
+            respond(422, null, 'Tên dự án là bắt buộc', false);
+        }
+
+        // Tự động sinh mã nếu trống
+        if (empty($code)) {
+            $code = $this->generateUniqueCode($name);
+        }
+
+        // Check unique code excluding this project
+        $stmtCheck = $this->db->prepare("SELECT id FROM projects WHERE code = ? AND id != ?");
+        $stmtCheck->execute([$code, $id]);
+        if ($stmtCheck->fetch()) {
+            respond(400, null, 'Mã dự án đã bị trùng với dự án khác', false);
+        }
+
+        $manager_ids = trim($b['manager_ids'] ?? '');
+        $folder_path = trim($b['folder_path'] ?? '');
+        $reference_url = trim($b['reference_url'] ?? '');
+        $campaign_sharing_mode = trim($b['campaign_sharing_mode'] ?? 'independent');
+        if (!in_array($campaign_sharing_mode, ['public', 'project_members', 'independent'], true)) {
+            $campaign_sharing_mode = 'independent';
+        }
+
+        $stmt = $this->db->prepare("
+            UPDATE projects 
+            SET name = ?, code = ?, description = ?, status = ?, location = ?, developer = ?, document_ids = ?, campaign_ids = ?, progress_percent = ?, construction_status = ?, legal_status = ?, scale_block_count = ?, scale_unit_count = ?, handover_year = ?, manager_ids = ?, folder_path = ?, reference_url = ?, campaign_sharing_mode = ? 
+            WHERE id = ? AND tenant_id = ?
+        ");
+        $stmt->execute([$name, $code, $desc, $status, $location, $developer, $document_ids, $campaign_ids, $progress_percent, $construction_status, $legal_status, $scale_block_count, $scale_unit_count, $handover_year, $manager_ids, $folder_path, $reference_url, $campaign_sharing_mode, $id, $auth['tenant_id']]);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_PROJECT', 'project', $id, "Cập nhật dự án: $name ($code)");
+
+        // Update campaigns to link to this project
+        $campaignIdsArray = isset($b['campaign_ids_array']) && is_array($b['campaign_ids_array']) 
+            ? array_filter(array_map('intval', $b['campaign_ids_array'])) 
+            : [];
+            
+        if (empty($campaignIdsArray) && !empty($campaign_ids)) {
+            $campNames = array_filter(array_map('trim', explode(',', $campaign_ids)));
+            if (!empty($campNames)) {
+                $inClause = implode(',', array_fill(0, count($campNames), '?'));
+                $stmtC = $this->db->prepare("SELECT id FROM marketing_campaigns WHERE name IN ($inClause)");
+                $stmtC->execute($campNames);
+                $campaignIdsArray = $stmtC->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            }
+        }
+
+        // Clear previous campaigns project_id association
+        $stmtClear = $this->db->prepare("UPDATE marketing_campaigns SET project_id = NULL WHERE project_id = ?");
+        $stmtClear->execute([$id]);
+
+        if (!empty($campaignIdsArray)) {
+            $inClause = implode(',', array_fill(0, count($campaignIdsArray), '?'));
+            $stmtSet = $this->db->prepare("UPDATE marketing_campaigns SET project_id = ? WHERE id IN ($inClause)");
+            $stmtSet->execute(array_merge([$id], $campaignIdsArray));
+        }
+
+        respond(200, null, 'Cập nhật dự án thành công');
+    }
+
+    public function destroy(array $auth, int $id): void {
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing']);
+        
+        $stmtProj = $this->db->prepare("SELECT created_by FROM projects WHERE id = ? AND tenant_id = ?");
+        $stmtProj->execute([$id, $auth['tenant_id']]);
+        $creatorId = $stmtProj->fetchColumn();
+            $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+            if (!$isAdminOrDirector && (int)$creatorId !== (int)$auth['user_id']) {
+                respond(403, null, 'Chỉ Admin, Director hoặc người tạo dự án mới được xóa', false);
+            }
+        
+        // Delete project physical documents
+        $docsStmt = $this->db->prepare("SELECT file_path FROM project_documents WHERE project_id = ?");
+        $docsStmt->execute([$id]);
+        $docs = $docsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($docs as $d) {
+            if (!empty($d['file_path'])) deleteServerFile($d['file_path']);
+        }
+        $this->db->prepare("DELETE FROM project_documents WHERE project_id = ?")->execute([$id]);
+
+        // Delete project comments physical attachments
+        $commentsStmt = $this->db->prepare("SELECT attachments, body FROM comments WHERE entity_type = 'project' AND entity_id = ? AND tenant_id = ?");
+        $commentsStmt->execute([$id, $auth['tenant_id']]);
+        $comments = $commentsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($comments as $c) {
+            if (!empty($c['attachments'])) deleteAttachmentFiles($c['attachments']);
+            if (!empty($c['body'])) deleteAttachmentFiles($c['body']);
+        }
+        $this->db->prepare("DELETE FROM comments WHERE entity_type = 'project' AND entity_id = ? AND tenant_id = ?")->execute([$id, $auth['tenant_id']]);
+
+        $stmt = $this->db->prepare("DELETE FROM projects WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$id, $auth['tenant_id']]);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE_PROJECT', 'project', $id, "Xóa dự án ID: $id");
+        respond(200, null, 'Xóa dự án thành công');
+    }
+
+    public function getRoster(array $auth, int $projectId): void {
+        $this->requireProjectAccess($auth, $projectId);
+
+        // Fetch user IDs in roster
+        $stmt = $this->db->prepare("
+             SELECT u.id, u.full_name, u.email, u.role, u.avatar_url, u.team_id,
+                    (CASE WHEN pr.user_id IS NOT NULL THEN 1 ELSE 0 END) as is_assigned
+              FROM users u
+              LEFT JOIN project_roster pr ON u.id = pr.user_id AND pr.project_id = ?
+              WHERE u.tenant_id = ? AND u.role IN ('sales', 'sale', 'manager', 'director') AND u.is_active = 1
+        ");
+        $stmt->execute([$projectId, $auth['tenant_id']]);
+        $roster = $stmt->fetchAll();
+        respond(200, $roster, 'Lấy danh sách roster thành công');
+    }
+
+    public function updateRoster(array $auth, int $projectId): void {
+        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        if (!$isAuthorized) {
+            $isManagerOrLeader = ($auth['role'] === 'manager');
+            if (!$isManagerOrLeader) {
+                $stmtLeader = $this->db->prepare("SELECT 1 FROM teams WHERE leader_id = ? LIMIT 1");
+                $stmtLeader->execute([(int)$auth['user_id']]);
+                if ($stmtLeader->fetch()) {
+                    $isManagerOrLeader = true;
+                }
+            }
+
+            if ($isManagerOrLeader) {
+                $stmtRoster = $this->db->prepare("SELECT 1 FROM project_roster WHERE project_id = ? AND user_id = ? LIMIT 1");
+                $stmtRoster->execute([$projectId, (int)$auth['user_id']]);
+                if ($stmtRoster->fetch()) {
+                    $isAuthorized = true;
+                }
+            }
+        }
+
+        if (!$isAuthorized) {
+            respond(403, null, 'Quyền truy cập bị từ chối', false);
+        }
+        $this->requireProjectAccess($auth, $projectId);
+        $b = getBody();
+        $userIds = $b['user_ids'] ?? []; // Array of user IDs to include in roster
+
+        if (!is_array($userIds)) {
+            respond(422, null, 'Danh sách user_ids không hợp lệ', false);
+        }
+
+        $this->db->beginTransaction();
+        try {
+            // Get current roster before delete
+            $stmtCurrent = $this->db->prepare("SELECT user_id FROM project_roster WHERE project_id = ?");
+            $stmtCurrent->execute([$projectId]);
+            $oldUserIds = $stmtCurrent->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+            // Remove all current roster for this project
+            $stmtDel = $this->db->prepare("DELETE FROM project_roster WHERE project_id = ?");
+            $stmtDel->execute([$projectId]);
+
+            // Add new roster entries
+            if (!empty($userIds)) {
+                $stmtAdd = $this->db->prepare("INSERT INTO project_roster (project_id, user_id) VALUES (?, ?)");
+                foreach ($userIds as $uid) {
+                    $stmtAdd->execute([$projectId, (int)$uid]);
+                }
+            }
+
+            // Find newly added users
+            $addedUserIds = array_diff($userIds, $oldUserIds);
+
+            if (!empty($addedUserIds)) {
+                // Get project name
+                $stmtName = $this->db->prepare("SELECT name FROM projects WHERE id = ?");
+                $stmtName->execute([$projectId]);
+                $projectName = $stmtName->fetchColumn() ?: "Dự án mới";
+
+                require_once __DIR__ . '/../NotificationService.php';
+                foreach ($addedUserIds as $newUid) {
+                    NotificationService::send($this->db, $auth['tenant_id'], 'PROJECT_ROSTER_UPDATE', [
+                        'user_id' => (int)$newUid,
+                        'project_name' => $projectName
+                    ]);
+                }
+            }
+
+            $this->db->commit();
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_PROJECT_ROSTER', 'project', $projectId, "Cập nhật roster dự án ID: $projectId, số lượng: " . count($userIds));
+            respond(200, null, 'Cập nhật roster thành công');
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi cập nhật roster: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function getDocuments(array $auth, int $projectId): void {
+        $this->requireProjectAccess($auth, $projectId);
+
+        $stmt = $this->db->prepare("
+            SELECT pd.*, u.full_name as uploaded_by_name 
+            FROM project_documents pd
+            JOIN users u ON pd.uploaded_by = u.id
+            WHERE pd.project_id = ? 
+            ORDER BY pd.created_at DESC
+        ");
+        $stmt->execute([$projectId]);
+        $docs = $stmt->fetchAll();
+        respond(200, $docs, 'Lấy danh sách tài liệu thành công');
+    }
+
+    public function uploadDocument(array $auth, int $projectId): void {
+        $this->requireProjectEditPermission($auth, $projectId);
+        
+        if (empty($_FILES['file'])) {
+            respond(400, null, 'Không tìm thấy file tải lên', false);
+        }
+
+        $file = $_FILES['file'];
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            respond(400, null, 'Lỗi tải file lên: ' . $file['error'], false);
+        }
+
+        $fileName = basename($file['name']);
+        $uploadDir = UPLOAD_DIR . '/projects/' . $projectId;
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $safeName = time() . '_' . preg_replace('/[^a-zA-Z0-9_.-]/', '_', $fileName);
+        $destPath = $uploadDir . '/' . $safeName;
+
+        require_once __DIR__ . '/../config/ImageHelper.php';
+        $res = ImageHelper::saveUploadedFile($file['tmp_name'], $destPath, $file['name']);
+
+        if ($res['success']) {
+            $savedName = $res['filename'];
+            $stmt = $this->db->prepare("
+                INSERT INTO project_documents (project_id, name, file_path, file_size, mime_type, uploaded_by) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $projectId,
+                $file['name'],
+                'projects/' . $projectId . '/' . $savedName, 
+                $file['size'], 
+                $file['type'], 
+                $auth['user_id']
+            ]);
+            $newDocId = $this->db->lastInsertId();
+
+            // Retrieve roster users for this project
+            $stmtRoster = $this->db->prepare("SELECT user_id FROM project_roster WHERE project_id = ?");
+            $stmtRoster->execute([$projectId]);
+            $rosterUsers = $stmtRoster->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+            // Get project details for name & managers
+            $stmtProj = $this->db->prepare("SELECT name, created_by, manager_ids FROM projects WHERE id = ?");
+            $stmtProj->execute([$projectId]);
+            $project = $stmtProj->fetch(PDO::FETCH_ASSOC);
+            $notifyUids = [];
+
+            if ($project) {
+                $projectName = $project['name'];
+                if ($project['created_by'] && (int)$project['created_by'] !== (int)$auth['user_id']) {
+                    $notifyUids[] = (int)$project['created_by'];
+                }
+                if (!empty($project['manager_ids'])) {
+                    $mIds = array_filter(array_map('intval', explode(',', $project['manager_ids'])));
+                    foreach ($mIds as $mId) {
+                        if ($mId !== (int)$auth['user_id']) {
+                            $notifyUids[] = $mId;
+                        }
+                    }
+                }
+            } else {
+                $projectName = "Dự án";
+            }
+
+            foreach ($rosterUsers as $rUid) {
+                if ((int)$rUid !== (int)$auth['user_id']) {
+                    $notifyUids[] = (int)$rUid;
+                }
+            }
+
+            $notifyUids = array_unique($notifyUids);
+
+            if (!empty($notifyUids)) {
+                $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'project_document', ?)");
+                foreach ($notifyUids as $nUid) {
+                    $stmtNotif->execute([
+                        $nUid,
+                        $auth['tenant_id'],
+                        "Tài liệu dự án mới được tải lên",
+                        $auth['full_name'] . " đã tải lên tài liệu mới \"" . $fileName . "\" cho dự án " . $projectName,
+                        "/projects?id=" . $projectId
+                    ]);
+                }
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPLOAD_PROJECT_DOC', 'project_document', $newDocId, "Tải lên tài liệu: $fileName cho dự án ID $projectId");
+            respond(200, ['id' => $newDocId, 'name' => $fileName], 'Tải lên tài liệu dự án thành công');
+        } else {
+            respond(500, null, 'Không thể lưu file trên máy chủ', false);
+        }
+    }
+
+    public function deleteDocument(array $auth, int $projectId, int $docId): void {
+        $this->requireProjectEditPermission($auth, $projectId);
+
+        // Fetch document info
+        $stmtDoc = $this->db->prepare("SELECT file_path, name FROM project_documents WHERE id = ? AND project_id = ?");
+        $stmtDoc->execute([$docId, $projectId]);
+        $doc = $stmtDoc->fetch();
+
+        if (!$doc) {
+            respond(404, null, 'Tài liệu không tồn tại', false);
+        }
+
+        // Delete physical file
+        deleteServerFile($doc['file_path']);
+
+        // Delete DB record
+        $stmt = $this->db->prepare("DELETE FROM project_documents WHERE id = ?");
+        $stmt->execute([$docId]);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE_PROJECT_DOC', 'project_document', $docId, "Xóa tài liệu: " . $doc['name']);
+        respond(200, null, 'Xóa tài liệu dự án thành công');
+    }
+
+    public function updateDocument(array $auth, int $projectId, int $docId): void {
+        $this->requireProjectEditPermission($auth, $projectId);
+
+        $b = getBody();
+        $name = trim($b['name'] ?? '');
+        if (empty($name)) {
+            respond(400, null, 'Tên tệp không được để trống', false);
+        }
+
+        // Fetch document info
+        $stmtDoc = $this->db->prepare("SELECT name FROM project_documents WHERE id = ? AND project_id = ?");
+        $stmtDoc->execute([$docId, $projectId]);
+        $oldName = $stmtDoc->fetchColumn();
+
+        if (!$oldName) {
+            respond(404, null, 'Tài liệu không tồn tại', false);
+        }
+
+        $stmt = $this->db->prepare("UPDATE project_documents SET name = ? WHERE id = ? AND project_id = ?");
+        $stmt->execute([$name, $docId, $projectId]);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_PROJECT_DOC', 'project_document', $docId, "Đổi tên tài liệu từ '$oldName' thành '$name'");
+        respond(200, null, 'Đổi tên tài liệu thành công');
+    }
+
+    public function downloadDocument(array $auth, int $projectId, int $docId): void {
+        $this->requireProjectAccess($auth, $projectId);
+
+        $stmtDoc = $this->db->prepare("SELECT file_path, name, mime_type FROM project_documents WHERE id = ? AND project_id = ?");
+        $stmtDoc->execute([$docId, $projectId]);
+        $doc = $stmtDoc->fetch();
+
+        if (!$doc) {
+            respond(404, null, 'Tài liệu không tồn tại', false);
+        }
+
+        $filePath = UPLOAD_DIR . '/' . $doc['file_path'];
+        if (!file_exists($filePath)) {
+            respond(404, null, 'File vật lý không tồn tại trên máy chủ', false);
+        }
+
+        // Force download file safely
+        header('Content-Description: File Transfer');
+        header('Content-Type: ' . ($doc['mime_type'] ?? 'application/octet-stream'));
+        header('Content-Disposition: attachment; filename="' . $doc['name'] . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($filePath));
+        readfile($filePath);
+        exit;
+    }
+
+    public function getComments(array $auth, int $projectId): void {
+        $this->requireProjectAccess($auth, $projectId);
+        $stmt = $this->db->prepare("
+            SELECT c.*, u.full_name as user_name, u.avatar_url 
+            FROM comments c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.entity_type = 'project' AND c.entity_id = ? AND c.tenant_id = ?
+            ORDER BY c.created_at DESC
+        ");
+        $stmt->execute([$projectId, $auth['tenant_id']]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $comments = array_map(function($row) {
+            if (!empty($row['attachments'])) {
+                $decoded = json_decode($row['attachments'], true);
+                $row['attachments'] = is_array($decoded) ? $decoded : [];
+            } else {
+                $row['attachments'] = [];
+            }
+            return $row;
+        }, $rows);
+        respond(200, $comments, 'Lấy danh sách bình luận thành công');
+    }
+
+    public function addComment(array $auth, int $projectId): void {
+        $this->requireProjectAccess($auth, $projectId);
+        $b = getBody();
+        $body = trim($b['body'] ?? '');
+        $attachments = !empty($b['attachments']) && is_array($b['attachments']) ? json_encode($b['attachments'], JSON_UNESCAPED_UNICODE) : null;
+        if (!$body && !$attachments) {
+            respond(422, null, 'Nội dung hoặc tệp đính kèm bình luận là bắt buộc', false);
+        }
+        $parentId = !empty($b['parent_id']) ? (int)$b['parent_id'] : null;
+
+        $stmt = $this->db->prepare("
+            INSERT INTO comments (tenant_id, entity_type, entity_id, user_id, body, attachments, parent_id) 
+            VALUES (?, 'project', ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$auth['tenant_id'], $projectId, $auth['user_id'], $body, $attachments, $parentId]);
+        $newId = $this->db->lastInsertId();
+
+        if ($parentId > 0) {
+            $stmtParent = $this->db->prepare("SELECT user_id FROM comments WHERE id = ?");
+            $stmtParent->execute([$parentId]);
+            $parentOwnerId = (int)$stmtParent->fetchColumn();
+
+            if ($parentOwnerId > 0 && $parentOwnerId !== (int)$auth['user_id']) {
+                $title = "Bạn có phản hồi mới trong thảo luận dự án";
+                $bodyText = ($auth['full_name'] ?? 'Đồng nghiệp') . " đã trả lời bình luận của bạn trong dự án";
+                $type = "info";
+                $link = "/projects?id=" . $projectId . "&highlight_comment_id=" . $newId;
+
+                $insertNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
+                $insertNotif->execute([$parentOwnerId, $auth['tenant_id'], $title, $bodyText, $type, $link]);
+            }
+        }
+
+        // Parse mentions in comment body
+        $mentions = [];
+        // 1. data-user-id
+        if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matchesId)) {
+            $uids = array_filter(array_map('intval', $matchesId[1]));
+            foreach ($uids as $uid) {
+                if ($uid !== (int)$auth['user_id']) {
+                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=?");
+                    $stmtUser->execute([$uid]);
+                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                    if ($userRow) {
+                        $mentions[$uid] = $userRow;
+                    }
+                }
+            }
+        }
+
+        // 2. @name fallback
+        $matches = [];
+        preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', (string)$body, $matches);
+        $names = is_array($matches[1] ?? null) ? $matches[1] : [];
+        if (!empty($names)) {
+            foreach ($names as $nameWithUnderscores) {
+                $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
+                if (empty($nameWithUnderscores)) continue;
+                $fullName = str_replace('_', ' ', $nameWithUnderscores);
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
+                $stmtUser->execute([$fullName, $nameWithUnderscores]);
+                $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                if ($userRow) {
+                    $uid = (int)$userRow['id'];
+                    if ($uid !== (int)$auth['user_id']) {
+                        $mentions[$uid] = $userRow;
+                    }
+                }
+            }
+        }
+
+        // Get project details for name & managers
+        $stmtProj = $this->db->prepare("SELECT name, created_by, manager_ids FROM projects WHERE id = ?");
+        $stmtProj->execute([$projectId]);
+        $project = $stmtProj->fetch(PDO::FETCH_ASSOC);
+        $projectName = $project ? $project['name'] : "Dự án";
+
+        // Retrieve roster users for this project
+        $stmtRoster = $this->db->prepare("SELECT user_id FROM project_roster WHERE project_id = ?");
+        $stmtRoster->execute([$projectId]);
+        $rosterUsers = $stmtRoster->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+        $notifyUids = [];
+        if ($project) {
+            if ($project['created_by'] && (int)$project['created_by'] !== (int)$auth['user_id']) {
+                $notifyUids[] = (int)$project['created_by'];
+            }
+            if (!empty($project['manager_ids'])) {
+                $mIds = array_filter(array_map('intval', explode(',', $project['manager_ids'])));
+                foreach ($mIds as $mId) {
+                    if ($mId !== (int)$auth['user_id']) {
+                        $notifyUids[] = $mId;
+                    }
+                }
+            }
+        }
+
+        foreach ($rosterUsers as $rUid) {
+            if ((int)$rUid !== (int)$auth['user_id']) {
+                $notifyUids[] = (int)$rUid;
+            }
+        }
+
+        $notifyUids = array_unique($notifyUids);
+        
+        // Remove mentioned users from generic notifications
+        $notifyUids = array_diff($notifyUids, array_keys($mentions));
+
+        $preview = mb_strimwidth($body, 0, 50, "...");
+
+        require_once __DIR__ . '/../NotificationService.php';
+
+        // Send mention notifications
+        if (!empty($mentions)) {
+            foreach ($mentions as $mUid => $userRow) {
+                NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
+                    'user_id' => (int)$mUid,
+                    'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
+                    'comment' => $body,
+                    'link' => "/projects?id=" . $projectId . "&highlight_comment_id=" . $newId
+                ]);
+            }
+        }
+
+        // Send regular notifications
+        if (!empty($notifyUids)) {
+            foreach ($notifyUids as $nUid) {
+                NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
+                    'user_id' => (int)$nUid,
+                    'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
+                    'comment' => $body,
+                    'link' => "/projects?id=" . $projectId . "&highlight_comment_id=" . $newId
+                ]);
+            }
+        }
+
+        respond(200, ['id' => $newId], 'Thêm bình luận thành công');
+    }
+
+    public function getStats(array $auth, int $projectId): void {
+        $this->requireProjectAccess($auth, $projectId);
+        
+        // Retrieve dynamic settings
+        $resOpp = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_opportunity_status' LIMIT 1");
+        $oppStatus = $resOpp ? $resOpp->fetchColumn() : 'booking';
+        if (!$oppStatus) {
+            $oppStatus = 'booking';
+        }
+
+        $resWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
+        $wonStatus = $resWon ? $resWon->fetchColumn() : 'hoc_vien';
+        if (!$wonStatus) {
+            $wonStatus = 'hoc_vien';
+        }
+
+        $resHier = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy' LIMIT 1");
+        $hierJson = $resHier ? $resHier->fetchColumn() : null;
+        $hierarchy = $hierJson ? json_decode($hierJson, true) : ['bo_theo_doi', 'chua_xac_dinh', 'co_nhu_cau', 'dang_tu_van', 'nop_ho_so', 'dong_le_phi_ho_so', 'hoc_vien', 'pending'];
+        if (!is_array($hierarchy)) {
+            $hierarchy = ['bo_theo_doi', 'chua_xac_dinh', 'co_nhu_cau', 'dang_tu_van', 'nop_ho_so', 'dong_le_phi_ho_so', 'hoc_vien', 'pending'];
+        }
+
+        // Find opportunity stages from $oppStatus onwards in hierarchy
+        $oppIdx = array_search($oppStatus, $hierarchy);
+        if ($oppIdx === false) {
+            $oppIdx = array_search('dong_le_phi_ho_so', $hierarchy);
+            if ($oppIdx === false) {
+                $oppIdx = 0;
+            }
+        }
+        $oppStages = array_slice($hierarchy, $oppIdx);
+
+        // Count total deals (contacts at or after opportunity status)
+        if (!empty($oppStages)) {
+            $placeholders = implode(',', array_fill(0, count($oppStages), '?'));
+            $stmtDeals = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND pipeline_status IN ($placeholders) AND deleted_at IS NULL");
+            $stmtDeals->execute(array_merge([$projectId], $oppStages));
+            $totalDeals = (int)$stmtDeals->fetchColumn();
+        } else {
+            $totalDeals = 0;
+        }
+        
+        // Count won deals (configured won status)
+        $stmtWon = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND pipeline_status = ? AND deleted_at IS NULL");
+        $stmtWon->execute([$projectId, $wonStatus]);
+        $wonDeals = (int)$stmtWon->fetchColumn();
+        
+        // Win rate
+        $winRate = $totalDeals > 0 ? round(($wonDeals / $totalDeals) * 100) : 0;
+        
+        // Expected revenue
+        $stmtExpRev = $this->db->prepare("SELECT COALESCE(SUM(expected_revenue), 0) FROM contacts WHERE project_id = ? AND deleted_at IS NULL");
+        $stmtExpRev->execute([$projectId]);
+        $expectedRevenue = (float)$stmtExpRev->fetchColumn();
+        
+        // Actual revenue (paid invoices)
+        $stmtActRev = $this->db->prepare("
+            SELECT COALESCE(SUM(total), 0) 
+            FROM invoices 
+            WHERE contact_id IN (SELECT id FROM contacts WHERE project_id = ? AND deleted_at IS NULL)
+              AND status = 'paid' 
+              AND deleted_at IS NULL
+        ");
+        $stmtActRev->execute([$projectId]);
+        $actualRevenue = (float)$stmtActRev->fetchColumn();
+        
+        // Total leads (all non-deleted contacts under this project)
+        $stmtLeads = $this->db->prepare("SELECT COUNT(*) FROM contacts WHERE project_id = ? AND deleted_at IS NULL");
+        $stmtLeads->execute([$projectId]);
+        $totalLeads = (int)$stmtLeads->fetchColumn();
+        
+        // Audit changelog trail: last 100 actions
+        $stmtLogs = $this->db->prepare("
+            SELECT a.id, a.action, a.new_data, a.created_at, u.full_name as user_name
+            FROM audit_logs a
+            LEFT JOIN users u ON a.user_id = u.id
+            WHERE a.resource = 'project' AND a.resource_id = ? AND a.tenant_id = ?
+            ORDER BY a.created_at DESC
+            LIMIT 100
+        ");
+        $stmtLogs->execute([$projectId, $auth['tenant_id']]);
+        $logs = $stmtLogs->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        
+        respond(200, [
+            'total_deals' => $totalDeals,
+            'won_deals' => $wonDeals,
+            'win_rate' => $winRate,
+            'expected_revenue' => $expectedRevenue,
+            'actual_revenue' => $actualRevenue,
+            'total_leads' => $totalLeads,
+            'logs' => $logs
+        ], 'Lấy thống kê dự án thành công');
+    }
+
+    public function deleteComment(array $auth, int $commentId): void {
+        $stmt = $this->db->prepare("SELECT * FROM comments WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$commentId, $auth['tenant_id']]);
+        $comment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$comment) {
+            respond(404, null, 'Bình luận không tồn tại', false);
+        }
+
+        $userRole = strtolower($auth['role'] ?? '');
+        $isAdmin = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isOwner = (int)$comment['user_id'] === (int)$auth['user_id'];
+
+        if (!$isAdmin && !$isOwner) {
+            respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
+        }
+
+        // Fetch all comments to be deleted (target comment + child replies) to clean up files
+        $fetchStmt = $this->db->prepare("SELECT attachments, body FROM comments WHERE (id = ? OR parent_id = ?) AND tenant_id = ?");
+        $fetchStmt->execute([$commentId, $commentId, $auth['tenant_id']]);
+        $commentsToDelete = $fetchStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($commentsToDelete as $c) {
+            if (!empty($c['attachments'])) deleteAttachmentFiles($c['attachments']);
+            if (!empty($c['body'])) deleteAttachmentFiles($c['body']);
+        }
+
+        $delStmt = $this->db->prepare("DELETE FROM comments WHERE (id = ? OR parent_id = ?) AND tenant_id = ?");
+        $delStmt->execute([$commentId, $commentId, $auth['tenant_id']]);
+
+        respond(200, null, 'Xóa bình luận thành công');
+    }
+}

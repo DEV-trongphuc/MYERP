@@ -1,0 +1,2776 @@
+import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { Plus, Search, Phone, Mail, Eye, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Avatar } from '../components/ui/Avatar';
+import { useUIStore } from '../store/uiStore';
+const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
+import { LeadScoreRing } from '../components/ui/LeadScoreRing';
+import { TagDisplay } from '../components/ui/TagInput';
+import { Pagination } from '../components/ui/Pagination';
+import { ColumnCustomizer, type ColumnDef } from '../components/ui/ColumnCustomizer';
+import { ImportExportModal } from '../components/ui/ImportExportModal';
+import { CustomModal } from '../components/ui/CustomModal';
+import { CustomSelect } from '../components/ui/CustomSelect';
+import { CustomCheckbox } from '../components/ui/CustomCheckbox';
+import { Skeleton, TableSkeleton } from '../components/ui/Skeleton';
+import { PhoneLink } from '../components/ui/PhoneLink';
+import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
+import { AddressSelect } from '../components/ui/AddressSelect';
+import type { Period, DateRange } from '../components/ui/PeriodFilter';
+import { CopyButton } from '../components/ui/CopyButton';
+import { Tooltip } from '../components/ui/Tooltip';
+import api from '../api/axios';
+import { fetchAPI } from '../utils/api';
+import { downloadExportFile } from '../utils/exportHelper';
+import { useDebounce } from '../hooks/useDebounce';
+import { useAuth } from '../contexts/AuthContext';
+
+const PAGE_SIZE = 10;
+
+const STATUS_LABEL: Record<string,string> = { lead:'Lead mới', qualified:'Đủ điều kiện', customer:'Học viên', churned:'Đã rời' };
+const STATUS_CLASS: Record<string,string> = { lead:'info', qualified:'warning', customer:'success', churned:'danger' };
+
+const getInteractionTime = (lastContact: string | null, updatedAt: string, createdAt: string) => {
+  if (!lastContact) return updatedAt || createdAt;
+  const contactDate = lastContact.slice(0, 10);
+  const updateDate = (updatedAt || '').slice(0, 10);
+  if (contactDate === updateDate) {
+    return updatedAt;
+  }
+  return lastContact;
+};
+
+const calcScore = (c: any, rules: any, decayDays = 5) => {
+  if (!c) return 0;
+  const r = rules || {
+    base_score: 10,
+    title_c_level: 20,
+    title_other: 5,
+    phone: 15,
+    mobile: 10,
+    both_phones: 10,
+    email: 10,
+    social_link: 10,
+    birthday: 10,
+    gender: 5,
+    customer_type: 5,
+    address: 15,
+    source_website: 15,
+    source_referral: 20,
+    project_id: 15,
+    company_id: 5,
+    industry: 5,
+    budget_range: 10,
+    revenue_high: 35,
+    revenue_medium: 20,
+    win_prob_high: 10,
+    status_qualified_customer: 15,
+    ttl1_completed: 25,
+    notes_long: 10,
+    has_tags: 10,
+    decay_no_interaction: -15
+  };
+  
+  let s = 0;
+  
+  // 1. Điểm khởi tạo (Mặc định)
+  s += Number(r.base_score ?? 10);
+
+  // 2. Chức danh
+  const title = (c.job_title || '').toLowerCase();
+  if (title.includes('giám đốc') || title.includes('ceo') || title.includes('sáng lập') || title.includes('founder') || title.includes('chủ tịch')) {
+    s += Number(r.title_c_level ?? 20);
+  } else if (title) {
+    s += Number(r.title_other ?? 5);
+  }
+
+  // 3. Số điện thoại & Thông tin liên hệ
+  if (c.phone) s += Number(r.phone ?? 15);
+  if (c.mobile) s += Number(r.mobile ?? 10);
+  if (c.phone && c.mobile) s += Number(r.both_phones ?? 10);
+  if (c.email) s += Number(r.email ?? 10);
+  if (c.zalo_link || c.fb_link) s += Number(r.social_link ?? 10);
+  if (c.birthday) s += Number(r.birthday ?? 10);
+  if (c.gender) s += Number(r.gender ?? 5);
+  if (c.customer_type) s += Number(r.customer_type ?? 5);
+
+  // 4. Địa chỉ
+  if (c.address) s += Number(r.address ?? 15);
+
+  // 5. Nguồn
+  if (c.source === 'website') s += Number(r.source_website ?? 15);
+  if (c.source === 'referral' || c.source === 'gioi_thieu') s += Number(r.source_referral ?? 20);
+
+  // 6. Liên kết dự án/công ty/phân khúc
+  if (c.project_id) s += Number(r.project_id ?? 15);
+  if (c.company_id) s += Number(r.company_id ?? 5);
+  if (c.industry) s += Number(r.industry ?? 5);
+  if (c.budget_range) s += Number(r.budget_range ?? 10);
+
+  // 7. Kỳ vọng doanh thu & Xác suất
+  const revenue = Number(c.expected_revenue) || 0;
+  if (revenue > 500000000) {
+    s += Number(r.revenue_high ?? 35);
+  } else if (revenue > 100000000) {
+    s += Number(r.revenue_medium ?? 20);
+  }
+  if (Number(c.win_probability) > 70) s += Number(r.win_prob_high ?? 10);
+
+  // 8. Trạng thái & TTL1
+  if (c.status === 'qualified' || c.status === 'customer') s += Number(r.status_qualified_customer ?? 15);
+  if (Number(c.ttl1_completed) === 1) s += Number(r.ttl1_completed ?? 25);
+
+  // 9. Ghi chú & Thẻ
+  if (c.notes && c.notes.trim().length > 10) s += Number(r.notes_long ?? 10);
+  
+  const tagList = typeof c.tags === 'string' 
+    ? c.tags.split(',').filter(Boolean) 
+    : (Array.isArray(c.tags) ? c.tags : []);
+  if (tagList.length > 0) s += Number(r.has_tags ?? 10);
+
+  // 10. Rớt nhiệt do quá X ngày không tương tác
+  const lastInteractionTime = c.last_contact || c.updated_at || c.created_at;
+  if (lastInteractionTime) {
+    const decayDaysInMs = decayDays * 24 * 60 * 60 * 1000;
+    const isDecayed = (new Date().getTime() - new Date(lastInteractionTime).getTime()) > decayDaysInMs;
+    if (isDecayed) {
+      s += Number(r.decay_no_interaction ?? -15);
+    }
+  }
+
+  return Math.min(100, Math.max(0, s));
+};
+
+const formatTimeAgo = (dateStr?: string) => {
+  if (!dateStr) return '—';
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  if (isNaN(diffMs)) return '—';
+  if (diffMs < 0) return 'Vừa xong';
+  
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Vừa xong';
+  if (diffMins < 60) return `${diffMins} phút trước`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} giờ trước`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} ngày trước`;
+};
+
+const SEGMENTS = [];
+
+const SOURCE_OPTIONS = [
+  { value: '', label: 'Tất cả nguồn' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'google', label: 'Google Ads' },
+  { value: 'gioi_thieu', label: 'Giới thiệu' },
+  { value: 'ca_nhan', label: 'Cá nhân tự khai thác' },
+  { value: 'website', label: 'Website' },
+  { value: 'other', label: 'Khác' }
+];
+
+const FMT_VND = (n: any) => {
+  const num = Math.round(Number(n || 0));
+  if (!num) return '—';
+  if (num >= 1e9) {
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(num / 1e9) + ' Tỷ đ';
+  }
+  if (num >= 1e6) {
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(num / 1e6) + ' Tr đ';
+  }
+  return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
+};
+const AGO_DAYS = (d: string) => d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 999;
+
+interface ContactsPageProps {
+  defaultSegment?: string;
+}
+
+export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'tiem_nang' }) => {
+  const { user } = useAuth();
+  const isSale = user?.role === 'sale';
+  const navigate = useNavigate();
+  const { addToast, showConfirm, closeConfirm } = useUIStore();
+  const [uncontactedCount, setUncontactedCount] = useState(() => {
+    return Number(sessionStorage.getItem('sale-uncontacted-count')) || 0;
+  });
+  const [pendingLeadsCount, setPendingLeadsCount] = useState(0);
+  const [initialMetadataLoaded, setInitialMetadataLoaded] = useState(false);
+
+  useEffect(() => {
+    if (isSale) {
+      fetchAPI('get_sale_portal_data').then(res => {
+        if (res && res.success && Array.isArray(res.leads)) {
+          const count = res.leads.filter((l: any) => {
+            if (Number(l.is_accepted)) return false;
+            const status = String(l.status || l.distribution_status || '').toLowerCase();
+            if (status === 'pending_work_hours' || status === 'pending_approval' || status === 'silent' || status === 'duplicate') {
+              return false;
+            }
+            return true;
+          }).length;
+          setPendingLeadsCount(count);
+        }
+      }).catch((err) => {
+        console.error("Error loading pending leads banner:", err);
+      });
+    }
+  }, [isSale]);
+
+  useEffect(() => {
+    const handleUncontactedCountChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setUncontactedCount(Number(detail) || 0);
+    };
+
+    window.addEventListener('uncontacted-count-changed', handleUncontactedCountChanged);
+    return () => {
+      window.removeEventListener('uncontacted-count-changed', handleUncontactedCountChanged);
+    };
+  }, []);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [studentSubTab, setStudentSubTab] = useState<'le_phi' | 'chinh_thuc' | 'nop_ho_so'>(() => {
+    const tab = searchParams.get('tab');
+    return (tab === 'chinh_thuc' || tab === 'le_phi' || tab === 'nop_ho_so') ? tab : 'chinh_thuc';
+  });
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'chinh_thuc' || tab === 'le_phi' || tab === 'nop_ho_so') {
+      setStudentSubTab(tab);
+    } else {
+      setStudentSubTab('chinh_thuc');
+    }
+  }, [searchParams]);
+
+  const [scoringRules, setScoringRules] = useState<any>(null);
+  const [decayDays, setDecayDays] = useState<number>(5);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search.trim(), 300); // 300ms debounce
+  const [pageSize, setPageSize] = useState<number>(() => {
+    return Number(localStorage.getItem('Ideas_contacts_page_size')) || 50;
+  });
+
+  const openContactId = searchParams.get('open_contact_id') || searchParams.get('id');
+
+  useEffect(() => {
+    if (openContactId) {
+      const cid = Number(openContactId);
+      if (cid) {
+        api.get(`/contacts/${cid}`).then(res => {
+          if (res.data.success && res.data.data) {
+            setProfileContact(res.data.data);
+          }
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('open_contact_id');
+          newParams.delete('id');
+          setSearchParams(newParams, { replace: true });
+        }).catch(err => {
+          console.error("Error loading auto-open contact:", err);
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('open_contact_id');
+          newParams.delete('id');
+          setSearchParams(newParams, { replace: true });
+        });
+      }
+    }
+  }, [openContactId]);
+  const [segment, setSegment] = useState(defaultSegment);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [page, setPage] = useState(1);
+  const [profileContact, setProfileContact] = useState<any>(null);
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ full_name: '', email: '', phone: '', company_name: '', job_title: '', status: 'lead', source: 'other', owner_id: '', city: '', ward: '', address: '' });
+  const [creating, setCreating] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+
+  // Advanced Filter state
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterSource, setFilterSource] = useState('');
+  const [filterDataType, setFilterDataType] = useState('');
+  const [filterOwnerId, setFilterOwnerId] = useState('');
+  const [filterProjectId, setFilterProjectId] = useState('');
+  const [filterCampaignId, setFilterCampaignId] = useState('');
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [filterTag, setFilterTag] = useState('');
+  const [dateFilterType, setDateFilterType] = useState<'range' | 'before' | 'after'>('range');
+  const [filterFromDate, setFilterFromDate] = useState('');
+  const [filterToDate, setFilterToDate] = useState('');
+  const [filterBeforeDate, setFilterBeforeDate] = useState('');
+  const [filterAfterDate, setFilterAfterDate] = useState('');
+  const [projects, setProjects] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+
+
+  const getEffectiveTeamId = () => {
+    const isMarketing = user?.role === 'marketing' || 
+      Number((user as any)?.team_id) === 3 || 
+      String((user as any)?.job_title || '').toLowerCase().includes('marketing') ||
+      String((user as any)?.team_name || '').toLowerCase().includes('marketing');
+    if (isMarketing || ['admin', 'superadmin', 'super_admin', 'director', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '')) {
+      return null;
+    }
+    if (user?.role === 'manager') {
+      const managedTeam = teams.find(t => Number(t.leader_id) === Number(user.id));
+      return managedTeam?.id || (user as any)?.team_id || null;
+    }
+    return (user as any)?.team_id || null;
+  };
+  const [activeFilters, setActiveFilters] = useState({
+    status: '',
+    source: '',
+    ownerId: '',
+    projectId: '',
+    campaignId: '',
+    tag: '',
+    dateField: 'created_at' as 'created_at' | 'updated_at' | 'last_contact',
+    dateType: 'range' as 'range' | 'before' | 'after',
+    fromDate: '',
+    toDate: '',
+    beforeDate: '',
+    afterDate: '',
+    dateActive: false,
+    dataType: ''
+  });
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      activeFilters.status,
+      activeFilters.source,
+      activeFilters.ownerId,
+      activeFilters.projectId,
+      activeFilters.campaignId,
+      activeFilters.tag,
+      activeFilters.dataType,
+      activeFilters.dateActive ? 'date' : ''
+    ].filter(val => {
+      if (typeof val === 'string') return val.trim() !== '';
+      return !!val;
+    }).length;
+  }, [activeFilters]);
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (statusParam === 'not_contacted') {
+      setFilterStatus('not_contacted');
+      setActiveFilters(prev => ({ ...prev, status: 'not_contacted' }));
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('status');
+      setSearchParams(newParams, { replace: true });
+    }
+
+    const projectIdParam = searchParams.get('project_id');
+    if (projectIdParam) {
+      setFilterProjectId(projectIdParam);
+      setActiveFilters(prev => ({ ...prev, projectId: projectIdParam }));
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('project_id');
+      setSearchParams(newParams, { replace: true });
+    }
+
+    const campaignIdParam = searchParams.get('campaign_id');
+    if (campaignIdParam) {
+      setFilterCampaignId(campaignIdParam);
+      setActiveFilters(prev => ({ ...prev, campaignId: campaignIdParam }));
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('campaign_id');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (showCreateModal && user) {
+      setCreateForm(prev => ({
+        ...prev,
+        owner_id: isSale ? String(user.id || '') : ''
+      }));
+    }
+  }, [showCreateModal, user, isSale]);
+
+  // New Enterprise Features State
+  const [viewMode, setViewMode] = useState<'list' | 'card'>(() => window.innerWidth <= 991 ? 'card' : 'list');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 991);
+  const [showMobileActions, setShowMobileActions] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 991);
+      if (window.innerWidth <= 991) {
+        setViewMode('card');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+
+  const [sortBy, setSortBy] = useState<'newest' | 'score_desc' | 'deal_desc' | 'interaction_desc'>('newest');
+  
+  // Date filter
+  const [datePeriod, setDatePeriod] = useState<Period>('this_month');
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
+  const [filterDateField, setFilterDateField] = useState<'created_at' | 'updated_at'>('created_at');
+  const [dateFilterActive, setDateFilterActive] = useState(false);
+  
+  const [columns, setColumns] = useState<ColumnDef[]>(() => {
+    const saved = localStorage.getItem('contacts_page_columns');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error('Failed to parse saved columns', e);
+      }
+    }
+    return [
+      { id: 'name', label: 'Tên liên hệ', visible: true },
+      { id: 'email', label: 'Email', visible: true },
+      { id: 'phone', label: 'SĐT', visible: true },
+      { id: 'company', label: 'Công ty', visible: false },
+      { id: 'tags', label: 'Phân loại (Tags)', visible: true },
+      { id: 'status', label: 'Trạng thái', visible: true },
+      { id: 'contact', label: 'Liên lạc cuối', visible: true },
+      { id: 'deal', label: 'Deal hiện tại', visible: false },
+      { id: 'owner', label: 'Sale phụ trách', visible: true },
+      { id: 'distribution', label: 'Nguồn phân bổ', visible: false },
+      { id: 'ticket_action', label: 'Helpdesk (Ticket)', visible: false },
+      { id: 'updated_at', label: 'Ngày cập nhật', visible: true },
+      { id: 'created_at', label: 'Ngày tạo', visible: true },
+      { id: 'score', label: 'Lead Score', visible: false },
+      { id: 'source', label: 'Nguồn khách hàng', visible: false },
+      { id: 'job_title', label: 'Chức danh', visible: false },
+      { id: 'birthday', label: 'Ngày sinh', visible: false },
+      { id: 'temperature', label: 'Nhiệt độ', visible: false },
+      { id: 'total_spent', label: 'Doanh thu / Đóng phí', visible: false },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('contacts_page_columns', JSON.stringify(columns));
+  }, [columns]);
+  const [showColumns, setShowColumns] = useState(false);
+  const [dbTags, setDbTags] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get('/tags')
+      .then(r => {
+        const arr = r.data && Array.isArray(r.data.data) 
+          ? r.data.data 
+          : (Array.isArray(r.data) ? r.data : []);
+        setDbTags(arr);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Report data/Ticket states
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedContactForReport, setSelectedContactForReport] = useState<any>(null);
+  const [reportReasonType, setReportReasonType] = useState('Số điện thoại không đúng / Thuê bao');
+  const [reportDetails, setReportDetails] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+
+  const handleOpenReportModal = (contact: any) => {
+    setSelectedContactForReport(contact);
+    setReportReasonType('Số điện thoại không đúng / Thuê bao');
+    setReportDetails('');
+    setReportModalOpen(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedContactForReport || submittingReport) return;
+    setSubmittingReport(true);
+    try {
+      const finalReason = reportReasonType === 'Lý do khác...'
+        ? `Lý do khác: ${reportDetails}`
+        : reportReasonType;
+
+      const payload = {
+        lead_id: selectedContactForReport.lead_id,
+        sale_id: selectedContactForReport.owner_id,
+        round_id: selectedContactForReport.dl_round_id,
+        reason: finalReason
+      };
+
+      const res = await api.post('/api.php?action=submit_report', payload);
+      if (res.data.success) {
+        if (res.data.auto_approved) {
+          addToast('Báo cáo lỗi đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT & ĐỀN BÙ thành công!', 'success');
+        } else {
+          addToast('Gửi báo lỗi data thành công! Đang chờ admin duyệt bù.', 'success');
+        }
+        setReportModalOpen(false);
+        fetchData();
+      } else {
+        addToast(res.data.message || 'Gửi báo lỗi thất bại', 'error');
+      }
+    } catch (err: any) {
+      addToast('Lỗi kết nối: ' + (err.message || ''), 'error');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
+  const [total, setTotal] = useState(0);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const params: any = { 
+        page, 
+        limit: pageSize, 
+        search: debouncedSearch, 
+        sort: sortBy === 'score_desc' ? 'lead_score' : (sortBy === 'deal_desc' ? 'open_deal_value' : (sortBy === 'interaction_desc' ? 'last_contact' : 'created_at')),
+        order: 'DESC',
+        segment
+      };
+
+      if (segment === 'customer') {
+        params.student_sub_tab = studentSubTab;
+      }
+      
+      if (activeFilters.status) {
+        if (/^\d+$/.test(activeFilters.status)) {
+          params.stage_id = activeFilters.status;
+        } else {
+          params.status = activeFilters.status;
+        }
+      }
+      if (activeFilters.source) params.source = activeFilters.source;
+      if (activeFilters.ownerId) params.owner_id = activeFilters.ownerId;
+      if (activeFilters.projectId) params.project_id = activeFilters.projectId;
+      if (activeFilters.campaignId) params.campaign_id = activeFilters.campaignId;
+      if (activeFilters.tag) params.tag = activeFilters.tag;
+      if (activeFilters.dataType) params.data_type = activeFilters.dataType;
+
+      if (activeFilters.dateActive) {
+        params.date_field = activeFilters.dateField;
+        if (activeFilters.dateType === 'range') {
+          if (activeFilters.fromDate) params.from = activeFilters.fromDate;
+          if (activeFilters.toDate) params.to = activeFilters.toDate;
+        } else if (activeFilters.dateType === 'before') {
+          if (activeFilters.beforeDate) params.to = activeFilters.beforeDate;
+        } else if (activeFilters.dateType === 'after') {
+          if (activeFilters.afterDate) params.from = activeFilters.afterDate;
+        }
+      }
+
+      const teamId = getEffectiveTeamId();
+      if (teamId) {
+        params.team_id = teamId;
+      }
+
+      const r = await api.get('/contacts', { params });
+      const data = r.data.data;
+      const items = data.items || [];
+      setContacts(items.map((c: any) => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
+      setTotal(data.total || items.length);
+    } catch (e: any) {
+      setContacts([]);
+      setTotal(0);
+      addToast('Không thể lấy danh sách liên hệ', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (initialMetadataLoaded) {
+      fetchData();
+    }
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (initialMetadataLoaded) {
+        fetchData();
+      }
+    };
+    window.addEventListener('lead-claimed', handleRefresh);
+    window.addEventListener('lead-added', handleRefresh);
+    window.addEventListener('contact-updated', handleRefresh);
+    return () => {
+      window.removeEventListener('lead-claimed', handleRefresh);
+      window.removeEventListener('lead-added', handleRefresh);
+      window.removeEventListener('contact-updated', handleRefresh);
+    };
+  }, [initialMetadataLoaded]);
+
+  useEffect(() => {
+    const loadMetadata = async () => {
+      try {
+        const projPromise = api.get('/projects?bypass_roster=1').catch(() => null);
+        const stagePromise = api.get('/pipeline-stages').catch(() => null);
+        const campaignPromise = api.get('/marketing-campaigns').catch(() => null);
+        
+        let teamsRes: any = null;
+        let usersRes: any = null;
+        
+        if (user && ['manager', 'admin', 'superadmin'].includes(user.role)) {
+          teamsRes = await api.get('/teams').catch(() => null);
+        }
+        
+        const [projRes, stageRes, campaignRes] = await Promise.all([projPromise, stagePromise, campaignPromise]);
+        
+        if (projRes) {
+          const d = projRes.data.data;
+          setProjects(Array.isArray(d) ? d : (d?.items || []));
+        }
+        if (stageRes) {
+          const d = stageRes.data.data;
+          setPipelineStages(Array.isArray(d) ? d : (d?.items || []));
+        }
+        if (campaignRes) {
+          const d = campaignRes.data.data;
+          setCampaigns(Array.isArray(d) ? d : (d?.items || []));
+        }
+        
+        let loadedTeams: any[] = [];
+        if (teamsRes) {
+          loadedTeams = teamsRes.data.data || teamsRes.data || [];
+          setTeams(loadedTeams);
+        }
+        
+        if (user) {
+          usersRes = await api.get('/users?all=1').catch(() => null);
+          if (usersRes) {
+            const d = usersRes.data.data;
+            const list = Array.isArray(d) ? d : (d?.items || []);
+            setUsers(list);
+          }
+        }
+        // Load lead scoring rules and decay days from settings
+        const settingsRes = await api.get('/api.php?action=get_settings').catch(() => null);
+        if (settingsRes && settingsRes.data?.success && settingsRes.data?.data) {
+          if (settingsRes.data.data.lead_scoring_rules) {
+            try {
+              const parsed = JSON.parse(settingsRes.data.data.lead_scoring_rules);
+              setScoringRules(parsed);
+            } catch(e) {}
+          }
+          if (settingsRes.data.data.temperature_decay_days) {
+            const parsedDays = parseInt(settingsRes.data.data.temperature_decay_days, 10);
+            if (!isNaN(parsedDays) && parsedDays > 0) {
+              setDecayDays(parsedDays);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error loading metadata:", err);
+      } finally {
+        setInitialMetadataLoaded(true);
+      }
+    };
+    
+    if (user) {
+      loadMetadata();
+    }
+  }, [user]);
+
+  const handleApplyFilters = () => {
+    setPage(1);
+    const dateActive = 
+      (dateFilterType === 'range' && (filterFromDate || filterToDate)) ||
+      (dateFilterType === 'before' && filterBeforeDate) ||
+      (dateFilterType === 'after' && filterAfterDate);
+
+    setActiveFilters({
+      status: filterStatus,
+      source: filterSource,
+      ownerId: filterOwnerId,
+      projectId: filterProjectId,
+      campaignId: filterCampaignId,
+      tag: filterTag.trim(),
+      dateField: filterDateField as any,
+      dateType: dateFilterType,
+      fromDate: filterFromDate,
+      toDate: filterToDate,
+      beforeDate: filterBeforeDate,
+      afterDate: filterAfterDate,
+      dateActive: !!dateActive,
+      dataType: filterDataType
+    });
+    setShowAdvancedFilters(false);
+  };
+
+  const handleResetFilters = () => {
+    setFilterStatus('');
+    setFilterSource('');
+    setFilterOwnerId('');
+    setFilterProjectId('');
+    setFilterCampaignId('');
+    setFilterTag('');
+    setFilterDateField('created_at');
+    setDateFilterType('range');
+    setFilterFromDate('');
+    setFilterToDate('');
+    setFilterBeforeDate('');
+    setFilterAfterDate('');
+    setPage(1);
+    setActiveFilters({
+      status: '',
+      source: '',
+      ownerId: '',
+      projectId: '',
+      campaignId: '',
+      tag: '',
+      dateField: 'created_at',
+      dateType: 'range',
+      fromDate: '',
+      toDate: '',
+      beforeDate: '',
+      afterDate: '',
+      dateActive: false,
+      dataType: ''
+    });
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showCreateModal && !creating) {
+        setShowCreateModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showCreateModal, creating]);
+
+  const paged = contacts;
+
+  const toggleSelect = (id: number) => setSelected(p => { 
+    const n = new Set(p); 
+    if (n.has(id)) n.delete(id); 
+    else n.add(id); 
+    return n; 
+  });
+  const toggleAll = () => setSelected(selected.size===paged.length ? new Set() : new Set(paged.map(c=>c.id)));
+
+  const bulkDelete = () => {
+    showConfirm({
+      title: `Xóa ${selected.size} liên hệ?`,
+      message: `Bạn có chắc chắn muốn xóa vĩnh viễn các liên hệ đã chọn? Thao tác này không thể hoàn tác.`,
+      isDanger: true,
+      impactInfo: `Cảnh báo: Thao tác này sẽ xóa vĩnh viễn ${selected.size} liên hệ và toàn bộ lịch sử giao dịch liên quan.`,
+      requireWordMatch: selected.size > 10 ? 'DELETE' : undefined,
+      confirmText: 'Xác nhận xóa vĩnh viễn',
+      onConfirm: async () => {
+        try {
+          await api.post('/contacts/bulk-delete', { ids: Array.from(selected) });
+          setContacts(p => p.filter(c => !selected.has(c.id)));
+          addToast(`Đã xóa ${selected.size} liên hệ thành công`, 'success');
+          setSelected(new Set());
+        } catch (e: any) {
+          addToast(e.response?.data?.message || 'Lỗi khi xóa liên hệ', 'error');
+        } finally {
+          closeConfirm();
+        }
+      }
+    });
+  };
+
+  const bulkExport = async () => {
+    const params: Record<string, any> = {
+      type: 'contact',
+      search: debouncedSearch,
+      segment,
+    };
+    if (segment === 'customer') {
+      params.student_sub_tab = studentSubTab;
+    }
+    if (activeFilters.status) {
+      if (/^\d+$/.test(activeFilters.status)) {
+        params.stage_id = activeFilters.status;
+      } else {
+        params.status = activeFilters.status;
+      }
+    }
+    if (activeFilters.source) params.source = activeFilters.source;
+    if (activeFilters.ownerId) params.owner_id = activeFilters.ownerId;
+    if (activeFilters.projectId) params.project_id = activeFilters.projectId;
+    if (activeFilters.campaignId) params.campaign_id = activeFilters.campaignId;
+    if (activeFilters.tag) params.tag = activeFilters.tag;
+    if (activeFilters.dataType) params.data_type = activeFilters.dataType;
+    if (activeFilters.dateActive) {
+      params.date_field = activeFilters.dateField;
+      params.date_type = activeFilters.dateType;
+      if (activeFilters.dateType === 'range') {
+        if (activeFilters.fromDate) params.from = activeFilters.fromDate;
+        if (activeFilters.toDate) params.to = activeFilters.toDate;
+      } else if (activeFilters.dateType === 'before') {
+        if (activeFilters.beforeDate) params.to = activeFilters.beforeDate;
+      } else if (activeFilters.dateType === 'after') {
+        if (activeFilters.afterDate) params.from = activeFilters.afterDate;
+      }
+    }
+    const teamId = getEffectiveTeamId();
+    if (teamId) {
+      params.team_id = teamId;
+    }
+
+    addToast('Đang tải xuống dữ liệu Export...', 'info');
+    try {
+      await downloadExportFile({
+        endpoint: '/export',
+        params,
+        defaultFilename: `export_contacts_${Date.now()}.csv`,
+        onSuccess: () => {
+          addToast('Tải xuống danh sách liên hệ thành công!', 'success');
+        },
+      });
+    } catch (err: any) {
+      addToast(err?.message || 'Xuất danh sách thất bại. Vui lòng thử lại sau.', 'error');
+    }
+  };
+  const bulkTag    = () => addToast('Mở gán tag hàng loạt...', 'info');
+  const bulkEmail  = () => addToast(`Soạn email cho ${selected.size} liên hệ...`, 'info');
+  const bulkAssign = () => addToast('Gán nhân viên phụ trách...', 'info');
+
+  const handleCreateContact = async () => {
+    if (!createForm.full_name.trim()) { addToast('Vui lòng nhập họ tên', 'error'); return; }
+    
+    // Yêu cầu ít nhất email hoặc số điện thoại
+    if (!createForm.email.trim() && !createForm.phone.trim()) {
+      addToast('Vui lòng cung cấp ít nhất Email hoặc Số điện thoại', 'error');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const r = await api.post('/contacts', createForm);
+      const newContact = r.data.data;
+      setContacts(prev => [newContact, ...prev]);
+      setShowCreateModal(false);
+      setCreateForm({ full_name: '', email: '', phone: '', company_name: '', job_title: '', status: 'lead', source: 'other', owner_id: '', city: '', ward: '', address: '' });
+      addToast('Đã thêm liên hệ mới thành công', 'success');
+    } catch (e: any) {
+      addToast(e.response?.data?.message || 'Không thể tạo liên hệ', 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const segmentCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: contacts.length, hot: 0, customer: 0, has_deal: 0, no_contact: 0, new_week: 0 };
+    contacts.forEach(c => {
+      if (!c) return;
+      const days = AGO_DAYS(c.last_contact);
+      if (c.score >= 80) counts.hot++;
+      if (c.status === 'customer') counts.customer++;
+      if ((c.open_deal_value || 0) > 0) counts.has_deal++;
+      if (days > 30) counts.no_contact++;
+      if (days <= 7) counts.new_week++;
+    });
+    return counts;
+  }, [contacts]);
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.5rem' }}>
+        <div style={{ width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h1 className="page-title" style={{ margin: 0 }}>{segment === 'customer' ? (studentSubTab === 'le_phi' ? 'Lệ phí hồ sơ' : studentSubTab === 'nop_ho_so' ? 'Nộp hồ sơ' : 'Học viên chính thức') : 'Tiềm năng'}</h1>
+              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, marginTop: '2px' }}>
+                {loading ? '(...)' : `(${total} liên hệ)`}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Render export buttons only if not on mobile */}
+        {!isMobile && (
+          <div className="flex gap-2">
+            {user?.role !== 'viewer' && !isSale && (
+              <button className="btn outline" onClick={() => setShowImportExport(true)} title="Nhập/Xuất Dữ liệu">
+                <Download size={14}/>
+                <span className="hide-on-mobile"> Nhập/Xuất Dữ liệu</span>
+              </button>
+            )}
+            {user?.role !== 'viewer' && user?.role !== 'sale' && (
+              <button className="btn outline" onClick={bulkExport} title="Xuất dữ liệu theo bộ lọc">
+                <Download size={14}/>
+                <span> Xuất theo bộ lọc</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {isSale && pendingLeadsCount > 0 && (
+        <div 
+          onClick={() => navigate('/workspace')}
+          style={{
+            background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+            border: '1px solid #fca5a5',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            boxShadow: '0 4px 6px -1px rgba(220, 38, 38, 0.05), 0 2px 4px -1px rgba(220, 38, 38, 0.03)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: '#ef4444', color: '#fff', borderRadius: '50%', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <AlertCircle size={16} />
+            </div>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: '#991b1b' }}>
+                Bạn có {pendingLeadsCount} khách hàng mới chưa tiếp nhận!
+              </p>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#b91c1c' }}>
+                Vui lòng vào Bàn làm việc để bấm "Tiếp nhận" ngay trước khi hết giờ và bị hệ thống thu hồi.
+              </p>
+            </div>
+          </div>
+          <button className="btn danger sm" style={{ height: 32, borderRadius: 8, fontSize: '0.8rem', padding: '0 12px' }}>
+            Đi tới Bàn làm việc
+          </button>
+        </div>
+      )}
+
+
+
+      {/* Search + filter row */}
+      <div className={isMobile ? "" : "card"} style={{ padding: isMobile ? '0' : '0.75rem 1rem', marginBottom:'0.75rem', display:'flex', gap:'0.75rem', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', background: isMobile ? 'transparent' : undefined, border: isMobile ? 'none' : undefined, boxShadow: isMobile ? 'none' : undefined }}>
+        {isMobile ? (
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', width: '100%', position: 'relative' }}>
+            <div className="filter-search" style={{ flex: 1, position: 'relative', height: '36px', borderRadius: '8px', border: '1px solid var(--color-border)', boxSizing: 'border-box', padding: 0, display: 'flex', alignItems: 'center', marginBottom: 0 }}>
+              <Search size={12} style={{ color:'var(--color-text-muted)', marginLeft: '8px', marginRight: '4px', flexShrink: 0 }}/>
+              <input 
+                placeholder="Tìm tên, email, điện thoại..." 
+                value={search} 
+                onChange={e=>{setSearch(e.target.value);setPage(1);}} 
+                style={{ border: 'none', background: 'transparent', outline: 'none', padding: '0 8px', height: '100%', fontSize: '0.75rem', flex: 1, minWidth: 0 }}
+              />
+              <div style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+                <AnimatePresence>
+                  {search && (
+                    <motion.button 
+                      initial={{ opacity: 0, scale: 0.8 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.15 }}
+                      className="btn-icon-bare" 
+                      onClick={() => setSearch('')} 
+                      style={{ padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none', background: 'transparent' }}
+                    >
+                      <X size={12} style={{ color: 'var(--color-text-muted)' }}/>
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+ 
+            {/* More Actions Trigger (...) */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <button 
+                className="mobile-more-btn"
+                onClick={() => setShowMobileActions(!showMobileActions)}
+                style={{
+                  height: '36px',
+                  width: '36px',
+                  minWidth: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  background: showMobileActions ? 'var(--color-border-light)' : 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  outline: 'none',
+                  boxShadow: 'var(--shadow-sm)',
+                  padding: 0,
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+ 
+              {/* Mobile Actions Dropdown */}
+              <AnimatePresence>
+                {showMobileActions && (
+                  <>
+                    {/* Backdrop to close dropdown */}
+                    <div 
+                      onClick={() => setShowMobileActions(false)} 
+                      style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'transparent' }}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: '38px',
+                        width: '200px',
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '12px',
+                        boxShadow: 'var(--shadow-lg)',
+                        padding: '6px',
+                        zIndex: 999,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px'
+                      }}
+                    >
+                      {/* Advanced Filter Toggle */}
+                      <button
+                        onClick={() => {
+                          setShowAdvancedFilters(!showAdvancedFilters);
+                          setShowMobileActions(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: 'none',
+                          background: showAdvancedFilters ? 'var(--color-bg-light)' : 'transparent',
+                          color: showAdvancedFilters ? 'var(--color-primary)' : 'var(--color-text)',
+                          borderRadius: '8px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Filter size={12} />
+                        <span>Bộ lọc nâng cao</span>
+                        {activeFiltersCount > 0 && (
+                          <span
+                            style={{
+                              background: 'var(--color-danger, #ef4444)',
+                              color: '#ffffff',
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              borderRadius: '50%',
+                              minWidth: '16px',
+                              height: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0 4px',
+                              marginLeft: 'auto',
+                              lineHeight: 1
+                            }}
+                          >
+                            {activeFiltersCount}
+                          </span>
+                        )}
+                      </button>
+ 
+
+ 
+                      <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
+ 
+                      {/* Sorting Dropdowns inside mobile menu */}
+                      <div style={{ padding: '4px 12px', fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        Sắp xếp
+                      </div>
+                      {(['newest', 'interaction_desc', 'score_desc', 'deal_desc'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setSortBy(mode as any);
+                            setShowMobileActions(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            width: '100%',
+                            padding: '6px 12px 6px 24px',
+                            border: 'none',
+                            background: sortBy === mode ? 'var(--color-bg-light)' : 'transparent',
+                            color: sortBy === mode ? 'var(--color-primary)' : 'var(--color-text)',
+                            borderRadius: '6px',
+                            fontSize: '0.725rem',
+                            fontWeight: 600,
+                            textAlign: 'left',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span style={{ width: 4, height: 4, borderRadius: '50%', background: sortBy === mode ? 'var(--color-primary)' : 'transparent', display: 'inline-block' }} />
+                          <span>
+                            {mode === 'newest' ? 'Mới nhất' : mode === 'interaction_desc' ? 'Tương tác gần nhất' : mode === 'score_desc' ? 'Theo Score' : 'Theo Deal'}
+                          </span>
+                        </button>
+                      ))}
+ 
+                      <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
+ 
+                      {/* View Mode Toggle inside mobile menu */}
+                      <div style={{ padding: '4px 12px', fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        Kiểu hiển thị
+                      </div>
+                      {(['list', 'card'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setViewMode(mode);
+                            setShowMobileActions(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            width: '100%',
+                            padding: '6px 12px 6px 24px',
+                            border: 'none',
+                            background: viewMode === mode ? 'var(--color-bg-light)' : 'transparent',
+                            color: viewMode === mode ? 'var(--color-primary)' : 'var(--color-text)',
+                            borderRadius: '6px',
+                            fontSize: '0.725rem',
+                            fontWeight: 600,
+                            textAlign: 'left',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span style={{ width: 4, height: 4, borderRadius: '50%', background: viewMode === mode ? 'var(--color-primary)' : 'transparent', display: 'inline-block' }} />
+                          <span>{mode === 'list' ? 'Dạng danh sách' : 'Dạng ô vuông'}</span>
+                        </button>
+                      ))}
+ 
+                      {(user?.role as string) !== 'viewer' && (!isSale || user?.role !== 'sale') && (
+                        <>
+                          <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
+                          {/* Import/Export Action */}
+                          {(user?.role as string) !== 'viewer' && !isSale && (
+                            <button
+                              onClick={() => {
+                                setShowImportExport(true);
+                                setShowMobileActions(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                width: '100%',
+                                padding: '8px 12px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'var(--color-text)',
+                                borderRadius: '8px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Download size={12} />
+                              <span>Nhập/Xuất Dữ liệu</span>
+                            </button>
+                          )}
+                          {/* Filter Export Action */}
+                          {(user?.role as string) !== 'viewer' && user?.role !== 'sale' && (
+                            <button
+                              onClick={() => {
+                                bulkExport();
+                                setShowMobileActions(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                width: '100%',
+                                padding: '8px 12px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'var(--color-text)',
+                                borderRadius: '8px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Download size={12} />
+                              <span>Xuất theo bộ lọc</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Row 1: Search and separate Filter Button */}
+            <div style={{ display: 'flex', gap: '8px', width: '100%', flex: 1, alignItems: 'center' }}>
+              <div className="filter-search" style={{ flex: 1, position: 'relative', width: 'auto', height: '38px', borderRadius: '8px', border: '1px solid var(--color-border)', boxSizing: 'border-box', paddingRight: '2.5rem' }}>
+                <Search size={14} style={{ color:'var(--color-text-muted)', marginLeft: '4px' }}/>
+                <input 
+                  placeholder="Tìm tên, email, điện thoại..." 
+                  value={search} 
+                  onChange={e=>{setSearch(e.target.value);setPage(1);}} 
+                  style={{ paddingRight: '0.5rem', height: '100%' }}
+                />
+                <div style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+                  <AnimatePresence>
+                    {search && (
+                      <motion.button 
+                        initial={{ opacity: 0, scale: 0.8 }} 
+                        animate={{ opacity: 1, scale: 1 }} 
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={{ duration: 0.15 }}
+                        className="btn-icon-bare" 
+                        onClick={() => setSearch('')} 
+                        style={{ padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none', background: 'transparent' }}
+                        title="Xóa tìm kiếm"
+                      >
+                        <X size={14} style={{ color: 'var(--color-text-muted)' }}/>
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+ 
+              <button 
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                style={{
+                  height: '38px',
+                  padding: '0 0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  background: showAdvancedFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
+                  color: showAdvancedFilters ? 'var(--color-primary)' : 'var(--color-text)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s',
+                  boxShadow: 'var(--shadow-sm)',
+                  outline: 'none',
+                  position: 'relative'
+                }}
+                title="Bộ lọc nâng cao"
+              >
+                <Filter size={14} />
+                <span>Bộ lọc</span>
+                {activeFiltersCount > 0 && (
+                  <span
+                    style={{
+                      background: 'var(--color-danger, #ef4444)',
+                      color: '#ffffff',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '50%',
+                      minWidth: '18px',
+                      height: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 4px',
+                      marginLeft: '2px',
+                      lineHeight: 1
+                    }}
+                  >
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
+ 
+            {/* Row 2: Chọn nhanh, Sort Select & View Mode switchers */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto', flexShrink: 0 }}>
+
+              {!isMobile && <div style={{ flex: 1 }} />}
+              
+              <div style={{ width: isMobile ? '130px' : 170 }}>
+                <CustomSelect 
+                  value={sortBy} 
+                  onChange={val => setSortBy(val as any)} 
+                  options={[
+                    { value: 'newest', label: 'Mới nhất', icon: <ArrowDownUp size={14} /> },
+                    { value: 'interaction_desc', label: 'Tương tác gần nhất', icon: <ArrowDownUp size={14} /> },
+                    { value: 'score_desc', label: 'Score', icon: <ArrowDownUp size={14} /> },
+                    { value: 'deal_desc', label: 'Deal', icon: <ArrowDownUp size={14} /> }
+                  ]} 
+                />
+              </div>
+ 
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                {!isMobile && (
+                  <div style={{
+                    display: 'flex',
+                    background: 'var(--color-border-light)',
+                    border: '1px solid var(--color-border)',
+                    padding: '2px',
+                    borderRadius: '8px',
+                    gap: '2px',
+                    alignItems: 'center',
+                    height: '38px',
+                    boxSizing: 'border-box'
+                  }}>
+                    <button 
+                      onClick={() => setViewMode('list')} 
+                      title="Danh sách"
+                      style={{ 
+                        padding: 0, 
+                        height: '32px', 
+                        width: '32px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        borderRadius: '6px',
+                        border: 'none',
+                        outline: 'none',
+                        boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        background: viewMode === 'list' ? 'var(--color-surface)' : 'transparent',
+                        color: viewMode === 'list' ? 'var(--color-text)' : 'var(--color-text-light)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <List size={16} />
+                    </button>
+                    <button 
+                      onClick={() => setViewMode('card')} 
+                      title="Dạng thẻ"
+                      style={{ 
+                        padding: 0, 
+                        height: '32px', 
+                        width: '32px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        borderRadius: '6px',
+                        border: 'none',
+                        outline: 'none',
+                        boxShadow: viewMode === 'card' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        background: viewMode === 'card' ? 'var(--color-surface)' : 'transparent',
+                        color: viewMode === 'card' ? 'var(--color-text)' : 'var(--color-text-light)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <LayoutGrid size={16} />
+                    </button>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => setShowColumns(true)} 
+                  title="Tùy chỉnh cột"
+                  style={{ 
+                    padding: 0, 
+                    height: '38px', 
+                    width: '38px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <Columns size={16} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Collapsible Advanced Filters Panel */}
+      <AnimatePresence>
+        {showAdvancedFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ overflow: showAdvancedFilters ? 'visible' : 'hidden', marginBottom: '0.75rem' }}
+          >
+            <div className="card" style={{ padding: '1.25rem', border: '1px solid var(--color-primary-light)', background: 'var(--color-surface)', borderRadius: '16px' }}>
+              {/* Nhóm 1: Thông tin khách hàng */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Thông tin khách hàng
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                  {/* Trạng thái */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Trạng thái</label>
+                    <CustomSelect
+                      value={filterStatus}
+                      onChange={v => setFilterStatus(v)}
+                      options={[
+                        { value: '', label: 'Tất cả trạng thái' },
+                        { value: 'not_contacted', label: 'Chưa liên hệ' },
+                        ...(pipelineStages.length > 0 
+                          ? pipelineStages.map(s => ({ value: String(s.id), label: s.name }))
+                          : [
+                              { value: 'lead', label: 'Lead mới' },
+                              { value: 'qualified', label: 'Đủ điều kiện' },
+                              { value: 'customer', label: 'Học viên VIP' },
+                              { value: 'churned', label: 'Đã rời' }
+                            ]
+                        )
+                      ]}
+                    />
+                  </div>
+
+                  {/* Dự án */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Dự án giao dịch</label>
+                    <CustomSelect
+                      value={filterProjectId}
+                      onChange={v => {
+                        setFilterProjectId(v);
+                        if (v && filterCampaignId) {
+                          const camp = campaigns.find(c => String(c.id) === String(filterCampaignId));
+                          if (camp && String(camp.project_id) !== String(v)) {
+                            setFilterCampaignId('');
+                          }
+                        }
+                      }}
+                      options={[
+                        { value: '', label: 'Tất cả dự án' },
+                        ...projects.map(p => ({ value: String(p.id), label: p.name }))
+                      ]}
+                      searchable
+                    />
+                  </div>
+
+                  {/* Chiến dịch */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Chiến dịch</label>
+                    {(() => {
+                      const filteredCamps = filterProjectId
+                        ? campaigns.filter(c => Number(c.project_id) === Number(filterProjectId))
+                        : campaigns;
+                      return (
+                        <CustomSelect
+                          value={filterCampaignId}
+                          onChange={v => {
+                            setFilterCampaignId(v);
+                            if (v) {
+                              const camp = campaigns.find(c => String(c.id) === String(v));
+                              if (camp && camp.project_id) {
+                                setFilterProjectId(String(camp.project_id));
+                              }
+                            }
+                          }}
+                          options={[
+                            { value: '', label: 'Tất cả chiến dịch' },
+                            ...filteredCamps.map(c => ({ value: String(c.id), label: c.name }))
+                          ]}
+                          searchable
+                        />
+                      );
+                    })()}
+                  </div>
+
+                  {/* Nhóm nguồn data */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Phân loại nguồn data</label>
+                    <CustomSelect
+                      value={filterDataType}
+                      onChange={v => setFilterDataType(v)}
+                      options={[
+                        { value: '', label: 'Tất cả loại data' },
+                        { value: 'distributed', label: 'Data được chia' },
+                        { value: 'personal', label: 'Data cá nhân' },
+                        { value: 'error_ticket', label: 'Data lỗi & Ticket' }
+                      ]}
+                    />
+                  </div>
+
+                  {/* Nguồn */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Nguồn khách hàng</label>
+                    <CustomSelect
+                      value={filterSource}
+                      onChange={v => setFilterSource(v)}
+                      options={SOURCE_OPTIONS}
+                    />
+                  </div>
+
+                  {/* Sale phụ trách */}
+                  {!isSale && (
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Sale phụ trách</label>
+                      <CustomSelect
+                        value={filterOwnerId}
+                        onChange={v => setFilterOwnerId(v)}
+                        options={[
+                          { value: '', label: 'Tất cả sales' },
+                          ...(() => {
+                            let list = users;
+                            if (user?.role === 'manager') {
+                              const managedTeam = teams.find(t => Number(t.leader_id) === Number(user?.id));
+                              const activeTeamId = managedTeam?.id || null;
+                              if (activeTeamId) {
+                                list = list.filter((u: any) => String(u.team_id) === String(activeTeamId));
+                              }
+                            }
+                            return list;
+                          })().map(u => ({ 
+                            value: String(u.id), 
+                            label: u.full_name,
+                            avatar: u.avatar_url || u.avatar,
+                            sublabel: u.email
+                          }))
+                        ]}
+                        searchable
+                        showAvatars
+                      />
+                    </div>
+                  )}
+
+                  {/* Nhãn / Tags */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Phân loại (Tag)</label>
+                    <input
+                      className="form-input"
+                      placeholder="Nhập tên tag cần lọc..."
+                      value={filterTag}
+                      onChange={e => setFilterTag(e.target.value)}
+                      style={{ height: '38px', borderRadius: '10px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Nhóm 2: Lọc theo thời gian */}
+              <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Bộ lọc thời gian
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                  {/* Kiểu lọc thời gian */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Lọc theo ngày nào</label>
+                    <CustomSelect
+                      value={filterDateField}
+                      onChange={v => setFilterDateField(v as any)}
+                      options={[
+                        { value: 'created_at', label: 'Ngày tạo' },
+                        { value: 'updated_at', label: 'Ngày cập nhật' },
+                        { value: 'last_contact', label: 'Ngày tương tác cuối' }
+                      ]}
+                    />
+                  </div>
+
+                  {/* Kiểu lọc ngày */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Kiểu lọc thời gian</label>
+                    <CustomSelect
+                      value={dateFilterType}
+                      onChange={v => setDateFilterType(v as any)}
+                      options={[
+                        { value: 'range', label: 'Trong khoảng' },
+                        { value: 'before', label: 'Trước ngày' },
+                        { value: 'after', label: 'Sau ngày' }
+                      ]}
+                    />
+                  </div>
+
+                  {/* inputs ngày tương ứng */}
+                  {dateFilterType === 'range' && (
+                    <>
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Từ ngày</label>
+                        <input type="date" className="form-input" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Đến ngày</label>
+                        <input type="date" className="form-input" value={filterToDate} onChange={e => setFilterToDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
+                      </div>
+                    </>
+                  )}
+                  {dateFilterType === 'before' && (
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Trước ngày</label>
+                      <input type="date" className="form-input" value={filterBeforeDate} onChange={e => setFilterBeforeDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
+                    </div>
+                  )}
+                  {dateFilterType === 'after' && (
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Sau ngày</label>
+                      <input type="date" className="form-input" value={filterAfterDate} onChange={e => setFilterAfterDate(e.target.value)} style={{ height: '38px', borderRadius: '10px' }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  className="btn outline sm"
+                  onClick={handleResetFilters}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
+                >
+                  Đặt lại
+                </button>
+                <button
+                  className="btn primary sm"
+                  onClick={handleApplyFilters}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
+                >
+                  Lọc kết quả
+                </button>
+              </div>
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <ColumnCustomizer 
+        isOpen={showColumns} 
+        onClose={() => setShowColumns(false)} 
+        columns={columns} 
+        onChange={setColumns} 
+      />
+
+      {/* Bulk Action Bar */}
+      <AnimatePresence>
+        {isMultiSelectMode && selected.size > 0 && (
+          <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
+            style={{ position:'sticky', top:68, zIndex:100, marginBottom:'0.75rem', padding:'0.75rem 1.25rem', background:'var(--color-primary)', borderRadius:'var(--radius-xl)', display:'flex', alignItems:'center', gap:'0.75rem', boxShadow:'0 8px 24px rgba(163, 20, 34,0.3)' }}>
+            <span style={{ color:'white', fontWeight:700, fontSize:'0.875rem' }}>{selected.size} đã chọn</span>
+            <div style={{ flex:1 }}/>
+            {[
+              { label:'Email', action:bulkEmail },
+              { label:'Tag',   action:bulkTag   },
+              ...(!isSale ? [
+                { label:'Gán',  action:bulkAssign},
+                { label:'Xuất', action:bulkExport },
+              ] : [])
+            ].map(b=>(
+              <button key={b.label} onClick={b.action}
+                style={{ padding:'0.375rem 0.875rem', background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:'var(--radius-lg)', color:'white', fontWeight:600, fontSize:'0.8125rem', cursor:'pointer' }}>
+                {b.label}
+              </button>
+            ))}
+            {['admin', 'superadmin', 'super_admin'].includes(user?.role || '') && (
+              <button onClick={bulkDelete}
+                style={{ padding:'0.375rem 0.875rem', background:'rgba(239,68,68,0.8)', border:'none', borderRadius:'var(--radius-lg)', color:'white', fontWeight:700, fontSize:'0.8125rem', cursor:'pointer' }}>
+                Xóa
+              </button>
+            )}
+            <button onClick={() => setSelected(new Set())} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer' }}><X size={16}/></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Table */}
+      {loading ? (
+        isMobile ? (
+          <div style={{ padding: '0.5rem 0' }}>
+            <div className="grid-cards-responsive">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border-light)',
+                    borderRadius: '16px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                    <Skeleton width={42} height={42} borderRadius="50%" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                      <Skeleton width="60%" height={14} />
+                      <Skeleton width="45%" height={11} style={{ marginTop: '4px' }} />
+                    </div>
+                  </div>
+                  <div style={{ color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: 0.3 }}>
+                    <ChevronRight size={18} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="card">
+            <TableSkeleton rows={6} cols={6} />
+          </div>
+        )
+      ) : (
+        <div className={isMobile ? "" : "card"} style={{ overflow: 'visible', background: isMobile ? 'transparent' : undefined, border: isMobile ? 'none' : undefined, padding: isMobile ? 0 : undefined, boxShadow: isMobile ? 'none' : undefined }}>
+          {viewMode === 'list' ? (
+
+            <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto' }}>
+              <style>{`
+                .table-wrap th {
+                  padding: 0.75rem 0.75rem !important;
+                  vertical-align: middle !important;
+                }
+                .table-wrap td {
+                  padding: 0.95rem 0.75rem !important;
+                  vertical-align: middle !important;
+                }
+                .table-wrap .table-row-hover:hover {
+                  background: rgba(0, 0, 0, 0.012) !important;
+                }
+                [data-theme="dark"] .table-wrap .table-row-hover:hover {
+                  background: rgba(255, 255, 255, 0.02) !important;
+                }
+                .table-wrap th {
+                  font-size: 0.7rem !important;
+                  font-weight: 700 !important;
+                  color: var(--color-text-light) !important;
+                  text-transform: uppercase !important;
+                  letter-spacing: 0.5px !important;
+                }
+                .table-wrap td p {
+                  font-size: 0.8125rem !important;
+                  margin: 0 !important;
+                }
+                .table-wrap td p + p {
+                  font-size: 0.7rem !important;
+                  margin-top: 1px !important;
+                }
+                .table-wrap td a {
+                  font-size: 0.8125rem !important;
+                }
+                .table-wrap td .badge {
+                  font-size: 0.7rem !important;
+                  padding: 2px 6px !important;
+                  border-radius: 4px !important;
+                  font-weight: 600 !important;
+                }
+                .table-wrap td span {
+                  font-size: 0.8125rem !important;
+                }
+                .table-wrap td span.text-muted, .table-wrap td span + span {
+                  font-size: 0.7rem !important;
+                }
+              `}</style>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--color-bg)', boxShadow: '0 1px 0 var(--color-border)' }}>
+                  <tr>
+                    {isMultiSelectMode && (
+                      <th style={{ width: 44, padding: '1rem', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                        <CustomCheckbox 
+                          checked={selected.size === paged.length && paged.length > 0} 
+                          onChange={toggleAll} 
+                        />
+                      </th>
+                    )}
+                    {columns.find(c => c.id === 'name')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên hệ</th>}
+                    {(columns.find(c => c.id === 'email')?.visible || columns.find(c => c.id === 'phone')?.visible) && (
+                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên lạc</th>
+                    )}
+                    {columns.find(c => c.id === 'company')?.visible && !columns.find(c => c.id === 'name')?.visible && (
+                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Công ty</th>
+                    )}
+                    {columns.find(c => c.id === 'tags')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Phân loại (Tags)</th>}
+                    {columns.find(c => c.id === 'status')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Trạng thái</th>}
+                    {columns.find(c => c.id === 'contact')?.visible && !columns.find(c => c.id === 'owner')?.visible && (
+                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên lạc cuối</th>
+                    )}
+                    {columns.find(c => c.id === 'deal')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Deal đang mở</th>}
+                    {columns.find(c => c.id === 'owner')?.visible && (
+                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                        {isSale ? 'Tương tác gần nhất' : 'Sale phụ trách'}
+                      </th>
+                    )}
+                    {columns.find(c => c.id === 'distribution')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Phân bổ</th>}
+                    {columns.find(c => c.id === 'ticket_action')?.visible && <th style={{ padding: '1rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Helpdesk</th>}
+                    {columns.find(c => c.id === 'updated_at')?.visible && !columns.find(c => c.id === 'owner')?.visible && (
+                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Cập nhật</th>
+                    )}
+                    {columns.find(c => c.id === 'created_at')?.visible && (
+                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                        {segment === 'customer' ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>Ngày chốt</span>
+                            <Tooltip content="Ngày chuyển pipeline" position="bottom">
+                              <AlertCircle size={14} style={{ color: 'var(--color-text-muted)', cursor: 'help' }} />
+                            </Tooltip>
+                          </div>
+                        ) : 'Ngày tạo'}
+                      </th>
+                    )}
+                    {columns.find(c => c.id === 'score')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Score</th>}
+                    {columns.find(c => c.id === 'source')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Nguồn khách</th>}
+                    {columns.find(c => c.id === 'job_title')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Chức danh</th>}
+                    {columns.find(c => c.id === 'birthday')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Ngày sinh</th>}
+                    {columns.find(c => c.id === 'temperature')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Nhiệt độ</th>}
+                    {columns.find(c => c.id === 'total_spent')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Doanh thu</th>}
+                    {/* Hiding actions column header */}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {paged.map(c => {
+                    const days = AGO_DAYS(c.last_contact);
+                    const fullName = c.full_name || '';
+                    return (
+                      <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                         style={{ transition: 'background 0.2s', cursor: 'pointer' }}
+                         className="table-row-hover"
+                         onClick={() => setProfileContact(c)}>
+                        {isMultiSelectMode && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }} onClick={e => e.stopPropagation()}>
+                            <CustomCheckbox 
+                              checked={selected.has(c.id)} 
+                              onChange={() => toggleSelect(c.id)} 
+                            />
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'name')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <Avatar name={fullName} size={36} />
+                              <div>
+                                <p style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center' }}>
+                                  {fullName}
+                                  {c.dl_status === 'databank_claim' || c.source === 'databank' ? (
+                                    <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                      <Layers size={13} />
+                                    </span>
+                                  ) : (!c.dl_status && c.source !== 'databank') || (c.source === 'ca_nhan' || c.source === 'gioi_thieu') ? (
+                                    <span title="Khách hàng cá nhân" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                      <User size={13} />
+                                    </span>
+                                  ) : null}
+                                </p>
+                                {columns.find(col => col.id === 'company')?.visible && c.company_name && (
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                                    {c.company_name} {c.job_title ? `• ${c.job_title}` : ''}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        )}
+                        {(columns.find(col => col.id === 'email')?.visible || columns.find(col => col.id === 'phone')?.visible) && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              {columns.find(col => col.id === 'phone')?.visible && c.phone ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <PhoneLink phone={c.phone} style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }} />
+                                </div>
+                              ) : null}
+                              {columns.find(col => col.id === 'email')?.visible && c.email ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>{c.email}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        )}
+
+                        {columns.find(col => col.id === 'company')?.visible && !columns.find(col => col.id === 'name')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{c.company_name || '—'}</p>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{c.job_title || ''}</p>
+                          </td>
+                        )}
+
+                        {columns.find(col => col.id === 'tags')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {(() => {
+                              const rawTagList = typeof c.tags === 'string' 
+                                ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
+                                : (Array.isArray(c.tags) ? c.tags : []);
+
+                              const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
+                              const cleanedTags = rawTagList.map((tag: string) => {
+                                return tag.replace(cleanRegex, '').trim();
+                              }).filter(Boolean);
+
+                              const uniqueTags = Array.from(new Set(cleanedTags));
+
+                              if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+                              
+                              return (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '240px' }}>
+                                  {uniqueTags.map((tag: string, idx: number) => {
+                                    const lowerTag = tag.toLowerCase();
+                                    const isProgramTag = lowerTag.includes('mba') || 
+                                                         lowerTag.includes('bba') || 
+                                                         lowerTag.includes('dba') || 
+                                                         lowerTag.includes('msc') || 
+                                                         lowerTag.includes('umef') || 
+                                                         lowerTag.includes('emba');
+
+                                    const matchedDbTag = Array.isArray(dbTags) 
+                                      ? dbTags.find(t => String(t.name).trim().toLowerCase() === lowerTag)
+                                      : null;
+                                    
+                                    let bg = matchedDbTag?.color || '#2563eb';
+                                    let color = '#ffffff';
+
+                                    if (isProgramTag) {
+                                      bg = '#3b82f6'; // Force blue for program/course tags
+                                    } else if (!matchedDbTag) {
+                                      if (lowerTag.includes('new')) {
+                                        bg = '#f97316';
+                                      } else if (lowerTag.includes('needed') || lowerTag.includes('considering')) {
+                                        bg = '#db2777';
+                                      } else if (lowerTag.includes('unqualified')) {
+                                        bg = '#ca8a04';
+                                      } else if (lowerTag.includes('qualified')) {
+                                        bg = '#ef4444';
+                                      } else if (lowerTag.includes('bad timing') || lowerTag.includes('bad_timing') || lowerTag.includes('baddtiming')) {
+                                        bg = '#7c3aed';
+                                      }
+                                    }
+
+                                    return (
+                                      <span 
+                                        key={idx} 
+                                        style={{ 
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: '0.52rem', 
+                                          fontWeight: 600, 
+                                          padding: '2px 8px', 
+                                          borderRadius: '10px', 
+                                          background: bg,
+                                          color: color,
+                                          whiteSpace: 'nowrap',
+                                          lineHeight: '1.2',
+                                          boxSizing: 'border-box'
+                                        }}
+                                      >
+                                        {tag}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        )}
+
+                        {columns.find(col => col.id === 'status')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {c.report_status === 'approved' || c.report_status === 'approved_no_comp' ? (
+                              <span 
+                                className="badge" 
+                                style={{ 
+                                  backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                                  color: 'var(--color-danger)', 
+                                  border: '1px solid rgba(239, 68, 68, 0.2)'
+                                }}
+                              >
+                                Ticket lỗi
+                              </span>
+                            ) : c.stage_name ? (
+                              <span 
+                                className="badge" 
+                                style={{ 
+                                  backgroundColor: `${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}1a`, 
+                                  color: c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || 'var(--color-primary)'), 
+                                  border: `1px solid ${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}33`
+                                }}
+                              >
+                                {c.stage_name}
+                              </span>
+                            ) : (
+                              <span 
+                                className={`badge ${STATUS_CLASS[c.status] || 'info'}`}
+                                style={c.status === 'customer' ? {
+                                  backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                                  color: '#ec4899',
+                                  border: '1px solid rgba(236, 72, 153, 0.2)'
+                                } : undefined}
+                              >
+                                {STATUS_LABEL[c.status] || c.status}
+                              </span>
+                            )}
+                          </td>
+                        )}
+
+                        {columns.find(col => col.id === 'contact')?.visible && !columns.find(col => col.id === 'owner')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <span style={{ fontSize: '0.8125rem', color: days > 30 ? 'var(--color-danger)' : days > 14 ? 'var(--color-warning)' : 'var(--color-text-muted)', fontWeight: days > 30 ? 700 : 400 }}>
+                              {c.last_contact ? (days === 0 ? 'Hôm nay' : days === 1 ? 'Hôm qua' : `${days} ngày trước`) : '—'}
+                            </span>
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'deal')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: (c.open_deal_value || 0) > 0 ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                              {FMT_VND(c.open_deal_value || 0)}
+                            </span>
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'owner')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {isSale ? (
+                              <div 
+                                style={{ 
+                                  fontSize: '0.725rem', 
+                                  color: c.last_interaction ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                  fontWeight: c.last_interaction ? 500 : 400,
+                                  minWidth: '200px',
+                                  maxWidth: '350px',
+                                  whiteSpace: 'normal',
+                                  wordBreak: 'break-word',
+                                  lineHeight: '1.4'
+                                }}
+                                title={c.last_interaction || undefined}
+                              >
+                                {c.last_interaction || 'Chưa có tương tác'}
+                              </div>
+                            ) : c.owner_name ? (() => {
+                              const collabs = (c.collaborator_ids || '')
+                                .split(',')
+                                .map((s: string) => s.trim())
+                                .filter(Boolean)
+                                .map((id: string) => users.find(u => String(u.id) === String(id)))
+                                .filter(Boolean);
+                              
+                              if (collabs.length > 0) {
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <div style={{ position: 'relative', zIndex: 3 }}>
+                                        <Avatar name={c.owner_name} src={c.owner_avatar} size={32} title={`Chủ sở hữu: ${c.owner_name}`} />
+                                      </div>
+                                      {collabs.map((col, idx) => (
+                                        <div key={col.id} style={{ marginLeft: '-8px', position: 'relative', zIndex: 2 - idx }}>
+                                          <Avatar name={col.full_name} src={col.avatar_url || col.avatar} size={32} title={`Hợp tác: ${col.full_name}`} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {c.owner_name}
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>
+                                          (+{collabs.length})
+                                        </span>
+                                      </span>
+                                      <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                        Tương tác: {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                  <Avatar name={c.owner_name} src={c.owner_avatar} size={32} />
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{c.owner_name}</span>
+                                    <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                      Tương tác: {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })() : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
+                                  <User size={16} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa giao</span>
+                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                                    Tương tác: {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'distribution')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {c.log_id && c.dl_status !== 'databank_claim' ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
+                                  {c.round_name || 'Chia data'}
+                                </span>
+                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                  {c.distributed_at ? new Date(c.distributed_at).toLocaleString('vi-VN') : '—'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                {c.dl_status === 'databank_claim' ? 'Claim Databank' : 'Cá nhân'}
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'ticket_action')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                            {c.log_id && c.dl_status !== 'databank_claim' ? (
+                              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                                {c.report_status === 'pending' && (
+                                  <span className="badge warning" title="Ticket chờ duyệt">
+                                    Chờ duyệt
+                                  </span>
+                                )}
+                                {c.report_status === 'approved' && (
+                                  <span className="badge success" title="Ticket đã duyệt bù">
+                                    Đã bù
+                                  </span>
+                                )}
+                                {c.report_status === 'approved_no_comp' && (
+                                  <span className="badge" style={{ background: '#dbeafe', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }} title="Ticket duyệt lỗi không bù">
+                                    Lỗi không bù
+                                  </span>
+                                )}
+                                {c.report_status === 'rejected' && (
+                                  <span className="badge danger" title="Từ chối">
+                                    Từ chối
+                                  </span>
+                                )}
+                                {(!c.report_status || c.report_status === 'rejected') && (
+                                  <button onClick={() => handleOpenReportModal(c)} className="btn sm danger" style={{ height: 28, padding: '0 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <AlertCircle size={11} /> Báo lỗi
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                            )}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'updated_at')?.visible && !columns.find(col => col.id === 'owner')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>{c.updated_at ? new Date(c.updated_at).toLocaleDateString('vi-VN') : '—'}</p>
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'created_at')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {(segment === 'customer' ? (c.closed_date || c.created_at) : c.created_at) ? (() => {
+                              const d = new Date(segment === 'customer' ? (c.closed_date || c.created_at) : c.created_at);
+                              const pad = (n: number) => String(n).padStart(2, '0');
+                              const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                              const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                              return (
+                                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.35 }}>
+                                  <div style={{ fontWeight: 600 }}>{dateStr}</div>
+                                  <div style={{ fontSize: '0.725rem', opacity: 0.85 }}>{timeStr}</div>
+                                </div>
+                              );
+                            })() : '—'}
+                          </td>
+                        )}
+                        {/* Removed interaction column */}
+                        {columns.find(col => col.id === 'score')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.875rem', color: c.score >= 80 ? 'var(--color-success)' : c.score >= 60 ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+                              {c.score}
+                            </span>
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'source')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                            {c.source || '—'}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'job_title')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                            {c.job_title || '—'}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'birthday')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                            {c.birthday ? new Date(c.birthday).toLocaleDateString('vi-VN') : '—'}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'temperature')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {(() => {
+                              const temp = String(c.temperature).toLowerCase();
+                              let label = 'Neutral';
+                              let color = '#6b7280';
+                              let bg = 'rgba(107, 114, 128, 0.1)';
+                              if (temp === 'hot') { label = 'Hot'; color = '#ef4444'; bg = 'rgba(239, 68, 68, 0.1)'; }
+                              else if (temp === 'warm') { label = 'Warm'; color = '#f97316'; bg = 'rgba(249, 115, 22, 0.1)'; }
+                              else if (temp === 'cool') { label = 'Cool'; color = '#3b82f6'; bg = 'rgba(59, 130, 246, 0.1)'; }
+                              else if (temp === 'cold') { label = 'Cold'; color = '#6b7280'; bg = 'rgba(107, 114, 128, 0.1)'; }
+                              return (
+                                <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 650, color, background: bg }}>
+                                  {label}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
+                        {columns.find(col => col.id === 'total_spent')?.visible && (
+                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            {FMT_VND(c.total_spent || 0)}
+                          </td>
+                        )}
+                        {/* Hiding row actions cell */}
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {total === 0 && (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <Users size={40} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
+                  <p style={{ fontWeight: 600 }}>Không tìm thấy liên hệ nào</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: isMobile ? '0.5rem 0' : '1rem', background: 'transparent' }}>
+              <div className="grid-cards-responsive">
+                {paged.map(c => {
+                  const days = AGO_DAYS(c.last_contact);
+                  const fullName = c.full_name || '';
+                  return (
+                    <motion.div 
+                      key={c.id} 
+                      initial={{ opacity: 0, scale: 0.95 }} 
+                      animate={{ opacity: 1, scale: 1 }}
+                      onClick={() => setProfileContact(c)}
+                      style={{ 
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border-light)', 
+                        borderRadius: '16px',
+                        padding: isMobile ? '12px 16px' : '1.25rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: isMobile ? 'row' : 'column',
+                        alignItems: isMobile ? 'center' : 'stretch',
+                        justifyContent: 'space-between',
+                        gap: isMobile ? '12px' : '0',
+                        overflow: 'hidden'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.08)';
+                        e.currentTarget.style.transform = 'translateY(-4px)';
+                        e.currentTarget.style.borderColor = 'var(--color-primary-light)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.03)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                      }}
+                    >
+                      {isMobile ? (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                            {isMultiSelectMode ? (
+                              <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                                <CustomCheckbox 
+                                  checked={selected.has(c.id)} 
+                                  onChange={() => toggleSelect(c.id)} 
+                                />
+                              </div>
+                            ) : (
+                              <div style={{ flexShrink: 0 }}>
+                                <Avatar name={fullName} size={42} />
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', lineHeight: 1.2 }}>
+                                {fullName}
+                              </span>
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                Điện thoại: {c.phone || '—'}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                            <ChevronRight size={18} />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Top Accent line colored by Status */}
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: '4px',
+                            background: (c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên') ? '#ec4899' : (c.stage_color || (
+                                        c.status === 'lead' ? 'var(--color-primary)' :
+                                        c.status === 'qualified' ? 'var(--color-warning)' :
+                                        c.status === 'customer' ? 'var(--color-success)' :
+                                        'var(--color-text-muted)'
+                                        ))
+                          }} />
+
+                          {/* Header Section */}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', width: '100%' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                                <Avatar name={fullName} size={42} />
+                                <div>
+                                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: '2px', lineHeight: 1.2, display: 'flex', alignItems: 'center' }}>
+                                    {fullName}
+                                    {c.dl_status === 'databank_claim' || c.source === 'databank' ? (
+                                      <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                        <Layers size={14} />
+                                      </span>
+                                    ) : (!c.dl_status && c.source !== 'databank') || (c.source === 'ca_nhan' || c.source === 'gioi_thieu') ? (
+                                      <span title="Khách hàng cá nhân" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                        <User size={14} />
+                                      </span>
+                                    ) : null}
+                                  </h3>
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Building2 size={11} /> {c.company_name || 'Khách hàng cá nhân'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div onClick={e => e.stopPropagation()} style={{ marginRight: '-4px', marginTop: '-4px' }}>
+                                <CustomCheckbox 
+                                  checked={selected.has(c.id)} 
+                                  onChange={() => toggleSelect(c.id)} 
+                                />
+                              </div>
+                            </div>
+
+                            {/* Contact Details Quick View */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '1rem', padding: '0.625rem', background: 'var(--color-bg)', borderRadius: '10px' }}>
+                              {c.phone && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--color-text)', fontWeight: 600 }}>
+                                  <Phone size={12} style={{ color: 'var(--color-text-muted)' }} />
+                                  <span>{c.phone}</span>
+                                </div>
+                              )}
+                              {c.email && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <Mail size={12} style={{ color: 'var(--color-text-muted)' }} />
+                                  <span>{c.email}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Status Badges & Score */}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                              {c.report_status === 'approved' || c.report_status === 'approved_no_comp' ? (
+                                <span 
+                                  className="badge" 
+                                  style={{ 
+                                    borderRadius: '8px', 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.72rem', 
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                                    color: 'var(--color-danger)', 
+                                    border: '1px solid rgba(239, 68, 68, 0.2)'
+                                  }}
+                                >
+                                  Ticket lỗi
+                                </span>
+                              ) : c.stage_name ? (
+                                <span 
+                                  className="badge" 
+                                  style={{ 
+                                    borderRadius: '8px', 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.72rem', 
+                                    fontWeight: 700,
+                                    backgroundColor: `${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}1a`, 
+                                    color: c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || 'var(--color-primary)'), 
+                                    border: `1px solid ${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}33`
+                                  }}
+                                >
+                                  {c.stage_name}
+                                </span>
+                              ) : (
+                                <span 
+                                  className={`badge ${STATUS_CLASS[c.status] || 'info'}`} 
+                                  style={{ 
+                                    borderRadius: '8px', 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.72rem', 
+                                    fontWeight: 700,
+                                    ...(c.status === 'customer' ? {
+                                      backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                                      color: '#ec4899',
+                                      border: '1px solid rgba(236, 72, 153, 0.2)'
+                                    } : {})
+                                  }}
+                                >
+                                  {STATUS_LABEL[c.status] || c.status}
+                                </span>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Đánh giá:</span>
+                                <span style={{ 
+                                  fontSize: '0.75rem', 
+                                  padding: '2px 8px', 
+                                  background: c.score >= 80 ? 'rgba(16, 185, 129, 0.1)' : c.score >= 60 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(107, 114, 128, 0.1)', 
+                                  color: c.score >= 80 ? 'var(--color-success)' : c.score >= 60 ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                                  borderRadius: '6px', 
+                                  fontWeight: 700 
+                                }}>
+                                  {c.score} pts
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Footer Grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.875rem', borderTop: '1px solid var(--color-border-light)' }}>
+                              <div>
+                                <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Ngày tạo</p>
+                                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                  {c.created_at ? (() => {
+                                    const d = new Date(c.created_at);
+                                    const pad = (n: number) => String(n).padStart(2, '0');
+                                    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+                                  })() : '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Tương tác cuối</p>
+                                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                  {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+              {total === 0 && (
+                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <Users size={40} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
+                  <p style={{ fontWeight: 600 }}>Không tìm thấy liên hệ nào</p>
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingTop: '0.75rem', marginTop: '0.75rem', width: '100%' }}>
+            <Pagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onChange={setPage}
+              showSizeChanger
+              onPageSizeChange={size => {
+                setPageSize(size);
+                localStorage.setItem('Ideas_contacts_page_size', String(size));
+                setPage(1);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 360° Profile Drawer */}
+      {profileContact && (
+        <Suspense fallback={null}>
+          <CustomerProfileDrawer
+            isOpen={!!profileContact}
+            onClose={() => setProfileContact(null)}
+            contact={profileContact}
+            onUpdate={updated => {
+              if (updated === null) {
+                setContacts(p => p.filter(c => c.id !== profileContact?.id));
+                setProfileContact(null);
+                fetchData();
+                return;
+              }
+              setContacts(p=>p.map(c=>c.id===updated?.id?{...c,...updated,score:calcScore(updated, scoringRules, decayDays)}:c));
+              setProfileContact(prev => prev && prev.id === updated?.id ? { ...prev, ...updated } : prev);
+            }}
+          />
+        </Suspense>
+      )}
+      
+      {reportModalOpen && selectedContactForReport && (
+        <CustomModal
+          isOpen={reportModalOpen}
+          onClose={() => setReportModalOpen(false)}
+          title="Báo cáo dữ liệu lỗi / Trùng lặp"
+        >
+          <div style={{ padding: '0.5rem 0' }}>
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'block' }}>Lý do báo lỗi (Chọn mẫu có sẵn)</label>
+              <CustomSelect
+                options={[
+                  { value: 'Số điện thoại không đúng / Thuê bao', label: 'Số điện thoại không đúng / Thuê bao' },
+                  { value: 'Không có nhu cầu mua dự án nào (rác)', label: 'Không có nhu cầu mua dự án nào (rác)' },
+                  { value: 'Trùng số với Sale khác', label: 'Trùng số với Sale khác' },
+                  { value: 'Khách hàng từ chối làm việc ngay lập tức', label: 'Khách hàng từ chối làm việc ngay lập tức' },
+                  { value: 'Lý do khác...', label: 'Lý do khác...' }
+                ]}
+                value={reportReasonType}
+                onChange={(val) => setReportReasonType(String(val))}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px', display: 'block' }}>Nội dung chi tiết báo cáo</label>
+              <textarea
+                className="form-input"
+                rows={4}
+                placeholder="Nhập chi tiết lý do báo lỗi, bằng chứng cuộc gọi/hình ảnh (nếu có)..."
+                value={reportDetails}
+                onChange={e => setReportDetails(e.target.value)}
+                style={{ resize: 'none', width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '1.5rem' }}>
+              <button
+                className="btn outline"
+                onClick={() => setReportModalOpen(false)}
+                disabled={submittingReport}
+                style={{ borderRadius: '8px', padding: '8px 16px' }}
+              >
+                Hủy
+              </button>
+              <button
+                className="btn primary"
+                onClick={handleSubmitReport}
+                disabled={submittingReport}
+                style={{
+                  background: 'var(--color-danger)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {submittingReport ? 'Đang gửi...' : 'Gửi báo cáo lỗi'}
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
+      <ImportExportModal 
+        isOpen={showImportExport} 
+        onClose={() => setShowImportExport(false)} 
+        entityName="Liên hệ" 
+        onExport={(format) => {
+          bulkExport();
+        }}
+      />
+
+      {/* Quick Create Contact Modal - Enhanced UI */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showCreateModal && (
+            <motion.div 
+            className="overlay-backdrop" 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            onClick={() => !creating && setShowCreateModal(false)} 
+            style={{ zIndex: 1000 }}
+          >
+            <motion.div
+              className="modal-sheet"
+              initial={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.95, y: 20 }}
+              animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+              exit={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
+              onClick={e => e.stopPropagation()}
+              style={isMobile ? { 
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
+                maxWidth: '100vw', zIndex: 1010, overflow: 'hidden', borderRadius: 0,
+                display: 'flex', flexDirection: 'column'
+              } : { 
+                width: 780, 
+                maxWidth: 'calc(100vw - 2rem)', zIndex: 1010, overflow: 'visible',
+                margin: 'auto'
+              }}
+            >
+              {/* Header */}
+              <div className="modal-header" style={{ padding: isMobile ? '1.25rem' : '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.75rem' : '1.25rem' }}>
+                  <div style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, borderRadius: '16px', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <User size={isMobile ? 20 : 26} style={{ color: 'var(--color-primary)' }} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: isMobile ? '1.25rem' : '1.5rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>Thêm Liên hệ mới</h3>
+                    <p style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', color: 'var(--color-text-light)', marginTop: 2 }}>{isMobile ? 'Nhập thông tin để quản lý khách hàng' : 'Nhập thông tin cơ bản để bắt đầu quản lý khách hàng'}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowCreateModal(false)} 
+                  className="btn-icon-bare" 
+                  disabled={creating}
+                ><X size={isMobile ? 20 : 24} /></button>
+              </div>
+
+              {/* Body */}
+              <div className="modal-body" style={{ padding: isMobile ? '1.25rem' : '2.5rem', overflowY: 'auto' }}>
+                {/* Name row */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Họ tên <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                  <input className="form-input lg" placeholder="Nhập đầy đủ họ tên" value={createForm.full_name} onChange={e => setCreateForm(f => ({ ...f, full_name: e.target.value }))} autoFocus />
+                </div>
+
+                {/* Contact row */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '1rem' : '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Số điện thoại</label>
+                    <div style={{ position: 'relative' }}>
+                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} placeholder="09xx xxx xxx" value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} />
+                      <Phone size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Email liên hệ</label>
+                    <div style={{ position: 'relative' }}>
+                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} type="email" placeholder="email@congty.com" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} />
+                      <Mail size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Company + Job */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '1rem' : '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Công ty / Tổ chức</label>
+                    <div style={{ position: 'relative' }}>
+                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} placeholder="Tên công ty..." value={createForm.company_name} onChange={e => setCreateForm(f => ({ ...f, company_name: e.target.value }))} />
+                      <Building2 size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Chức vụ</label>
+                    <div style={{ position: 'relative' }}>
+                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} placeholder="VD: Giám đốc, Kế toán..." value={createForm.job_title} onChange={e => setCreateForm(f => ({ ...f, job_title: e.target.value }))} />
+                      <Briefcase size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status + Source */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '1rem' : '1.5rem' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Trạng thái Lead</label>
+                    <CustomSelect 
+                      options={[
+                        { value: 'lead', label: 'Lead mới (Chưa xử lý)' },
+                        { value: 'qualified', label: 'Đủ điều kiện (Qualified)' },
+                        { value: 'customer', label: 'Học viên (Closed Won)' }
+                      ]} 
+                      value={createForm.status} 
+                      onChange={val => setCreateForm(f => ({ ...f, status: val.toString() }))} 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700 }}>Phụ trách bởi (Sale)</label>
+                    {isSale ? (
+                      <input 
+                        className="form-input lg" 
+                        value={user?.name || user?.username || ''} 
+                        readOnly 
+                        disabled 
+                        style={{ background: 'var(--color-bg)', cursor: 'not-allowed' }}
+                      />
+                    ) : (
+                      <CustomSelect 
+                        options={users.map(u => ({ 
+                          value: u.id, 
+                          label: u.full_name || u.name, 
+                          avatar: u.avatar_url,
+                          sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                        }))}
+                        value={createForm.owner_id}
+                        onChange={val => setCreateForm(f => ({ ...f, owner_id: val.toString() }))}
+                        placeholder="Chọn sale phụ trách..."
+                        searchable
+                        showAvatars
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>Nguồn khách hàng</label>
+                  <CustomSelect 
+                    options={[
+                      { value: 'website', label: 'Đăng ký từ Website' },
+                      { value: 'gioi_thieu', label: 'Được giới thiệu' },
+                      { value: 'ca_nhan', label: 'Cá nhân tự khai thác' },
+                      { value: 'social', label: 'Mạng xã hội (FB/Zalo)' },
+                      { value: 'cold_call', label: 'Telesale / Cold Call' },
+                      { value: 'event', label: 'Sự kiện / Workshop' },
+                      { value: 'other', label: 'Nguồn khác' }
+                    ]} 
+                    value={createForm.source} 
+                    onChange={val => setCreateForm(f => ({ ...f, source: val.toString() }))} 
+                  />
+                </div>
+                <div className="form-group" style={{ marginTop: isMobile ? '1rem' : '1.5rem' }}>
+                  <AddressSelect 
+                    label="Địa chỉ khách hàng"
+                    value={createForm.address || ''}
+                    onChange={addr => setCreateForm(f => ({ ...f, address: addr }))}
+                    placeholder="Chọn địa chỉ..."
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="modal-footer" style={{ padding: isMobile ? '1rem 1.25rem' : '1.5rem 2.5rem' }}>
+                <button className={`btn outline ${isMobile ? 'sm' : 'lg'}`} onClick={() => setShowCreateModal(false)} disabled={creating}>Hủy bỏ</button>
+                <button 
+                  className={`btn primary ${isMobile ? 'sm' : 'lg'}`} 
+                  onClick={handleCreateContact} 
+                  disabled={creating} 
+                  style={{ minWidth: isMobile ? 140 : 200, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
+                >
+                  {creating ? <Loader2 size={20} className="spin" /> : <Plus size={20} />}
+                  {creating ? 'Đang khởi tạo...' : 'Tạo Liên hệ'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    , document.body)}
+    </div>
+  );
+};

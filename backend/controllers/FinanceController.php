@@ -1,0 +1,1702 @@
+<?php
+// f:\CRM\backend\controllers\FinanceController.php
+
+class FinanceController
+{
+    private PDO $db;
+    public function __construct(PDO $db)
+    {
+        $this->db = $db;
+    }
+
+    private function syncContactStats(int $tid, ?int $contactId): void
+    {
+        if (!$contactId)
+            return;
+        
+        $sInv = $this->db->prepare("SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count, MAX(paid_at) as last_at FROM invoices WHERE contact_id = ? AND status = 'paid' AND deleted_at IS NULL");
+        $sInv->execute([$contactId]);
+        $inv = $sInv->fetch();
+
+        $sExp = $this->db->prepare("SELECT COALESCE(SUM(ee.amount),0) as total, COUNT(*) as count, MAX(e.approved_at) as last_at FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = ? AND e.status = 'approved' AND e.deleted_at IS NULL");
+        $sExp->execute([$contactId]);
+        $exp = $sExp->fetch();
+
+        $totalSpent = (float)$inv['total'] + (float)$exp['total'];
+        $orderCount = (int)$inv['count'] + (int)$exp['count'];
+        
+        $lastOrderAt = null;
+        if ($inv['last_at'] || $exp['last_at']) {
+            $lastOrderAt = ($inv['last_at'] && (!$exp['last_at'] || $inv['last_at'] > $exp['last_at'])) ? $inv['last_at'] : $exp['last_at'];
+        }
+
+        $stmt = $this->db->prepare("
+            UPDATE contacts 
+            SET 
+                total_spent = ?,
+                order_count = ?,
+                last_order_at = ?,
+                status = CASE WHEN ? > 0 THEN 'customer' ELSE status END
+            WHERE id = ? AND tenant_id = ?
+        ");
+        $stmt->execute([$totalSpent, $orderCount, $lastOrderAt, $orderCount, $contactId, $tid]);
+    }
+
+    private function syncInvoiceContact(int $tid, int $invId): void
+    {
+        $stmt = $this->db->prepare("SELECT contact_id FROM invoices WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$invId, $tid]);
+        $cid = $stmt->fetchColumn();
+        if ($cid)
+            $this->syncContactStats($tid, (int) $cid);
+    }
+
+    private function syncExpenseContacts(int $tid, int $expId): void
+    {
+        $stmt = $this->db->prepare("SELECT entity_id FROM expense_entities WHERE expense_id = ? AND entity_type = 'contact'");
+        $stmt->execute([$expId]);
+        $contactIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($contactIds as $cid) {
+            $this->syncContactStats($tid, (int)$cid);
+        }
+    }
+
+    // ─────────────────────── INVOICES ───────────────────────────
+
+    public function listInvoices(array $auth): void
+    {
+        $tid = $auth['tenant_id'];
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $limit = min(100, max(10, (int) ($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        $status = $_GET['status'] ?? '';
+        $search = $_GET['search'] ?? '';
+        $contactId = $_GET['contact_id'] ?? '';
+        $from = $_GET['from'] ?? '';
+        $to = $_GET['to'] ?? '';
+        $where = ['i.tenant_id=?', 'i.deleted_at IS NULL'];
+        $params = [$tid];
+        if ($contactId) {
+            $where[] = 'i.contact_id = ?';
+            $params[] = (int)$contactId;
+        }
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        
+        $isSale = $role === 'sales' || $role === 'sale';
+        $isManager = $role === 'manager';
+
+        // Get team members for manager
+        $userIds = [$uid];
+        if ($isManager) {
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->execute([$uid]);
+            $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+        }
+
+        if ($contactId) {
+            if (!$this->checkContactAccess($uid, (int)$contactId, $tid, $role)) {
+                respond(403, null, 'Bạn không có quyền xem hóa đơn của liên hệ này', false);
+            }
+        } else {
+            if ($isSale) {
+                $where[] = 'i.created_by = ?';
+                $params[] = $uid;
+            } else if ($isManager) {
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $where[] = "i.created_by IN ($placeholders)";
+                $params = array_merge($params, $userIds);
+            }
+        }
+        if ($status) {
+            $where[] = 'i.status=?';
+            $params[] = $status;
+        }
+        if ($from) {
+            $where[] = 'i.issue_date >= ?';
+            $params[] = $from;
+        }
+        if ($to) {
+            $where[] = 'i.issue_date <= ?';
+            $params[] = $to;
+        }
+        if ($search) {
+            $where[] = '(i.invoice_number LIKE ? OR ct.full_name LIKE ?)';
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
+        $w = implode(' AND ', $where);
+
+        $cnt = $this->db->prepare("SELECT COUNT(*) FROM invoices i LEFT JOIN contacts ct ON i.contact_id = ct.id WHERE $w");
+        $cnt->execute($params);
+        $total = (int) $cnt->fetchColumn();
+
+        $stmt = $this->db->prepare("
+            SELECT i.*, c.name as company_name,
+                   CASE WHEN ct.deleted_at IS NULL THEN ct.full_name 
+                        ELSE CONCAT(ct.full_name, ' (Đã xóa)') END as contact_name,
+                   ct.phone as contact_phone,
+                   u.full_name as creator_name
+            FROM invoices i
+            LEFT JOIN companies c  ON i.company_id  = c.id
+            LEFT JOIN contacts ct  ON i.contact_id  = ct.id
+            LEFT JOIN users u      ON i.created_by  = u.id
+            WHERE $w ORDER BY i.issue_date DESC LIMIT $limit OFFSET $offset
+        ");
+        $stmt->execute($params);
+        // Summary totals respecting filters
+        $sSummary = $this->db->prepare("SELECT COALESCE(SUM(i.total),0) as total_rev, COALESCE(SUM(CASE WHEN i.status='paid' THEN i.total END),0) as paid_amt, COALESCE(SUM(CASE WHEN i.status='pending' THEN i.total END),0) as pending_amt, COALESCE(SUM(CASE WHEN i.status='overdue' THEN i.total END),0) as overdue_amt FROM invoices i LEFT JOIN contacts ct ON i.contact_id = ct.id WHERE $w");
+        $sSummary->execute($params);
+        $currentSummary = $sSummary->fetch();
+
+        $prevTotalRev = 0.0;
+        $prevPaidAmt = 0.0;
+        $prevPendingAmt = 0.0;
+        $prevOverdueAmt = 0.0;
+
+        if ($from && $to) {
+            $fromTs = strtotime($from);
+            $toTs = strtotime($to);
+            $diffSeconds = $toTs - $fromTs;
+            $diffDays = round($diffSeconds / (24 * 3600)) + 1;
+
+            $prevFrom = date('Y-m-d', strtotime("-$diffDays days", $fromTs));
+            $prevTo = date('Y-m-d', strtotime("-1 day", $fromTs));
+
+            $prevWhere = ['i.tenant_id=?', 'i.deleted_at IS NULL'];
+            $prevParams = [$tid];
+            if ($contactId) {
+                $prevWhere[] = 'i.contact_id = ?';
+                $prevParams[] = (int)$contactId;
+            }
+            if ($isSale) {
+                $prevWhere[] = 'i.created_by = ?';
+                $prevParams[] = $uid;
+            } else if ($isManager) {
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $prevWhere[] = "i.created_by IN ($placeholders)";
+                $prevParams = array_merge($prevParams, $userIds);
+            }
+            if ($status) {
+                $prevWhere[] = 'i.status=?';
+                $prevParams[] = $status;
+            }
+            $prevWhere[] = 'i.issue_date >= ?';
+            $prevParams[] = $prevFrom;
+            $prevWhere[] = 'i.issue_date <= ?';
+            $prevParams[] = $prevTo;
+
+            $pw = implode(' AND ', $prevWhere);
+            $sPrev = $this->db->prepare("SELECT COALESCE(SUM(i.total),0) as total_rev, COALESCE(SUM(CASE WHEN i.status='paid' THEN i.total END),0) as paid_amt, COALESCE(SUM(CASE WHEN i.status='pending' THEN i.total END),0) as pending_amt, COALESCE(SUM(CASE WHEN i.status='overdue' THEN i.total END),0) as overdue_amt FROM invoices i LEFT JOIN contacts ct ON i.contact_id = ct.id WHERE $pw");
+            $sPrev->execute($prevParams);
+            $prevSummary = $sPrev->fetch();
+            if ($prevSummary) {
+                $prevTotalRev = (float)$prevSummary['total_rev'];
+                $prevPaidAmt = (float)$prevSummary['paid_amt'];
+                $prevPendingAmt = (float)$prevSummary['pending_amt'];
+                $prevOverdueAmt = (float)$prevSummary['overdue_amt'];
+            }
+        }
+
+        $summary = [
+            'total_rev' => (float)$currentSummary['total_rev'],
+            'paid_amt' => (float)$currentSummary['paid_amt'],
+            'pending_amt' => (float)$currentSummary['pending_amt'],
+            'overdue_amt' => (float)$currentSummary['overdue_amt'],
+            'prev_total_rev' => $prevTotalRev,
+            'prev_paid_amt' => $prevPaidAmt,
+            'prev_pending_amt' => $prevPendingAmt,
+            'prev_overdue_amt' => $prevOverdueAmt
+        ];
+
+        respond(200, ['items' => $stmt->fetchAll(), 'total' => $total, 'page' => $page, 'limit' => $limit, 'summary' => $summary]);
+    }
+
+    public function showInvoice(array $auth, int $id): void
+    {
+        $sql = "
+            SELECT i.*, ct.full_name as contact_name, ct.phone as contact_phone, c.name as company_name
+            FROM invoices i
+            LEFT JOIN contacts ct ON i.contact_id = ct.id
+            LEFT JOIN companies c ON i.company_id = c.id
+            WHERE i.id=? AND i.tenant_id=? AND i.deleted_at IS NULL
+        ";
+        $p = [$id, $auth['tenant_id']];
+        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+            $sql .= " AND i.created_by=?";
+            $p[] = $auth['user_id'];
+        } else if ($auth['role'] === 'manager') {
+            $sql .= " AND (i.created_by = ? OR i.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+        }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($p);
+        $row = $stmt->fetch();
+        if (!$row)
+            respond(404, null, 'Không tìm thấy hóa đơn', false);
+
+        // Load items
+        $sItems = $this->db->prepare("SELECT ii.*, p.name as product_name FROM invoice_items ii LEFT JOIN products p ON ii.product_id=p.id WHERE ii.invoice_id=?");
+        $sItems->execute([$id]);
+        $row['items'] = $sItems->fetchAll();
+        respond(200, $row);
+    }
+
+    public function createInvoice(array $auth): void
+    {
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền tạo hóa đơn', false);
+        $tid = $auth['tenant_id'];
+        $uid = $auth['user_id'];
+        $data = getBody();
+
+        if (empty($data['title']))
+            respond(400, null, 'Tiêu đề hóa đơn là bắt buộc', false);
+        if (($data['total'] ?? 0) < 0) respond(422, null, 'Tổng tiền hóa đơn không được âm', false);
+
+        // Auto-generate invoice number (Race condition safe)
+        if (empty($data['invoice_number'])) {
+            $data['invoice_number'] = 'INV-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
+        }
+
+        $this->db->beginTransaction();
+        try {
+            // Verify entities belong to tenant and are accessible
+            if (!empty($data['contact_id'])) {
+                $sqlContact = "SELECT id FROM contacts WHERE id=? AND tenant_id=?";
+                $pContact = [(int)$data['contact_id'], $tid];
+                if ($auth['role'] === 'manager') {
+                    $sqlContact .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                    $pContact[] = $uid;
+                    $pContact[] = $uid;
+                }
+                $c = $this->db->prepare($sqlContact);
+                $c->execute($pContact);
+                if (!$c->fetch())
+                    $data['contact_id'] = null;
+            }
+            if (!empty($data['company_id'])) {
+                $sqlCompany = "SELECT id FROM companies WHERE id=? AND tenant_id=?";
+                $pCompany = [(int)$data['company_id'], $tid];
+                if ($auth['role'] === 'manager') {
+                    $sqlCompany .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                    $pCompany[] = $uid;
+                    $pCompany[] = $uid;
+                }
+                $c = $this->db->prepare($sqlCompany);
+                $c->execute($pCompany);
+                if (!$c->fetch())
+                    $data['company_id'] = null;
+            }
+
+            $isPaid = ($data['status'] ?? 'pending') === 'paid';
+            $stmt = $this->db->prepare("
+                INSERT INTO invoices (tenant_id,deal_id,company_id,contact_id,created_by,invoice_number,title,status,issue_date,due_date,subtotal,discount,tax,total,notes,shipping_customer_pay,shipping_fee,is_inventory_deducted,paid_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ");
+            $stmt->execute([
+                $tid,
+                $data['deal_id'] ?? null,
+                $data['company_id'] ?? null,
+                $data['contact_id'] ?? null,
+                $uid,
+                $data['invoice_number'],
+                $data['title'],
+                $data['status'] ?? 'pending',
+                empty($data['issue_date']) ? date('Y-m-d') : $data['issue_date'],
+                empty($data['due_date']) ? date('Y-m-d', strtotime('+30 days')) : $data['due_date'],
+                $data['subtotal'] ?? 0,
+                $data['discount'] ?? 0,
+                $data['tax'] ?? 0,
+                $data['total'] ?? 0,
+                $data['notes'] ?? null,
+                $data['shipping_customer_pay'] ?? 1,
+                $data['shipping_fee'] ?? 0,
+                $isPaid ? 1 : 0,
+                $isPaid ? date('Y-m-d H:i:s') : null
+            ]);
+            $invId = $this->db->lastInsertId();
+
+            if (!empty($data['items']) && is_array($data['items'])) {
+                $sItem = $this->db->prepare("INSERT INTO invoice_items (invoice_id,product_id,name,quantity,unit_price,subtotal) VALUES (?,?,?,?,?,?)");
+                foreach ($data['items'] as $item) {
+                    $qty = (float) ($item['quantity'] ?? 1);
+                    $price = (float) ($item['unit_price'] ?? 0);
+                    if ($qty <= 0 || $price < 0) {
+                        throw new Exception('Số lượng sản phẩm phải lớn hơn 0 và đơn giá không được âm');
+                    }
+
+                    $trackInventory = 0;
+                    if (!empty($item['product_id'])) {
+                        $pCheck = $this->db->prepare("SELECT track_inventory FROM products WHERE id=? AND tenant_id=?");
+                        $pCheck->execute([(int) $item['product_id'], $tid]);
+                        $prod = $pCheck->fetch();
+                        if (!$prod) {
+                            throw new Exception("Sản phẩm ID {$item['product_id']} không hợp lệ hoặc không thuộc cửa hàng của bạn");
+                        }
+                        $trackInventory = (int)$prod['track_inventory'];
+                    }
+
+                    $sItem->execute([$invId, $item['product_id'] ?? null, $item['name'], $qty, $price, $item['subtotal'] ?? 0]);
+
+                    if ($isPaid && !empty($item['product_id']) && $trackInventory) {
+                        deductStockFIFO($this->db, $tid, $uid, (int) $item['product_id'], (float) $item['quantity'], $data['invoice_number']);
+                    }
+                }
+            }
+            $this->db->commit();
+            $this->syncInvoiceContact($tid, $invId);
+
+            if (!empty($data['contact_id'])) {
+                logInteraction($this->db, $tid, $uid, 'email', "Phát hành Hóa đơn #{$data['invoice_number']}", "Hóa đơn \"{$data['title']}\" trị giá " . number_format($data['total'] ?? 0, 0, ',', '.') . "đ đã được khởi tạo.", 'invoice', $invId);
+            }
+
+            logActivity($this->db, $tid, $uid, 'CREATE', 'invoice', (int) $invId, json_encode(['invoice_number' => $data['invoice_number'], 'total' => $data['total']]));
+
+            $this->showInvoice($auth, $invId);
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, $e->getMessage(), false);
+        }
+    }
+
+    public function updateInvoice(array $auth, int $id): void
+    {
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền cập nhật hóa đơn', false);
+        $data = getBody();
+        $fields = ['title', 'status', 'issue_date', 'due_date', 'subtotal', 'discount', 'tax', 'total', 'notes', 'contact_id', 'company_id', 'deal_id', 'shipping_customer_pay', 'shipping_fee'];
+        $sets = [];
+        $params = [];
+        foreach ($fields as $f) {
+            if (array_key_exists($f, $data)) {
+                $sets[] = "$f=?";
+                if (in_array($f, ['issue_date', 'due_date']) && $data[$f] === '') {
+                    $params[] = null;
+                } else {
+                    $params[] = $data[$f];
+                }
+            }
+        }
+        if (!$sets) respond(422, null, 'Không có dữ liệu', false);
+
+        // Verify entities belong to tenant and are accessible
+        $tid = $auth['tenant_id'];
+        $uid = $auth['user_id'];
+        if (isset($data['contact_id']) && $data['contact_id']) {
+            $sqlContact = "SELECT id FROM contacts WHERE id=? AND tenant_id=?";
+            $pContact = [(int)$data['contact_id'], $tid];
+            if ($auth['role'] === 'manager') {
+                $sqlContact .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $pContact[] = $uid;
+                $pContact[] = $uid;
+            }
+            $c = $this->db->prepare($sqlContact);
+            $c->execute($pContact);
+            if (!$c->fetch()) respond(403, null, 'Không có quyền thao tác trên liên hệ này', false);
+        }
+        if (isset($data['company_id']) && $data['company_id']) {
+            $sqlCompany = "SELECT id FROM companies WHERE id=? AND tenant_id=?";
+            $pCompany = [(int)$data['company_id'], $tid];
+            if ($auth['role'] === 'manager') {
+                $sqlCompany .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $pCompany[] = $uid;
+                $pCompany[] = $uid;
+            }
+            $c = $this->db->prepare($sqlCompany);
+            $c->execute($pCompany);
+            if (!$c->fetch()) respond(403, null, 'Không có quyền thao tác trên công ty này', false);
+        }
+        if (isset($data['deal_id']) && $data['deal_id']) {
+            $sqlDeal = "SELECT id FROM deals WHERE id=? AND tenant_id=?";
+            $pDeal = [(int)$data['deal_id'], $tid];
+            if ($auth['role'] === 'manager') {
+                $sqlDeal .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $pDeal[] = $uid;
+                $pDeal[] = $uid;
+            }
+            $c = $this->db->prepare($sqlDeal);
+            $c->execute($pDeal);
+            if (!$c->fetch()) respond(403, null, 'Không có quyền thao tác trên deal này', false);
+        }
+        $this->db->beginTransaction();
+        try {
+            // Check permission and current status with FOR UPDATE to prevent race condition
+            $sqlCheck = "SELECT id, status, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=?";
+            $cp = [$id, $tid];
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sqlCheck .= " AND created_by=?";
+                $cp[] = $uid;
+            } else if ($auth['role'] === 'manager') {
+                $sqlCheck .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $cp[] = $uid;
+                $cp[] = $uid;
+            }
+            $check = $this->db->prepare($sqlCheck . " FOR UPDATE");
+            $check->execute($cp);
+            $current = $check->fetch();
+            if (!$current)
+                respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+
+            if (isset($data['status']) && $data['status'] === 'paid' && $current['status'] !== 'paid') {
+                $data['paid_at'] = date('Y-m-d H:i:s');
+                $sets[] = "paid_at=?";
+                $params[] = $data['paid_at'];
+            }
+
+            $params[] = $id;
+            $params[] = $auth['tenant_id'];
+            $stmt = $this->db->prepare("UPDATE invoices SET " . implode(',', $sets) . " WHERE id=? AND tenant_id=?");
+            $stmt->execute($params);
+
+            // Handle stock deduction if status changed to paid and not already deducted
+            if (isset($data['status']) && $data['status'] === 'paid' && !$current['is_inventory_deducted']) {
+                $this->triggerStockDeduction($auth, $id, $current['invoice_number']);
+                $this->db->prepare("UPDATE invoices SET is_inventory_deducted=1 WHERE id=?")->execute([$id]);
+            }
+            // Handle stock return if status changed AWAY from paid (e.g. cancelled) and it was already deducted
+            else if (isset($data['status']) && $data['status'] !== 'paid' && $current['is_inventory_deducted']) {
+                returnStock($this->db, $auth['tenant_id'], $auth['user_id'], $current['invoice_number']);
+                $this->db->prepare("UPDATE invoices SET is_inventory_deducted=0 WHERE id=?")->execute([$id]);
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'invoice', $id, json_encode($data));
+            $this->db->commit();
+            $this->syncInvoiceContact($auth['tenant_id'], $id);
+            $this->showInvoice($auth, $id);
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, $e->getMessage(), false);
+        }
+    }
+
+    private function triggerStockDeduction(array $auth, int $invId, string $invNum): void
+    {
+        $items = $this->db->prepare("
+            SELECT ii.product_id, ii.quantity, p.track_inventory 
+            FROM invoice_items ii 
+            JOIN products p ON ii.product_id = p.id 
+            WHERE ii.invoice_id = ?
+        ");
+        $items->execute([$invId]);
+        while ($item = $items->fetch()) {
+            if ($item['track_inventory'] && !empty($item['product_id'])) {
+                deductStockFIFO($this->db, $auth['tenant_id'], $auth['user_id'], (int) $item['product_id'], (float) $item['quantity'], $invNum);
+            }
+        }
+    }
+
+    public function deleteInvoice(array $auth, int $id): void
+    {
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền xóa hóa đơn', false);
+        try {
+            $this->db->beginTransaction();
+
+            $sql = "UPDATE invoices SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
+            $p = [$id, $auth['tenant_id']];
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sql .= " AND created_by=?";
+                $p[] = $auth['user_id'];
+            } else if ($auth['role'] === 'manager') {
+                $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+            }
+            $stmt = $this->db->prepare($sql);
+
+            // Get details before deletion for side effects (use FOR UPDATE to lock row)
+            $sqlCheck = "SELECT contact_id, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=?";
+            $pCheck = [$id, $auth['tenant_id']];
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sqlCheck .= " AND created_by=?";
+                $pCheck[] = $auth['user_id'];
+            } else if ($auth['role'] === 'manager') {
+                $sqlCheck .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $pCheck[] = $auth['user_id'];
+                $pCheck[] = $auth['user_id'];
+            }
+            $cCheck = $this->db->prepare($sqlCheck . " FOR UPDATE");
+            $cCheck->execute($pCheck);
+            $inv = $cCheck->fetch();
+            $oldContactId = $inv['contact_id'] ?? null;
+
+            $stmt->execute($p);
+            if (!$stmt->rowCount())
+                respond(404, null, 'Không tìm thấy hóa đơn hoặc không có quyền', false);
+
+        // REVERSE SIDE EFFECTS
+        // 1. Return stock if it was deducted
+        if ($inv && $inv['is_inventory_deducted']) {
+            returnStock($this->db, $auth['tenant_id'], $auth['user_id'], $inv['invoice_number']);
+        }
+
+        // 2. Sync contact stats
+        if ($oldContactId)
+            $this->syncContactStats($auth['tenant_id'], (int) $oldContactId);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'invoice', $id);
+        $this->db->commit();
+        respond(200, null, 'Đã xóa hóa đơn');
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi hệ thống: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function markPaid(array $auth, int $id): void
+    {
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director'], true)) respond(403, null, 'Bạn không có quyền xác nhận thanh toán', false);
+        try {
+            $this->db->beginTransaction();
+
+            // Check if already deducted or already paid
+            $sqlCheck = "SELECT id, status, is_inventory_deducted, invoice_number FROM invoices WHERE id=? AND tenant_id=?";
+            $cp = [$id, $auth['tenant_id']];
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sqlCheck .= " AND created_by=?";
+                $cp[] = $auth['user_id'];
+            } else if ($auth['role'] === 'manager') {
+                $sqlCheck .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $cp[] = $auth['user_id'];
+                $cp[] = $auth['user_id'];
+            }
+            $check = $this->db->prepare($sqlCheck . " FOR UPDATE");
+            $check->execute($cp);
+            $inv = $check->fetch();
+
+            if (!$inv)
+                respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+            if ($inv['status'] === 'paid')
+                respond(400, null, 'Hóa đơn đã được thanh toán', false);
+
+            $sql = "UPDATE invoices SET status='paid', paid_at=NOW(), is_inventory_deducted=1 WHERE id=? AND tenant_id=?";
+            $p = [$id, $auth['tenant_id']];
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sql .= " AND created_by=?";
+                $p[] = $auth['user_id'];
+            } else if ($auth['role'] === 'manager') {
+                $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+            }
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($p);
+
+            if (!$inv['is_inventory_deducted']) {
+                $this->triggerStockDeduction($auth, $id, $inv['invoice_number']);
+            }
+
+            // Update contact's last_contact
+            $invData = $this->db->prepare("SELECT contact_id FROM invoices WHERE id=?");
+            $invData->execute([$id]);
+            $cId = $invData->fetchColumn();
+            if ($cId) {
+                $this->db->prepare("UPDATE contacts SET last_contact = NOW() WHERE id = ? AND tenant_id = ?")
+                    ->execute([(int) $cId, $auth['tenant_id']]);
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'PAYMENT', 'invoice', $id, json_encode(['amount' => $inv['total'] ?? 0]));
+            $this->db->commit();
+            $this->syncInvoiceContact($auth['tenant_id'], $id);
+            respond(200, null, 'Hóa đơn đã được thanh toán và tồn kho đã được cập nhật');
+        } catch (Exception $e) {
+            if ($this->db->inTransaction())
+                $this->db->rollBack();
+            respond(500, null, 'Lỗi hệ thống: ' . $e->getMessage(), false);
+        }
+    }
+
+    // ─────────────────────── EXPENSES ───────────────────────────
+
+    public function listExpenses(array $auth): void
+    {
+        $tid = $auth['tenant_id'];
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $limit = min(5000, max(1, (int) ($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        $status = $_GET['status'] ?? '';
+        $category = $_GET['category'] ?? '';
+        $from = $_GET['from'] ?? '';
+        $to = $_GET['to'] ?? '';
+        $companyId = $_GET['company_id'] ?? '';
+        $where = ['e.tenant_id=?', 'e.deleted_at IS NULL'];
+        $params = [$tid];
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        $isSale = $role === 'sales' || $role === 'sale';
+        $isSaleAdmin = $role === 'sale_admin' || $role === 'saleadmin';
+        $isManager = $role === 'manager';
+
+        // Load team members if manager
+        $userIds = [$uid];
+        if ($isManager) {
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->execute([$uid]);
+            $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+        }
+
+        $isAdminOrDirectorOrAccountant = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
+
+        if (!$isAdminOrDirectorOrAccountant) {
+            if ($isManager) {
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.refunder_id = ?)";
+                $params = array_merge($params, $userIds);
+                $params[] = $uid;
+                $params[] = $uid;
+            } else if ($isSaleAdmin) {
+                $where[] = "(
+                    e.created_by = ? 
+                    OR e.approver_id = ?
+                    OR EXISTS (
+                        SELECT 1 FROM expense_entities ee 
+                        JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
+                        WHERE ee.expense_id = e.id AND c.status = 'customer'
+                    )
+                )";
+                $params[] = $uid;
+                $params[] = $uid;
+            } else {
+                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.refunder_id = ?)";
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+            }
+        }
+        if ($status) {
+            $where[] = 'e.status=?';
+            $params[] = $status;
+        }
+
+        $includeZeroAdmin = ($_GET['include_zero_admin'] ?? '') === '1';
+        if (!$includeZeroAdmin) {
+            $where[] = '(e.amount > 0 OR (e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%" AND e.title NOT LIKE "%văn phòng phẩm%" AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"))';
+        }
+        if ($category) {
+            $where[] = 'e.category=?';
+            $params[] = $category;
+        }
+        if ($from) {
+            $where[] = 'e.date >= ?';
+            $params[] = $from;
+        }
+        if ($to) {
+            $where[] = 'e.date <= ?';
+            $params[] = $to;
+        }
+        if ($companyId) {
+            $where[] = "EXISTS (
+                SELECT 1 FROM expense_entities ee 
+                LEFT JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
+                WHERE ee.expense_id = e.id AND (
+                    (ee.entity_type = 'company' AND ee.entity_id = ?) 
+                    OR (ee.entity_type = 'contact' AND c.company_id = ?)
+                )
+            )";
+            $params[] = (int)$companyId;
+            $params[] = (int)$companyId;
+        }
+        $w = implode(' AND ', $where);
+
+        $simple = ($_GET['simple'] ?? '') === '1';
+        if ($simple) {
+            $stmt = $this->db->prepare("
+                SELECT e.id, e.amount, e.date, e.title, e.category, e.vendor_name, e.status
+                FROM expenses e 
+                WHERE $w ORDER BY e.date DESC LIMIT $limit OFFSET $offset
+            ");
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll();
+
+            respond(200, [
+                'items' => $rows,
+                'total' => count($rows)
+            ]);
+            return;
+        }
+
+        $cnt = $this->db->prepare("SELECT COUNT(*) FROM expenses e WHERE $w");
+        $cnt->execute($params);
+        $total = (int) $cnt->fetchColumn();
+
+        $stmt = $this->db->prepare("
+            SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, 
+                   u2.full_name as approver_name, u2.avatar_url as approver_avatar,
+                   u3.full_name as refunder_name, u3.avatar_url as refunder_avatar
+            FROM expenses e 
+            LEFT JOIN users u ON e.created_by = u.id
+            LEFT JOIN users u2 ON e.approver_id = u2.id
+            LEFT JOIN users u3 ON e.refunder_id = u3.id
+            WHERE $w ORDER BY e.date DESC LIMIT $limit OFFSET $offset
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        // Fetch entities for all these rows
+        if (!empty($rows)) {
+            $ids = array_column($rows, 'id');
+            $in = str_repeat('?,', count($ids) - 1) . '?';
+            $sEE = $this->db->prepare("SELECT ee.*, c.full_name, c.avatar_url FROM expense_entities ee LEFT JOIN contacts c ON ee.entity_type='contact' AND ee.entity_id=c.id WHERE ee.expense_id IN ($in)");
+            $sEE->execute($ids);
+            $allEntities = $sEE->fetchAll();
+
+            $entitiesByExp = [];
+            foreach ($allEntities as $ee) {
+                $ee['name'] = trim($ee['full_name'] ?? '');
+                $entitiesByExp[$ee['expense_id']][] = $ee;
+            }
+
+            foreach ($rows as &$r) {
+                $r['entities'] = $entitiesByExp[$r['id']] ?? [];
+            }
+        }
+
+        // Summary totals respecting filters
+        $sTotal = $this->db->prepare("SELECT COALESCE(SUM(e.amount),0) as total, COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount END),0) as approved, COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount END),0) as pending, COUNT(*) as total_count, COALESCE(SUM(CASE WHEN e.status='approved' THEN 1 ELSE 0 END),0) as approved_count, COALESCE(SUM(CASE WHEN e.status='pending' THEN 1 ELSE 0 END),0) as pending_count FROM expenses e WHERE $w");
+        $sTotal->execute($params);
+        $currentSummary = $sTotal->fetch();
+
+        $sMax = $this->db->prepare("SELECT amount, title FROM expenses e WHERE $w ORDER BY e.amount DESC LIMIT 1");
+        $sMax->execute($params);
+        $maxItem = $sMax->fetch() ?: null;
+
+        $prevTotal = 0.0;
+        $prevApproved = 0.0;
+        $prevPending = 0.0;
+
+        if ($from && $to) {
+            $fromTs = strtotime($from);
+            $toTs = strtotime($to);
+            $diffSeconds = $toTs - $fromTs;
+            $diffDays = round($diffSeconds / (24 * 3600)) + 1;
+
+            $prevFrom = date('Y-m-d', strtotime("-$diffDays days", $fromTs));
+            $prevTo = date('Y-m-d', strtotime("-1 day", $fromTs));
+
+            $prevWhere = ['e.tenant_id=?', 'e.deleted_at IS NULL'];
+            $prevParams = [$tid];
+            if ($isSale) {
+                $prevWhere[] = 'e.created_by = ?';
+                $prevParams[] = $uid;
+            } else if ($isSaleAdmin) {
+                $prevWhere[] = "(
+                    e.created_by = ? 
+                    OR e.approver_id = ?
+                    OR EXISTS (
+                        SELECT 1 FROM expense_entities ee 
+                        JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
+                        WHERE ee.expense_id = e.id AND c.status = 'customer'
+                    )
+                )";
+                $prevParams[] = $uid;
+                $prevParams[] = $uid;
+            } else if ($isManager) {
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $prevWhere[] = "e.created_by IN ($placeholders)";
+                $prevParams = array_merge($prevParams, $userIds);
+            }
+            if ($status) {
+                $prevWhere[] = 'e.status=?';
+                $prevParams[] = $status;
+            }
+            if ($category) {
+                $prevWhere[] = 'e.category=?';
+                $prevParams[] = $category;
+            }
+            $prevWhere[] = 'e.date >= ?';
+            $prevParams[] = $prevFrom;
+            $prevWhere[] = 'e.date <= ?';
+            $prevParams[] = $prevTo;
+
+            $pw = implode(' AND ', $prevWhere);
+            $sPrev = $this->db->prepare("SELECT COALESCE(SUM(e.amount),0) as total, COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount END),0) as approved, COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount END),0) as pending FROM expenses e WHERE $pw");
+            $sPrev->execute($prevParams);
+            $prevSummary = $sPrev->fetch();
+            if ($prevSummary) {
+                $prevTotal = (float)$prevSummary['total'];
+                $prevApproved = (float)$prevSummary['approved'];
+                $prevPending = (float)$prevSummary['pending'];
+            }
+        }
+
+        $summary = [
+            'total' => (float)$currentSummary['total'],
+            'approved' => (float)$currentSummary['approved'],
+            'pending' => (float)$currentSummary['pending'],
+            'total_count' => (int)$currentSummary['total_count'],
+            'approved_count' => (int)$currentSummary['approved_count'],
+            'pending_count' => (int)$currentSummary['pending_count'],
+            'max_amount' => $maxItem ? (float)$maxItem['amount'] : 0.0,
+            'max_title' => $maxItem ? $maxItem['title'] : '',
+            'prev_total' => $prevTotal,
+            'prev_approved' => $prevApproved,
+            'prev_pending' => $prevPending
+        ];
+
+        respond(200, ['items' => $rows, 'total' => $total, 'page' => $page, 'limit' => $limit, 'summary' => $summary]);
+    }
+
+    public function showExpense(array $auth, int $id): void
+    {
+        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
+        $p = [$id, $auth['tenant_id']];
+        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+            $sql .= " AND e.created_by=?";
+            $p[] = $auth['user_id'];
+        } else if ($auth['role'] === 'sale_admin' || $auth['role'] === 'saleadmin') {
+            $sql .= " AND (
+                e.created_by = ? 
+                OR e.approver_id = ?
+                OR EXISTS (
+                    SELECT 1 FROM expense_entities ee 
+                    JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
+                    WHERE ee.expense_id = e.id AND c.status = 'customer'
+                )
+            )";
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+        } else if ($auth['role'] === 'manager') {
+            $sql .= " AND (e.created_by = ? OR e.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+        }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($p);
+        $row = $stmt->fetch();
+        if (!$row)
+            respond(404, null, 'Không tìm thấy chi phí', false);
+
+        // Fetch linked entities with names
+        $sEE = $this->db->prepare("SELECT ee.*, c.full_name, c.avatar_url FROM expense_entities ee LEFT JOIN contacts c ON ee.entity_type='contact' AND ee.entity_id=c.id WHERE ee.expense_id=?");
+        $sEE->execute([$id]);
+        $entities = $sEE->fetchAll();
+        foreach ($entities as &$ee) {
+            $ee['name'] = trim($ee['full_name'] ?? '');
+        }
+        $row['entities'] = $entities;
+
+        respond(200, $row);
+    }
+
+    public function createExpense(array $auth): void
+    {
+        if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền tạo chi phí', false);
+        $data = getBody();
+        if (empty($data['title']) || (!isset($data['amount']) || $data['amount'] === ''))
+            respond(400, null, 'Thiếu tiêu đề hoặc số tiền', false);
+
+        $totalAmount = (float) $data['amount'];
+        if ($totalAmount < 0) respond(422, null, 'Số tiền chi phí không được âm', false);
+        $entities = $data['entities'] ?? [];
+
+        // Validate split amounts
+        if (!empty($entities)) {
+            $splitSum = array_reduce($entities, fn($s, $e) => $s + (float) ($e['amount'] ?? 0), 0);
+            if ($splitSum > $totalAmount) {
+                respond(422, null, 'Tổng số tiền phân bổ không được lớn hơn tổng số tiền chi phí', false);
+            }
+        }
+
+        // Force pending status if created by sales/sale role (Security Gate)
+        $statusVal = $data['status'] ?? 'pending';
+        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+            $statusVal = 'pending';
+        }
+
+        $approver_id = !empty($data['approver_id']) ? (int)$data['approver_id'] : null;
+        $approver_id_2 = !empty($data['approver_id_2']) ? (int)$data['approver_id_2'] : null;
+        $approver_id_3 = !empty($data['approver_id_3']) ? (int)$data['approver_id_3'] : null;
+
+        // Fetch threshold for 3-level approval
+        $threshold = 5000000;
+        $thQuery = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'po_three_level_threshold' LIMIT 1");
+        if ($thQuery) {
+            $thRow = $thQuery->fetch();
+            if ($thRow && is_numeric($thRow['setting_value'])) {
+                $threshold = (float)$thRow['setting_value'];
+            }
+        }
+
+        if ($statusVal === 'pending') {
+            if (empty($approver_id)) {
+                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+                $stmtLeader->execute([$auth['user_id']]);
+                $leadId = $stmtLeader->fetchColumn();
+                if (!empty($leadId) && (int)$leadId !== (int)$auth['user_id']) {
+                    $approver_id = (int)$leadId;
+                } else {
+                    $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$auth['user_id'] . " LIMIT 1");
+                    $approver_id = (int)($stmtDir->fetchColumn() ?: 1003);
+                }
+            }
+            if ($totalAmount >= $threshold) {
+                if (empty($approver_id_2)) {
+                    respond(422, null, 'Chi phí từ ' . number_format($threshold, 0, ',', '.') . ' VND trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn người duyệt Cấp 2.', false);
+                }
+            }
+        }
+
+        $relatedUserIds = !empty($data['related_user_ids']) ? (is_array($data['related_user_ids']) ? json_encode($data['related_user_ids']) : $data['related_user_ids']) : null;
+
+        $status_level_1 = $approver_id ? 'pending' : 'none';
+        $status_level_2 = $approver_id_2 ? 'pending' : 'none';
+        $status_level_3 = $approver_id_3 ? 'pending' : 'none';
+        $approval_status = $approver_id ? 'pending' : 'approved';
+        if ($statusVal === 'approved') {
+            $status_level_1 = 'approved';
+            $status_level_2 = $approver_id_2 ? 'approved' : 'none';
+            $status_level_3 = $approver_id_3 ? 'approved' : 'none';
+            $approval_status = 'approved';
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO expenses (
+                    tenant_id, created_by, title, category, amount, vat_amount, date, status, notes,
+                    vendor_name, has_vat_invoice, is_vat_inclusive, image_url,
+                    approver_id, approver_id_2, approver_id_3,
+                    status_level_1, status_level_2, status_level_3, approval_status, related_user_ids
+                )
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ");
+            $stmt->execute([
+                $auth['tenant_id'],
+                $auth['user_id'],
+                $data['title'],
+                $data['category'] ?? 'Khác',
+                $totalAmount,
+                $data['vat_amount'] ?? 0,
+                $data['date'] ?? date('Y-m-d'),
+                $statusVal,
+                $data['notes'] ?? null,
+                $data['vendor_name'] ?? null,
+                $data['has_vat_invoice'] ?? 0,
+                $data['is_vat_inclusive'] ?? 0,
+                $data['image_url'] ?? null,
+                $approver_id,
+                $approver_id_2,
+                $approver_id_3,
+                $status_level_1,
+                $status_level_2,
+                $status_level_3,
+                $approval_status,
+                $relatedUserIds
+            ]);
+            $expId = (int) $this->db->lastInsertId();
+
+            if ($statusVal === 'approved') {
+                $stmtApprove = $this->db->prepare("UPDATE expenses SET approver_id = ?, approved_at = NOW(), status_level_1='approved', approval_status='approved' WHERE id = ?");
+                $stmtApprove->execute([$auth['user_id'], $expId]);
+            }
+
+            if (!empty($entities)) {
+                $sEE = $this->db->prepare("INSERT INTO expense_entities (tenant_id, expense_id, entity_type, entity_id, amount) VALUES (?,?,?,?,?)");
+                foreach ($entities as $ee) {
+                    // Verify entity exists in this tenant and is accessible
+                    $table = $ee['entity_type'] === 'contact' ? 'contacts' : ($ee['entity_type'] === 'company' ? 'companies' : 'deals');
+                    $sqlEnt = "SELECT id FROM $table WHERE id=? AND tenant_id=?";
+                    $pEnt = [(int) $ee['entity_id'], $auth['tenant_id']];
+                    if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                        $sqlEnt .= " AND owner_id = ?";
+                        $pEnt[] = $auth['user_id'];
+                    } else if ($auth['role'] === 'manager') {
+                        $sqlEnt .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                        $pEnt[] = $auth['user_id'];
+                        $pEnt[] = $auth['user_id'];
+                    }
+                    $check = $this->db->prepare($sqlEnt);
+                    $check->execute($pEnt);
+                    if (!$check->fetch())
+                        continue; // Skip unauthorized/missing entities
+
+                    $sEE->execute([$auth['tenant_id'], $expId, $ee['entity_type'], (int) $ee['entity_id'], (float) ($ee['amount'] ?? 0)]);
+                }
+            }
+
+            $this->db->commit();
+
+            // Log interaction for entities
+            if (!empty($entities)) {
+                foreach ($entities as $ee) {
+                    if ($ee['entity_type'] === 'contact') {
+                        $body = "Khoản chi phí trị giá " . number_format($ee['amount'] ?? 0, 0, ',', '.') . "đ đã được liên kết với khách hàng.";
+                        if (!empty($data['image_url'])) {
+                            $body .= "\nTài liệu/Link đính kèm: " . $data['image_url'];
+                        }
+                        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', "Ghi nhận Chi phí: {$data['title']}", $body, 'contact', (int) $ee['entity_id']);
+                    }
+                }
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CREATE', 'expense', $expId, json_encode(['title' => $data['title'], 'amount' => $totalAmount]));
+
+            $statusVal = $data['status'] ?? 'pending';
+            if ($statusVal === 'pending') {
+                require_once __DIR__ . '/../NotificationService.php';
+                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                    'approver_id' => $approver_id,
+                    'user_id' => $approver_id,
+                    'target_user_id' => $approver_id,
+                    'user_name' => $auth['full_name'],
+                    'title' => $data['title'],
+                    'amount' => $totalAmount,
+                    'reason' => $data['notes'] ?? 'Không có',
+                    'ref_id' => $expId
+                ]);
+
+                // Notify related persons
+                if (!empty($data['related_user_ids'])) {
+                    $relList = is_array($data['related_user_ids']) ? $data['related_user_ids'] : json_decode($data['related_user_ids'], true);
+                    if (is_array($relList)) {
+                        foreach ($relList as $relUid) {
+                            $relUid = (int)$relUid;
+                            if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$approver_id) {
+                                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                                    'user_id' => $relUid,
+                                    'user_name' => $auth['full_name'],
+                                    'title' => $data['title'],
+                                    'amount' => $totalAmount,
+                                    'reason' => ($data['notes'] ?? 'Không có') . ' (Bạn được gắn là Người liên quan)',
+                                    'ref_id' => $expId
+                                ]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            $this->showExpense($auth, $expId);
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, $e->getMessage(), false);
+        }
+    }
+
+    public function updateExpense(array $auth, int $id): void
+    {
+        if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật chi phí', false);
+        $data = getBody();
+        $fields = [
+            'title',
+            'category',
+            'amount',
+            'vat_amount',
+            'date',
+            'status',
+            'notes',
+            'vendor_name',
+            'has_vat_invoice',
+            'is_vat_inclusive',
+            'image_url',
+            'approver_id',
+            'approver_id_2',
+            'approver_id_3',
+            'status_level_1',
+            'status_level_2',
+            'status_level_3',
+            'approval_status'
+        ];
+        $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true);
+        if ($isAdminOrDirector) {
+            $fields[] = 'refund_image_url';
+        }
+        $sets = [];
+        $params = [];
+        foreach ($fields as $f) {
+            if (array_key_exists($f, $data)) {
+                $sets[] = "$f=?";
+                $params[] = $data[$f];
+            }
+        }
+        if ($isAdminOrDirector && array_key_exists('is_refunded', $data)) {
+            $sets[] = "is_refunded=?";
+            $params[] = $data['is_refunded'] ? 1 : 0;
+            if ($data['is_refunded']) {
+                $sets[] = "refunded_at=NOW()";
+                $sets[] = "refunder_id=?";
+                $params[] = $auth['user_id'];
+            } else {
+                $sets[] = "refunded_at=NULL";
+                $sets[] = "refunder_id=NULL";
+            }
+        }
+
+        $this->db->beginTransaction();
+        try {
+            // Check permission and get current amount if not provided
+            $sqlCheck = "SELECT id, amount, created_by, title FROM expenses WHERE id=? AND tenant_id=?";
+            $cp = [$id, $auth['tenant_id']];
+            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                $sqlCheck .= " AND created_by=?";
+                $cp[] = $auth['user_id'];
+            } else if ($auth['role'] === 'manager') {
+                $sqlCheck .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $cp[] = $auth['user_id'];
+                $cp[] = $auth['user_id'];
+            }
+            $check = $this->db->prepare($sqlCheck);
+            $check->execute($cp);
+            $row = $check->fetch();
+            if (!$row)
+                respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+
+            $currentTotal = (float) ($data['amount'] ?? $row['amount']);
+            if ($currentTotal < 0) respond(422, null, 'Số tiền chi phí không được âm', false);
+
+            if ($sets) {
+                $params[] = $id;
+                $params[] = $auth['tenant_id'];
+                $stmt = $this->db->prepare("UPDATE expenses SET " . implode(',', $sets) . " WHERE id=? AND tenant_id=?");
+                $stmt->execute($params);
+            }
+
+            if (isset($data['entities']) && is_array($data['entities'])) {
+                $entities = $data['entities'];
+                $splitSum = array_reduce($entities, fn($s, $e) => $s + (float) ($e['amount'] ?? 0), 0);
+                if ($splitSum > $currentTotal) {
+                    throw new Exception('Tổng số tiền phân bổ không được lớn hơn tổng số tiền chi phí');
+                }
+
+                $this->db->prepare("DELETE FROM expense_entities WHERE expense_id=?")->execute([$id]);
+                $sEE = $this->db->prepare("INSERT INTO expense_entities (tenant_id, expense_id, entity_type, entity_id, amount) VALUES (?,?,?,?,?)");
+                foreach ($entities as $ee) {
+                    // Verify entity exists in this tenant and is accessible
+                    $table = $ee['entity_type'] === 'contact' ? 'contacts' : ($ee['entity_type'] === 'company' ? 'companies' : 'deals');
+                    $sqlEnt = "SELECT id FROM $table WHERE id=? AND tenant_id=?";
+                    $pEnt = [(int) $ee['entity_id'], $auth['tenant_id']];
+                    if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                        $sqlEnt .= " AND owner_id = ?";
+                        $pEnt[] = $auth['user_id'];
+                    } else if ($auth['role'] === 'manager') {
+                        $sqlEnt .= " AND (owner_id = ? OR owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                        $pEnt[] = $auth['user_id'];
+                        $pEnt[] = $auth['user_id'];
+                    }
+                    $eCheck = $this->db->prepare($sqlEnt);
+                    $eCheck->execute($pEnt);
+                    if (!$eCheck->fetch())
+                        continue;
+
+                    $sEE->execute([$auth['tenant_id'], $id, $ee['entity_type'], (int) $ee['entity_id'], (float) ($ee['amount'] ?? 0)]);
+                }
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'expense', $id, json_encode($data));
+            
+            // If modified by someone other than the creator, insert a system notification and send email
+            if (isset($row['created_by']) && (int)$row['created_by'] !== (int)$auth['user_id']) {
+                $creatorId = (int)$row['created_by'];
+                $notifTitle = "Yêu cầu chi phí đã chỉnh sửa";
+                $notifBody = "Quản lý/Admin đã chỉnh sửa yêu cầu chi phí: \"" . $row['title'] . "\"";
+                $notifType = "expense_edited";
+                $notifLink = "/expenses";
+                
+                $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmtNotif->execute([$creatorId, $auth['tenant_id'], $notifTitle, $notifBody, $notifType, $notifLink]);
+
+                $stmtUser = $this->db->prepare("SELECT email, full_name FROM users WHERE id=?");
+                $stmtUser->execute([$creatorId]);
+                $creatorRow = $stmtUser->fetch();
+                if ($creatorRow && !empty($creatorRow['email'])) {
+                    require_once __DIR__ . '/../mailer.php';
+                    $emailSubject = "[IDEAS] Yêu cầu chi phí của bạn đã được cập nhật";
+                    $emailTitle = "CẬP NHẬT YÊU CẦU CHI PHÍ";
+                    $emailContent = "Chào <strong>" . htmlspecialchars($creatorRow['full_name']) . "</strong>,<br/><br/>" .
+                                    "Yêu cầu thanh toán chi phí của bạn cho mục <strong>" . htmlspecialchars($row['title']) . "</strong> đã được quản trị viên chỉnh sửa.<br/>" .
+                                    "Số tiền hiện tại: <strong>" . number_format($currentTotal, 0, ',', '.') . "đ</strong>.<br/>" .
+                                    "Vui lòng đăng nhập hệ thống IDEAS CRM để xem chi tiết.";
+                    sendEmailNotification($creatorRow['email'], $emailSubject, $emailTitle, $emailContent, '', false);
+                }
+            }
+
+            $this->db->commit();
+            $this->showExpense($auth, $id);
+        } catch (Exception $e) {
+            if ($this->db->inTransaction())
+                $this->db->rollBack();
+            respond(422, null, $e->getMessage(), false);
+        }
+    }
+
+    public function listEntityExpenses(array $auth, string $type, int $id): void
+    {
+        $where = "ee.entity_type=? AND ee.entity_id=? AND e.tenant_id=?";
+        $p = [$type, $id, $auth['tenant_id']];
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        $isSale = $role === 'sales' || $role === 'sale';
+        $isManager = $role === 'manager';
+
+        // Load team members if manager
+        $userIds = [$uid];
+        if ($isManager) {
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->execute([$uid]);
+            $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+        }
+
+        if ($type === 'contact') {
+            if (!$this->checkContactAccess($uid, (int)$id, $tid, $role)) {
+                respond(403, null, 'Bạn không có quyền xem chi phí của liên hệ này', false);
+            }
+        } else if ($type === 'deal') {
+            if (!$this->checkDealAccess($uid, (int)$id, $tid, $role)) {
+                respond(403, null, 'Bạn không có quyền xem chi phí của cơ hội này', false);
+            }
+        } else {
+            if ($isSale) {
+                $where .= " AND e.created_by=?";
+                $p[] = $uid;
+            } else if ($isManager) {
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $where .= " AND e.created_by IN ($placeholders)";
+                $p = array_merge($p, $userIds);
+            }
+        }
+        $stmt = $this->db->prepare("
+            SELECT e.*, ee.amount as split_amount, 
+                   u.full_name as creator_name, u.avatar_url as creator_avatar,
+                   u2.full_name as approver_name, u2.avatar_url as approver_avatar,
+                   u3.full_name as refunder_name, u3.avatar_url as refunder_avatar
+            FROM expenses e
+            JOIN expense_entities ee ON e.id = ee.expense_id
+            LEFT JOIN users u ON e.created_by = u.id
+            LEFT JOIN users u2 ON e.approver_id = u2.id
+            LEFT JOIN users u3 ON e.refunder_id = u3.id
+            WHERE $where
+            ORDER BY e.date DESC
+        ");
+        $stmt->execute($p);
+        respond(200, $stmt->fetchAll());
+    }
+
+    public function deleteExpense(array $auth, int $id): void
+    {
+        if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền xóa chi phí', false);
+        
+        $sql = "UPDATE expenses SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
+        $p = [$id, $auth['tenant_id']];
+        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+            $sql .= " AND created_by = ?";
+            $p[] = $auth['user_id'];
+        } else if ($auth['role'] === 'manager') {
+            $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+        }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($p);
+        if (!$stmt->rowCount())
+            respond(404, null, 'Không tìm thấy chi phí hoặc không có quyền', false);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'expense', $id);
+        respond(200, null, 'Đã xóa chi phí');
+    }
+
+    public function approveExpense(array $auth, int $id): void
+    {
+        if (!in_array($auth['role'], ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin'], true)) respond(403, null, 'Bạn không có quyền duyệt chi phí', false);
+        requireRole($auth, ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin']);
+
+        $data = getBody();
+        $statusInput = $data['status'] ?? 'approved'; // 'approved' or 'rejected'
+        if (!in_array($statusInput, ['approved', 'rejected'], true)) {
+            respond(400, null, 'Trạng thái phê duyệt không hợp lệ', false);
+        }
+
+        $userId = $auth['user_id'];
+
+        $this->db->beginTransaction();
+        try {
+            // Find creator of the expense WITH row-level lock (FOR UPDATE)
+            $stmtExp = $this->db->prepare("SELECT * FROM expenses WHERE id=? AND tenant_id=? FOR UPDATE");
+            $stmtExp->execute([$id, $auth['tenant_id']]);
+            $expenseRow = $stmtExp->fetch();
+            
+            if (!$expenseRow) {
+                $this->db->rollBack();
+                respond(404, null, 'Không tìm thấy chi phí', false);
+            }
+
+            if ($auth['role'] === 'manager') {
+                $creatorId = (int)$expenseRow['created_by'];
+                
+                // Check if creator belongs to the manager's team
+                $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+                $stmtUserTeam->execute([$creatorId]);
+                $targetUserTeamId = $stmtUserTeam->fetchColumn();
+
+                $stmtLead = $this->db->prepare("SELECT 1 FROM teams WHERE id = ? AND leader_id = ?");
+                $stmtLead->execute([$targetUserTeamId, $auth['user_id']]);
+                $isTeamMember = $stmtLead->fetch();
+
+                if ($creatorId !== (int)$auth['user_id'] && !$isTeamMember) {
+                    $this->db->rollBack();
+                    respond(403, null, 'Bạn chỉ có quyền phê duyệt chi phí cho nhân viên thuộc nhóm của mình', false);
+                }
+            }
+
+            // Determine which level needs to be approved next
+            $currentLevel = 0;
+            if ($expenseRow['status_level_1'] === 'pending') {
+                $currentLevel = 1;
+            } elseif ($expenseRow['status_level_1'] === 'approved' && $expenseRow['status_level_2'] === 'pending') {
+                $currentLevel = 2;
+            } elseif ($expenseRow['status_level_1'] === 'approved' && $expenseRow['status_level_2'] === 'approved' && $expenseRow['status_level_3'] === 'pending') {
+                $currentLevel = 3;
+            }
+
+            // Fallback for old records without levels
+            if ($currentLevel === 0 && $expenseRow['status'] === 'pending') {
+                $currentLevel = 1;
+            }
+
+            if ($currentLevel === 0) {
+                $this->db->rollBack();
+                respond(422, null, 'Khoản chi đã được duyệt hoặc từ chối đầy đủ rồi', false);
+            }
+
+            // Check if current user is the expected approver for this level
+            $expectedApproverId = 0;
+            if ($currentLevel === 1) {
+                $expectedApproverId = (int)($expenseRow['approver_id'] ?? 0);
+            } elseif ($currentLevel === 2) {
+                $expectedApproverId = (int)($expenseRow['approver_id_2'] ?? 0);
+            } elseif ($currentLevel === 3) {
+                $expectedApproverId = (int)($expenseRow['approver_id_3'] ?? 0);
+            }
+
+            if ($expectedApproverId > 0 && $expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền phê duyệt cấp này', false);
+            }
+
+            // Update status of current level
+            $levelStatusField = "status_level_" . $currentLevel;
+            $nextApprovalStatus = $expenseRow['approval_status'];
+            $nextStatus = $expenseRow['status'];
+
+            if ($statusInput === 'rejected') {
+                $nextApprovalStatus = 'rejected';
+                $nextStatus = 'rejected';
+                
+                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField=?, approver_id=?, approved_at=NOW(), reject_reason=? WHERE id=?")
+                    ->execute(['rejected', 'rejected', 'rejected', $userId, $data['reject_reason'] ?? null, $id]);
+            } else {
+                $hasLevel2 = !empty($expenseRow['approver_id_2']) && $expenseRow['status_level_2'] !== 'none';
+                $hasLevel3 = !empty($expenseRow['approver_id_3']) && $expenseRow['status_level_3'] !== 'none';
+
+                if ($currentLevel === 1) {
+                    if ($hasLevel2) {
+                        $nextApprovalStatus = 'pending';
+                        $nextStatus = 'pending';
+                    } else {
+                        $nextApprovalStatus = 'approved';
+                        $nextStatus = 'approved';
+                    }
+                } elseif ($currentLevel === 2) {
+                    if ($hasLevel3) {
+                        $nextApprovalStatus = 'pending';
+                        $nextStatus = 'pending';
+                    } else {
+                        $nextApprovalStatus = 'approved';
+                        $nextStatus = 'approved';
+                    }
+                } elseif ($currentLevel === 3) {
+                    $nextApprovalStatus = 'approved';
+                    $nextStatus = 'approved';
+                }
+
+                $approvedAtVal = ($nextStatus === 'approved') ? 'NOW()' : 'NULL';
+                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', approved_at=" . ($nextStatus === 'approved' ? "NOW()" : "NULL") . " WHERE id=?")
+                    ->execute([$nextStatus, $nextApprovalStatus, $id]);
+            }
+
+            $this->db->commit();
+
+            // Send multi-channel notification via NotificationService
+            require_once __DIR__ . '/../NotificationService.php';
+            if ($nextStatus === 'approved' || $nextStatus === 'rejected') {
+                NotificationService::send($this->db, $auth['tenant_id'], $nextStatus === 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_REJECTED', [
+                    'target_user_id' => (int)$expenseRow['created_by'],
+                    'title' => $expenseRow['title'],
+                    'amount' => (float)$expenseRow['amount'],
+                    'reject_reason' => $data['reject_reason'] ?? '',
+                    'ref_id' => $id
+                ]);
+            } else if ($nextStatus === 'pending') {
+                // If transitioning to next approval level (Level 2 or Level 3), notify the next approver
+                $nextApproverId = 0;
+                if ($currentLevel === 1 && !empty($expenseRow['approver_id_2'])) {
+                    $nextApproverId = (int)$expenseRow['approver_id_2'];
+                } elseif ($currentLevel === 2 && !empty($expenseRow['approver_id_3'])) {
+                    $nextApproverId = (int)$expenseRow['approver_id_3'];
+                }
+                if ($nextApproverId > 0) {
+                    NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                        'approver_id' => $nextApproverId,
+                        'user_id' => $nextApproverId,
+                        'user_name' => $auth['full_name'] ?? 'Hệ thống',
+                        'title' => $expenseRow['title'] . ' (Duyệt Cấp ' . ($currentLevel + 1) . ')',
+                        'amount' => (float)$expenseRow['amount'],
+                        'reason' => $expenseRow['notes'] ?? '',
+                        'ref_id' => $id
+                    ]);
+                }
+            }
+
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'APPROVE', 'expense', $id, json_encode(['status' => $nextStatus]));
+            respond(200, null, 'Đã cập nhật trạng thái');
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi khi duyệt chi phí: ' . $e->getMessage(), false);
+        }
+    }
+
+    public function summary(array $auth): void
+    {
+        requireRole($auth, ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'sale_admin', 'saleadmin']);
+        $role = $auth['role'] ?? '';
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 0);
+        
+        $isManager = $role === 'manager';
+
+        // Load team members if manager
+        $userIds = [$uid];
+        if ($isManager) {
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->execute([$uid]);
+            $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+        }
+
+        $invSql = "
+            SELECT COALESCE(SUM(total),0) as total_revenue,
+                   COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) as total_paid,
+                   COUNT(CASE WHEN status='pending' THEN 1 END) as pending_count
+            FROM invoices WHERE tenant_id=? AND deleted_at IS NULL
+        ";
+        $invParams = [$tid];
+        if ($isManager) {
+            $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+            $invSql .= " AND created_by IN ($placeholders)";
+            $invParams = array_merge($invParams, $userIds);
+        }
+        $sInv = $this->db->prepare($invSql);
+        $sInv->execute($invParams);
+        $inv = $sInv->fetch() ?: ['total_revenue' => 0, 'total_paid' => 0, 'pending_count' => 0];
+
+        $expSql = "
+            SELECT COALESCE(SUM(amount),0) as total_expenses,
+                   COALESCE(SUM(CASE WHEN status='approved' THEN amount ELSE 0 END),0) as approved_expenses
+            FROM expenses WHERE tenant_id=? AND deleted_at IS NULL
+        ";
+        $expParams = [$tid];
+        if ($isManager) {
+            $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+            $expSql .= " AND created_by IN ($placeholders)";
+            $expParams = array_merge($expParams, $userIds);
+        }
+        $sExp = $this->db->prepare($expSql);
+        $sExp->execute($expParams);
+        $exp = $sExp->fetch() ?: ['total_expenses' => 0, 'approved_expenses' => 0];
+
+        respond(200, array_merge($inv, $exp));
+    }
+
+    private function checkContactAccess(int $uid, int $contactId, int $tid, string $role): bool {
+        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'assistant'], true)) {
+            return true;
+        }
+        
+        $stmt = $this->db->prepare("SELECT owner_id, collaborator_ids FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$contactId, $tid]);
+        $row = $stmt->fetch();
+        if (!$row) return false;
+        
+        $ownerId = (int)$row['owner_id'];
+        $collabs = array_filter(array_map('intval', explode(',', $row['collaborator_ids'] ?? '')));
+        
+        $userIds = [$uid];
+        if ($role === 'manager') {
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->execute([$uid]);
+            $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+        }
+        
+        if (in_array($ownerId, $userIds, true)) {
+            return true;
+        }
+        if (!empty(array_intersect($collabs, $userIds))) {
+            return true;
+        }
+        
+        foreach ($userIds as $teamUid) {
+            $checkC = $this->db->prepare("SELECT id FROM cooperation_slips WHERE contact_id = ? AND JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(? AS CHAR)))");
+            $checkC->execute([$contactId, $teamUid]);
+            if ($checkC->fetch()) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    private function checkDealAccess(int $uid, int $dealId, int $tid, string $role): bool {
+        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'assistant'], true)) {
+            return true;
+        }
+        
+        $stmt = $this->db->prepare("SELECT owner_id, contact_id FROM deals WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$dealId, $tid]);
+        $deal = $stmt->fetch();
+        if (!$deal) return false;
+        
+        $ownerId = (int)$deal['owner_id'];
+        $contactId = (int)$deal['contact_id'];
+        
+        $userIds = [$uid];
+        if ($role === 'manager') {
+            $stmtTeam = $this->db->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->execute([$uid]);
+            $teamMemberIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $userIds = array_merge($userIds, array_map('intval', $teamMemberIds));
+        }
+        
+        if (in_array($ownerId, $userIds, true)) {
+            return true;
+        }
+        
+        if ($contactId > 0) {
+            return $this->checkContactAccess($uid, $contactId, $tid, $role);
+        }
+        
+        return false;
+    }
+
+    public function getComments(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT c.*, u.full_name as user_name, u.avatar_url 
+            FROM comments c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.entity_type = 'expense' AND c.entity_id = ? AND c.tenant_id = ?
+            ORDER BY c.created_at DESC
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $comments = array_map(function($row) {
+            if (!empty($row['attachments'])) {
+                $decoded = json_decode($row['attachments'], true);
+                $row['attachments'] = is_array($decoded) ? $decoded : [];
+            } else {
+                $row['attachments'] = [];
+            }
+            return $row;
+        }, $rows);
+        respond(200, $comments, 'Lấy danh sách bình luận thành công');
+    }
+
+    public function addComment(array $auth, int $id): void {
+        $b = getBody();
+        $body = trim($b['body'] ?? '');
+        $attachments = !empty($b['attachments']) && is_array($b['attachments']) ? json_encode($b['attachments'], JSON_UNESCAPED_UNICODE) : null;
+        if (!$body && !$attachments) {
+            respond(422, null, 'Nội dung hoặc tệp đính kèm bình luận là bắt buộc', false);
+        }
+        $parentId = !empty($b['parent_id']) ? (int)$b['parent_id'] : null;
+
+        $stmt = $this->db->prepare("
+            INSERT INTO comments (tenant_id, entity_type, entity_id, user_id, body, attachments, parent_id) 
+            VALUES (?, 'expense', ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$auth['tenant_id'], $id, $auth['user_id'], $body, $attachments, $parentId]);
+        $newId = $this->db->lastInsertId();
+
+        // logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADD_COMMENT', 'expense', $id, "Thêm bình luận cho khoản chi #" . $id);
+        $this->parseAndNotifyMentions($body, $id, 'expense', $auth);
+
+        respond(200, ['id' => $newId], 'Thêm bình luận thành công');
+    }
+
+    public function deleteComment(array $auth, int $commentId): void {
+        $stmt = $this->db->prepare("SELECT user_id FROM comments WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$commentId, $auth['tenant_id']]);
+        $userId = $stmt->fetchColumn();
+        if (!$userId) {
+            respond(404, null, 'Không tìm thấy bình luận', false);
+        }
+        if ($auth['role'] !== 'admin' && $auth['role'] !== 'superadmin' && $auth['role'] !== 'super_admin' && (int)$userId !== (int)$auth['user_id']) {
+            respond(403, null, 'Bạn không có quyền xóa bình luận này', false);
+        }
+        $del = $this->db->prepare("DELETE FROM comments WHERE (id = ? OR parent_id = ?) AND tenant_id = ?");
+        $del->execute([$commentId, $commentId, $auth['tenant_id']]);
+        respond(200, null, 'Xóa bình luận thành công');
+    }
+
+    public function getHistory(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT a.id, a.action, a.new_data, a.created_at, u.full_name as user_name, u.avatar_url
+            FROM audit_logs a
+            LEFT JOIN users u ON a.user_id = u.id
+            WHERE a.tenant_id = ? AND a.resource = 'expense' AND a.resource_id = ?
+            ORDER BY a.created_at DESC
+        ");
+        $stmt->execute([$auth['tenant_id'], $id]);
+        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        respond(200, $logs, 'Lấy lịch sử chỉnh sửa thành công');
+    }
+
+    private function parseAndNotifyMentions(string $body, int $id, string $type, array $auth): void {
+        $mentions = [];
+        if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', (string)$body, $matches)) {
+            $uids = array_filter(array_map('intval', $matches[1]));
+            foreach ($uids as $uid) {
+                if ($uid !== (int)$auth['user_id']) {
+                    $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE id=?");
+                    $stmtUser->execute([$uid]);
+                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                    if ($userRow) {
+                        $mentions[$uid] = $userRow;
+                    }
+                }
+            }
+        }
+
+        $matches = [];
+        preg_match_all('/@([a-zA-Z0-9_\x{00C0}-\x{1EF9}()\s]+?)(?:<\/span>|<br|\n|$)/u', (string)$body, $matches);
+        $names = is_array($matches[1] ?? null) ? $matches[1] : [];
+        if (!empty($names)) {
+            foreach ($names as $nameWithUnderscores) {
+                $nameWithUnderscores = trim(strip_tags($nameWithUnderscores));
+                if (empty($nameWithUnderscores)) continue;
+                $fullName = str_replace('_', ' ', $nameWithUnderscores);
+                $stmtUser = $this->db->prepare("SELECT id, email, full_name, role FROM users WHERE (full_name=? OR REPLACE(full_name, ' ', '_')=?)");
+                $stmtUser->execute([$fullName, $nameWithUnderscores]);
+                $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                if ($userRow) {
+                    $uid = (int)$userRow['id'];
+                    if ($uid !== (int)$auth['user_id']) {
+                        $mentions[$uid] = $userRow;
+                    }
+                }
+            }
+        }
+
+        if (!empty($mentions)) {
+            require_once __DIR__ . '/../NotificationService.php';
+            foreach ($mentions as $uid => $userRow) {
+                NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
+                    'user_id' => $uid,
+                    'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
+                    'comment' => $body,
+                    'link' => "/approvals?open_id={$id}&open_type={$type}"
+                ]);
+            }
+        }
+    }
+}

@@ -1,0 +1,19211 @@
+<?php
+header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Auth-Token, X-HTTP-Method-Override");
+header("Content-Type: application/json; charset=utf-8");
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: DENY");
+header("X-XSS-Protection: 1; mode=block");
+
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=UTF-8');
+        }
+        echo json_encode([
+            'success' => false,
+            'message' => 'FATAL ERROR: ' . $error['message'] . ' in ' . $error['file'] . ' on line ' . $error['line']
+        ], JSON_UNESCAPED_UNICODE);
+    }
+});
+
+// Handle CORS Preflight early to avoid DB connection overhead for OPTIONS requests
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    header("Access-Control-Allow-Origin: *");
+    http_response_code(200);
+    exit();
+}
+
+// Intercept OOP controller routes and bridge them to index.php
+$action = $_GET['action'] ?? '';
+
+// Self-healing check for actions passing query parameters using '?' instead of '&'
+if (strpos($action, '?') !== false) {
+    $parts = explode('?', $action, 2);
+    $action = $parts[0];
+    $_GET['action'] = $action;
+    parse_str($parts[1], $extraGet);
+    $_GET = array_merge($_GET, $extraGet);
+    $_REQUEST = array_merge($_REQUEST, $extraGet);
+}
+
+$segments = explode('/', $action);
+$baseAction = explode('&', $segments[0])[0];
+if (in_array($baseAction, [
+    'auth',
+    'projects',
+    'deposits',
+    'cooperation-slips',
+    'capi',
+    'check-ins',
+    'cloud-files',
+    'file-categories',
+    'tickets',
+    'suppliers',
+    'purchase-orders',
+    'pos',
+    'custom-fields',
+    'inventory',
+    'tags',
+    'pipeline-stages',
+    'users',
+    'reports',
+    'quotes',
+    'invoices',
+    'sales-orders',
+    'expenses',
+    'products',
+    'posts',
+    'contacts',
+    'companies',
+    'deals',
+    'activities',
+    'notes',
+    'campaigns',
+    'marketing-campaigns',
+    'upload',
+    'teams',
+    'dashboard',
+    'notifications',
+    'workflow-task-templates',
+    'search',
+    'export',
+    'import',
+    'system',
+    'test-benchmark',
+    'hrm'
+], true)) {
+    $_SERVER['REQUEST_URI'] = '/backend/' . $action . (!empty($_GET) ? '?' . http_build_query($_GET) : '');
+    require_once __DIR__ . '/index.php';
+    exit;
+}
+
+require_once 'env.php';
+require_once 'config.php';
+require_once 'db_connect.php';
+require_once 'permission_matrix_helper.php';
+require_once __DIR__ . '/utils/rag_helpers.php';
+
+// Safe CORS origin matching
+$httpOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'https://crm-ideas.vercel.app',
+    'https://crm-Ideas.vercel.app'
+];
+
+$frontendUrl = get_system_setting($conn, 'frontend_url');
+if (!empty($frontendUrl)) {
+    $parsed = parse_url($frontendUrl);
+    if (isset($parsed['scheme']) && isset($parsed['host'])) {
+        $allowedOrigins[] = $parsed['scheme'] . '://' . $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
+    }
+}
+
+$originToSet = '*';
+if (!empty($httpOrigin)) {
+    $cleanedOrigin = rtrim($httpOrigin, '/');
+    $isLocalhost = (bool) preg_match('#^https?://localhost(:\d+)?$#', $cleanedOrigin);
+    $isVercel = (bool) preg_match('#^https?://.*\.vercel\.app$#', $cleanedOrigin);
+    
+    if ($isLocalhost || $isVercel) {
+        $originToSet = $httpOrigin;
+    } else {
+        foreach ($allowedOrigins as $allowed) {
+            if (strcasecmp(rtrim($allowed, '/'), $cleanedOrigin) === 0) {
+                $originToSet = $httpOrigin;
+                break;
+            }
+        }
+    }
+}
+header("Access-Control-Allow-Origin: " . $originToSet);
+
+$JWT_SECRET = $_ENV['JWT_SECRET'] ?? "IDEAS_SECRET_KEY_2026";
+
+function getSafeErrorMsg($e)
+{
+    if ($e instanceof mysqli_sql_exception) {
+        error_log("DB Error: " . $e->getMessage());
+        return "Lỗi cơ sở dữ liệu hệ thống. Vui lòng thử lại sau.";
+    }
+    return $e->getMessage();
+}
+
+function getSystemFallbackRoundIds($conn)
+{
+    require_once __DIR__ . '/webhook_logic.php';
+    $roundIds = getAllFallbackRoundIds($conn);
+    $mainFbRoundId = (int) get_system_setting($conn, 'fallback_round_id');
+    if ($mainFbRoundId > 0) {
+        $roundIds[] = $mainFbRoundId;
+    }
+    return array_unique($roundIds);
+}
+
+function create_jwt($payload, $secret)
+{
+    $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
+    $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
+    $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(json_encode($payload)));
+    $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secret, true);
+    $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
+    return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
+}
+
+function verify_jwt($jwt, $secret)
+{
+    // Bypass for dev/demo tokens
+    if ($jwt === 'demo_token_12345') {
+        return [
+            'username' => 'info',
+            'email' => 'info@ideas.edu.vn',
+            'name' => 'Admin Demo',
+            'role' => 'admin',
+            'id' => 999905,
+            'user_id' => 999905,
+            'tenant_id' => 1
+        ];
+    }
+    if ($jwt === 'demo_token_marketing') {
+        return [
+            'username' => 'duongtnt',
+            'email' => 'duongtnt@ideas.edu.vn',
+            'name' => 'Trần Ngọc Thùy Dương',
+            'role' => 'marketing',
+            'id' => 100071,
+            'user_id' => 100071,
+            'tenant_id' => 1
+        ];
+    }
+    if ($jwt === 'demo_token_manager') {
+        return [
+            'username' => 'manager',
+            'email' => 'manager@Ideas.test',
+            'name' => 'Manager Demo',
+            'role' => 'manager',
+            'id' => 2,
+            'user_id' => 2
+        ];
+    }
+    if (strpos($jwt, 'demo_token_sale_') === 0) {
+        $cId = (int)str_replace('demo_token_sale_', '', $jwt);
+        $names = [
+            1 => 'Hải Đăng',
+            2 => 'Thanh Thảo',
+            3 => 'Việt Dũng',
+            4 => 'Minh Tuấn'
+        ];
+        $emails = [
+            1 => 'haidang@Ideas.test',
+            2 => 'thanhthao@Ideas.test',
+            3 => 'vietdung@Ideas.test',
+            4 => 'minhtuan@Ideas.test'
+        ];
+        return [
+            'username' => str_replace('@Ideas.test', '', $emails[$cId] ?? 'sale'),
+            'email' => $emails[$cId] ?? 'sale@Ideas.test',
+            'name' => $names[$cId] ?? 'Sale Demo',
+            'role' => 'sale',
+            'consultant_id' => $cId,
+            'id' => 100 + $cId // Dummy user ID for sales
+        ];
+    }
+
+    $parts = explode('.', $jwt);
+    if (count($parts) !== 3)
+        return false;
+    list($header, $payload, $signature) = $parts;
+    $validSignature = hash_hmac('sha256', $header . "." . $payload, $secret, true);
+    $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($validSignature));
+    if (hash_equals($base64UrlSignature, $signature)) {
+        $decoded = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $payload)), true);
+        if (isset($decoded['exp']) && $decoded['exp'] < time())
+            return false;
+        if ($decoded && is_array($decoded)) {
+            if (!isset($decoded['user_id']) && isset($decoded['id'])) {
+                $decoded['user_id'] = $decoded['id'];
+            }
+            if (!isset($decoded['tenant_id']) || empty($decoded['tenant_id'])) {
+                $decoded['tenant_id'] = 1;
+            }
+        }
+        return $decoded;
+    }
+    return false;
+}
+
+function getModulePermissionScope($conn, $auth, $module, $action)
+{
+    // Admin / Superadmin always have 'all' permissions
+    if (in_array($auth['role'], ['admin', 'superadmin', 'super_admin'], true)) {
+        return 'all';
+    }
+
+    $role = isset($auth['role']) ? trim($auth['role']) : 'viewer';
+
+    // All roles can read departments and consultants
+    if ($module === 'users' && $action === 'read') {
+        if (in_array($role, ['superadmin', 'admin', 'super_admin', 'hr', 'director', 'viewer', 'assistant', 'sale_admin', 'saleadmin', 'marketing'], true)) {
+            return 'all';
+        }
+        if ($role === 'manager') {
+            return 'team';
+        }
+        if (in_array($role, ['accountant', 'sale', 'sales'], true)) {
+            return 'own';
+        }
+        return 'none';
+    }
+
+    // Sale Admin permission rules
+    if ($role === 'sale_admin' || $role === 'saleadmin') {
+        if (in_array($module, ['settings', 'hrm', 'attendance'], true)) {
+            return 'none';
+        }
+        return 'all';
+    }
+
+    // Force sales role to have only 'own' (or 'none' for delete) on deals module
+    if (in_array($role, ['sale', 'sales'], true) && $module === 'deals') {
+        return $action === 'delete' ? 'none' : 'own';
+    }
+
+    $permissionsJson = $auth['permissions'] ?? null;
+    if ($permissionsJson === null) {
+        $userId = $auth['id'] ?? $auth['user_id'] ?? 0;
+        $stmt = $conn->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($res && !empty($res['permissions_json'])) {
+                $permissionsJson = json_decode($res['permissions_json'], true);
+            }
+        }
+    }
+
+    if ($permissionsJson && isset($permissionsJson[$module][$action])) {
+        $val = $permissionsJson[$module][$action];
+        if (in_array($val, ['all', 'team', 'own', 'none'], true)) {
+            return $val;
+        }
+    }
+
+    // Default fallbacks based on role
+    $role = $auth['role'];
+    if ($role === 'hr') {
+        if (in_array($module, ['hrm', 'attendance', 'users', 'expenses'], true)) {
+            return 'all';
+        }
+        if ($module === 'settings') {
+            return 'none';
+        }
+        return 'own';
+    }
+    if ($role === 'accountant') {
+        if (in_array($module, ['deposits', 'expenses', 'finance', 'invoices', 'quotes'], true)) {
+            return 'all';
+        }
+        if ($module === 'settings') {
+            return 'none';
+        }
+        return 'own';
+    }
+    if ($role === 'marketing') {
+        if (in_array($module, ['leads', 'campaigns', 'projects', 'deals', 'tickets', 'gatekeeper', 'users', 'contacts', 'students', 'companies'], true)) {
+            return 'all';
+        }
+        if ($module === 'settings') {
+            return 'none';
+        }
+        return 'own';
+    }
+    if ($role === 'director') {
+        if ($module === 'settings') {
+            return 'none';
+        }
+        return 'all';
+    }
+    if ($role === 'manager') {
+        return $action === 'delete' ? 'none' : 'team';
+    }
+    if ($role === 'assistant') {
+        return $action === 'delete' ? 'none' : 'all';
+    }
+    if (in_array($role, ['sale', 'sales'], true)) {
+        if ($module === 'projects') {
+            return $action === 'read' ? 'all' : 'none';
+        }
+        return $action === 'delete' ? 'none' : 'own';
+    }
+    if ($role === 'viewer') {
+        return $action === 'read' ? 'all' : 'none';
+    }
+
+    return 'none';
+}
+
+function validateWorkSchedule($schedule)
+{
+    if ($schedule === null || $schedule === '') return true;
+    $decoded = $schedule;
+    if (is_string($schedule)) {
+        $decoded = json_decode($schedule, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return false;
+        }
+    }
+    if (!is_array($decoded)) return false;
+    foreach ($decoded as $day => $config) {
+        if (!is_numeric($day) || $day < 1 || $day > 7) return false;
+        if (!is_array($config)) return false;
+        if (isset($config['active']) && !is_bool($config['active']) && $config['active'] !== 'true' && $config['active'] !== 'false' && $config['active'] !== 1 && $config['active'] !== 0 && $config['active'] !== '1' && $config['active'] !== '0') return false;
+        if (!empty($config['start']) && !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $config['start'])) return false;
+        if (!empty($config['end']) && !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $config['end'])) return false;
+    }
+    return true;
+}
+
+if (!function_exists('getBearerToken')) {
+    function getBearerToken()
+    {
+        if (isset($_SERVER['HTTP_X_AUTH_TOKEN'])) {
+            return trim($_SERVER['HTTP_X_AUTH_TOKEN']);
+        }
+        if (isset($_GET['token'])) {
+            return trim($_GET['token']);
+        }
+
+        $headers = null;
+        if (isset($_SERVER['Authorization'])) {
+            $headers = trim($_SERVER["Authorization"]);
+        } else if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $headers = trim($_SERVER["HTTP_AUTHORIZATION"]);
+        } elseif (function_exists('apache_request_headers')) {
+            $requestHeaders = apache_request_headers();
+            $requestHeaders = array_combine(array_map('ucwords', array_keys($requestHeaders)), array_values($requestHeaders));
+            if (isset($requestHeaders['Authorization'])) {
+                $headers = trim($requestHeaders['Authorization']);
+            }
+        }
+        if (!empty($headers)) {
+            if (preg_match('/Bearer\s(\S+)/', $headers, $matches)) {
+                return $matches[1];
+            }
+        }
+        return null;
+    }
+}
+
+function check_zalo_direct_log_for_lead($logFile, $createdDate, $phone, $name)
+{
+    if (!file_exists($logFile)) return 'N/A';
+
+    $handle = fopen($logFile, 'r');
+    if (!$handle) return 'N/A';
+
+    $fsize = filesize($logFile);
+    $readSize = min($fsize, 150000); // Read last 150KB
+    if ($fsize > $readSize) {
+        fseek($handle, $fsize - $readSize);
+    }
+
+    $content = fread($handle, $readSize);
+    fclose($handle);
+
+    if (empty($content)) return 'N/A';
+
+    $lines = explode("\n", $content);
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        $line = $lines[$i];
+        if (empty(trim($line))) continue;
+
+        // Match by phone or name
+        if (strpos($line, $phone) !== false || (!empty($name) && strpos($line, $name) !== false)) {
+            if (strpos($line, 'HTTP: 200') !== false || strpos($line, '"ok":true') !== false) {
+                return 'sent (Direct cURL)';
+            }
+        }
+    }
+    return 'N/A';
+}
+
+function parse_zalo_direct_logs($logFile, $conn = null)
+{
+    $logs = [];
+    if (!file_exists($logFile)) return $logs;
+
+    $zaloGroupChatId = '';
+    if ($conn) {
+        $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_admin_group_chat_id' LIMIT 1");
+        if ($res && $row = $res->fetch_assoc()) {
+            $zaloGroupChatId = trim($row['setting_value'] ?? '');
+        }
+    }
+
+    $handle = fopen($logFile, 'r');
+    if (!$handle) return $logs;
+
+    $fsize = filesize($logFile);
+    $readSize = min($fsize, 250000); // Read last 250KB for log feed
+    if ($fsize > $readSize) {
+        fseek($handle, $fsize - $readSize);
+    }
+
+    $content = fread($handle, $readSize);
+    fclose($handle);
+
+    if (empty($content)) return $logs;
+
+    $lines = explode("\n", $content);
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        $line = $lines[$i];
+        if (empty(trim($line))) continue;
+
+        // Format: [Y-m-d H:i:s] Target ChatId: X, HTTP: Y, Request: Z, Response: W
+        if (preg_match('/^\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]\s+Target\s+ChatId:\s*([^,]+),\s*HTTP:\s*(\d+)/i', $line, $matches)) {
+            $time = $matches[1];
+            $chatId = trim($matches[2]);
+            $httpCode = $matches[3];
+
+            $body = '';
+            $reqStart = strpos($line, 'Request: ');
+            if ($reqStart !== false) {
+                $reqEnd = strpos($line, ', Response:', $reqStart);
+                $reqJsonStr = ($reqEnd !== false)
+                    ? substr($line, $reqStart + 9, $reqEnd - ($reqStart + 9))
+                    : substr($line, $reqStart + 9);
+
+                $reqData = json_decode($reqJsonStr, true);
+                if (isset($reqData['text'])) {
+                    $body = $reqData['text'];
+                } else if (isset($reqData['body_text'])) {
+                    $body = $reqData['body_text'];
+                } else {
+                    $body = $reqJsonStr;
+                }
+            }
+
+            $isDirect = empty($zaloGroupChatId) || (strtolower($chatId) !== strtolower($zaloGroupChatId));
+
+            $logs[] = [
+                'id' => 'direct_' . md5($line),
+                'channel' => 'zalo',
+                'target' => $chatId,
+                'subject' => 'Zalo Message',
+                'body' => $body,
+                'status' => ($httpCode == 200) ? 'sent' : 'failed',
+                'created_at' => $time,
+                'sent_at' => $time,
+                'is_direct' => $isDirect
+            ];
+        }
+    }
+    return $logs;
+}
+
+function parse_telegram_direct_logs($logFile, $conn = null)
+{
+    $logs = [];
+    if (!file_exists($logFile)) return $logs;
+
+    $tgGroupChatId = '';
+    if ($conn) {
+        $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_admin_group_chat_id' LIMIT 1");
+        if ($res && $row = $res->fetch_assoc()) {
+            $tgGroupChatId = trim($row['setting_value'] ?? '');
+        }
+    }
+
+    $handle = fopen($logFile, 'r');
+    if (!$handle) return $logs;
+
+    $fsize = filesize($logFile);
+    $readSize = min($fsize, 250000); // Read last 250KB for log feed
+    if ($fsize > $readSize) {
+        fseek($handle, $fsize - $readSize);
+    }
+
+    $content = fread($handle, $readSize);
+    fclose($handle);
+
+    if (empty($content)) return $logs;
+
+    $lines = explode("\n", $content);
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        $line = $lines[$i];
+        if (empty(trim($line))) continue;
+
+        // Format: [Y-m-d H:i:s] Target ChatId: X, HTTP: Y, Request: Z, Response: W
+        if (preg_match('/^\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]\s+Target\s+ChatId:\s*([^,]+),\s*HTTP:\s*(\d+)/i', $line, $matches)) {
+            $time = $matches[1];
+            $chatId = trim($matches[2]);
+            $httpCode = $matches[3];
+
+            $body = '';
+            $reqStart = strpos($line, 'Request: ');
+            if ($reqStart !== false) {
+                $reqEnd = strpos($line, ', Response:', $reqStart);
+                $reqJsonStr = ($reqEnd !== false)
+                    ? substr($line, $reqStart + 9, $reqEnd - ($reqStart + 9))
+                    : substr($line, $reqStart + 9);
+
+                $reqData = json_decode($reqJsonStr, true);
+                if (isset($reqData['text'])) {
+                    $body = $reqData['text'];
+                } else if (isset($reqData['body_text'])) {
+                    $body = $reqData['body_text'];
+                } else {
+                    $body = $reqJsonStr;
+                }
+            }
+
+            $isDirect = empty($tgGroupChatId) || (strtolower($chatId) !== strtolower($tgGroupChatId));
+
+            $logs[] = [
+                'id' => 'tg_direct_' . md5($line),
+                'channel' => 'telegram',
+                'target' => $chatId,
+                'subject' => 'Telegram Message',
+                'body' => $body,
+                'status' => ($httpCode == 200) ? 'sent' : 'failed',
+                'created_at' => $time,
+                'sent_at' => $time,
+                'is_direct' => $isDirect
+            ];
+        }
+    }
+    return $logs;
+}
+
+if (!function_exists('saveSignatureBase64ToFile')) {
+    function saveSignatureBase64ToFile($sigVal, $userId)
+    {
+        if (empty($sigVal) || strpos($sigVal, 'data:image/') !== 0) {
+            return $sigVal;
+        }
+        if (preg_match('/^data:image\/(\w+);base64,/', $sigVal)) {
+            $base64Data = substr($sigVal, strpos($sigVal, ',') + 1);
+            $decoded = base64_decode($base64Data);
+            if ($decoded !== false) {
+                $sigDir = __DIR__ . '/uploads/signatures/';
+                if (!file_exists($sigDir)) {
+                    @mkdir($sigDir, 0755, true);
+                }
+                $filename = 'sig_' . (int)$userId . '_' . time() . '_' . substr(md5(uniqid()), 0, 6) . '.png';
+                $filePath = $sigDir . $filename;
+                if (@file_put_contents($filePath, $decoded)) {
+                    return 'uploads/signatures/' . $filename;
+                }
+            }
+        }
+        return $sigVal;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    exit(0);
+}
+
+$action = $_GET['action'] ?? '';
+
+// Require authentication for all endpoints except login
+$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'debug_companies_db', 'public_student_schedule'];
+
+if (!in_array($action, $publicActions)) {
+    $token = getBearerToken();
+    if (!$token) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Unauthorized: No token provided']);
+        exit();
+    }
+    $decodedUser = verify_jwt($token, $JWT_SECRET);
+    if (!$decodedUser) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Unauthorized: Invalid or expired token']);
+        exit();
+    }
+
+    if (isset($decodedUser['role']) && $decodedUser['role'] === 'sales') {
+        $decodedUser['role'] = 'sale';
+    }
+
+    if (!isset($decodedUser['user_id']) && isset($decodedUser['id'])) {
+        $decodedUser['user_id'] = $decodedUser['id'];
+    }
+
+    $decodedUser['permissions'] = null;
+    /** @var int $dbUserId */
+    $dbUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+    $lookupUserId = $dbUserId;
+    if ($lookupUserId > 0) {
+        $pStmt = $conn->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
+        $pStmt->bind_param("i", $lookupUserId);
+        $pStmt->execute();
+        $pRes = $pStmt->get_result()->fetch_assoc();
+        $pStmt->close();
+        if ($pRes && !empty($pRes['permissions_json'])) {
+            $decodedUser['permissions'] = json_decode($pRes['permissions_json'], true);
+        }
+    }
+
+    /** @var int $currentSaleConsultantId */
+    $currentSaleConsultantId = 0;
+    $lookupId = $decodedUser['user_id'] ?? $decodedUser['id'] ?? 0;
+    if ($lookupId > 0) {
+        $stmtC = $conn->prepare("SELECT id FROM consultants WHERE id = ? LIMIT 1");
+        $stmtC->bind_param("i", $lookupId);
+        $stmtC->execute();
+        $cRow = $stmtC->get_result()->fetch_assoc();
+        $stmtC->close();
+        if ($cRow) {
+            $currentSaleConsultantId = (int)$cRow['id'];
+        }
+    }
+
+    if ($currentSaleConsultantId === 0 && isset($decodedUser['email']) && !empty($decodedUser['email'])) {
+        $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+        $stmtC->bind_param("s", $decodedUser['email']);
+        $stmtC->execute();
+        $cRow = $stmtC->get_result()->fetch_assoc();
+        $stmtC->close();
+        if ($cRow) {
+            $currentSaleConsultantId = (int)$cRow['id'];
+        } else if (isset($decodedUser['role']) && in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true)) {
+            // Auto-create consultant record if missing for this company user
+            $stmtInsert = $conn->prepare("INSERT INTO consultants (name, email, status, work_start_time, work_end_time, vacation_mode, overtime_mode) VALUES (?, ?, 'active', '08:00', '17:30', 0, 0)");
+            $userName = $decodedUser['name'] ?? $decodedUser['username'] ?? 'User';
+            $stmtInsert->bind_param("ss", $userName, $decodedUser['email']);
+            if ($stmtInsert->execute()) {
+                $currentSaleConsultantId = $stmtInsert->insert_id;
+            }
+            $stmtInsert->close();
+        }
+    }
+
+    $salesAllowedActions = [
+        'get_settings',
+        'get_sale_portal_data',
+        'get_sse_updates',
+        'get_sale_lead_timeline',
+        'toggle_consultant_vacation',
+        'accept_lead',
+        'check_lead_duplicate',
+        'get_lead_notification_status',
+        'get_reports',
+        'get_support_tickets_count',
+        'get_rounds',
+        'get_fair_share_stats',
+        'get_consultant_compensation_details',
+        'upload_avatar',
+        'update_consultant_self_profile',
+        'consultant-profile',
+        'get_dashboard_stats',
+        'get_logs',
+        'get_consultants',
+        'invoices',
+        'projects',
+        'campaigns',
+        'marketing-campaigns',
+        'files',
+        'cloud-files',
+        'file-categories',
+        'get_public_leads',
+        'claim_public_lead',
+        'teams',
+        'manual_insert_lead',
+        'get_unique_sources',
+        'get_calendar_stats',
+        'get_calendar_day_details',
+        'contacts',
+        'deals',
+        'companies',
+        'pipeline-stages',
+        'quotes',
+        'expenses',
+        'tickets',
+        'activities',
+        'users',
+        'notes',
+        'cooperation-slips',
+        'get_accounts',
+        'edit_account',
+        'unlink_zalo',
+        'unlink_telegram',
+        'get_night_shift_status',
+        'register_night_shift',
+        'get_consultant_leaves',
+        'add_consultant_leave',
+        'delete_consultant_leave',
+        // Whitelisted missing front-controller routes for Sales
+        'notifications',
+        'check-ins',
+        'deposits',
+        'search',
+        'workflow-task-templates',
+        'products',
+        'dashboard',
+        'update_profile',
+        'change_password',
+        'get_my_activity_logs'
+    ];
+
+    // Read the input body to check for self-operation
+    $isSelfEdit = false;
+    $isSelfUnlink = false;
+
+    // Self-profile updates are inherently permitted for the logged-in user
+    if (in_array($action, [
+        'update_consultant_self_profile',
+        'consultant-profile',
+        'update_profile',
+        'change_password',
+        'upload_avatar',
+        'unlink_telegram'
+    ], true)) {
+        $isSelfEdit = true;
+    }
+
+    if ($action === 'edit_account' || $action === 'edit_consultant' || $action === 'unlink_zalo' || $action === 'unlink_telegram') {
+        $rawInput = file_get_contents('php://input');
+        $inputData = json_decode($rawInput, true);
+        if (($action === 'edit_account' || $action === 'edit_consultant') && isset($inputData['id']) && (int)$inputData['id'] === (int)$decodedUser['id']) {
+            $isSelfEdit = true;
+        }
+        if (($action === 'unlink_zalo' || $action === 'unlink_telegram') && isset($inputData['id']) && isset($inputData['type'])) {
+            if ($inputData['type'] === 'account' && (int)$inputData['id'] === (int)$decodedUser['id']) {
+                $isSelfUnlink = true;
+            } else if ($inputData['type'] === 'consultant') {
+                $isSelfUnlink = true;
+            }
+        }
+    }
+
+    // Dynamic Permission Matrix check
+    list($permModule, $permActionType) = getActionModuleAndType($action);
+    $resolvedScope = getModulePermissionScope($conn, $decodedUser, $permModule, $permActionType);
+
+    // Read-only configuration and own-data lookups called by Layout, Dashboard, SalePortal, PersonalAccount, and Attendance pages
+    // We allow any authenticated user (all roles) to query these endpoints.
+    if (in_array($action, [
+        'get_settings',
+        'get_unique_sources',
+        'get_calendar_stats',
+        'get_calendar_day_details',
+        'get_consultant_leaves',
+        'upload_avatar',
+        'update_consultant_self_profile',
+        'consultant-profile',
+        'update_profile',
+        'change_password',
+        'get_night_shift_status',
+        'register_night_shift',
+        'get_weekend_shift_status',
+        'register_weekend_shift',
+        'get_holiday_shift_status',
+        'register_holiday_shift',
+        'register_weekly_shifts',
+        'get_connections',
+        'get_mappings',
+        'get_settings',
+        'custom_fields',
+        'get_sale_portal_data',
+        'get_logs',
+        'get_all_pending_counts'
+    ], true)) {
+        $resolvedScope = 'all';
+    }
+
+    // Bypass check if it is a self-operation (e.g. updating one's own profile, password, unlinking one's own Zalo)
+    $isSelfOperation = $isSelfEdit || $isSelfUnlink;
+
+    if ($resolvedScope === 'none' && !$isSelfOperation) {
+        if ($action !== 'get_accounts') {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => "Forbidden: You do not have permission to $permActionType $permModule ($action)"]);
+            exit();
+        }
+    }
+
+    // Ghi nhận thời gian hoạt động cuối cùng (last active time)
+    if ($decodedUser && isset($decodedUser['id'])) {
+        $conn->query("UPDATE accounts SET last_login = NOW() WHERE id = " . (int) $decodedUser['id']);
+    }
+} else {
+    $decodedUser = null; // Public actions have no user context
+}
+function logAdminAction($conn, $accountId, $action, $details = [])
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+    $detailsJson = json_encode($details, JSON_UNESCAPED_UNICODE);
+    $stmt = $conn->prepare("INSERT INTO admin_logs (account_id, action, details, ip_address) VALUES (?, ?, ?, ?)");
+    if ($stmt) {
+        $stmt->bind_param("isss", $accountId, $action, $detailsJson, $ip);
+        $stmt->execute();
+        $stmt->close();
+        pruneAdminLogs($conn);
+    }
+}
+
+function isManagerOfConsultant($conn, $managerUserId, $consultantId)
+{
+    if (!$consultantId) return false;
+    $stmt = $conn->prepare("SELECT u.id FROM users u JOIN teams t ON u.team_id = t.id JOIN consultants c ON u.email = c.email WHERE t.leader_id = ? AND c.id = ?");
+    if (!$stmt) return false;
+    $stmt->bind_param("ii", $managerUserId, $consultantId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $isManaged = ($res->num_rows > 0);
+    $stmt->close();
+    return $isManaged;
+}
+
+function notifyLeaveChange($conn, $consultantId, $startDate, $endDate, $type = 'ADD')
+{
+    // 1. Get consultant name & team leader info
+    $stmtC = $conn->prepare("
+        SELECT c.name as sale_name, c.team_id, t.leader_id 
+        FROM consultants c 
+        LEFT JOIN teams t ON c.team_id = t.id 
+        WHERE c.id = ?
+    ");
+    if (!$stmtC) return;
+    $stmtC->bind_param("i", $consultantId);
+    $stmtC->execute();
+    $cRow = $stmtC->get_result()->fetch_assoc();
+    $stmtC->close();
+    if (!$cRow) return;
+
+    $saleName = $cRow['sale_name'];
+    $leaderId = $cRow['leader_id'] ? (int)$cRow['leader_id'] : null;
+
+    // 2. Fetch Zalo Bot token
+    $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+    $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+    if (empty($botToken)) return;
+
+    // 3. Collect target chat IDs: all admins + team leader (if any)
+    require_once __DIR__ . '/zalo_bot.php';
+    $allAdmins = getTicketNotifyAdmins($conn);
+    $notifyChatIds = [];
+    foreach ($allAdmins as $adm) {
+        if (!empty($adm['zalo_chat_id'])) {
+            $notifyChatIds[] = $adm['zalo_chat_id'];
+        }
+    }
+
+    if ($leaderId) {
+        $stmtL = $conn->prepare("SELECT zalo_chat_id FROM users WHERE id = ?");
+        if ($stmtL) {
+            $stmtL->bind_param("i", $leaderId);
+            $stmtL->execute();
+            $lRow = $stmtL->get_result()->fetch_assoc();
+            $stmtL->close();
+            if ($lRow && !empty($lRow['zalo_chat_id']) && !in_array($lRow['zalo_chat_id'], $notifyChatIds)) {
+                $notifyChatIds[] = $lRow['zalo_chat_id'];
+            }
+        }
+    }
+
+    if (empty($notifyChatIds)) return;
+
+    // 4. Construct message
+    $formattedStart = date('d/m/Y', strtotime($startDate));
+    $formattedEnd = date('d/m/Y', strtotime($endDate));
+    $timeStr = date('Y-m-d H:i:s');
+
+    if ($type === 'ADD') {
+        $zaloMsg = "⚠️ [ ĐĂNG KÝ NGHỈ PHÉP ]\n\n"
+            . "Tư vấn viên $saleName vừa đăng ký nghỉ phép:\n"
+            . "  • Thời gian: Từ $formattedStart đến $formattedEnd\n"
+            . "  • Ghi nhận lúc: $timeStr\n\n"
+            . "Hệ thống sẽ tạm thời không chia data mới cho TVV này trong thời gian nghỉ phép.";
+    } else {
+        $zaloMsg = "ℹ️ [ HỦY NGHỈ PHÉP ]\n\n"
+            . "Tư vấn viên $saleName vừa hủy đăng ký nghỉ phép:\n"
+            . "  • Thời gian: Từ $formattedStart đến $formattedEnd\n"
+            . "  • Thực hiện lúc: $timeStr\n\n"
+            . "Chế độ chia data sẽ hoạt động bình thường theo lịch làm việc.";
+    }
+
+    try {
+        sendZaloMessageToMultiple($botToken, $notifyChatIds, $zaloMsg, false);
+    } catch (Exception $e) {
+        error_log("Error sending leave Zalo notification: " . $e->getMessage());
+    }
+}
+
+function notifyNightShiftChange($conn, $userId, $shiftDate, $register = true)
+{
+    if (!$userId) return;
+    try {
+        // 1. Get user name & team leader info
+        $stmtC = $conn->prepare("
+            SELECT c.name as sale_name, c.team_id, t.leader_id 
+            FROM consultants c 
+            LEFT JOIN teams t ON c.team_id = t.id 
+            WHERE c.id = ?
+        ");
+        if (!$stmtC) return;
+        $stmtC->bind_param("i", $userId);
+        $stmtC->execute();
+        $cRow = $stmtC->get_result()->fetch_assoc();
+        $stmtC->close();
+        if (!$cRow) return;
+
+        $saleName = $cRow['sale_name'];
+        $leaderId = $cRow['leader_id'] ? (int)$cRow['leader_id'] : null;
+        $formattedDate = date('d/m/Y', strtotime($shiftDate));
+        $timeStr = date('Y-m-d H:i:s');
+
+        require_once __DIR__ . '/zalo_bot.php';
+        $allAdmins = getTicketNotifyAdmins($conn);
+
+        // 2. Send Zalo Bot Notification
+        $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+        $botToken = $stmtToken ? ($stmtToken->fetch_assoc()['setting_value'] ?? '') : '';
+
+        if (!empty($botToken)) {
+            $notifyChatIds = [];
+            foreach ($allAdmins as $adm) {
+                if (!empty($adm['zalo_chat_id'])) {
+                    $notifyChatIds[] = $adm['zalo_chat_id'];
+                }
+            }
+
+            if ($leaderId) {
+                $stmtL = $conn->prepare("SELECT zalo_chat_id FROM users WHERE id = ?");
+                if ($stmtL) {
+                    $stmtL->bind_param("i", $leaderId);
+                    $stmtL->execute();
+                    $lRow = $stmtL->get_result()->fetch_assoc();
+                    $stmtL->close();
+                    if ($lRow && !empty($lRow['zalo_chat_id']) && !in_array($lRow['zalo_chat_id'], $notifyChatIds)) {
+                        $notifyChatIds[] = $lRow['zalo_chat_id'];
+                    }
+                }
+            }
+
+            if (!empty($notifyChatIds)) {
+                if ($register) {
+                    $zaloMsg = "🌙 [ ĐĂNG KÝ TRỰC ĐÊM ]\n\n"
+                        . "Tư vấn viên $saleName vừa ĐĂNG KÝ trực ca đêm:\n"
+                        . "  • Ngày trực: $formattedDate (18h-6h)\n"
+                        . "  • Ghi nhận lúc: $timeStr\n\n"
+                        . "Hệ thống sẽ tự động điều phối lead mới phát sinh vào ca đêm cho TVV này.";
+                } else {
+                    $zaloMsg = "🌙 [ HỦY ĐĂNG KÝ TRỰC ĐÊM ]\n\n"
+                        . "Tư vấn viên $saleName vừa HỦY đăng ký trực ca đêm:\n"
+                        . "  • Ngày trực: $formattedDate (18h-6h)\n"
+                        . "  • Thực hiện lúc: $timeStr";
+                }
+                try {
+                    sendZaloMessageToMultiple($botToken, array_unique($notifyChatIds), $zaloMsg, false);
+                } catch (Throwable $ez) {
+                    error_log("Error sending Zalo night shift notification: " . $ez->getMessage());
+                }
+            }
+        }
+
+        // 3. Send Telegram Bot Notification
+        $stmtTgToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_bot_token' LIMIT 1");
+        $tgToken = $stmtTgToken ? ($stmtTgToken->fetch_assoc()['setting_value'] ?? '') : '';
+        $stmtTgAdminChat = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_admin_group_chat_id' LIMIT 1");
+        $tgAdminChatId = $stmtTgAdminChat ? ($stmtTgAdminChat->fetch_assoc()['setting_value'] ?? '') : '';
+
+        if (!empty($tgToken)) {
+            require_once __DIR__ . '/telegram_bot.php';
+            $tgNotifyChatIds = [];
+            if (!empty($tgAdminChatId)) {
+                $tgNotifyChatIds[] = $tgAdminChatId;
+            } else {
+                foreach ($allAdmins as $adm) {
+                    if (!empty($adm['telegram_chat_id'])) {
+                        $tgNotifyChatIds[] = $adm['telegram_chat_id'];
+                    }
+                }
+            }
+
+            if ($leaderId) {
+                $stmtL = $conn->prepare("SELECT telegram_chat_id FROM users WHERE id = ?");
+                if ($stmtL) {
+                    $stmtL->bind_param("i", $leaderId);
+                    $stmtL->execute();
+                    $lRow = $stmtL->get_result()->fetch_assoc();
+                    $stmtL->close();
+                    if ($lRow && !empty($lRow['telegram_chat_id']) && !in_array($lRow['telegram_chat_id'], $tgNotifyChatIds)) {
+                        $tgNotifyChatIds[] = $lRow['telegram_chat_id'];
+                    }
+                }
+            }
+
+            if (!empty($tgNotifyChatIds)) {
+                if ($register) {
+                    $tgMsg = "🌙 <b>[ ĐĂNG KÝ TRỰC ĐÊM ]</b>\n\n"
+                        . "Tư vấn viên <b>$saleName</b> vừa <b>ĐĂNG KÝ</b> trực ca đêm:\n"
+                        . "  • Ngày trực: <code>$formattedDate</code> (18h-6h)\n"
+                        . "  • Ghi nhận lúc: <i>$timeStr</i>\n\n"
+                        . "Hệ thống sẽ tự động điều phối lead mới phát sinh vào ca đêm cho TVV này.";
+                } else {
+                    $tgMsg = "🌙 <b>[ HỦY ĐĂNG KÝ TRỰC ĐÊM ]</b>\n\n"
+                        . "Tư vấn viên <b>$saleName</b> vừa <b>HỦY</b> đăng ký trực ca đêm:\n"
+                        . "  • Ngày trực: <code>$formattedDate</code> (18h-6h)\n"
+                        . "  • Thực hiện lúc: <i>$timeStr</i>";
+                }
+                foreach (array_unique($tgNotifyChatIds) as $chatId) {
+                    try {
+                        sendTelegramMessage($tgToken, $chatId, $tgMsg, false);
+                    } catch (Throwable $etg) {
+                        error_log("Error sending Telegram night shift notification: " . $etg->getMessage());
+                    }
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log("Error in notifyNightShiftChange: " . $e->getMessage());
+    }
+}
+
+function isManagerOfLead($conn, $managerUserId, $leadId)
+{
+    if (!$leadId) return false;
+    $stmt = $conn->prepare("SELECT l.id FROM leads l JOIN users u ON l.assigned_to = u.id JOIN teams t ON u.team_id = t.id WHERE t.leader_id = ? AND l.id = ?");
+    if (!$stmt) return false;
+    $stmt->bind_param("ii", $managerUserId, $leadId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $isManaged = ($res->num_rows > 0);
+    $stmt->close();
+    return $isManaged;
+}
+
+function maskPhone($phone)
+{
+    if (empty($phone)) return '';
+    $phone = trim($phone);
+    if (strlen($phone) <= 6) return '***';
+    return substr($phone, 0, 3) . str_repeat('*', strlen($phone) - 6) . substr($phone, -3);
+}
+
+function maskEmail($email)
+{
+    if (empty($email)) return '';
+    $email = trim($email);
+    $parts = explode('@', $email);
+    if (count($parts) < 2) return '***';
+    $name = $parts[0];
+    $domain = $parts[1];
+    if (strlen($name) <= 3) {
+        $maskedName = str_repeat('*', strlen($name));
+    } else {
+        $maskedName = substr($name, 0, 2) . str_repeat('*', strlen($name) - 3) . substr($name, -1);
+    }
+    return $maskedName . '@' . $domain;
+}
+
+function processManualLead($conn, $leadData, $override_round_id, $override_consultant_id, $compensate_skipped, $skipped_consultant_id, $distribution_mode, $decodedUser)
+{
+    require_once __DIR__ . '/webhook_logic.php';
+
+    $phone = normalizePhone($leadData['phone'] ?? '');
+    $email = trim($leadData['email'] ?? '');
+    $name = trim($leadData['name'] ?? '');
+    $source = trim($leadData['source'] ?? '');
+    $type = trim($leadData['type'] ?? '');
+    $note = trim($leadData['note'] ?? '');
+
+    $managerBehaviorMode = $decodedUser['manager_behavior_mode'] ?? 'combined';
+    $canSelfAssign = ($decodedUser['role'] === 'sale') || ($decodedUser['role'] === 'manager' && $managerBehaviorMode === 'sale');
+
+    if ($distribution_mode === 'self_assign' && !$canSelfAssign) {
+        return ['success' => false, 'message' => 'Chỉ có Sale hoặc Manager dạng Sale mới được phép tự nhận chăm sóc (Self-assign) data.'];
+    }
+
+    if ($decodedUser['role'] === 'sale' || $distribution_mode === 'self_assign') {
+        $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+        $stmtC->bind_param("s", $decodedUser['email']);
+        $stmtC->execute();
+        $cRow = $stmtC->get_result()->fetch_assoc();
+        $stmtC->close();
+        if ($cRow) {
+            $override_consultant_id = (int)$cRow['id'];
+        } else {
+            $override_consultant_id = (int)$decodedUser['user_id'];
+        }
+        $distribution_mode = 'auto_round';
+        if ($source !== 'gioi_thieu') {
+            $source = 'ca_nhan';
+        }
+    }
+
+    if (empty($phone) && empty($email)) {
+        return ['success' => false, 'message' => 'Vui lòng nhập SĐT hoặc Email'];
+    }
+
+    if (isLeadBlocked($conn, $phone, $email)) {
+        return ['success' => false, 'message' => 'Liên hệ này đã bị chặn vĩnh viễn trong hệ thống (Blocked).'];
+    }
+
+    if ($distribution_mode === 'direct_databank') {
+        // Direct to Databank
+        $conn->begin_transaction();
+        try {
+            // Check if duplicate in leads to update last interaction
+            $crmCheckResult = checkCRMInteraction($conn, $phone, $email);
+            if ($crmCheckResult['leadExists']) {
+                $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, null, null, $name);
+            } else {
+                $leadId = insertLead($conn, [], null, $phone, $email, $name, $source, $type, $note);
+            }
+
+            // Ensure Person exists and is set to public (databank)
+            $stmtPerson = $conn->prepare("
+                INSERT INTO persons (phone, email, full_name, is_public, released_to_kho_at, public_count, deleted_from_databank) 
+                VALUES (?, ?, ?, 1, NOW(), 1, 0) 
+                ON DUPLICATE KEY UPDATE 
+                    email = IF(email IS NULL OR email = '', VALUES(email), email),
+                    full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name),
+                    is_public = 1,
+                    released_to_kho_at = NOW(),
+                    deleted_from_databank = 0,
+                    public_count = public_count + 1
+            ");
+            $stmtPerson->bind_param("sss", $phone, $email, $name);
+            $stmtPerson->execute();
+            $stmtPerson->close();
+
+            logDistribution($conn, $leadId, null, null, 'released_to_kho', 'Thêm thủ công thẳng vào Kho chung (Databank)', false);
+            $conn->commit();
+
+            // Post-commit: trigger live write-back
+            if (!empty($leadId)) {
+                triggerTwoWaySync($conn, $leadId);
+            }
+
+            return ['success' => true, 'message' => 'Data đã được thêm thẳng vào Databank (Kho chung).'];
+        } catch (Exception $e) {
+            $conn->rollback();
+            return ['success' => false, 'message' => 'Lỗi: ' . $e->getMessage()];
+        }
+    }
+
+    // Default 'auto_round' mode
+    $assignedRoundId = $override_round_id;
+    $inject = [];
+    $isFallback = false;
+    $isFallbackAdmin = false;
+    $fallbackAdminData = null;
+    $fallbackCcEmails = '';
+
+    if (!$assignedRoundId) {
+        $ruleResult = evaluateRules($conn, $leadData, $source, $type, null, 'manual');
+        if (is_array($ruleResult)) {
+            $assignedRoundId = $ruleResult['target_round_id'];
+            $inject = $ruleResult['inject'] ?? [];
+        } else {
+            $assignedRoundId = $ruleResult;
+        }
+
+        if ($assignedRoundId) {
+            $chkRound = $conn->prepare("SELECT is_active FROM distribution_rounds WHERE id = ?");
+            if ($chkRound) {
+                $chkRound->bind_param("i", $assignedRoundId);
+                $chkRound->execute();
+                $chkRes = $chkRound->get_result()->fetch_assoc();
+                $chkRound->close();
+                if (!$chkRes || (int) $chkRes['is_active'] !== 1) {
+                    $assignedRoundId = null;
+                }
+            }
+        }
+    }
+
+    if (!$assignedRoundId) {
+        $fbSettings = [];
+        $fbRes = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('fallback_type', 'fallback_round_id', 'fallback_admin_id', 'fallback_cc_email')");
+        if ($fbRes) {
+            while ($row = $fbRes->fetch_assoc()) {
+                $fbSettings[$row['setting_key']] = $row['setting_value'];
+            }
+        }
+
+        $fbType = $fbSettings['fallback_type'] ?? 'round';
+        $fbCc = $fbSettings['fallback_cc_email'] ?? '';
+
+        if ($fbType === 'admin') {
+            $fbAdminId = (int) ($fbSettings['fallback_admin_id'] ?? 0);
+            if ($fbAdminId > 0) {
+                $admStmt = $conn->prepare("SELECT id, name, email, zalo_chat_id FROM accounts WHERE id = ? AND (role = 'admin' OR role = 'superadmin') LIMIT 1");
+                $admStmt->bind_param("i", $fbAdminId);
+                $admStmt->execute();
+                $admRes = $admStmt->get_result();
+                if ($admRes->num_rows > 0) {
+                    $fallbackAdminData = $admRes->fetch_assoc();
+                    $isFallbackAdmin = true;
+                    $fallbackCcEmails = $fbCc;
+                }
+                $admStmt->close();
+            }
+        } else {
+            $fbRoundId = (int) ($fbSettings['fallback_round_id'] ?? 0);
+            if ($fbRoundId > 0) {
+                $chkFb = $conn->prepare("SELECT is_active FROM distribution_rounds WHERE id = ?");
+                if ($chkFb) {
+                    $chkFb->bind_param("i", $fbRoundId);
+                    $chkFb->execute();
+                    $chkFbRes = $chkFb->get_result()->fetch_assoc();
+                    $chkFb->close();
+                    if ($chkFbRes && (int) $chkFbRes['is_active'] === 1) {
+                        $assignedRoundId = $fbRoundId;
+                        $isFallback = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // If rule matched and there are inject fields, apply them!
+    if (!empty($inject)) {
+        $standardFields = ['source', 'type', 'note', 'name', 'phone', 'email'];
+        foreach ($inject as $k => $v) {
+            if (in_array($k, $standardFields)) {
+                if ($k === 'source')
+                    $source = $v;
+                if ($k === 'type')
+                    $type = $v;
+                if ($k === 'note')
+                    $note = $v;
+                if ($k === 'name')
+                    $name = $v;
+                if ($k === 'phone')
+                    $phone = normalizePhone($v);
+                if ($k === 'email')
+                    $email = trim($v);
+            } else {
+                $note .= "\n[$k]: $v";
+            }
+        }
+    }
+
+    $skippedCompensationNotify = null;
+    $lockAcquired = false;
+    $lockKey = '';
+    if (!empty($phone)) {
+        $lockKey = 'webhook_lead_phone_' . $phone;
+    } else if (!empty($email)) {
+        $lockKey = 'webhook_lead_email_' . md5($email);
+    } else {
+        $lockKey = 'webhook_lead_empty_' . md5(json_encode($leadData));
+    }
+
+    // Get lock using prepared statement with 5s timeout
+    $lockStmt = $conn->prepare("SELECT GET_LOCK(?, 5) as get_lock");
+    if ($lockStmt) {
+        $lockStmt->bind_param("s", $lockKey);
+        $lockStmt->execute();
+        $lockRes = $lockStmt->get_result()->fetch_assoc();
+        $lockStmt->close();
+        if ($lockRes && $lockRes['get_lock'] == 1) {
+            $lockAcquired = true;
+        }
+    }
+
+    if (!$lockAcquired) {
+        return ['success' => false, 'message' => 'Hệ thống đang bận xử lý dữ liệu này. Vui lòng thử lại sau.'];
+    }
+
+    $inTransaction = false;
+    try {
+        // Check CRM duplicate (both phone & email)
+        $crmCheckResult = checkCRMInteraction($conn, $phone, $email);
+        $dupCheckMonths = (int) get_system_setting($conn, 'duplicate_check_months');
+        if ($dupCheckMonths <= 0) {
+            $dupCheckMonths = 6;
+        }
+
+        if (!$override_consultant_id && $crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+            $assignedTo = $crmCheckResult['assignedTo'];
+            $conn->begin_transaction();
+            $inTransaction = true;
+
+            // Update last interaction
+            $leadId = updateLead($conn, $phone, $email, $assignedTo, $source, $type, $note, null, null, $name);
+            logDistribution($conn, $leadId, $assignedTo, null, 'reminder', 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng (Nhập thủ công).', false);
+            $conn->commit();
+            $inTransaction = false;
+
+            // Post-commit: trigger live write-back
+            if (!empty($leadId)) {
+                triggerTwoWaySync($conn, $leadId);
+            }
+
+            $stmtC = $conn->prepare("SELECT name, email, status FROM consultants WHERE id = ?");
+            $stmtC->bind_param("i", $assignedTo);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+
+            if ($cRow && ($cRow['status'] === 'active' || $cRow['status'] === 'leave')) {
+                try {
+                    require_once __DIR__ . '/mailer.php';
+                    require_once __DIR__ . '/zalo_bot.php';
+
+                    $timeline = getLeadHistoryTimeline($conn, $leadId, true);
+                    try {
+                        sendLeadReminderEmailToSale(
+                            $cRow['email'],
+                            $cRow['name'],
+                            $name,
+                            $phone,
+                            $note,
+                            $source,
+                            '',
+                            '',
+                            $timeline,
+                            $leadId
+                        );
+                    } catch (Exception $eEx) {
+                        error_log("Error sending duplicate lead reminder email: " . $eEx->getMessage());
+                    }
+
+                    try {
+                        sendLeadReminderZaloMessageToSale(
+                            $assignedTo,
+                            $cRow['name'],
+                            $name,
+                            $phone,
+                            $note,
+                            $source,
+                            '',
+                            $timeline,
+                            $leadId,
+                            $email,
+                            $type
+                        );
+                    } catch (Exception $zEx) {
+                        error_log("Error sending duplicate lead reminder Zalo: " . $zEx->getMessage());
+                    }
+                } catch (Exception $notifyEx) {
+                    error_log("Error preparing reminder notifications: " . $notifyEx->getMessage());
+                }
+            }
+
+            return ['success' => true, 'message' => 'Trùng khách cũ trong vòng ' . $dupCheckMonths . ' tháng. Đã gán lại cho Sale cũ: ' . ($cRow ? $cRow['name'] : 'Không rõ')];
+        } else if (!$override_consultant_id && !$assignedRoundId && !$isFallbackAdmin) {
+            // Cannot assign
+            $leadId = insertLead($conn, [], null, $phone, $email, $name, $source, $type, $note);
+            return ['success' => true, 'message' => 'Data đã được thêm nhưng không rơi vào vòng nào.'];
+        } else {
+            // Check if we need to run AI Screener
+            $aiScreenerResult = null;
+            if (!$override_consultant_id) {
+                $screenerData = [
+                    'phone' => $phone,
+                    'email' => $email,
+                    'name' => $name,
+                    'source' => $source,
+                    'type' => $type,
+                    'note' => $note
+                ];
+                $aiScreenerResult = evaluateScreener($conn, $assignedRoundId, $screenerData);
+            }
+
+            $isSubstandardAutoApprove = false;
+            if ($aiScreenerResult && $aiScreenerResult['status'] === 'failed') {
+                $bsFallbackEnabled = (int) ($aiScreenerResult['below_standard_fallback_enabled'] ?? 0);
+                $bsAutoApprove = (int) ($aiScreenerResult['below_standard_auto_approve'] ?? 0);
+                $bsFallbackRoundId = (int) ($aiScreenerResult['below_standard_fallback_round_id'] ?? 0);
+
+                if ($bsFallbackEnabled === 1 && $bsAutoApprove === 1 && $bsFallbackRoundId > 0) {
+                    $assignedRoundId = $bsFallbackRoundId;
+                    $isSubstandardAutoApprove = true;
+                }
+            }
+
+            if ($aiScreenerResult && ($aiScreenerResult['status'] === 'failed' || $aiScreenerResult['status'] === 'error') && !$isSubstandardAutoApprove) {
+                $conn->begin_transaction();
+                $inTransaction = true;
+                if ($crmCheckResult['leadExists']) {
+                    $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, null, null, $name);
+                } else {
+                    $leadId = insertLead($conn, [], null, $phone, $email, $name, $source, $type, $note);
+                }
+
+                $updHeld = $conn->prepare("UPDATE leads SET status = 'pending_approval', target_round_id = ?, ai_screener_status = ?, ai_evaluation = ?, assigned_to = NULL WHERE id = ?");
+                $updHeld->bind_param("issi", $assignedRoundId, $aiScreenerResult['status'], $aiScreenerResult['reason'], $leadId);
+                $updHeld->execute();
+                $updHeld->close();
+
+                $logMsgStr = $aiScreenerResult['status'] === 'error' ? "Lỗi kết nối AI (Nhập thủ công): " . $aiScreenerResult['reason'] : "Tạm giữ bởi AI (Nhập thủ công): " . $aiScreenerResult['reason'];
+                logDistribution($conn, $leadId, null, $assignedRoundId, 'pending_approval', $logMsgStr, false);
+                $conn->commit();
+                $inTransaction = false;
+
+                if (!empty($leadId)) {
+                    triggerTwoWaySync($conn, $leadId);
+                }
+
+                $roundName = 'Không rõ';
+                if ($assignedRoundId) {
+                    $stmtR = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ?");
+                    $stmtR->bind_param("i", $assignedRoundId);
+                    $stmtR->execute();
+                    $roundName = $stmtR->get_result()->fetch_assoc()['round_name'] ?? 'Không rõ';
+                    $stmtR->close();
+                }
+                try {
+                    sendHeldLeadNotifications($conn, $leadId, $name, $phone, $aiScreenerResult['reason'], $roundName, $email, $source, $type, $note);
+                } catch (Exception $notifyEx) {
+                    error_log("Error during manual insert AI screener notifications: " . $notifyEx->getMessage());
+                }
+
+                return [
+                    'success' => true,
+                    'status' => 'pending_approval',
+                    'message' => 'Dữ liệu bị tạm giữ bởi AI (Nhập thủ công): ' . $aiScreenerResult['reason']
+                ];
+            } else {
+                $conn->begin_transaction();
+                $inTransaction = true;
+
+                $consultantId = $override_consultant_id;
+                $isComp = false;
+                $isStarvation = false;
+
+                if (!$consultantId && $assignedRoundId) {
+                    // Compute it naturally INSIDE transaction block for row-level locking consistency
+                    $assignResult = getNextConsultantInRound($conn, $assignedRoundId);
+                    if ($assignResult) {
+                        $consultantId = $assignResult['id'];
+                        $isComp = $assignResult['is_compensation'];
+                        $isStarvation = isset($assignResult['is_starvation']) ? true : false;
+                    }
+                }
+
+                if ($override_consultant_id && $assignedRoundId) {
+                    // If overridden, check if we need to compensate the skipped consultant
+                    if ($compensate_skipped && $skipped_consultant_id) {
+                        $stmtComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id = ? AND consultant_id = ?");
+                        $stmtComp->bind_param("ii", $assignedRoundId, $skipped_consultant_id);
+                        $stmtComp->execute();
+                        $stmtComp->close();
+
+                        // Fetch skipped consultant name & email
+                        $skippedCName = '';
+                        $skippedCEmail = '';
+                        $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                        $stmtC->bind_param("i", $skipped_consultant_id);
+                        $stmtC->execute();
+                        $resC = $stmtC->get_result()->fetch_assoc();
+                        if ($resC) {
+                            $skippedCName = $resC['name'];
+                            $skippedCEmail = $resC['email'];
+                        }
+                        $stmtC->close();
+
+                        // Fetch round name
+                        $roundName = 'Không rõ';
+                        $stmtR = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ?");
+                        $stmtR->bind_param("i", $assignedRoundId);
+                        $stmtR->execute();
+                        $resR = $stmtR->get_result()->fetch_assoc();
+                        if ($resR) {
+                            $roundName = $resR['round_name'];
+                        }
+                        $stmtR->close();
+
+                        // Write to active_compensation_logs
+                        $reason = "Bù 1 lượt do Admin chỉ định đè lead (Nhập thủ công)";
+                        $stmtCompLog = $conn->prepare("INSERT INTO active_compensation_logs (round_id, consultant_id, admin_id, amount, reason) VALUES (?, ?, ?, 1, ?)");
+                        $adminIdInt = (int) ($decodedUser['id'] ?? 1);
+                        $stmtCompLog->bind_param("iiis", $assignedRoundId, $skipped_consultant_id, $adminIdInt, $reason);
+                        $stmtCompLog->execute();
+                        $stmtCompLog->close();
+
+                        // Log admin action
+                        logAdminAction($conn, $decodedUser['id'] ?? 1, 'MANUAL_COMPENSATE_SKIPPED_SALE', [
+                            'round_id' => $assignedRoundId,
+                            'round_name' => $roundName,
+                            'consultant_id' => $skipped_consultant_id,
+                            'consultant_name' => $skippedCName,
+                            'reason' => $reason
+                        ]);
+
+                        // Setup notification queue data
+                        $skippedCompensationNotify = [
+                            'consultant_id' => $skipped_consultant_id,
+                            'email' => $skippedCEmail,
+                            'name' => $skippedCName,
+                            'round_name' => $roundName,
+                            'delta' => 1,
+                            'admin_name' => $decodedUser['name'] ?? 'Admin',
+                            'reason' => $reason,
+                            'time' => date('H:i:s d/m/Y')
+                        ];
+                    }
+                }
+
+                if ($isFallbackAdmin && $fallbackAdminData) {
+                    if ($crmCheckResult['leadExists']) {
+                        $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, null, null, $name);
+                    } else {
+                        $leadId = insertLead($conn, [], null, $phone, $email, $name, $source, $type, $note);
+                    }
+                    if ($aiScreenerResult) {
+                        $updAi = $conn->prepare("UPDATE leads SET ai_screener_status = ?, ai_evaluation = ? WHERE id = ?");
+                        $updAi->bind_param("ssi", $aiScreenerResult['status'], $aiScreenerResult['reason'], $leadId);
+                        $updAi->execute();
+                        $updAi->close();
+                    }
+
+                    logDistribution($conn, $leadId, null, null, 'fallback', 'No matching rule. Routed directly to fallback Admin: ' . $fallbackAdminData['name'], false);
+
+                    $conn->commit();
+                    $inTransaction = false;
+
+                    // Post-commit: trigger live write-back
+                    if (!empty($leadId)) {
+                        triggerTwoWaySync($conn, $leadId);
+                    }
+
+                    try {
+                        require_once __DIR__ . '/mailer.php';
+                        require_once __DIR__ . '/zalo_bot.php';
+
+                        $fName = trim($name) !== '' ? $name : 'Khách hàng ẩn danh';
+                        try {
+                            sendLeadAssignedEmailToSale(
+                                $fallbackAdminData['email'],
+                                $fallbackAdminData['name'],
+                                $fName,
+                                $phone ?: '',
+                                $note ?: '',
+                                $source ?: '',
+                                $fallbackCcEmails,
+                                'Fallback Admin',
+                                $leadId,
+                                0,
+                                0
+                            );
+                        } catch (Exception $eEx) {
+                            error_log("Error sending fallback admin email: " . $eEx->getMessage());
+                        }
+
+                        if (!empty($fallbackAdminData['zalo_chat_id'])) {
+                            try {
+                                sendLeadAssignedZaloMessageToAdmin(
+                                    $fallbackAdminData['zalo_chat_id'],
+                                    $fallbackAdminData['name'],
+                                    $fName,
+                                    $phone ?: '',
+                                    $note ?: '',
+                                    $source ?: '',
+                                    $leadId,
+                                    $email,
+                                    $type
+                                );
+                            } catch (Exception $zEx) {
+                                error_log("Error sending fallback admin Zalo: " . $zEx->getMessage());
+                            }
+                        }
+                    } catch (Exception $notifyEx) {
+                        error_log("Error preparing fallback notifications: " . $notifyEx->getMessage());
+                    }
+
+                    return ['success' => true, 'message' => 'Data đã được chuyển thẳng cho Admin Fallback thành công.'];
+                } else if ($consultantId) {
+                    $status = $isComp ? 'compensation' : 'assigned';
+                    $logMsg = $isComp
+                        ? ($isStarvation ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.')
+                        : 'Được phân bổ tự động qua vòng xoay.';
+
+                    // Check working hours
+                    $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");
+                    $whStmt->bind_param("i", $consultantId);
+                    $whStmt->execute();
+                    $whRes = $whStmt->get_result();
+                    $isOutsideWorkHours = false;
+                    $whStart = '00:00';
+                    $whEnd = '23:59';
+                    if ($whRes && $whRow = $whRes->fetch_assoc()) {
+                        $whStart = $whRow['work_start_time'] ?? '00:00';
+                        $whEnd = $whRow['work_end_time'] ?? '23:59';
+                        $workSchedule = $whRow['work_schedule'] ?? null;
+                        $currentTime = date('H:i');
+                        if ($decodedUser['role'] !== 'sale' && !isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $consultantId, $conn)) {
+                            $status = 'pending_work_hours';
+                            $isOutsideWorkHours = true;
+                            $assignedConsultantId = null;
+                        }
+                    }
+                    $whStmt->close();
+
+                    // Rule 1.9: Nhập tay (khách cá nhân/giới thiệu) trùng SĐT với lead MKT đang active trong 30 ngày -> flag
+                    $isMktDuplicate = false;
+                    $daysSinceMkt = 0;
+                    $oldMktSource = '';
+                    if ($crmCheckResult['isDuplicate'] && ($source === 'ca_nhan' || $source === 'gioi_thieu')) {
+                        $checkMktStmt = $conn->prepare("
+                            SELECT id, source, created_at 
+                            FROM leads 
+                            WHERE phone = ? OR (email = ? AND email != '') 
+                            ORDER BY created_at DESC LIMIT 1
+                        ");
+                        if ($checkMktStmt) {
+                            $checkMktStmt->bind_param("ss", $phone, $email);
+                            $checkMktStmt->execute();
+                            $mktRes = $checkMktStmt->get_result()->fetch_assoc();
+                            $checkMktStmt->close();
+
+                            if ($mktRes) {
+                                $oldMktSource = $mktRes['source'];
+                                $mktSources = ['facebook', 'google', 'google_lp', 'website', 'mkt_webhook', 'capi', 'campaign'];
+                                if (in_array($oldMktSource, $mktSources)) {
+                                    $createdTime = strtotime($mktRes['created_at']);
+                                    $daysSinceMkt = (time() - $createdTime) / (24 * 3600);
+                                    if ($daysSinceMkt <= 30) {
+                                        $isMktDuplicate = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if ($isMktDuplicate) {
+                        $note = "[CẢNH BÁO RỬA NGUỒN]: Khách hàng cá nhân tự nhập trùng SĐT active với lead MKT (" . $oldMktSource . ") cách đây " . round($daysSinceMkt) . " ngày.\n" . $note;
+                    }
+
+                    if ($crmCheckResult['leadExists']) {
+                        $leadId = updateLead($conn, $phone, $email, $consultantId, $source, $type, $note, null, null, $name);
+                    } else {
+                        $leadId = insertLead($conn, [], $consultantId, $phone, $email, $name, $source, $type, $note);
+                    }
+                    if ($override_consultant_id && $leadId > 0) {
+                        $updAccepted = $conn->prepare("UPDATE leads SET is_accepted = 1 WHERE id = ?");
+                        $updAccepted->bind_param("i", $leadId);
+                        $updAccepted->execute();
+                        $updAccepted->close();
+
+                        ensurePersonAndContact($conn, $leadId);
+                    }
+                    if ($aiScreenerResult) {
+                        $updAi = $conn->prepare("UPDATE leads SET ai_screener_status = ?, ai_evaluation = ? WHERE id = ?");
+                        $updAi->bind_param("ssi", $aiScreenerResult['status'], $aiScreenerResult['reason'], $leadId);
+                        $updAi->execute();
+                        $updAi->close();
+                    }
+
+                    $stmtRound = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ?");
+                    $stmtRound->bind_param("i", $assignedRoundId);
+                    $stmtRound->execute();
+                    $roundName = $stmtRound->get_result()->fetch_assoc()['round_name'] ?? 'Không rõ';
+                    $stmtRound->close();
+
+                    logDistribution($conn, $leadId, $consultantId, $assignedRoundId, $status, $logMsg, false);
+
+                    $conn->commit();
+                    $inTransaction = false;
+
+                    // Log flag and notify admin if it is an MKT duplicate
+                    if ($isMktDuplicate) {
+                        logAdminAction($conn, $decodedUser['id'] ?? 1, 'MANUAL_LEAD_DUPLICATE_FLAG', [
+                            'lead_id' => $leadId,
+                            'phone' => $phone,
+                            'sale_id' => $consultantId,
+                            'sale_name' => $decodedUser['name'] ?? 'Sale',
+                            'old_source' => $oldMktSource,
+                            'days_since' => round($daysSinceMkt)
+                        ]);
+
+                        try {
+                            $admRes = $conn->query("SELECT id, name, zalo_chat_id FROM accounts WHERE role IN ('admin', 'superadmin', 'manager') AND is_active = 1 AND tenant_id = 1");
+                            if ($admRes) {
+                                require_once __DIR__ . '/zalo_bot.php';
+                                while ($adm = $admRes->fetch_assoc()) {
+                                    if (!empty($adm['zalo_chat_id'])) {
+                                        sendLeadDuplicateFlagZaloMessageToAdmin(
+                                            $adm['zalo_chat_id'],
+                                            $adm['name'],
+                                            $decodedUser['name'] ?? 'Sale',
+                                            $name,
+                                            $phone,
+                                            $oldMktSource,
+                                            $leadId
+                                        );
+                                    }
+                                }
+                            }
+                        } catch (Exception $zEx) {
+                            error_log("Error sending duplicate flag Zalo: " . $zEx->getMessage());
+                        }
+                    }
+
+                    // Post-commit: trigger live write-back
+                    if (!empty($leadId)) {
+                        triggerTwoWaySync($conn, $leadId);
+                    }
+
+                    // Fire skipped compensation notifications outside transaction
+                    if ($skippedCompensationNotify) {
+                        try {
+                            require_once __DIR__ . '/mailer.php';
+                            require_once __DIR__ . '/zalo_bot.php';
+
+                            if (!empty($skippedCompensationNotify['email'])) {
+                                try {
+                                    sendCompensationAddedEmailToSale(
+                                        $skippedCompensationNotify['email'],
+                                        $skippedCompensationNotify['name'],
+                                        $skippedCompensationNotify['round_name'],
+                                        $skippedCompensationNotify['delta'],
+                                        $skippedCompensationNotify['admin_name'],
+                                        $skippedCompensationNotify['reason'],
+                                        $skippedCompensationNotify['time']
+                                    );
+                                } catch (Exception $mailEx) {
+                                    error_log("Error sending manual insert skip compensation email: " . $mailEx->getMessage());
+                                }
+                            }
+                            try {
+                                sendCompensationAddedZaloMessageToSale(
+                                    $skippedCompensationNotify['consultant_id'],
+                                    $skippedCompensationNotify['name'],
+                                    $skippedCompensationNotify['round_name'],
+                                    $skippedCompensationNotify['delta'],
+                                    $skippedCompensationNotify['admin_name'],
+                                    $skippedCompensationNotify['reason'],
+                                    $skippedCompensationNotify['time']
+                                );
+                            } catch (Exception $zaloEx) {
+                                error_log("Error sending manual insert skip compensation Zalo: " . $zaloEx->getMessage());
+                            }
+                        } catch (Exception $notifyEx) {
+                            error_log("Error preparing skipped compensation notifications: " . $notifyEx->getMessage());
+                        }
+                    }
+
+                    // Fire notification using Mailer and Zalo ONLY if within working hours
+                    if (!$isOutsideWorkHours) {
+                        try {
+                            require_once __DIR__ . '/mailer.php';
+                            require_once __DIR__ . '/zalo_bot.php';
+
+                            $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                            $stmtC->bind_param("i", $consultantId);
+                            $stmtC->execute();
+                            $cRes = $stmtC->get_result();
+                            if ($cRes->num_rows > 0) {
+                                $c = $cRes->fetch_assoc();
+                                $ccEmails = '';
+                                $stmtQ = $conn->prepare("SELECT cc_emails FROM distribution_rounds WHERE id = ?");
+                                $stmtQ->bind_param("i", $assignedRoundId);
+                                $stmtQ->execute();
+                                $qRound = $stmtQ->get_result();
+                                if ($qRound && $qRound->num_rows > 0) {
+                                    $ccEmails = $qRound->fetch_assoc()['cc_emails'] ?? '';
+                                }
+                                $stmtQ->close();
+
+                                $fName = trim($name) !== '' ? $name : 'Khách hàng ẩn danh';
+
+                                try {
+                                    sendLeadAssignedEmailToSale(
+                                        $c['email'],
+                                        $c['name'],
+                                        $fName,
+                                        $phone ?: '',
+                                        $note ?: '',
+                                        $source ?: '',
+                                        $ccEmails,
+                                        $roundName,
+                                        $leadId,
+                                        $consultantId,
+                                        $assignedRoundId
+                                    );
+                                } catch (Exception $eEx) {
+                                    error_log("Error sending manual insert assignment email: " . $eEx->getMessage());
+                                }
+
+                                try {
+                                    sendLeadAssignedZaloMessageToSale(
+                                        $consultantId,
+                                        $c['name'],
+                                        $fName,
+                                        $phone ?: '',
+                                        $note ?: '',
+                                        $source ?: '',
+                                        $roundName,
+                                        $leadId,
+                                        $assignedRoundId,
+                                        $email,
+                                        $type
+                                    );
+                                } catch (Exception $zEx) {
+                                    error_log("Error sending manual insert assignment Zalo: " . $zEx->getMessage());
+                                }
+                            }
+                            $stmtC->close();
+                        } catch (Exception $notifyEx) {
+                            error_log("Error preparing manual assignment notifications: " . $notifyEx->getMessage());
+                        }
+                    }
+
+                    if ($override_consultant_id) {
+                        $msg = ($decodedUser['role'] === 'sale') ? 'Thêm khách hàng thành công.' : 'Đã thêm và bàn giao khách hàng thành công.';
+                        return ['success' => true, 'message' => $msg];
+                    }
+                    return ['success' => true, 'message' => $isOutsideWorkHours ? 'Data đã gán cho Sale ngoài giờ làm việc (Hoãn thông báo).' : 'Data đã được giao thành công.'];
+                } else {
+                    if ($crmCheckResult['leadExists']) {
+                        $leadId = updateLead($conn, $phone, $email, null, $source, $type, $note, null, null, $name);
+                    } else {
+                        $leadId = insertLead($conn, [], null, $phone, $email, $name, $source, $type, $note);
+                    }
+                    if ($aiScreenerResult) {
+                        $updAi = $conn->prepare("UPDATE leads SET ai_screener_status = ?, ai_evaluation = ? WHERE id = ?");
+                        $updAi->bind_param("ssi", $aiScreenerResult['status'], $aiScreenerResult['reason'], $leadId);
+                        $updAi->execute();
+                        $updAi->close();
+                    }
+                    $status = (isset($isFallback) && $isFallback) ? 'fallback' : 'pending';
+                    $logMsg = (isset($isFallback) && $isFallback) ? 'No active consultants in fallback round.' : 'No active consultants in this round.';
+                    logDistribution($conn, $leadId, null, $assignedRoundId ? $assignedRoundId : null, $status, $logMsg, false);
+                    $conn->commit();
+                    $inTransaction = false;
+                    return ['success' => true, 'message' => 'Data được lưu nhưng không có TVV nào nhận.'];
+                }
+            }
+        }
+    } catch (Exception $e) {
+        if ($inTransaction) {
+            $conn->rollback();
+        }
+        return ['success' => false, 'message' => $e->getMessage()];
+    } finally {
+        if ($lockAcquired) {
+            $relStmt = $conn->prepare("SELECT RELEASE_LOCK(?)");
+            if ($relStmt) {
+                $relStmt->bind_param("s", $lockKey);
+                $relStmt->execute();
+                $relRes = $relStmt->get_result();
+                if ($relRes) $relRes->close();
+                $relStmt->close();
+            }
+        }
+    }
+}
+
+if (!function_exists('getTicketNotifyAdmins')) {
+    function getTicketNotifyAdmins($conn)
+    {
+        $res = $conn->query("SELECT account_id FROM ticket_notify_settings");
+        $adminIds = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $adminIds[] = (int) $row['account_id'];
+            }
+        }
+
+        $admins = [];
+        if (!empty($adminIds)) {
+            $inPlaceholders = implode(',', array_fill(0, count($adminIds), '?'));
+            $types = str_repeat('i', count($adminIds));
+            $adminStmt = $conn->prepare("SELECT id, name, email, zalo_chat_id FROM accounts WHERE id IN ($inPlaceholders)");
+            $adminStmt->bind_param($types, ...$adminIds);
+            $adminStmt->execute();
+            $adminRes = $adminStmt->get_result();
+            if ($adminRes) {
+                while ($r = $adminRes->fetch_assoc()) {
+                    $admins[] = $r;
+                }
+            }
+            $adminStmt->close();
+        } else {
+            // Fallback: role = 'admin' OR id = 1
+            $adminRes = $conn->query("SELECT id, name, email, zalo_chat_id FROM accounts WHERE role = 'admin' OR role = 'superadmin' OR id = 1");
+            if ($adminRes) {
+                while ($r = $adminRes->fetch_assoc()) {
+                    $admins[] = $r;
+                }
+            }
+        }
+        return $admins;
+    }
+}
+
+switch ($action) {
+    case 'debug_companies_db':
+        $res = $conn->query("DESCRIBE companies")->fetch_all(MYSQLI_ASSOC);
+        echo json_encode(['success' => true, 'columns' => $res]);
+        exit;
+
+    case 'get_zalo_send_logs':
+        $logFile = __DIR__ . '/zalo_send_log.txt';
+        if (file_exists($logFile)) {
+            $content = file_get_contents($logFile);
+            if (strlen($content) > 10000) {
+                $content = substr($content, -10000);
+            }
+            echo json_encode(['success' => true, 'logs' => $content]);
+        } else {
+            echo json_encode(['success' => true, 'logs' => 'No logs found.']);
+        }
+        break;
+
+    case 'get_unique_sources':
+        $res = $conn->query("SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source != '' ORDER BY source ASC");
+        $sources = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $sources[] = $row['source'];
+            }
+        }
+        echo json_encode(['success' => true, 'data' => $sources]);
+        break;
+
+    case 'get_import_history':
+        if (!isset($decodedUser) || ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'assistant')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            exit();
+        }
+
+        /** @var mysqli_stmt|null $stmt */
+        $stmt = null;
+        $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $limit = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 50;
+        $offset = ($page - 1) * $limit;
+        $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+        $limitStr = "LIMIT $limit OFFSET $offset";
+
+        if (!empty($search)) {
+            $searchParam = "%$search%";
+
+            $countSql = "
+                SELECT COUNT(*) as cnt
+                FROM leads l
+                WHERE (l.source = 'Excel Import' OR l.note LIKE '%Nhap du lieu cu%')
+                  AND (l.name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?)
+            ";
+            $stmtCount = $conn->prepare($countSql);
+            $totalCount = 0;
+            if ($stmtCount) {
+                $stmtCount->bind_param("sss", $searchParam, $searchParam, $searchParam);
+                $stmtCount->execute();
+                $totalCount = (int) ($stmtCount->get_result()->fetch_assoc()['cnt'] ?? 0);
+                $stmtCount->close();
+            }
+
+            $sql = "
+                SELECT 
+                    COALESCE(dl.id, -l.id) as log_id,
+                    l.id as lead_id,
+                    l.name,
+                    l.phone,
+                    l.email,
+                    dl.status as distribution_status,
+                    dl.message as distribution_message,
+                    c.name as consultant_name,
+                    c.status as consultant_status,
+                    l.last_interaction_date
+                FROM leads l
+                LEFT JOIN distribution_logs dl ON l.id = dl.lead_id
+                LEFT JOIN consultants c ON l.assigned_to = c.id
+                WHERE (l.source = 'Excel Import' OR l.note LIKE '%Nhap du lieu cu%')
+                  AND (l.name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?)
+                ORDER BY l.id DESC
+                $limitStr
+            ";
+            $stmt = $conn->prepare($sql);
+            if ($stmt) {
+                $stmt->bind_param("sss", $searchParam, $searchParam, $searchParam);
+                $stmt->execute();
+                $res = $stmt->get_result();
+            } else {
+                $res = false;
+            }
+        } else {
+            // Count total import history records from leads table directly
+            $countRes = $conn->query("
+                SELECT COUNT(*) as cnt
+                FROM leads l
+                WHERE l.source = 'Excel Import' 
+                   OR l.note LIKE '%Nhap du lieu cu%'
+            ");
+            $totalCount = (int) ($countRes->fetch_assoc()['cnt'] ?? 0);
+
+            $res = $conn->query("
+                SELECT 
+                    COALESCE(dl.id, -l.id) as log_id,
+                    l.id as lead_id,
+                    l.name,
+                    l.phone,
+                    l.email,
+                    dl.status as distribution_status,
+                    dl.message as distribution_message,
+                    c.name as consultant_name,
+                    c.status as consultant_status,
+                    l.last_interaction_date
+                FROM leads l
+                LEFT JOIN distribution_logs dl ON l.id = dl.lead_id
+                LEFT JOIN consultants c ON l.assigned_to = c.id
+                WHERE l.source = 'Excel Import' 
+                   OR l.note LIKE '%Nhap du lieu cu%'
+                ORDER BY l.id DESC
+                $limitStr
+            ");
+        }
+
+        $data = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $distMsg = $row['distribution_message'] ?? '';
+                $distStatus = $row['distribution_status'] ?? '';
+                $isDuplicate = (
+                    strpos($distMsg, 'Trung') !== false ||
+                    strpos($distMsg, 'trung') !== false ||
+                    $distStatus === 'duplicate' ||
+                    $distStatus === 'reminder'
+                );
+                $data[] = [
+                    'log_id' => (int) $row['log_id'],
+                    'lead_id' => (int) $row['lead_id'],
+                    'name' => $row['name'],
+                    'phone' => $row['phone'],
+                    'email' => $row['email'],
+                    'has_record' => $isDuplicate ? true : false,
+                    'consultant_name' => $row['consultant_name'],
+                    'consultant_status' => $row['consultant_status'],
+                    'last_interaction_date' => $row['last_interaction_date']
+                ];
+            }
+            if ($stmt instanceof mysqli_stmt) {
+                $stmt->close();
+            }
+        }
+        echo json_encode(['success' => true, 'data' => $data, 'total_count' => $totalCount]);
+        break;
+
+    case 'delete_import_history':
+        if (!isset($decodedUser) || ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'assistant')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            exit();
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $logIds = $input['log_ids'] ?? [];
+        $leadIds = $input['lead_ids'] ?? [];
+
+        if (empty($logIds) && empty($leadIds)) {
+            echo json_encode(['success' => false, 'message' => 'Không có bản ghi nào được chọn để xóa.']);
+            break;
+        }
+
+        // Filter out fake negative log IDs (which represent leads with deleted/pruned logs)
+        $logIds = array_filter($logIds, function ($id) {
+            return is_numeric($id) && (int) $id > 0;
+        });
+        $logIds = array_values(array_map('intval', $logIds));
+
+        $conn->begin_transaction();
+        try {
+            if (!empty($logIds)) {
+                $placeholders = implode(',', array_fill(0, count($logIds), '?'));
+                $stmt = $conn->prepare("DELETE FROM distribution_logs WHERE id IN ($placeholders)");
+                $types = str_repeat('i', count($logIds));
+                $stmt->bind_param($types, ...$logIds);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            if (!empty($leadIds)) {
+                $placeholders = implode(',', array_fill(0, count($leadIds), '?'));
+                $stmt = $conn->prepare("DELETE FROM leads WHERE id IN ($placeholders) AND (source = 'Excel Import' OR note LIKE '%Nhap du lieu cu%')");
+                $types = str_repeat('i', count($leadIds));
+                $stmt->bind_param($types, ...$leadIds);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            $conn->commit();
+            echo json_encode(['success' => true, 'message' => 'Xóa bản ghi thành công.']);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => 'Lỗi khi xóa dữ liệu: ' . $e->getMessage()]);
+        }
+        break;
+
+    case 'public_student_schedule':
+        $customerId = isset($_GET['customer_id']) ? (int)$_GET['customer_id'] : 0;
+        $campaignId = isset($_GET['campaign_id']) ? (int)$_GET['campaign_id'] : 0;
+        $lecturerId = isset($_GET['lecturer_id']) ? (int)$_GET['lecturer_id'] : 0;
+
+        // Fetch Lecturers lookup dictionary
+        $lecturers = [];
+        $resComp = $conn->query("SELECT id, name FROM companies");
+        if ($resComp) {
+            while ($row = $resComp->fetch_assoc()) {
+                $lecturers[$row['id']] = $row['name'];
+            }
+        }
+        $resUsers = $conn->query("SELECT id, username, full_name FROM users");
+        if ($resUsers) {
+            while ($row = $resUsers->fetch_assoc()) {
+                $lecturers[$row['id']] = $row['full_name'] ?: $row['username'];
+            }
+        }
+
+        $lecturerIdRaw = isset($_GET['lecturer_id']) ? $_GET['lecturer_id'] : '';
+        $isAllLecturers = ($lecturerIdRaw === 'all');
+
+        if ($lecturerId > 0 || $isAllLecturers) {
+            $lecturerName = $isAllLecturers ? 'Tất cả giảng viên' : ($lecturers[$lecturerId] ?? 'Giảng viên');
+
+            // Query all campaigns and extract subjects matching lecturerId
+            $resCampaigns = $conn->query("SELECT id, name, project_id, subjects_json, status, thesis_milestones_json FROM marketing_campaigns");
+            $matchingSubjects = [];
+            $thesisMilestones = [];
+
+            if ($resCampaigns) {
+                while ($row = $resCampaigns->fetch_assoc()) {
+                    if (empty($row['subjects_json'])) continue;
+                    $subjectsArray = json_decode($row['subjects_json'], true);
+                    if (!is_array($subjectsArray)) continue;
+
+                    $courseTaught = false;
+                    $courseSubjects = [];
+                    foreach ($subjectsArray as $sub) {
+                        $subjectMatches = false;
+                        if ($isAllLecturers) {
+                            $subjectMatches = true;
+                        } else {
+                            if (isset($sub['lecturer_id']) && (int)$sub['lecturer_id'] === $lecturerId) {
+                                $subjectMatches = true;
+                            }
+                            if (isset($sub['host_sessions']) && is_array($sub['host_sessions'])) {
+                                foreach ($sub['host_sessions'] as $session) {
+                                    if (isset($session['lecturer_name']) && (int)$session['lecturer_name'] === $lecturerId) {
+                                        $subjectMatches = true;
+                                    }
+                                }
+                            }
+                            if (isset($sub['seminars']) && is_array($sub['seminars'])) {
+                                foreach ($sub['seminars'] as $sem) {
+                                    if (isset($sem['lecturer_id']) && (int)$sem['lecturer_id'] === $lecturerId) {
+                                        $subjectMatches = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        if ($subjectMatches) {
+                            $courseTaught = true;
+                            $sub['name'] = $sub['name'] . " (" . $row['name'] . ")";
+                            $courseSubjects[] = $sub;
+                        }
+                    }
+
+                    if ($courseTaught) {
+                        $matchingSubjects = array_merge($matchingSubjects, $courseSubjects);
+                        if (!empty($row['thesis_milestones_json'])) {
+                            $miles = json_decode($row['thesis_milestones_json'], true);
+                            if (is_array($miles)) {
+                                $thesisMilestones = array_merge($thesisMilestones, $miles);
+                            }
+                        }
+                    }
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'student' => null,
+                    'lecturer' => [
+                        'id' => $isAllLecturers ? 'all' : $lecturerId,
+                        'name' => $lecturerName
+                    ],
+                    'course' => [
+                        'id' => 0,
+                        'name' => $isAllLecturers ? 'Lịch giảng dạy tổng hợp' : 'Lịch giảng dạy',
+                        'subjects' => $matchingSubjects,
+                        'thesis_milestones' => $thesisMilestones
+                    ],
+                    'program' => [
+                        'id' => 0,
+                        'name' => 'Hệ thống IDEAS ERP',
+                        'code' => 'IDEAS',
+                        'degree_awarding_body' => 'Viện IDEAS'
+                    ],
+                    'lecturers' => $lecturers
+                ]
+            ]);
+            break;
+        }
+
+        $lead = null;
+        if ($customerId > 0) {
+            // 1. Query Contact
+            $stmtL = $conn->prepare("SELECT id, full_name, campaign_id, phone, email, dob, citizen_id FROM contacts WHERE id = ? LIMIT 1");
+            $stmtL->bind_param("i", $customerId);
+            $stmtL->execute();
+            $lead = $stmtL->get_result()->fetch_assoc();
+            if (!$lead) {
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy học viên']);
+                break;
+            }
+            $campaignId = (int)($lead['campaign_id'] ?? 0);
+        }
+
+        if ($campaignId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Khóa học hoặc học viên không hợp lệ']);
+            break;
+        }
+
+        $campaign = null;
+        $project = null;
+
+        // 2. Query Campaign/Course
+        $stmtC = $conn->prepare("SELECT id, name, project_id, subjects_json, status, thesis_milestones_json FROM marketing_campaigns WHERE id = ? LIMIT 1");
+        $stmtC->bind_param("i", $campaignId);
+        $stmtC->execute();
+        $campaign = $stmtC->get_result()->fetch_assoc();
+
+        if (!$campaign) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy thông tin khóa học']);
+            break;
+        }
+
+        $projectId = (int)($campaign['project_id'] ?? 0);
+        // 3. Query Project/Program
+        if ($projectId > 0) {
+            $stmtP = $conn->prepare("SELECT id, name, code, developer FROM projects WHERE id = ? LIMIT 1");
+            $stmtP->bind_param("i", $projectId);
+            $stmtP->execute();
+            $project = $stmtP->get_result()->fetch_assoc();
+        }
+
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'student' => $lead ? [
+                    'id' => $lead['id'],
+                    'name' => $lead['full_name'] ?? $lead['name'] ?? '',
+                    'email' => $lead['email'] ?? '',
+                    'phone' => $lead['phone'] ?? '',
+                    'dob' => $lead['dob'] ?? '',
+                    'citizen_id' => $lead['citizen_id'] ?? ''
+                ] : null,
+                'course' => $campaign ? [
+                    'id' => $campaign['id'],
+                    'name' => $campaign['name'] ?? '',
+                    'subjects' => $campaign['subjects_json'] ? json_decode($campaign['subjects_json'], true) : [],
+                    'thesis_milestones' => $campaign['thesis_milestones_json'] ? json_decode($campaign['thesis_milestones_json'], true) : []
+                ] : null,
+                'program' => $project ? [
+                    'id' => $project['id'],
+                    'name' => $project['name'] ?? '',
+                    'code' => $project['code'] ?? '',
+                    'degree_awarding_body' => $project['developer'] ?? ''
+                ] : null,
+                'lecturers' => $lecturers
+            ]
+        ]);
+        break;
+
+    case 'login':
+        $input = json_decode(file_get_contents('php://input'), true);
+        // FEATURE: Đăng nhập bằng Email thay vì username
+        // Backward compatible: Super Admin (id=1) vẫn có thể dùng username nếu chưa có email
+        $loginField = trim($input['email'] ?? $input['username'] ?? '');
+        $password = $input['password'] ?? '';
+
+        if (empty($loginField) || empty($password)) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng nhập email và mật khẩu']);
+            break;
+        }
+
+        // Tìm theo email trước, fallback sang username cho super admin
+        $stmt = $conn->prepare("SELECT * FROM accounts WHERE email = ? OR (id = 1 AND username = ?) LIMIT 1");
+        $stmt->bind_param("ss", $loginField, $loginField);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $stmt->close();
+        if ($res->num_rows > 0) {
+            $user = $res->fetch_assoc();
+            if (password_verify($password, $user['password_hash'])) {
+
+                // Update last_login
+                $upd = $conn->prepare("UPDATE accounts SET last_login = NOW() WHERE id = ?");
+                if ($upd) {
+                    $upd->bind_param("i", $user['id']);
+                    $upd->execute();
+                    $upd->close();
+                }
+
+                $consultantId = null;
+                if (in_array($user['role'], ['sales', 'sale', 'manager'], true)) {
+                    $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+                    $stmtC->bind_param("s", $user['email']);
+                    $stmtC->execute();
+                    $cRow = $stmtC->get_result()->fetch_assoc();
+                    $stmtC->close();
+                    if ($cRow) {
+                        $consultantId = (int)$cRow['id'];
+                    }
+                }
+
+                $payload = [
+                    'id' => $user['id'],
+                    'user_id' => $user['id'],
+                    'consultant_id' => $consultantId,
+                    'username' => $user['username'],
+                    'email' => $user['email'] ?? '',
+                    'role' => $user['role'] === 'sales' ? 'sale' : $user['role'],
+                    'exp' => time() + 86400 * 30
+                ];
+                $token = create_jwt($payload, $JWT_SECRET);
+                echo json_encode([
+                    'success' => true,
+                    'token' => $token,
+                    'user' => [
+                        'id' => $user['id'],
+                        'user_id' => $user['id'],
+                        'consultant_id' => $consultantId,
+                        'username' => $user['username'],
+                        'email' => $user['email'] ?? '',
+                        'role' => $user['role'] === 'sales' ? 'sale' : $user['role'],
+                        'name' => $user['name'],
+                        'avatar' => $user['avatar'] ?? null
+                    ]
+                ]);
+                exit;
+            }
+        }
+        echo json_encode(['success' => false, 'message' => 'Email hoặc mật khẩu không chính xác']);
+        break;
+
+    case 'login_google':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $credential = $input['credential'] ?? '';
+
+        if (empty($credential)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin xác thực Google']);
+            break;
+        }
+
+        // Verify ID token via Google Tokeninfo API
+        $url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . urlencode($credential);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$response) {
+            echo json_encode(['success' => false, 'message' => 'Token xác thực Google không hợp lệ hoặc đã hết hạn']);
+            break;
+        }
+
+        $googleData = json_decode($response, true);
+        $googleEmail = trim($googleData['email'] ?? '');
+        $googleAud = $googleData['aud'] ?? '';
+
+        $expectedClientId = '641158233158-nsg8a8tdsj3fdgb34dc9tugm8god7tho.apps.googleusercontent.com';
+        if ($googleAud !== $expectedClientId) {
+            echo json_encode(['success' => false, 'message' => 'Client ID không hợp lệ']);
+            break;
+        }
+
+        if (empty($googleEmail)) {
+            echo json_encode(['success' => false, 'message' => 'Không thể lấy email từ tài khoản Google']);
+            break;
+        }
+
+        // Find user by email
+        $stmt = $conn->prepare("SELECT * FROM accounts WHERE email = ? LIMIT 1");
+        $stmt->bind_param("s", $googleEmail);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $stmt->close();
+
+        if ($res->num_rows > 0) {
+            $user = $res->fetch_assoc();
+
+            // Auto confirm email if not already
+            if ((int) $user['is_confirmed'] === 0) {
+                $stmtConfirm = $conn->prepare("UPDATE accounts SET is_confirmed = 1 WHERE id = ?");
+                $stmtConfirm->bind_param("i", $user['id']);
+                $stmtConfirm->execute();
+                $stmtConfirm->close();
+            }
+
+            // Update last_login
+            $upd = $conn->prepare("UPDATE accounts SET last_login = NOW() WHERE id = ?");
+            if ($upd) {
+                $upd->bind_param("i", $user['id']);
+                $upd->execute();
+                $upd->close();
+            }
+
+            $payload = [
+                'id' => $user['id'],
+                'user_id' => $user['id'],
+                'username' => $user['username'],
+                'email' => $user['email'] ?? '',
+                'role' => $user['role'] === 'sales' ? 'sale' : $user['role'],
+                'exp' => time() + 86400 * 30
+            ];
+            $token = create_jwt($payload, $JWT_SECRET);
+            echo json_encode([
+                'success' => true,
+                'token' => $token,
+                'user' => [
+                    'username' => $user['username'],
+                    'email' => $user['email'] ?? '',
+                    'role' => $user['role'] === 'sales' ? 'sale' : $user['role'],
+                    'name' => $user['name'],
+                    'avatar' => $user['avatar'] ?? null
+                ]
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'message' => "Email '$googleEmail' chưa được đăng ký trong hệ thống. Vui lòng liên hệ Admin."
+            ]);
+        }
+        break;
+
+    case 'login_google_sale':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $credential = $input['credential'] ?? '';
+        if (empty($credential)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin xác thực Google']);
+            break;
+        }
+
+        $url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . urlencode($credential);
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$response) {
+            echo json_encode(['success' => false, 'message' => 'Token xác thực Google không hợp lệ hoặc đã hết hạn']);
+            break;
+        }
+
+        $googleData = json_decode($response, true);
+        $googleEmail = trim($googleData['email'] ?? '');
+        $googleAud = $googleData['aud'] ?? '';
+
+        $expectedClientId = '641158233158-nsg8a8tdsj3fdgb34dc9tugm8god7tho.apps.googleusercontent.com';
+        if ($googleAud !== $expectedClientId) {
+            echo json_encode(['success' => false, 'message' => 'Client ID không hợp lệ']);
+            break;
+        }
+
+        if (empty($googleEmail)) {
+            echo json_encode(['success' => false, 'message' => 'Không thể lấy email từ tài khoản Google']);
+            break;
+        }
+
+        // 1. Check if email exists in accounts table as Admin
+        $stmtAdmin = $conn->prepare("SELECT * FROM accounts WHERE email = ? LIMIT 1");
+        $stmtAdmin->bind_param("s", $googleEmail);
+        $stmtAdmin->execute();
+        $resAdmin = $stmtAdmin->get_result();
+        if ($resAdmin->num_rows > 0) {
+            $adminUser = $resAdmin->fetch_assoc();
+            $payload = [
+                'id' => $adminUser['id'],
+                'username' => $adminUser['username'],
+                'email' => $adminUser['email'] ?? '',
+                'role' => $adminUser['role'],
+                'name' => $adminUser['name'],
+                'exp' => time() + 86400 * 30
+            ];
+            $token = create_jwt($payload, $JWT_SECRET);
+            echo json_encode([
+                'success' => true,
+                'token' => $token,
+                'user' => [
+                    'username' => $adminUser['username'],
+                    'email' => $adminUser['email'] ?? '',
+                    'role' => $adminUser['role'],
+                    'name' => $adminUser['name']
+                ]
+            ]);
+            $stmtAdmin->close();
+            break;
+        }
+        $stmtAdmin->close();
+
+        // 2. Check if email exists in consultants table as Sale
+        $stmtSale = $conn->prepare("SELECT * FROM consultants WHERE email = ? LIMIT 1");
+        $stmtSale->bind_param("s", $googleEmail);
+        $stmtSale->execute();
+        $resSale = $stmtSale->get_result();
+        $sale = null;
+        if ($resSale->num_rows > 0) {
+            $sale = $resSale->fetch_assoc();
+        }
+        $stmtSale->close();
+
+        if ($sale) {
+            if ($sale['status'] !== 'active' && $sale['status'] !== 'leave') {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Tài khoản Tư vấn viên của bạn đã bị ngừng hoạt động.'
+                ]);
+                break;
+            }
+
+            // Look up matching account (user) ID
+            $stmtAcc = $conn->prepare("SELECT id FROM accounts WHERE email = ? LIMIT 1");
+            $stmtAcc->bind_param("s", $googleEmail);
+            $stmtAcc->execute();
+            $accRow = $stmtAcc->get_result()->fetch_assoc();
+            $stmtAcc->close();
+            $userId = $accRow ? (int)$accRow['id'] : (int)$sale['id']; // fallback to consultant id
+
+            $payload = [
+                'id' => $userId,
+                'user_id' => $userId,
+                'consultant_id' => $sale['id'],
+                'username' => $sale['email'],
+                'email' => $sale['email'],
+                'role' => 'sale',
+                'name' => $sale['name'],
+                'exp' => time() + 86400 * 30 // 30 days token for sales
+            ];
+            $token = create_jwt($payload, $JWT_SECRET);
+            echo json_encode([
+                'success' => true,
+                'token' => $token,
+                'user' => [
+                    'id' => $userId,
+                    'user_id' => $userId,
+                    'consultant_id' => $sale['id'],
+                    'username' => $sale['email'],
+                    'email' => $sale['email'],
+                    'role' => 'sale',
+                    'name' => $sale['name'],
+                    'consultant_id' => $sale['id'],
+                    'avatar' => $sale['avatar'] ?? null
+                ]
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'message' => "Email '$googleEmail' chưa được cấu hình làm Tư vấn viên trong hệ thống. Vui lòng liên hệ Admin."
+            ]);
+        }
+        $stmtSale->close();
+        break;
+    case 'get_sse_updates':
+        // SSE runs persistently, disable execution timeout
+        set_time_limit(0);
+
+        // Prevent buffer buffering
+        if (function_exists('apache_setenv')) {
+            @apache_setenv('no-gzip', '1');
+        }
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('implicit_flush', '1');
+        ob_implicit_flush(true);
+
+        header('Content-Type: text/event-stream');
+        header('Cache-Control: no-cache');
+        header('Connection: keep-alive');
+        header('X-Accel-Buffering: no'); // Tells Nginx not to buffer output
+
+        $isSale = in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true);
+        $saleId = $isSale ? ($currentSaleConsultantId ?? 0) : (int) $decodedUser['id'];
+
+        $lastLeadCount = -1;
+        $lastNotifCount = -1;
+        $lastCoopCount = -1;
+
+        $maxIterations = 16; // Runs for ~48 seconds to free up PHP workers periodically
+        for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
+            // Check connection status: if client disconnected, stop immediately
+            if (connection_aborted()) {
+                break;
+            }
+
+            // 1. Count unaccepted leads
+            $leadCount = 0;
+            if ($isSale) {
+                $sqlLead = "
+                    SELECT COUNT(*) as cnt
+                    FROM distribution_logs dl
+                    INNER JOIN (
+                        SELECT lead_id, MAX(id) as max_id 
+                        FROM distribution_logs 
+                        WHERE status != 'silent' AND assigned_to = ?
+                        GROUP BY lead_id
+                    ) dl_max ON dl.id = dl_max.max_id
+                    JOIN leads l ON dl.lead_id = l.id
+                    WHERE dl.assigned_to = ? AND l.is_accepted = 0
+                ";
+            } else {
+                $sqlLead = "
+                    SELECT COUNT(*) as cnt
+                    FROM distribution_logs dl
+                    INNER JOIN (
+                        SELECT lead_id, MAX(id) as max_id 
+                        FROM distribution_logs 
+                        WHERE status != 'silent'
+                        GROUP BY lead_id, assigned_to
+                    ) dl_max ON dl.id = dl_max.max_id
+                    JOIN leads l ON dl.lead_id = l.id
+                    WHERE l.is_accepted = 0
+                ";
+            }
+            $stmt = $conn->prepare($sqlLead);
+            if ($stmt) {
+                if ($isSale) {
+                    $stmt->bind_param("ii", $saleId, $saleId);
+                }
+                $stmt->execute();
+                $leadCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+                $stmt->close();
+            }
+
+            // 2. Count unread notifications
+            $notifCount = 0;
+            $sqlNotif = "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0";
+            $stmt = $conn->prepare($sqlNotif);
+            if ($stmt) {
+                $stmt->bind_param("i", $decodedUser['id']);
+                $stmt->execute();
+                $notifCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+                $stmt->close();
+            }
+
+            // 3. Count pending signature cooperation slips
+            $coopCount = 0;
+            $sqlCoop = "
+                SELECT COUNT(*) as cnt
+                FROM cooperation_slips cs
+                WHERE (cs.status = 'pending_signatures' OR cs.status = 'approved_pending_signatures')
+                  AND JSON_CONTAINS(JSON_KEYS(COALESCE(cs.shares_json, '{}')), JSON_QUOTE(CAST(? AS CHAR)))
+                  AND NOT JSON_CONTAINS(JSON_KEYS(COALESCE(cs.signatures_json, '{}')), JSON_QUOTE(CAST(? AS CHAR)))
+            ";
+            $stmt = $conn->prepare($sqlCoop);
+            if ($stmt) {
+                $uidStr = (string)$decodedUser['id'];
+                $stmt->bind_param("ss", $uidStr, $uidStr);
+                $stmt->execute();
+                $coopCount = (int)($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+                $stmt->close();
+            }
+
+            // Detect changes
+            if ($leadCount !== $lastLeadCount || $notifCount !== $lastNotifCount || $coopCount !== $lastCoopCount) {
+                $lastLeadCount = $leadCount;
+                $lastNotifCount = $notifCount;
+                $lastCoopCount = $coopCount;
+
+                echo "event: update\n";
+                echo "data: " . json_encode([
+                    'new_leads' => $leadCount,
+                    'unread_notifications' => $notifCount,
+                    'pending_coops' => $coopCount
+                ]) . "\n\n";
+
+                // Flush buffers
+                while (ob_get_level() > 0) {
+                    ob_end_flush();
+                }
+                flush();
+            }
+
+            // Sleep 3 seconds before checking again
+            sleep(3);
+        }
+
+        // Output dummy ping before close to keep HTTP connection neat
+        echo "event: close\n";
+        echo "data: ok\n\n";
+        flush();
+        exit;
+
+    case 'get_sale_portal_data':
+        $isSale = in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true);
+        $saleFilterId = isset($_GET['sale_id']) && $_GET['sale_id'] !== '' ? (int) $_GET['sale_id'] : null;
+        $saleId = $isSale ? ($currentSaleConsultantId ?? 0) : ($saleFilterId !== null ? $saleFilterId : (int) $decodedUser['id']);
+        $tid = (int)($decodedUser['tenant_id'] ?? 1);
+
+        $search = trim($_GET['search'] ?? '');
+        $roundFilter = isset($_GET['round_id']) && $_GET['round_id'] !== '' ? (int) $_GET['round_id'] : null;
+        $saleFilterId = isset($_GET['sale_id']) && $_GET['sale_id'] !== '' ? (int) $_GET['sale_id'] : null;
+
+        $dateMode = $_GET['date_mode'] ?? 'all';
+        $startDate = $_GET['start_date'] ?? '';
+        $endDate = $_GET['end_date'] ?? '';
+
+        if ($isSale) {
+            $where = ["dl.assigned_to = ?", "dl.status IN ('assigned', 'compensation', 'reminder', 'rule_6_month', 'pending_work_hours', 'fallback', 'databank_claim')"];
+            $params = [$saleId];
+            $types = "i";
+        } else {
+            $where = ["dl.status IN ('assigned', 'compensation', 'reminder', 'rule_6_month', 'pending_work_hours', 'fallback', 'databank_claim')"];
+            $params = [];
+            $types = "";
+            if ($saleFilterId !== null) {
+                $where[] = "dl.assigned_to = ?";
+                $params[] = $saleFilterId;
+                $types .= "i";
+            }
+        }
+
+        if (!empty($search)) {
+            $where[] = "(l.phone LIKE ? OR l.email LIKE ? OR l.name LIKE ?)";
+            $searchParam = "%$search%";
+            $params[] = $searchParam;
+            $params[] = $searchParam;
+            $params[] = $searchParam;
+            $types .= "sss";
+        }
+
+        if ($roundFilter !== null) {
+            $where[] = "dl.round_id = ?";
+            $params[] = $roundFilter;
+            $types .= "i";
+        }
+
+        $dateCondition = "1=1";
+        if ($dateMode === 'today') {
+            $dateCondition = "received_at >= CURDATE() AND received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } elseif ($dateMode === 'this_week') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND received_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } elseif ($dateMode === 'last_week') {
+            $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } elseif ($dateMode === 'two_weeks_ago') {
+            $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } elseif ($dateMode === 'yesterday') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND received_at < CURDATE()";
+        } elseif ($dateMode === '7_days') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } elseif ($dateMode === '30_days') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } elseif ($dateMode === 'this_month') {
+            $dateCondition = "received_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND received_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } elseif ($dateMode === 'last_month') {
+            $dateCondition = "received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } elseif ($dateMode === 'this_year') {
+            $dateCondition = "received_at >= DATE_FORMAT(CURDATE(), '%Y-01-01')";
+        } elseif ($dateMode === 'custom' && !empty($startDate) && !empty($endDate)) {
+            $startEsc = $conn->real_escape_string($startDate);
+            $endEsc = $conn->real_escape_string($endDate);
+            $dateCondition = "received_at >= '$startEsc 00:00:00' AND received_at <= '$endEsc 23:59:59'";
+        }
+
+        $dateConditionDl = str_replace('received_at', 'dl.received_at', $dateCondition);
+
+        $whereClause = implode(" AND ", $where);
+
+        $page = isset($_GET['page']) ? (int) $_GET['page'] : 0;
+        $pageSize = isset($_GET['pageSize']) ? (int) $_GET['pageSize'] : 50;
+
+        // Count query for pagination support
+        $sqlCount = "
+            SELECT COUNT(*) as cnt
+            FROM distribution_logs dl
+            INNER JOIN (
+                SELECT lead_id, MAX(id) as max_id 
+                FROM distribution_logs 
+                WHERE status != 'silent'
+                GROUP BY lead_id, assigned_to
+            ) dl_max ON dl.id = dl_max.max_id
+            JOIN leads l ON dl.lead_id = l.id
+            LEFT JOIN consultants cons ON dl.assigned_to = cons.id
+            LEFT JOIN contacts c ON c.person_id = l.person_id AND c.owner_id = cons.id AND c.deleted_at IS NULL
+            WHERE $whereClause AND (l.is_accepted = 0 OR $dateConditionDl)
+        ";
+        $totalCount = 0;
+        $stmtCount = $conn->prepare($sqlCount);
+        if ($stmtCount) {
+            if (!empty($types)) {
+                $stmtCount->bind_param($types, ...$params);
+            }
+            $stmtCount->execute();
+            $totalCount = (int) ($stmtCount->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtCount->close();
+        }
+
+        $limitStr = "";
+        if ($page > 0) {
+            $offset = ($page - 1) * $pageSize;
+            $limitStr = "LIMIT $pageSize OFFSET $offset";
+        }
+
+        // 1. Query leads with limits applied
+        $sqlLeads = "
+            SELECT dl.id as log_id, dl.received_at, dl.status, dl.message, dl.round_id, dl.assigned_to,
+                   l.id as lead_id, l.name as lead_name, l.phone, l.email as lead_email, l.source, l.type, l.note,
+                   l.is_accepted, l.accepted_at, l.last_interaction_date, l.person_id,
+                   r.round_name,
+                   c.name as sale_name, c.email as sale_email, c.avatar as sale_avatar,
+                   dr.status as report_status, dr.id as report_id, dr.reason as report_reason, dr.reject_reason as report_reject_reason, dr.created_at as report_created_at,
+                   IFNULL(sc.lead_recall_minutes, 0) as lead_recall_minutes,
+                   sc.sheet_name as connection_name,
+                   c_real.id as contact_id, c_real.last_contact as contact_last_contact FROM distribution_logs dl
+            INNER JOIN (
+                SELECT lead_id, MAX(id) as max_id 
+                FROM distribution_logs 
+                WHERE status != 'silent'
+                GROUP BY lead_id, assigned_to
+            ) dl_max ON dl.id = dl_max.max_id
+            JOIN leads l ON dl.lead_id = l.id
+            LEFT JOIN sheet_connections sc ON l.connection_id = sc.id
+            LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+            LEFT JOIN consultants c ON dl.assigned_to = c.id
+            LEFT JOIN users u ON c.email = u.email
+            LEFT JOIN contacts c_real ON c_real.person_id = l.person_id AND c_real.owner_id = u.id AND c_real.deleted_at IS NULL
+            LEFT JOIN (
+                SELECT dr1.* FROM data_reports dr1
+                INNER JOIN (
+                    SELECT lead_id, consultant_id, MAX(id) as max_dr_id
+                    FROM data_reports
+                    GROUP BY lead_id, consultant_id
+                ) dr2 ON dr1.id = dr2.max_dr_id
+            ) dr ON dr.lead_id = l.id AND dr.consultant_id = dl.assigned_to
+            WHERE $whereClause AND (l.is_accepted = 0 OR $dateConditionDl)
+            ORDER BY dl.received_at DESC
+            $limitStr
+        ";
+
+        $stmtLeads = $conn->prepare($sqlLeads);
+        if (!empty($types)) {
+            $stmtLeads->bind_param($types, ...$params);
+        }
+        $stmtLeads->execute();
+        $resLeads = $stmtLeads->get_result();
+        $leads = [];
+        $personIds = [];
+        while ($row = $resLeads->fetch_assoc()) {
+            $row['takers'] = [];
+            $row['lead_recall_minutes'] = get_lead_recall_minutes($conn, $row['last_interaction_date'], $row['lead_recall_minutes']);
+            $leads[] = $row;
+            $personId = isset($row['person_id']) ? (int)$row['person_id'] : 0;
+            if ($personId > 0) {
+                $personIds[] = $personId;
+            }
+        }
+        $stmtLeads->close();
+
+        if (!empty($personIds)) {
+            $personIds = array_unique($personIds);
+            $inClause = implode(',', array_map('intval', $personIds));
+            $tQuery = "SELECT c.person_id, c.id as contact_id, c.owner_id as id, cons.name, cons.avatar, c.created_at as claimed_at 
+                       FROM contacts c
+                       JOIN users u ON c.owner_id = u.id
+                       JOIN consultants cons ON u.email = cons.email
+                       WHERE c.person_id IN ($inClause) AND c.deleted_at IS NULL";
+            $tRes = $conn->query($tQuery);
+            if ($tRes) {
+                $takersMap = [];
+                while ($tRow = $tRes->fetch_assoc()) {
+                    $pid = $tRow['person_id'];
+                    unset($tRow['person_id']);
+                    $takersMap[$pid][] = $tRow;
+                }
+                foreach ($leads as &$row) {
+                    $pid = isset($row['person_id']) ? (int)$row['person_id'] : 0;
+                    if (isset($takersMap[$pid])) {
+                        $row['takers'] = $takersMap[$pid];
+                    }
+                }
+                unset($row);
+            }
+        }
+
+        // 2. Query rounds
+        if ($isSale) {
+            $sqlRounds = "
+                SELECT DISTINCT r.id, r.round_name 
+                FROM distribution_rounds r
+                JOIN round_consultants rc ON r.id = rc.round_id
+                WHERE rc.consultant_id = ?
+            ";
+            $stmtR = $conn->prepare($sqlRounds);
+            $stmtR->bind_param("i", $saleId);
+        } else {
+            $sqlRounds = "SELECT id, round_name FROM distribution_rounds";
+            $stmtR = $conn->prepare($sqlRounds);
+        }
+        $stmtR->execute();
+        $resR = $stmtR->get_result();
+        $rounds = [];
+        while ($row = $resR->fetch_assoc()) {
+            $rounds[] = $row;
+        }
+        $stmtR->close();
+
+        // 3. Ticket stats under active date filter
+        if ($isSale) {
+            $ticketWhere = ["consultant_id = ?"];
+            $ticketParams = [$saleId];
+            $ticketTypes = "i";
+        } else {
+            $ticketWhere = [];
+            $ticketParams = [];
+            $ticketTypes = "";
+            if ($saleFilterId !== null) {
+                $ticketWhere[] = "consultant_id = ?";
+                $ticketParams[] = $saleFilterId;
+                $ticketTypes .= "i";
+            }
+        }
+        if ($dateMode === 'today') {
+            $today = date('Y-m-d');
+            $ticketWhere[] = "created_at >= ?";
+            $ticketWhere[] = "created_at <= ?";
+            $ticketParams[] = $today . ' 00:00:00';
+            $ticketParams[] = $today . ' 23:59:59';
+            $ticketTypes .= "ss";
+        } elseif ($dateMode === 'yesterday') {
+            $yesterday = date('Y-m-d', strtotime('-1 day'));
+            $ticketWhere[] = "created_at >= ?";
+            $ticketWhere[] = "created_at <= ?";
+            $ticketParams[] = $yesterday . ' 00:00:00';
+            $ticketParams[] = $yesterday . ' 23:59:59';
+            $ticketTypes .= "ss";
+        } elseif ($dateMode === '7_days') {
+            $ticketWhere[] = "created_at >= ?";
+            $ticketParams[] = date('Y-m-d', strtotime('-7 days')) . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === '30_days') {
+            $ticketWhere[] = "created_at >= ?";
+            $ticketParams[] = date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === 'this_month') {
+            $ticketWhere[] = "created_at >= ?";
+            $ticketParams[] = date('Y-m-01') . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === 'last_month') {
+            $ticketWhere[] = "created_at >= ?";
+            $ticketWhere[] = "created_at < ?";
+            $ticketParams[] = date('Y-m-01', strtotime('first day of last month')) . ' 00:00:00';
+            $ticketParams[] = date('Y-m-01') . ' 00:00:00';
+            $ticketTypes .= "ss";
+        } elseif ($dateMode === 'this_year') {
+            $ticketWhere[] = "created_at >= ?";
+            $ticketParams[] = date('Y-01-01') . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === 'custom' && !empty($startDate) && !empty($endDate)) {
+            $ticketWhere[] = "created_at >= ?";
+            $ticketWhere[] = "created_at <= ?";
+            $ticketParams[] = $startDate . ' 00:00:00';
+            $ticketParams[] = $endDate . ' 23:59:59';
+            $ticketTypes .= "ss";
+        }
+        $ticketWhereClause = !empty($ticketWhere) ? implode(" AND ", $ticketWhere) : "1=1";
+
+        $sqlTickets = "
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status IN ('approved', 'approved_no_comp') THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+            FROM data_reports
+            WHERE $ticketWhereClause
+        ";
+        $stmtT = $conn->prepare($sqlTickets);
+        if (!empty($ticketTypes)) {
+            $stmtT->bind_param($ticketTypes, ...$ticketParams);
+        }
+        $stmtT->execute();
+        $ticketStats = $stmtT->get_result()->fetch_assoc();
+        $stmtT->close();
+
+        // Compute contacts count covering manually entered, claimed, and distributed leads
+        $contactsDateCondition = "1=1";
+        if ($dateMode === 'today') {
+            $contactsDateCondition = "c.created_at >= CURDATE() AND c.created_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } elseif ($dateMode === 'this_week') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND c.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } elseif ($dateMode === 'last_week') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND c.created_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } elseif ($dateMode === 'two_weeks_ago') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND c.created_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } elseif ($dateMode === 'yesterday') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND c.created_at < CURDATE()";
+        } elseif ($dateMode === '7_days') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } elseif ($dateMode === '30_days') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } elseif ($dateMode === 'this_month') {
+            $contactsDateCondition = "c.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND c.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } elseif ($dateMode === 'last_month') {
+            $contactsDateCondition = "c.created_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND c.created_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } elseif ($dateMode === 'this_year') {
+            $contactsDateCondition = "c.created_at >= DATE_FORMAT(CURDATE(), '%Y-01-01')";
+        } elseif ($dateMode === 'custom' && !empty($startDate) && !empty($endDate)) {
+            $startEsc = $conn->real_escape_string($startDate);
+            $endEsc = $conn->real_escape_string($endDate);
+            $contactsDateCondition = "c.created_at >= '$startEsc 00:00:00' AND c.created_at <= '$endEsc 23:59:59'";
+        }
+
+        $saleUserId = (int)$decodedUser['id'];
+        if (!$isSale && $saleFilterId !== null) {
+            $stmtUser = $conn->prepare("SELECT u.id FROM users u JOIN consultants cons ON u.email = cons.email WHERE cons.id = ?");
+            if ($stmtUser) {
+                $stmtUser->bind_param("i", $saleFilterId);
+                $stmtUser->execute();
+                $resUser = $stmtUser->get_result()->fetch_assoc();
+                if ($resUser) {
+                    $saleUserId = (int)$resUser['id'];
+                }
+                $stmtUser->close();
+            }
+        }
+
+        $contactsWhere = ["c.tenant_id = ?", "c.deleted_at IS NULL"];
+        $contactsParams = [$tid];
+        $contactsTypes = "i";
+
+        if ($isSale) {
+            $contactsWhere[] = "(c.owner_id = ? OR FIND_IN_SET(?, c.collaborator_ids))";
+            $contactsParams[] = $saleUserId;
+            $contactsParams[] = $saleUserId;
+            $contactsTypes .= "ii";
+        } else {
+            if ($saleFilterId !== null) {
+                $contactsWhere[] = "(c.owner_id = ? OR FIND_IN_SET(?, c.collaborator_ids))";
+                $contactsParams[] = $saleUserId;
+                $contactsParams[] = $saleUserId;
+                $contactsTypes .= "ii";
+            }
+        }
+
+        $contactsWhereClause = implode(" AND ", $contactsWhere) . " AND " . $contactsDateCondition;
+
+        $stmtContactsCount = $conn->prepare("SELECT COUNT(*) as cnt FROM contacts c WHERE $contactsWhereClause");
+        $contactsCount = 0;
+        if ($stmtContactsCount) {
+            $stmtContactsCount->bind_param($contactsTypes, ...$contactsParams);
+            $stmtContactsCount->execute();
+            $contactsCount = (int) ($stmtContactsCount->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtContactsCount->close();
+        }
+
+        // 1. DATA LỖI & TICKET
+        $stmtErrorTicket = $conn->prepare("
+            SELECT COUNT(DISTINCT c.id) as cnt 
+            FROM contacts c 
+            WHERE $contactsWhereClause 
+              AND (
+                EXISTS (
+                    SELECT 1 FROM data_reports dr 
+                    JOIN leads l2 ON dr.lead_id = l2.id 
+                    WHERE l2.person_id = c.person_id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM leads l2 
+                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                    JOIN users u2 ON u2.id = c.owner_id
+                    JOIN consultants cons2 ON u2.email = cons2.email
+                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                )
+              )
+        ");
+        $errorTicketCount = 0;
+        if ($stmtErrorTicket) {
+            $stmtErrorTicket->bind_param($contactsTypes, ...$contactsParams);
+            $stmtErrorTicket->execute();
+            $errorTicketCount = (int) ($stmtErrorTicket->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtErrorTicket->close();
+        }
+
+        // TỪ DATABANK
+        $stmtDatabank = $conn->prepare("
+            SELECT COUNT(DISTINCT c.id) as cnt 
+            FROM contacts c 
+            WHERE $contactsWhereClause 
+              AND NOT (
+                EXISTS (
+                    SELECT 1 FROM data_reports dr 
+                    JOIN leads l2 ON dr.lead_id = l2.id 
+                    WHERE l2.person_id = c.person_id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM leads l2 
+                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                    JOIN users u2 ON u2.id = c.owner_id
+                    JOIN consultants cons2 ON u2.email = cons2.email
+                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                )
+              )
+              AND (c.source = 'databank' OR EXISTS (
+                  SELECT 1 FROM leads l2 
+                  JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                  JOIN users u2 ON u2.id = c.owner_id
+                  JOIN consultants cons2 ON u2.email = cons2.email
+                  WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status = 'databank_claim'
+              ))
+        ");
+        $databankCount = 0;
+        if ($stmtDatabank) {
+            $stmtDatabank->bind_param($contactsTypes, ...$contactsParams);
+            $stmtDatabank->execute();
+            $databankCount = (int) ($stmtDatabank->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtDatabank->close();
+        }
+
+        // ĐƯỢC CHIA (Exclude coop contacts)
+        $stmtDistributed = $conn->prepare("
+            SELECT COUNT(DISTINCT c.id) as cnt 
+            FROM contacts c 
+            WHERE $contactsWhereClause 
+              AND NOT (
+                EXISTS (
+                    SELECT 1 FROM data_reports dr 
+                    JOIN leads l2 ON dr.lead_id = l2.id 
+                    WHERE l2.person_id = c.person_id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM leads l2 
+                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                    JOIN users u2 ON u2.id = c.owner_id
+                    JOIN consultants cons2 ON u2.email = cons2.email
+                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                )
+              )
+              AND c.source NOT IN ('databank', 'ca_nhan', 'gioi_thieu')
+              AND (c.collaborator_ids IS NULL OR c.collaborator_ids = '')
+              AND EXISTS (
+                  SELECT 1 FROM leads l2 
+                  JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                  JOIN users u2 ON u2.id = c.owner_id
+                  JOIN consultants cons2 ON u2.email = cons2.email
+                  WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
+              )
+        ");
+        $distributedCount = 0;
+        if ($stmtDistributed) {
+            $stmtDistributed->bind_param($contactsTypes, ...$contactsParams);
+            $stmtDistributed->execute();
+            $distributedCount = (int) ($stmtDistributed->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtDistributed->close();
+        }
+
+        // HỢP TÁC (COOP)
+        $stmtCoop = $conn->prepare("
+            SELECT COUNT(DISTINCT c.id) as cnt 
+            FROM contacts c 
+            WHERE $contactsWhereClause 
+              AND NOT (
+                EXISTS (
+                    SELECT 1 FROM data_reports dr 
+                    JOIN leads l2 ON dr.lead_id = l2.id 
+                    WHERE l2.person_id = c.person_id
+                )
+                OR EXISTS (
+                    SELECT 1 FROM leads l2 
+                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                    JOIN users u2 ON u2.id = c.owner_id
+                    JOIN consultants cons2 ON u2.email = cons2.email
+                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                )
+              )
+              AND (FIND_IN_SET(?, c.collaborator_ids) OR (c.owner_id = ? AND c.collaborator_ids IS NOT NULL AND c.collaborator_ids != ''))
+        ");
+        $coopCount = 0;
+        if ($stmtCoop) {
+            $coopParams = $contactsParams;
+            $coopParams[] = $saleUserId;
+            $coopParams[] = $saleUserId;
+            $coopTypes = $contactsTypes . "ii";
+            $stmtCoop->bind_param($coopTypes, ...$coopParams);
+            $stmtCoop->execute();
+            $coopCount = (int) ($stmtCoop->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtCoop->close();
+        }
+
+        // TỰ NHẬP
+        $selfCount = max(0, $contactsCount - $errorTicketCount - $databankCount - $distributedCount - $coopCount);
+
+        // 4. Query distribution by round using contacts table
+        $sqlByRound = "
+            SELECT COALESCE(r.round_name, 'Tự nhập / Khác') as round_name, COUNT(c.id) as count
+            FROM contacts c
+            LEFT JOIN leads l ON c.person_id = l.person_id
+            LEFT JOIN users u2 ON u2.id = c.owner_id
+            LEFT JOIN consultants cons2 ON u2.email = cons2.email
+            LEFT JOIN (
+                SELECT lead_id, assigned_to, MAX(round_id) as round_id 
+                FROM distribution_logs 
+                WHERE status != 'silent'
+                GROUP BY lead_id, assigned_to
+            ) dl ON dl.lead_id = l.id AND dl.assigned_to = cons2.id
+            LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+            WHERE $contactsWhereClause
+            GROUP BY COALESCE(r.round_name, 'Tự nhập / Khác')
+        ";
+        $byRound = [];
+        $stmtBR = $conn->prepare($sqlByRound);
+        if ($stmtBR) {
+            if (!empty($contactsTypes)) {
+                $stmtBR->bind_param($contactsTypes, ...$contactsParams);
+            }
+            $stmtBR->execute();
+            $resBR = $stmtBR->get_result();
+            while ($row = $resBR->fetch_assoc()) {
+                $byRound[] = $row;
+            }
+            $stmtBR->close();
+        }
+
+        // 5. Query distribution by hour using contacts table
+        $sqlByHour = "
+            SELECT HOUR(c.created_at) as hr, COUNT(c.id) as count
+            FROM contacts c
+            WHERE $contactsWhereClause
+            GROUP BY HOUR(c.created_at)
+            ORDER BY hr ASC
+        ";
+        $byHour = array_fill(0, 24, 0);
+        $stmtBH = $conn->prepare($sqlByHour);
+        if ($stmtBH) {
+            if (!empty($contactsTypes)) {
+                $stmtBH->bind_param($contactsTypes, ...$contactsParams);
+            }
+            $stmtBH->execute();
+            $resBH = $stmtBH->get_result();
+            while ($row = $resBH->fetch_assoc()) {
+                $byHour[(int) $row['hr']] = (int) $row['count'];
+            }
+            $stmtBH->close();
+        }
+
+        // 6. Query active consultants list if user is admin
+        $consultantsList = [];
+        if (!$isSale) {
+            $resC = $conn->query("SELECT c.id, c.name, c.email, c.avatar, u.id AS user_id FROM consultants c LEFT JOIN users u ON c.email = u.email WHERE c.status = 'active' ORDER BY c.name ASC");
+            if ($resC) {
+                while ($row = $resC->fetch_assoc()) {
+                    $consultantsList[] = $row;
+                }
+            }
+        }
+
+        $targetUserId = null;
+        if ($saleId > 0) {
+            $stmtUId = $conn->prepare("SELECT u.id FROM users u JOIN consultants c ON u.email = c.email WHERE c.id = ? LIMIT 1");
+            $stmtUId->bind_param("i", $saleId);
+            $stmtUId->execute();
+            $uRow = $stmtUId->get_result()->fetch_assoc();
+            $stmtUId->close();
+            if ($uRow) {
+                $targetUserId = (int)$uRow['id'];
+            }
+        }
+        if (!$targetUserId) {
+            $targetUserId = (int)$decodedUser['id'];
+        }
+
+        $vacationMode = 0;
+        if ($targetUserId > 0) {
+            $stmtV = $conn->prepare("SELECT vacation_mode FROM users WHERE id = ?");
+            $stmtV->bind_param("i", $targetUserId);
+            $stmtV->execute();
+            $resV = $stmtV->get_result();
+            if ($rowV = $resV->fetch_assoc()) {
+                $vacationMode = (int) $rowV['vacation_mode'];
+            }
+            $stmtV->close();
+        }
+
+        $consultantProfile = null;
+        if ($targetUserId > 0) {
+            $stmtP = $conn->prepare("SELECT id, full_name AS name, email, status, leave_start, leave_end, work_start_time, work_end_time, work_schedule, avatar_url AS avatar, vacation_mode, dob, gender, citizen_id, address, bank_name, bank_account, extra_fields_json, bio, use_custom_work_hours FROM users WHERE id = ?");
+            $stmtP->bind_param("i", $targetUserId);
+            $stmtP->execute();
+            $consultantProfile = $stmtP->get_result()->fetch_assoc();
+            if ($consultantProfile) {
+                $useCustom = (int)($consultantProfile['use_custom_work_hours'] ?? 0);
+                if ($useCustom !== 1 || empty($consultantProfile['work_schedule'])) {
+                    $globalStart = '08:00';
+                    $globalEnd = '17:30';
+                    $globalSchedule = null;
+
+                    $resGlobal = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_start_time', 'global_work_end_time', 'global_work_schedule')");
+                    if ($resGlobal) {
+                        while ($gRow = $resGlobal->fetch_assoc()) {
+                            if ($gRow['setting_key'] === 'global_work_start_time') $globalStart = $gRow['setting_value'];
+                            if ($gRow['setting_key'] === 'global_work_end_time') $globalEnd = $gRow['setting_value'];
+                            if ($gRow['setting_key'] === 'global_work_schedule') $globalSchedule = $gRow['setting_value'];
+                        }
+                    }
+                    $consultantProfile['work_start_time'] = $globalStart;
+                    $consultantProfile['work_end_time'] = $globalEnd;
+                    $consultantProfile['work_schedule'] = $globalSchedule;
+                }
+
+                if (!empty($consultantProfile['work_schedule'])) {
+                    if (is_string($consultantProfile['work_schedule'])) {
+                        $consultantProfile['work_schedule'] = json_decode($consultantProfile['work_schedule'], true);
+                    }
+                }
+
+                // Check if user has approved morning leave request today
+                $hasMorningLeave = false;
+                $morningLeaveStmt = $conn->prepare("
+                    SELECT 1 
+                    FROM hrm_leave_requests 
+                    WHERE user_id = ? AND status = 'approved' AND DATE(start_date) = ?
+                      AND leave_type IN ('annual', 'sick', 'compensatory', 'unpaid', 'remote_work')
+                      AND HOUR(start_date) < 12
+                    LIMIT 1
+                ");
+                if ($morningLeaveStmt) {
+                    $todayYmd = date('Y-m-d');
+                    $morningLeaveStmt->bind_param("is", $targetUserId, $todayYmd);
+                    $morningLeaveStmt->execute();
+                    $hasMorningLeave = (bool)$morningLeaveStmt->get_result()->fetch_assoc();
+                    $morningLeaveStmt->close();
+                }
+                $consultantProfile['has_morning_leave_today'] = $hasMorningLeave;
+
+                // Fetch night shift registrations for this user
+                $nightShifts = [];
+                $stmtNS = $conn->prepare("SELECT id, shift_date, approved, created_at FROM night_shift_registrations WHERE user_id = ? ORDER BY shift_date DESC LIMIT 100");
+                if ($stmtNS) {
+                    $stmtNS->bind_param("i", $targetUserId);
+                    $stmtNS->execute();
+                    $resNS = $stmtNS->get_result();
+                    while ($row = $resNS->fetch_assoc()) {
+                        $nightShifts[] = [
+                            'id' => (int)$row['id'],
+                            'shift_date' => $row['shift_date'],
+                            'approved' => (int)$row['approved'],
+                            'created_at' => $row['created_at']
+                        ];
+                    }
+                    $stmtNS->close();
+                }
+                $consultantProfile['night_shifts'] = $nightShifts;
+
+                // Fetch weekend shift registrations for this user
+                $weekendShifts = [];
+                $stmtWS = $conn->prepare("SELECT id, shift_date, approved, created_at FROM weekend_shift_registrations WHERE user_id = ? ORDER BY shift_date DESC LIMIT 100");
+                if ($stmtWS) {
+                    $stmtWS->bind_param("i", $targetUserId);
+                    $stmtWS->execute();
+                    $resWS = $stmtWS->get_result();
+                    while ($row = $resWS->fetch_assoc()) {
+                        $weekendShifts[] = [
+                            'id' => (int)$row['id'],
+                            'shift_date' => $row['shift_date'],
+                            'approved' => (int)$row['approved'],
+                            'created_at' => $row['created_at']
+                        ];
+                    }
+                    $stmtWS->close();
+                }
+                $consultantProfile['weekend_shifts'] = $weekendShifts;
+            }
+            $stmtP->close();
+        }
+
+        $uncontactedCount = 0;
+        $uncontactedQuery = "
+            SELECT COUNT(*) as cnt 
+            FROM contacts c
+            WHERE c.deleted_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM activities WHERE related_type = 'contact' AND related_id = c.id)
+              AND NOT EXISTS (SELECT 1 FROM notes WHERE entity_type = 'contact' AND entity_id = c.id)
+        ";
+        if ($isSale) {
+            $uncontactedQuery .= " AND c.owner_id = " . (int)$saleUserId;
+        } else {
+            if ($saleFilterId !== null) {
+                $uncontactedQuery .= " AND c.owner_id = " . (int)$saleUserId;
+            }
+        }
+        $resUncontacted = $conn->query($uncontactedQuery);
+        if ($resUncontacted) {
+            $uncontactedCount = (int) ($resUncontacted->fetch_assoc()['cnt'] ?? 0);
+        }
+        $leadRecallMinutes = (int) get_system_setting($conn, 'lead_response_timeout_minutes');
+
+        echo json_encode([
+            'success' => true,
+            'leads' => $leads,
+            'uncontacted_count' => $uncontactedCount,
+            'total_count' => $totalCount,
+            'rounds' => $rounds,
+            'consultants' => $consultantsList,
+            'consultant_profile' => $consultantProfile,
+            'vacation_mode' => $vacationMode,
+            'lead_recall_minutes' => $leadRecallMinutes,
+            'below_standard_fallback_round_id' => (int) get_system_setting($conn, 'ai_screener_below_standard_fallback_round_id'),
+            'below_standard_fallback_round_ids' => getAllFallbackRoundIds($conn),
+            'duplicate_check_months' => (int) get_system_setting($conn, 'duplicate_check_months') ?: 6,
+            'report_error_reasons' => get_normalized_report_error_reasons($conn),
+            'is_allowed_to_report' => true,
+            'stats' => [
+                'total_received' => $contactsCount,
+                'distributed_count' => $distributedCount,
+                'coop_count' => $coopCount,
+                'databank_count' => $databankCount,
+                'self_count' => $selfCount,
+                'error_ticket_count' => $errorTicketCount,
+                'tickets_total' => (int) ($ticketStats['total'] ?? 0),
+                'tickets_approved' => (int) ($ticketStats['approved'] ?? 0),
+                'tickets_rejected' => (int) ($ticketStats['rejected'] ?? 0),
+                'tickets_pending' => (int) ($ticketStats['pending'] ?? 0)
+            ],
+            'by_round' => $byRound,
+            'by_hour' => $byHour
+        ]);
+        break;
+
+    case 'get_sale_lead_timeline':
+        $isSale = in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true);
+        $saleId = $isSale ? ($currentSaleConsultantId ?? 0) : (int) $decodedUser['id'];
+        $leadId = isset($_GET['lead_id']) ? (int) $_GET['lead_id'] : 0;
+
+        if (empty($leadId)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu lead_id']);
+            break;
+        }
+
+        // Security check for sale role: did this sale receive this lead?
+        if ($isSale) {
+            $stmtCheck = $conn->prepare("
+                SELECT 1 
+                FROM distribution_logs 
+                WHERE lead_id = ? AND assigned_to = ? AND status IN ('assigned', 'compensation', 'reminder', 'rule_6_month', 'pending_work_hours', 'fallback') 
+                LIMIT 1
+            ");
+            $stmtCheck->bind_param("ii", $leadId, $saleId);
+            $stmtCheck->execute();
+            $hasAccess = $stmtCheck->get_result()->num_rows > 0;
+            $stmtCheck->close();
+
+            if (!$hasAccess) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Forbidden: Bạn không có quyền truy cập dữ liệu này']);
+                break;
+            }
+        }
+
+        require_once __DIR__ . '/webhook_logic.php';
+        $timeline = getLeadHistoryTimeline($conn, $leadId);
+
+        echo json_encode([
+            'success' => true,
+            'timeline' => $timeline
+        ]);
+        break;
+
+    case 'get_stats':
+        $todayStr = date('Y-m-d');
+        $stmt = $conn->prepare("SELECT 
+            COUNT(*) as total,
+            SUM(IF(status='assigned',1,0)) as assigned,
+            SUM(IF(status='duplicate',1,0)) as duplicates
+        FROM distribution_logs WHERE received_at >= ? AND received_at <= ?");
+        $todayStart = $todayStr . ' 00:00:00';
+        $todayEnd = $todayStr . ' 23:59:59';
+        $stmt->bind_param("ss", $todayStart, $todayEnd);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'total_today' => (int) $row['total'],
+                'assigned' => (int) $row['assigned'],
+                'duplicates' => (int) $row['duplicates']
+            ]
+        ]);
+        break;
+
+    case 'get_logs':
+        $date = $_GET['date'] ?? 'all';
+        $dateCondition = "1=1";
+
+        if ($date === 'today' || $date === 'Hôm nay') {
+            $dateCondition = "dl.received_at >= CURDATE() AND dl.received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } else if ($date === 'yesterday' || $date === 'Hôm qua') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND dl.received_at < CURDATE()";
+        } else if ($date === 'this_week' || $date === 'Tuần này') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND dl.received_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === 'last_week' || $date === 'Tuần trước') {
+            $dateCondition = "dl.received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND dl.received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } else if ($date === 'two_weeks_ago' || $date === 'Tuần trước nữa') {
+            $dateCondition = "dl.received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND dl.received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === '7days' || $date === '7 ngày qua') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } else if ($date === '30days' || $date === '30 ngày qua') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } else if ($date === 'this_month' || $date === 'Tháng này') {
+            $dateCondition = "dl.received_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND dl.received_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } else if ($date === 'last_month' || $date === 'Tháng trước') {
+            $dateCondition = "dl.received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND dl.received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+            $start = $conn->real_escape_string($matches[1]);
+            $end = $conn->real_escape_string($matches[2]);
+            $dateCondition = "dl.received_at >= '$start 00:00:00' AND dl.received_at <= '$end 23:59:59'";
+        }
+
+        $dateConditionSubQuery = str_replace('dl.received_at', 'received_at', $dateCondition);
+
+        $extraCondition = "(p.is_public IS NULL OR p.is_public = 0) AND dl.status != 'released_to_kho' AND dl.status != 'databank'";
+        $isFilteringActive = false;
+
+        if (isset($_GET['status']) && $_GET['status'] !== 'all') {
+            $statusInput = $_GET['status'];
+            if ($statusInput === 'not_contacted') {
+                $extraCondition .= " AND l.status != 'reminder' AND l.is_accepted = 1 AND l.source NOT IN ('ca_nhan', 'gioi_thieu') 
+                    AND EXISTS (
+                        SELECT 1 FROM contacts co 
+                        WHERE co.person_id = l.person_id AND co.owner_id = dl.assigned_to AND co.deleted_at IS NULL
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM activities act 
+                        JOIN contacts co2 ON act.related_type = 'contact' AND act.related_id = co2.id
+                        WHERE co2.person_id = l.person_id AND co2.owner_id = dl.assigned_to AND co2.deleted_at IS NULL
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM notes n 
+                        JOIN contacts co3 ON n.entity_type = 'contact' AND n.entity_id = co3.id
+                        WHERE co3.person_id = l.person_id AND co3.owner_id = dl.assigned_to AND co3.deleted_at IS NULL
+                    )";
+            } else if (strpos($statusInput, ',') !== false) {
+                $statuses = explode(',', $statusInput);
+                $escapedStatuses = array_map(function ($s) use ($conn) {
+                    return "'" . $conn->real_escape_string(trim($s)) . "'";
+                }, $statuses);
+                $extraCondition .= " AND dl.status IN (" . implode(',', $escapedStatuses) . ")";
+            } else {
+                $status = $conn->real_escape_string($statusInput);
+                $extraCondition .= " AND dl.status = '$status'";
+            }
+            $isFilteringActive = true;
+        }
+        if (isset($_GET['exclude_status'])) {
+            $excludeStatus = $conn->real_escape_string($_GET['exclude_status']);
+            $extraCondition .= " AND dl.status != '$excludeStatus'";
+        }
+        if (isset($_GET['consultant']) && $_GET['consultant'] !== 'all') {
+            $consultant = $conn->real_escape_string($_GET['consultant']);
+            $extraCondition .= " AND c.name = '$consultant'";
+            $isFilteringActive = true;
+        }
+        if (isset($_GET['round']) && $_GET['round'] !== 'all') {
+            $round = $conn->real_escape_string($_GET['round']);
+            $extraCondition .= " AND dr.round_name = '$round'";
+            $isFilteringActive = true;
+        }
+        if (isset($_GET['search']) && trim($_GET['search']) !== '') {
+            $search = $conn->real_escape_string(trim($_GET['search']));
+            $extraCondition .= " AND (l.name LIKE '%$search%' OR l.phone LIKE '%$search%' OR l.email LIKE '%$search%')";
+            $isFilteringActive = true;
+        }
+
+        // Apply silent exclusion rule if no filters active
+        if (!$isFilteringActive) {
+            $extraCondition .= " AND dl.status != 'silent'";
+        }
+
+        // Security check for Sale and Manager roles
+        if (isset($decodedUser['role']) && $decodedUser['role'] === 'sale') {
+            $extraCondition .= " AND dl.assigned_to = " . (int)($currentSaleConsultantId ?? 0);
+        } elseif (isset($decodedUser['role']) && $decodedUser['role'] === 'manager') {
+            // Check if this manager is leading a sales team or non-sales team (e.g. Marketing)
+            $isMktOrNonSale = false;
+            $mgrTeamRes = $conn->query("SELECT u.team_id, t.name as team_name, u.job_title FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = " . (int)$decodedUser['user_id']);
+            if ($mgrTeamRes && $uInfo = $mgrTeamRes->fetch_assoc()) {
+                $tName = mb_strtolower($uInfo['team_name'] ?? '');
+                $jTitle = mb_strtolower($uInfo['job_title'] ?? '');
+                if ((int)$uInfo['team_id'] === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
+                    $isMktOrNonSale = true;
+                }
+            }
+
+            if (!$isMktOrNonSale) {
+                $teamMemberIds = [];
+                $stmtTeam = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                $stmtTeam->bind_param("i", $decodedUser['user_id']);
+                $stmtTeam->execute();
+                $resTeam = $stmtTeam->get_result();
+                while ($tRow = $resTeam->fetch_assoc()) {
+                    $teamMemberIds[] = (int)$tRow['id'];
+                }
+                $stmtTeam->close();
+
+                // Also include the manager's own consultant ID
+                $stmtSelf = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+                $stmtSelf->bind_param("s", $decodedUser['email']);
+                $stmtSelf->execute();
+                $selfRow = $stmtSelf->get_result()->fetch_assoc();
+                $stmtSelf->close();
+                if ($selfRow) {
+                    $teamMemberIds[] = (int)$selfRow['id'];
+                }
+
+                $teamMemberIds = array_unique(array_filter($teamMemberIds));
+                if (!empty($teamMemberIds)) {
+                    $extraCondition .= " AND dl.assigned_to IN (" . implode(',', $teamMemberIds) . ")";
+                } else if ($selfRow) {
+                    $extraCondition .= " AND dl.assigned_to = " . (int)$selfRow['id'];
+                }
+            }
+        }
+
+        // Get total count first with all active filters
+        $joinLeads = (strpos($extraCondition, 'l.') !== false || strpos($extraCondition, 'p.') !== false) ? "LEFT JOIN leads l ON dl.lead_id = l.id LEFT JOIN persons p ON l.person_id = p.id" : "";
+        $joinConsultants = (strpos($extraCondition, 'c.') !== false) ? "LEFT JOIN consultants c ON dl.assigned_to = c.id" : "";
+        $joinRounds = (strpos($extraCondition, 'dr.') !== false) ? "LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id" : "";
+
+        $countRes = $conn->query("
+            SELECT COUNT(*) as cnt 
+            FROM distribution_logs dl 
+            INNER JOIN (
+                SELECT lead_id, MAX(id) as max_id 
+                FROM distribution_logs 
+                WHERE status != 'silent' AND $dateConditionSubQuery
+                GROUP BY lead_id
+            ) dl_max ON dl.id = dl_max.max_id
+            $joinLeads 
+            $joinConsultants
+            $joinRounds
+            WHERE $dateCondition AND $extraCondition
+        ");
+        $totalCount = (int) ($countRes->fetch_assoc()['cnt'] ?? 0);
+
+        // Check for pagination
+        $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+        $pageSize = isset($_GET['pageSize']) ? (int) $_GET['pageSize'] : 50;
+        if ($page < 1)
+            $page = 1;
+        if ($pageSize < 1)
+            $pageSize = 50;
+        $offset = ($page - 1) * $pageSize;
+
+        if (!isset($_GET['page'])) {
+            $LIMIT = 500;
+            if (isset($_GET['limit']) && $_GET['limit'] === 'all' && isset($decodedUser) && ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin')) {
+                $LIMIT = 50000; // Admin full dump limit
+            }
+            $limitStr = "LIMIT $LIMIT";
+            $responseLimit = $LIMIT;
+        } else {
+            $limitStr = "LIMIT $pageSize OFFSET $offset";
+            $responseLimit = $pageSize;
+        }
+
+        $res = $conn->query("
+            SELECT 
+                dl.id, 
+                dl.lead_id,
+                l.name as lead_name, 
+                l.phone, 
+                l.email, 
+                l.source, 
+                l.type,
+                l.note,
+                l.ai_screener_status,
+                l.ai_evaluation,
+                dl.status, 
+                c.name as assigned_to_name, 
+                c.avatar as assigned_to_avatar, 
+                dr.round_name, 
+                dl.received_at as created_at,
+                r.status as report_status,
+                r.resolved_by,
+                r.resolved_at,
+                p.is_public as is_public,
+                p.id as person_id,
+                (SELECT MAX(received_at) FROM distribution_logs WHERE lead_id = dl.lead_id AND id < dl.id) as last_activity_at
+            FROM distribution_logs dl
+            INNER JOIN (
+                SELECT lead_id, MAX(id) as max_id 
+                FROM distribution_logs 
+                WHERE status != 'silent' AND $dateConditionSubQuery
+                GROUP BY lead_id
+            ) dl_max ON dl.id = dl_max.max_id
+            LEFT JOIN leads l ON dl.lead_id = l.id
+            LEFT JOIN persons p ON l.person_id = p.id
+            LEFT JOIN consultants c ON dl.assigned_to = c.id
+            LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
+            LEFT JOIN (
+                SELECT r1.* FROM data_reports r1
+                INNER JOIN (
+                    SELECT lead_id, consultant_id, round_id, MAX(id) as max_r_id
+                    FROM data_reports
+                    GROUP BY lead_id, consultant_id, round_id
+                ) r2 ON r1.id = r2.max_r_id
+            ) r ON r.lead_id = dl.lead_id AND r.consultant_id = dl.assigned_to AND r.round_id = dl.round_id
+            WHERE $dateCondition AND $extraCondition
+            ORDER BY dl.received_at DESC 
+            $limitStr
+        ");
+        $data = [];
+        $personIds = [];
+        while ($row = $res->fetch_assoc()) {
+            $row['takers'] = [];
+            $data[] = $row;
+            $personId = isset($row['person_id']) ? (int)$row['person_id'] : 0;
+            if ($personId > 0) {
+                $personIds[] = $personId;
+            }
+        }
+
+        if (!empty($personIds)) {
+            $personIds = array_unique($personIds);
+            $inClause = implode(',', array_map('intval', $personIds));
+            $tQuery = "SELECT c.person_id, c.id as contact_id, c.owner_id as id, cons.name, cons.avatar, c.created_at as claimed_at 
+                       FROM contacts c
+                       JOIN users u ON c.owner_id = u.id
+                       JOIN consultants cons ON u.email = cons.email
+                       WHERE c.person_id IN ($inClause) AND c.deleted_at IS NULL";
+            $tRes = $conn->query($tQuery);
+            if ($tRes) {
+                $takersMap = [];
+                while ($tRow = $tRes->fetch_assoc()) {
+                    $pid = $tRow['person_id'];
+                    unset($tRow['person_id']);
+                    $takersMap[$pid][] = $tRow;
+                }
+                foreach ($data as &$row) {
+                    $pid = isset($row['person_id']) ? (int)$row['person_id'] : 0;
+                    if (isset($takersMap[$pid])) {
+                        $row['takers'] = $takersMap[$pid];
+                    }
+                }
+                unset($row);
+            }
+        }
+        echo json_encode(['success' => true, 'data' => $data, 'total_count' => $totalCount, 'limit' => $responseLimit]);
+        break;
+
+    case 'get_lead_notification_status':
+        if (!isset($decodedUser) || !$decodedUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+
+        $leadId = isset($_GET['lead_id']) ? (int) $_GET['lead_id'] : 0;
+        if ($leadId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Lead ID không hợp lệ']);
+            break;
+        }
+
+        // Fetch lead details including direct notify status columns
+        $leadStmt = $conn->prepare("SELECT l.id, l.name, l.phone, l.email, l.assigned_to, l.created_at, l.zalo_notify_status, l.email_notify_status, l.telegram_notify_status, l.zalo_notify_sent_at, l.email_notify_sent_at, l.telegram_notify_sent_at FROM leads l WHERE l.id = ? LIMIT 1");
+        $leadStmt->bind_param("i", $leadId);
+        $leadStmt->execute();
+        $lead = $leadStmt->get_result()->fetch_assoc();
+        $leadStmt->close();
+
+        if (!$lead) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy khách hàng']);
+            break;
+        }
+
+        // If user is a sale, check if they own the lead. If manager, check if it belongs to their team members
+        if ($decodedUser['role'] === 'sale') {
+            $saleStmt = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+            $saleStmt->bind_param("s", $decodedUser['email']);
+            $saleStmt->execute();
+            $sRow = $saleStmt->get_result()->fetch_assoc();
+            $saleStmt->close();
+
+            if (!$sRow || (int)$lead['assigned_to'] !== (int)$sRow['id']) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xem thông tin khách hàng này']);
+                break;
+            }
+        } elseif ($decodedUser['role'] === 'manager') {
+            $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtM->bind_param("i", $decodedUser['user_id']);
+            $stmtM->execute();
+            $resM = $stmtM->get_result();
+            $teamIds = [];
+            while ($mRow = $resM->fetch_assoc()) {
+                $teamIds[] = (int)$mRow['id'];
+            }
+            $stmtM->close();
+
+            if (!in_array((int)$lead['assigned_to'], $teamIds, true) && (int)$lead['assigned_to'] !== ($currentSaleConsultantId ?? 0)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xem thông tin khách hàng này']);
+                break;
+            }
+        }
+
+        $assignedTo = $lead['assigned_to'];
+        $saleZaloId = '';
+        $saleEmail = '';
+        $saleTelegramId = '';
+
+        if ($assignedTo) {
+            $saleStmt = $conn->prepare("SELECT email, zalo_chat_id, telegram_chat_id FROM consultants WHERE id = ? LIMIT 1");
+            $saleStmt->bind_param("i", $assignedTo);
+            $saleStmt->execute();
+            $sRow = $saleStmt->get_result()->fetch_assoc();
+            if ($sRow) {
+                $saleEmail = $sRow['email'] ?? '';
+                $saleZaloId = $sRow['zalo_chat_id'] ?? '';
+                $saleTelegramId = $sRow['telegram_chat_id'] ?? '';
+            }
+            $saleStmt->close();
+        }
+
+        // Extract statuses from lead
+        $zaloNotifyStatus = $lead['zalo_notify_status'] ?? 'none';
+        $emailNotifyStatus = $lead['email_notify_status'] ?? 'none';
+        $telegramNotifyStatus = $lead['telegram_notify_status'] ?? 'none';
+
+        // Map Email
+        $mailQueued = ($emailNotifyStatus !== 'none');
+        $mailFinalStatus = $mailQueued ? $emailNotifyStatus : 'missed';
+
+        // Map Zalo
+        $zaloQueued = ($zaloNotifyStatus !== 'none');
+        if (!$zaloQueued && empty($saleZaloId)) {
+            $zaloFinalStatus = 'no_zalo_config';
+        } else if ($zaloQueued) {
+            $zaloFinalStatus = $zaloNotifyStatus;
+        } else {
+            $zaloFinalStatus = 'missed';
+        }
+
+        // Map Telegram
+        $telegramQueued = ($telegramNotifyStatus !== 'none');
+        if (!$telegramQueued && empty($saleTelegramId)) {
+            $telegramFinalStatus = 'no_telegram_config';
+        } else if ($telegramQueued) {
+            $telegramFinalStatus = $telegramNotifyStatus;
+        } else {
+            $telegramFinalStatus = 'missed';
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'lead_id' => $leadId,
+                'email' => [
+                    'queued' => $mailQueued,
+                    'status' => $mailFinalStatus,
+                    'id' => null, // no longer query database queue primary keys
+                    'target' => $saleEmail,
+                    'sent_at' => $lead['email_notify_sent_at'] ? date('Y-m-d H:i:s', strtotime($lead['email_notify_sent_at'])) : null
+                ],
+                'zalo' => [
+                    'queued' => $zaloQueued,
+                    'status' => $zaloFinalStatus,
+                    'id' => null,
+                    'target' => $saleZaloId,
+                    'sent_at' => $lead['zalo_notify_sent_at'] ? date('Y-m-d H:i:s', strtotime($lead['zalo_notify_sent_at'])) : null
+                ],
+                'telegram' => [
+                    'queued' => $telegramQueued,
+                    'status' => $telegramFinalStatus,
+                    'id' => null,
+                    'target' => $saleTelegramId,
+                    'sent_at' => $lead['telegram_notify_sent_at'] ? date('Y-m-d H:i:s', strtotime($lead['telegram_notify_sent_at'])) : null
+                ]
+            ]
+        ]);
+        break;
+
+    case 'get_calendar_stats':
+        if (!isset($decodedUser) || !$decodedUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+
+        $year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
+        $month = isset($_GET['month']) ? (int) $_GET['month'] : (int) date('m');
+
+        if ($month < 1 || $month > 12) {
+            $month = (int) date('m');
+        }
+        if ($year < 2000 || $year > 2100) {
+            $year = (int) date('Y');
+        }
+
+        // Format dates
+        $daysInMonth = (int) date('t', strtotime(sprintf("%04d-%02d-01", $year, $month)));
+        $startDate = sprintf("%04d-%02d-01 00:00:00", $year, $month);
+        $endDate = sprintf("%04d-%02d-%02d 23:59:59", $year, $month, $daysInMonth);
+
+        $distFilter = '';
+        $ticketFilter = '';
+
+        if ($decodedUser['role'] === 'sale') {
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+            $stmtC->bind_param("s", $decodedUser['email']);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+            $consultantId = $cRow ? (int)$cRow['id'] : 0;
+
+            $distFilter = " AND dl.assigned_to = " . $consultantId;
+            $ticketFilter = " AND t.consultant_id = " . $consultantId;
+        } elseif ($decodedUser['role'] === 'manager' && (!isset($_GET['consultant']) || $_GET['consultant'] === 'all')) {
+            $teamMemberIds = [];
+            $stmtTeam = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->bind_param("i", $decodedUser['user_id']);
+            $stmtTeam->execute();
+            $resTeam = $stmtTeam->get_result();
+            while ($tRow = $resTeam->fetch_assoc()) {
+                $teamMemberIds[] = (int)$tRow['id'];
+            }
+            $stmtTeam->close();
+
+            if (!empty($teamMemberIds)) {
+                $listStr = implode(',', $teamMemberIds);
+                $distFilter = " AND dl.assigned_to IN ($listStr)";
+                $ticketFilter = " AND t.consultant_id IN ($listStr)";
+            } else {
+                $distFilter = " AND dl.assigned_to = " . (int)$decodedUser['user_id'];
+                $ticketFilter = " AND t.consultant_id = " . (int)$decodedUser['user_id'];
+            }
+        } elseif (isset($_GET['consultant']) && $_GET['consultant'] !== 'all') {
+            // Find consultant ID from name
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE name = ? LIMIT 1");
+            $stmtC->bind_param("s", $_GET['consultant']);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+            $consultantId = $cRow ? (int)$cRow['id'] : 0;
+
+            $distFilter = " AND dl.assigned_to = " . $consultantId;
+            $ticketFilter = " AND t.consultant_id = " . $consultantId;
+        }
+
+        // 1. Get distribution logs count per day
+        $distRes = $conn->query("
+            SELECT 
+                DATE(dl.received_at) as date_str,
+                SUM(CASE WHEN dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'databank_claim', 'fallback', 'success') AND l.is_accepted = 1 AND l.assigned_to = dl.assigned_to THEN 1 ELSE 0 END) as distributed,
+                SUM(CASE WHEN dl.status = 'blacklisted' THEN 1 ELSE 0 END) as blacklist,
+                SUM(CASE WHEN dl.status = 'reminder' THEN 1 ELSE 0 END) as reminder,
+                SUM(CASE WHEN dl.status IN ('error', 'no_consultant') THEN 1 ELSE 0 END) as error,
+                COUNT(*) as total
+            FROM distribution_logs dl
+            LEFT JOIN leads l ON dl.lead_id = l.id
+            WHERE dl.received_at >= '$startDate' AND dl.received_at <= '$endDate' AND dl.status != 'silent' $distFilter
+            GROUP BY DATE(dl.received_at)
+        ");
+
+        $stats = [];
+        if ($distRes) {
+            while ($row = $distRes->fetch_assoc()) {
+                $d = $row['date_str'];
+                $stats[$d] = [
+                    'distributed' => (int) $row['distributed'],
+                    'blacklist' => (int) $row['blacklist'],
+                    'reminder' => (int) $row['reminder'],
+                    'error' => (int) $row['error'],
+                    'total' => (int) $row['total'],
+                    'ticket_total' => 0,
+                    'ticket_approved' => 0
+                ];
+            }
+        }
+
+        // 2. Get tickets count per day
+        $ticketRes = $conn->query("
+            SELECT 
+                DATE(t.created_at) as date_str,
+                COUNT(*) as ticket_total,
+                SUM(CASE WHEN t.status IN ('approved', 'approved_no_comp') THEN 1 ELSE 0 END) as ticket_approved
+            FROM data_reports t
+            WHERE t.created_at >= '$startDate' AND t.created_at <= '$endDate' $ticketFilter
+            GROUP BY DATE(t.created_at)
+        ");
+
+        if ($ticketRes) {
+            while ($row = $ticketRes->fetch_assoc()) {
+                $d = $row['date_str'];
+                if (!isset($stats[$d])) {
+                    $stats[$d] = [
+                        'distributed' => 0,
+                        'blacklist' => 0,
+                        'reminder' => 0,
+                        'error' => 0,
+                        'total' => 0,
+                        'ticket_total' => 0,
+                        'ticket_approved' => 0
+                    ];
+                }
+                $stats[$d]['ticket_total'] = (int) $row['ticket_total'];
+                $stats[$d]['ticket_approved'] = (int) $row['ticket_approved'];
+            }
+        }
+
+        $pendingOnly = isset($_GET['pending_only']) && (int)$_GET['pending_only'] === 1;
+        $pendingFilterSO = $pendingOnly ? " AND i.status != 'paid'" : '';
+        $pendingFilterPO = $pendingOnly ? " AND e.is_refunded = 0" : '';
+
+        if (in_array($decodedUser['role'], ['accountant', 'admin', 'superadmin', 'super_admin', 'director'])) {
+            // 3. Get SO (invoices) stats per day
+            $soRes = $conn->query("
+                SELECT 
+                    DATE(i.issue_date) as date_str,
+                    COUNT(*) as so_count,
+                    SUM(i.total) as so_total
+                FROM invoices i
+                WHERE i.issue_date >= '$startDate' AND i.issue_date <= '$endDate' AND i.deleted_at IS NULL $pendingFilterSO
+                GROUP BY DATE(i.issue_date)
+            ");
+            if ($soRes) {
+                while ($row = $soRes->fetch_assoc()) {
+                    $d = $row['date_str'];
+                    if (!isset($stats[$d])) {
+                        $stats[$d] = [
+                            'distributed' => 0,
+                            'blacklist' => 0,
+                            'reminder' => 0,
+                            'error' => 0,
+                            'total' => 0,
+                            'ticket_total' => 0,
+                            'ticket_approved' => 0
+                        ];
+                    }
+                    $stats[$d]['so_count'] = (int)$row['so_count'];
+                    $stats[$d]['so_total'] = (float)$row['so_total'];
+                }
+            }
+
+            // Fetch pending deposit milestones
+            $dmRes = $conn->query("
+                SELECT 
+                    DATE(dm.expected_pay_date) as date_str,
+                    COUNT(*) as dm_count,
+                    SUM(dm.expected_amount) as dm_total
+                FROM deposit_milestones dm
+                JOIN deposits d ON dm.deposit_id = d.id
+                WHERE dm.expected_pay_date >= '$startDate' 
+                  AND dm.expected_pay_date <= '$endDate' 
+                  AND dm.status = 'pending' 
+                  AND d.status != 'cancelled'
+                GROUP BY DATE(dm.expected_pay_date)
+            ");
+            if ($dmRes) {
+                while ($row = $dmRes->fetch_assoc()) {
+                    $d = $row['date_str'];
+                    if (!isset($stats[$d])) {
+                        $stats[$d] = [
+                            'distributed' => 0,
+                            'blacklist' => 0,
+                            'reminder' => 0,
+                            'error' => 0,
+                            'total' => 0,
+                            'ticket_total' => 0,
+                            'ticket_approved' => 0
+                        ];
+                    }
+                    $stats[$d]['so_count'] = ($stats[$d]['so_count'] ?? 0) + (int)$row['dm_count'];
+                    $stats[$d]['so_total'] = ($stats[$d]['so_total'] ?? 0) + (float)$row['dm_total'];
+                }
+            }
+
+            // 4. Get PO (expenses) stats per day (grouped by payment date/refunded_at if paid, otherwise evidence date)
+            $poRes = $conn->query("
+                SELECT 
+                    DATE(COALESCE(e.refunded_at, e.date)) as date_str,
+                    COUNT(*) as po_count,
+                    SUM(e.amount) as po_total
+                FROM expenses e
+                WHERE COALESCE(e.refunded_at, e.date) >= '$startDate' AND COALESCE(e.refunded_at, e.date) <= '$endDate' AND e.deleted_at IS NULL $pendingFilterPO
+                GROUP BY DATE(COALESCE(e.refunded_at, e.date))
+            ");
+            if ($poRes) {
+                while ($row = $poRes->fetch_assoc()) {
+                    $d = $row['date_str'];
+                    if (!isset($stats[$d])) {
+                        $stats[$d] = [
+                            'distributed' => 0,
+                            'blacklist' => 0,
+                            'reminder' => 0,
+                            'error' => 0,
+                            'total' => 0,
+                            'ticket_total' => 0,
+                            'ticket_approved' => 0
+                        ];
+                    }
+                    $stats[$d]['po_count'] = (int)$row['po_count'];
+                    $stats[$d]['po_total'] = (float)$row['po_total'];
+                }
+            }
+        }
+
+        $financeSummary = null;
+        if (in_array($decodedUser['role'], ['accountant', 'admin', 'superadmin', 'super_admin', 'director'])) {
+            $soSumRes = $conn->query("
+                SELECT 
+                    SUM(CASE WHEN i.status = 'paid' THEN i.total ELSE 0 END) as so_paid,
+                    SUM(CASE WHEN i.status IN ('pending', 'overdue') THEN i.total ELSE 0 END) as so_pending
+                FROM invoices i
+                WHERE i.issue_date >= '$startDate' AND i.issue_date <= '$endDate' AND i.deleted_at IS NULL
+            ");
+            $soSums = $soSumRes ? $soSumRes->fetch_assoc() : ['so_paid' => 0, 'so_pending' => 0];
+
+            $poSumRes = $conn->query("
+                SELECT 
+                    SUM(CASE WHEN e.is_refunded = 1 THEN e.amount ELSE 0 END) as po_approved,
+                    SUM(CASE WHEN e.is_refunded = 0 THEN e.amount ELSE 0 END) as po_pending
+                FROM expenses e
+                WHERE COALESCE(e.refunded_at, e.date) >= '$startDate' AND COALESCE(e.refunded_at, e.date) <= '$endDate' AND e.deleted_at IS NULL
+            ");
+            $poSums = $poSumRes ? $poSumRes->fetch_assoc() : ['po_approved' => 0, 'po_pending' => 0];
+
+            $dmSumRes = $conn->query("
+                SELECT SUM(dm.expected_amount) as dm_pending
+                FROM deposit_milestones dm
+                JOIN deposits d ON dm.deposit_id = d.id
+                WHERE dm.expected_pay_date >= '$startDate' 
+                  AND dm.expected_pay_date <= '$endDate' 
+                  AND dm.status = 'pending' 
+                  AND d.status != 'cancelled'
+            ");
+            $dmSum = $dmSumRes ? $dmSumRes->fetch_assoc() : ['dm_pending' => 0];
+
+            $financeSummary = [
+                'so_paid' => (float)($soSums['so_paid'] ?? 0),
+                'so_pending' => (float)($soSums['so_pending'] ?? 0) + (float)($dmSum['dm_pending'] ?? 0),
+                'po_approved' => (float)($poSums['po_approved'] ?? 0),
+                'po_pending' => (float)($poSums['po_pending'] ?? 0),
+            ];
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => $stats,
+            'finance_summary' => $financeSummary
+        ]);
+        break;
+
+    case 'get_calendar_day_details':
+        if (!isset($decodedUser) || !$decodedUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+
+        $date = $_GET['date'] ?? '';
+        if (empty($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            echo json_encode(['success' => false, 'message' => 'Ngày không hợp lệ']);
+            break;
+        }
+
+        $escapedDate = $conn->real_escape_string($date);
+
+        $consultantFilter = '';
+        $distFilter = '';
+        $ticketFilter = '';
+
+        if ($decodedUser['role'] === 'sale') {
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+            $stmtC->bind_param("s", $decodedUser['email']);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+            $consultantId = $cRow ? (int)$cRow['id'] : 0;
+
+            $distFilter = " AND dl.assigned_to = " . $consultantId;
+            $ticketFilter = " AND r.consultant_id = " . $consultantId;
+        } elseif ($decodedUser['role'] === 'manager' && (!isset($_GET['consultant']) || $_GET['consultant'] === 'all')) {
+            $teamMemberIds = [];
+            $stmtTeam = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtTeam->bind_param("i", $decodedUser['user_id']);
+            $stmtTeam->execute();
+            $resTeam = $stmtTeam->get_result();
+            while ($tRow = $resTeam->fetch_assoc()) {
+                $teamMemberIds[] = (int)$tRow['id'];
+            }
+            $stmtTeam->close();
+
+            if (!empty($teamMemberIds)) {
+                $listStr = implode(',', $teamMemberIds);
+                $distFilter = " AND dl.assigned_to IN ($listStr)";
+                $ticketFilter = " AND r.consultant_id IN ($listStr)";
+            } else {
+                $distFilter = " AND dl.assigned_to = " . (int)$decodedUser['user_id'];
+                $ticketFilter = " AND r.consultant_id = " . (int)$decodedUser['user_id'];
+            }
+        } elseif (isset($_GET['consultant']) && $_GET['consultant'] !== 'all') {
+            // Find consultant ID from name
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE name = ? LIMIT 1");
+            $stmtC->bind_param("s", $_GET['consultant']);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+            $consultantId = $cRow ? (int)$cRow['id'] : 0;
+
+            $distFilter = " AND dl.assigned_to = " . $consultantId;
+            $ticketFilter = " AND r.consultant_id = " . $consultantId;
+        }
+
+        $view = $_GET['view'] ?? '';
+        $sales = [];
+
+        if ($view === 'individual') {
+            $salesRes = $conn->query("
+                SELECT 
+                    l.id as lead_id,
+                    l.name as lead_name,
+                    l.phone,
+                    l.source,
+                    dr.round_name,
+                    l.type,
+                    dl.received_at,
+                    dl.status,
+                    rep.status as report_status
+                FROM distribution_logs dl
+                JOIN leads l ON dl.lead_id = l.id
+                LEFT JOIN consultants c ON dl.assigned_to = c.id
+                LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
+                LEFT JOIN data_reports rep ON rep.lead_id = l.id AND rep.consultant_id = c.id
+                WHERE DATE(dl.received_at) = '$escapedDate' 
+                  AND dl.lead_id IS NOT NULL 
+                  AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'databank_claim', 'fallback', 'success')
+                  AND l.is_accepted = 1
+                  AND l.assigned_to = dl.assigned_to
+                  $distFilter
+                ORDER BY dl.id DESC
+            ");
+            if ($salesRes) {
+                while ($row = $salesRes->fetch_assoc()) {
+                    $sales[] = [
+                        'lead_id' => (int) $row['lead_id'],
+                        'lead_name' => $row['lead_name'] ?: 'Ẩn danh',
+                        'phone' => $row['phone'] ?: 'SĐT đã ẩn',
+                        'source' => $row['source'] ?: 'Chưa rõ',
+                        'round_name' => $row['round_name'] ?: 'Ngoài vòng',
+                        'type' => $row['type'],
+                        'received_at' => $row['received_at'],
+                        'status' => $row['status'],
+                        'report_status' => $row['report_status']
+                    ];
+                }
+            }
+        } else {
+            // a) Sale distribution statistics
+            $salesRes = $conn->query("
+                SELECT 
+                    c.name as sale_name, 
+                    c.avatar as sale_avatar, 
+                    dr.round_name,
+                    dl.status,
+                    COUNT(*) as cnt
+                FROM distribution_logs dl
+                LEFT JOIN consultants c ON dl.assigned_to = c.id
+                LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
+                LEFT JOIN leads l ON dl.lead_id = l.id
+                WHERE DATE(dl.received_at) = '$escapedDate' 
+                  AND dl.lead_id IS NOT NULL 
+                  AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'databank_claim', 'fallback', 'success')
+                  AND l.is_accepted = 1
+                  AND l.assigned_to = dl.assigned_to
+                  $distFilter
+                GROUP BY dl.assigned_to, dl.round_id, dl.status
+            ");
+            if ($salesRes) {
+                while ($row = $salesRes->fetch_assoc()) {
+                    $sales[] = [
+                        'sale_name' => $row['sale_name'] ?: 'Chưa phân bổ',
+                        'sale_avatar' => $row['sale_avatar'],
+                        'round_name' => $row['round_name'] ?: '-',
+                        'status' => $row['status'],
+                        'count' => (int) $row['cnt']
+                    ];
+                }
+            }
+        }
+
+        // b) Ticket details
+        $ticketsRes = $conn->query("
+            SELECT 
+                r.id, 
+                l.name as lead_name, 
+                l.phone, 
+                c.name as sale_name, 
+                c.avatar as sale_avatar, 
+                r.reason, 
+                r.status, 
+                r.created_at,
+                l.ai_screener_status
+            FROM data_reports r
+            LEFT JOIN leads l ON r.lead_id = l.id
+            LEFT JOIN consultants c ON r.consultant_id = c.id
+            WHERE DATE(r.created_at) = '$escapedDate' $ticketFilter
+        ");
+
+        $tickets = [];
+        if ($ticketsRes) {
+            while ($row = $ticketsRes->fetch_assoc()) {
+                $tickets[] = [
+                    'id' => (int) $row['id'],
+                    'lead_name' => $row['lead_name'] ?: 'Ẩn danh',
+                    'phone' => $row['phone'] ?: '-',
+                    'sale_name' => $row['sale_name'] ?: '-',
+                    'sale_avatar' => $row['sale_avatar'],
+                    'reason' => $row['reason'],
+                    'status' => $row['status'],
+                    'created_at' => $row['created_at'],
+                    'ai_screener_status' => $row['ai_screener_status']
+                ];
+            }
+        }
+
+        // c) Blacklist & error logs
+        $blacklistJoin = "";
+        $blacklistFilter = "";
+        if (!empty($consultantFilter)) {
+            $blacklistJoin = " LEFT JOIN consultants c ON dl.assigned_to = c.id ";
+            $blacklistFilter = $consultantFilter;
+        }
+
+        $blacklistRes = $conn->query("
+            SELECT 
+                dl.id,
+                l.name as lead_name,
+                l.phone,
+                l.email,
+                dl.status,
+                dl.message,
+                dl.received_at,
+                l.ai_screener_status
+            FROM distribution_logs dl
+            LEFT JOIN leads l ON dl.lead_id = l.id
+            $blacklistJoin
+            WHERE DATE(dl.received_at) = '$escapedDate' AND dl.status IN ('blacklisted', 'error', 'no_consultant', 'reminder', 'duplicate') $blacklistFilter
+        ");
+
+        $blacklistLogs = [];
+        if ($blacklistRes) {
+            while ($row = $blacklistRes->fetch_assoc()) {
+                $blacklistLogs[] = [
+                    'id' => (int) $row['id'],
+                    'lead_name' => $row['lead_name'] ?: 'Ẩn danh',
+                    'phone' => $row['phone'] ?: '-',
+                    'email' => $row['email'] ?: '-',
+                    'status' => $row['status'],
+                    'message' => $row['message'],
+                    'received_at' => $row['received_at'],
+                    'ai_screener_status' => $row['ai_screener_status']
+                ];
+            }
+        }
+
+        $invoices = [];
+        $expenses = [];
+
+        $pendingOnly = isset($_GET['pending_only']) && (int)$_GET['pending_only'] === 1;
+        $pendingFilterSO = $pendingOnly ? " AND i.status != 'paid'" : '';
+        $pendingFilterPO = $pendingOnly ? " AND e.is_refunded = 0" : '';
+
+        if (in_array($decodedUser['role'], ['accountant', 'admin', 'superadmin', 'super_admin', 'director'])) {
+            // Fetch invoices (SO) for the date
+            $invRes = $conn->query("
+                SELECT i.id, i.invoice_number, i.total, i.status, i.issue_date, ct.full_name, i.deal_id, ct.avatar_url
+                FROM invoices i
+                LEFT JOIN contacts ct ON i.contact_id = ct.id
+                WHERE DATE(i.issue_date) = '$escapedDate' AND i.deleted_at IS NULL $pendingFilterSO
+                ORDER BY i.id DESC
+            ");
+            if ($invRes) {
+                while ($row = $invRes->fetch_assoc()) {
+                    $invoices[] = [
+                        'id' => (int)$row['id'],
+                        'invoice_number' => $row['invoice_number'],
+                        'total' => (float)$row['total'],
+                        'status' => $row['status'],
+                        'issue_date' => $row['issue_date'],
+                        'customer_name' => ($row['full_name'] ?? '') ? trim($row['full_name']) : 'N/A',
+                        'customer_avatar' => $row['avatar_url'] ?: null,
+                        'deal_id' => $row['deal_id'] ? (int)$row['deal_id'] : null
+                    ];
+                }
+            }
+
+            // Fetch pending deposit milestones for this day
+            $dmRes = $conn->query("
+                SELECT 
+                    dm.id, 
+                    dm.milestone_name, 
+                    dm.expected_amount, 
+                    dm.expected_pay_date, 
+                    ct.full_name, 
+                    d.id as deposit_id,
+                    ct.avatar_url
+                FROM deposit_milestones dm
+                JOIN deposits d ON dm.deposit_id = d.id
+                LEFT JOIN contacts ct ON d.contact_id = ct.id
+                WHERE DATE(dm.expected_pay_date) = '$escapedDate' 
+                  AND dm.status = 'pending' 
+                  AND d.status != 'cancelled'
+                ORDER BY dm.id DESC
+            ");
+            if ($dmRes) {
+                while ($row = $dmRes->fetch_assoc()) {
+                    $invoices[] = [
+                        'id' => (int)$row['id'],
+                        'invoice_number' => $row['milestone_name'],
+                        'total' => (float)$row['expected_amount'],
+                        'status' => 'pending',
+                        'issue_date' => $row['expected_pay_date'],
+                        'customer_name' => ($row['full_name'] ?? '') ? trim($row['full_name']) : 'N/A',
+                        'customer_avatar' => $row['avatar_url'] ?: null,
+                        'deal_id' => (int)$row['deposit_id']
+                    ];
+                }
+            }
+
+            // Fetch expenses (PO) for the date
+            $expRes = $conn->query("
+                SELECT e.id, e.title, e.amount, e.status, e.date, e.refunded_at, e.is_refunded, u.full_name as creator_name, u.avatar_url as creator_avatar
+                FROM expenses e
+                LEFT JOIN users u ON e.created_by = u.id
+                WHERE DATE(COALESCE(e.refunded_at, e.date)) = '$escapedDate' AND e.deleted_at IS NULL $pendingFilterPO
+                ORDER BY e.id DESC
+            ");
+            if ($expRes) {
+                while ($row = $expRes->fetch_assoc()) {
+                    $expenses[] = [
+                        'id' => (int)$row['id'],
+                        'title' => $row['title'],
+                        'amount' => (float)$row['amount'],
+                        'status' => $row['status'],
+                        'date' => $row['date'],
+                        'refunded_at' => $row['refunded_at'],
+                        'is_refunded' => (int)$row['is_refunded'],
+                        'creator_name' => $row['creator_name'] ?: 'N/A',
+                        'creator_avatar' => $row['creator_avatar']
+                    ];
+                }
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'sales' => $sales,
+                'tickets' => $tickets,
+                'blacklist_logs' => $blacklistLogs,
+                'invoices' => $invoices,
+                'expenses' => $expenses
+            ]
+        ]);
+        break;
+
+    case 'export_csv':
+        // BUG-CRIT-02 fix: Xác thực token TRƯỚC khi đổi Content-Type sang CSV
+        // Nếu kiểm tra ở đây sau khi đã set header CSV, lỗi 401 sẽ không hiện được
+        if (!isset($decodedUser) || !$decodedUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized: Token required to export data']);
+            exit();
+        }
+        // Xử lý xuất CSV trực tiếp (Stream) để tránh tràn bộ nhớ RAM (OOM) với file > 100,000 dòng
+        $date = $_GET['date'] ?? 'all';
+        $dateCondition = "1=1";
+
+        if ($date === 'today' || $date === 'Hôm nay') {
+            $dateCondition = "dl.received_at >= CURDATE() AND dl.received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } else if ($date === 'yesterday' || $date === 'Hôm qua') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND dl.received_at < CURDATE()";
+        } else if ($date === 'this_week' || $date === 'Tuần này') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND dl.received_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === 'last_week' || $date === 'Tuần trước') {
+            $dateCondition = "dl.received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND dl.received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } else if ($date === 'two_weeks_ago' || $date === 'Tuần trước nữa') {
+            $dateCondition = "dl.received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND dl.received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === '7days' || $date === '7 ngày qua') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } else if ($date === '30days' || $date === '30 ngày qua') {
+            $dateCondition = "dl.received_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } else if ($date === 'this_month' || $date === 'Tháng này') {
+            $dateCondition = "dl.received_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND dl.received_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } else if ($date === 'last_month' || $date === 'Tháng trước') {
+            $dateCondition = "dl.received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND dl.received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+            $start = $conn->real_escape_string($matches[1]);
+            $end = $conn->real_escape_string($matches[2]);
+            $dateCondition = "dl.received_at >= '$start 00:00:00' AND dl.received_at <= '$end 23:59:59'";
+        }
+
+        // Add filters for export
+        $statusFilter = $_GET['status'] ?? 'all';
+        $consultantFilter = $_GET['consultant'] ?? 'all';
+        $roundFilter = $_GET['round'] ?? 'all';
+        $searchFilter = trim($_GET['search'] ?? '');
+
+        $sqlFilters = "";
+        $isFilteringActive = false;
+        if ($statusFilter !== 'all') {
+            if (strpos($statusFilter, ',') !== false) {
+                $statuses = explode(',', $statusFilter);
+                $escapedStatuses = array_map(function ($s) use ($conn) {
+                    return "'" . $conn->real_escape_string(trim($s)) . "'";
+                }, $statuses);
+                $sqlFilters .= " AND dl.status IN (" . implode(',', $escapedStatuses) . ")";
+            } else {
+                $sqlFilters .= " AND dl.status = '" . $conn->real_escape_string($statusFilter) . "'";
+            }
+            $isFilteringActive = true;
+        }
+        if ($consultantFilter !== 'all') {
+            $sqlFilters .= " AND c.name = '" . $conn->real_escape_string($consultantFilter) . "'";
+            $isFilteringActive = true;
+        }
+        if ($roundFilter !== 'all') {
+            $sqlFilters .= " AND dr.round_name = '" . $conn->real_escape_string($roundFilter) . "'";
+            $isFilteringActive = true;
+        }
+        if ($searchFilter !== '') {
+            $s = $conn->real_escape_string($searchFilter);
+            $sqlFilters .= " AND (l.name LIKE '%$s%' OR l.phone LIKE '%$s%' OR l.email LIKE '%$s%')";
+            $isFilteringActive = true;
+        }
+
+        // Apply silent exclusion rule if no filters active
+        if (!$isFilteringActive) {
+            $sqlFilters .= " AND dl.status != 'silent'";
+        }
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="export_' . date('Ymd_His') . '.csv"');
+        // Vô hiệu hóa JSON header đã set ở trên
+        header_remove('Content-Type');
+        header('Content-Type: text/csv; charset=utf-8');
+
+        $output = fopen('php://output', 'w');
+        // Thêm BOM để Excel đọc đúng tiếng Việt
+        fputs($output, "\xEF\xBB\xBF");
+        fputcsv($output, ['ID', 'Họ Tên', 'SĐT', 'Email', 'Vòng', 'Phân bổ cho', 'Trạng thái', 'Nguồn', 'Ghi chú', 'Thời gian']);
+
+        $res = $conn->query("
+            SELECT 
+                dl.id, l.name, l.phone, l.email, dr.round_name, c.name as assigned_to_name, 
+                dl.status, l.source, l.note, dl.received_at
+            FROM distribution_logs dl
+            LEFT JOIN leads l ON dl.lead_id = l.id
+            LEFT JOIN consultants c ON dl.assigned_to = c.id
+            LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
+            WHERE $dateCondition $sqlFilters
+            ORDER BY dl.received_at DESC
+        ", MYSQLI_USE_RESULT);
+
+        if ($res) {
+            $rowCount = 0;
+            while ($row = $res->fetch_assoc()) {
+                fputcsv($output, [
+                    $row['id'],
+                    $row['name'],
+                    $row['phone'],
+                    $row['email'],
+                    $row['round_name'],
+                    $row['assigned_to_name'],
+                    $row['status'],
+                    $row['source'],
+                    str_replace("\n", " ", $row['note']), // Tránh vỡ form CSV
+                    $row['received_at']
+                ]);
+
+                $rowCount++;
+                if ($rowCount % 500 === 0) {
+                    if (ob_get_level() > 0)
+                        ob_flush();
+                    flush();
+                }
+            }
+        }
+        fclose($output);
+        exit(); // Kết thúc script ngay lập tức để không lọt JSON rác
+        break;
+
+    case 'get_night_shift_status':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $dbUserId = (int)$decodedUser['id'];
+        $currentHour = (int)date('H');
+        $shiftDate = ($currentHour < 6) ? date('Y-m-d', strtotime('-1 day')) : date('Y-m-d');
+
+        $stmt = $conn->prepare("SELECT id, approved FROM night_shift_registrations WHERE user_id = ? AND shift_date = ?");
+        $stmt->bind_param("is", $dbUserId, $shiftDate);
+        $stmt->execute();
+        $res = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $nightShiftStart = '18:00';
+        $setRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'night_shift_start_time' LIMIT 1");
+        if ($setRes && $sRow = $setRes->fetch_assoc()) {
+            $nightShiftStart = !empty($sRow['setting_value']) ? $sRow['setting_value'] : '18:00';
+        }
+
+        // Load late and advance registration settings
+        $allowLate = 0;
+        $lateMinutes = 0;
+        $advanceMinutes = 0;
+        $resLate = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('allow_late_night_shift_registration', 'late_night_shift_registration_minutes', 'advance_night_shift_registration_minutes')");
+        if ($resLate) {
+            while ($lateRow = $resLate->fetch_assoc()) {
+                if ($lateRow['setting_key'] === 'allow_late_night_shift_registration') {
+                    $allowLate = (int) $lateRow['setting_value'];
+                } else if ($lateRow['setting_key'] === 'late_night_shift_registration_minutes') {
+                    $lateMinutes = (int) $lateRow['setting_value'];
+                } else if ($lateRow['setting_key'] === 'advance_night_shift_registration_minutes') {
+                    $advanceMinutes = (int) $lateRow['setting_value'];
+                }
+            }
+        }
+
+        $deadline = strtotime($shiftDate . ' ' . $nightShiftStart);
+        if ($allowLate === 1) {
+            if ($lateMinutes > 0) {
+                $deadline = strtotime($shiftDate . ' ' . $nightShiftStart . " +{$lateMinutes} minutes");
+            }
+        } else if ($advanceMinutes > 0) {
+            $deadline = strtotime($shiftDate . ' ' . $nightShiftStart . " -{$advanceMinutes} minutes");
+        }
+
+        $canToggle = (time() < $deadline);
+
+        echo json_encode([
+            'success' => true,
+            'registered' => ($res !== null),
+            'approved' => ($res !== null ? (int)$res['approved'] : 0),
+            'shift_date' => $shiftDate,
+            'can_toggle' => $canToggle,
+            'deadline_time' => date('H:i', $deadline)
+        ]);
+        break;
+
+    case 'register_night_shift':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+
+        $nightShiftStart = '18:00';
+        $setRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'night_shift_start_time' LIMIT 1");
+        if ($setRes && $sRow = $setRes->fetch_assoc()) {
+            $nightShiftStart = !empty($sRow['setting_value']) ? $sRow['setting_value'] : '18:00';
+        }
+
+        // Load late and advance registration settings
+        $allowLate = 0;
+        $lateMinutes = 0;
+        $advanceMinutes = 0;
+        $resLate = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('allow_late_night_shift_registration', 'late_night_shift_registration_minutes', 'advance_night_shift_registration_minutes')");
+        if ($resLate) {
+            while ($lateRow = $resLate->fetch_assoc()) {
+                if ($lateRow['setting_key'] === 'allow_late_night_shift_registration') {
+                    $allowLate = (int) $lateRow['setting_value'];
+                } else if ($lateRow['setting_key'] === 'late_night_shift_registration_minutes') {
+                    $lateMinutes = (int) $lateRow['setting_value'];
+                } else if ($lateRow['setting_key'] === 'advance_night_shift_registration_minutes') {
+                    $advanceMinutes = (int) $lateRow['setting_value'];
+                }
+            }
+        }
+
+        $shiftDate = date('Y-m-d');
+        $deadline = strtotime($shiftDate . ' ' . $nightShiftStart);
+        if ($allowLate === 1) {
+            if ($lateMinutes > 0) {
+                $deadline = strtotime($shiftDate . ' ' . $nightShiftStart . " +{$lateMinutes} minutes");
+            }
+        } else if ($advanceMinutes > 0) {
+            $deadline = strtotime($shiftDate . ' ' . $nightShiftStart . " -{$advanceMinutes} minutes");
+        }
+
+        if (time() >= $deadline) {
+            if ($allowLate === 1 && $lateMinutes > 0) {
+                $deadlineStr = date('H:i', $deadline);
+                echo json_encode(['success' => false, 'message' => "Chỉ được phép đăng ký trực đêm trước {$deadlineStr} hàng ngày (đã quá thời hạn cho phép trễ {$lateMinutes} phút)."]);
+            } else if ($advanceMinutes > 0) {
+                $deadlineStr = date('H:i', $deadline);
+                echo json_encode(['success' => false, 'message' => "Chỉ được phép đăng ký trực đêm trước {$deadlineStr} hàng ngày (yêu cầu đăng ký trước ít nhất {$advanceMinutes} phút)."]);
+            } else {
+                echo json_encode(['success' => false, 'message' => "Chỉ được phép đăng ký trực đêm trước {$nightShiftStart} hàng ngày."]);
+            }
+            break;
+        }
+
+        $dbUserId = (int)$decodedUser['id'];
+        $shiftDate = date('Y-m-d');
+        $b = json_decode(file_get_contents('php://input'), true);
+        $register = isset($b['register']) ? (bool)$b['register'] : true;
+
+        if ($register) {
+            // Check if user is already registered for today to prevent duplicate requests/notifications
+            $stmtCheckReg = $conn->prepare("SELECT approved FROM night_shift_registrations WHERE user_id = ? AND shift_date = ? LIMIT 1");
+            $stmtCheckReg->bind_param("is", $dbUserId, $shiftDate);
+            $stmtCheckReg->execute();
+            $existingReg = $stmtCheckReg->get_result()->fetch_assoc();
+            $stmtCheckReg->close();
+
+            if ($existingReg) {
+                $isPending = ((int)$existingReg['approved'] === 0);
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Bạn đã đăng ký trực ca đêm ngày hôm nay rồi.',
+                    'pending' => $isPending,
+                    'already' => true
+                ]);
+                break;
+            }
+
+            // Check if today is a leave day
+            $stmtCheckLeave = $conn->prepare("SELECT 1 FROM consultant_leaves WHERE consultant_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1");
+            $stmtCheckLeave->bind_param("is", $dbUserId, $shiftDate);
+            $stmtCheckLeave->execute();
+            $hasLeave = $stmtCheckLeave->get_result()->fetch_assoc();
+            $stmtCheckLeave->close();
+            if ($hasLeave) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không thể đăng ký trực ca vào những ngày đang nghỉ phép.']);
+                break;
+            }
+
+            // Check if auto approve is active
+            $autoApprove = 1;
+            $setApprove = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'auto_approve_night_shift' LIMIT 1");
+            if ($setApprove && $aRow = $setApprove->fetch_assoc()) {
+                $autoApprove = (int)$aRow['setting_value'];
+            }
+
+            $stmt = $conn->prepare("INSERT INTO night_shift_registrations (user_id, shift_date, approved) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE approved = ?");
+            $stmt->bind_param("isii", $dbUserId, $shiftDate, $autoApprove, $autoApprove);
+            $stmt->execute();
+            $stmt->close();
+
+            logAdminAction($conn, $dbUserId, 'REGISTER_NIGHT_SHIFT', json_encode([
+                'user_id' => $dbUserId,
+                'shift_date' => $shiftDate,
+                'approved' => $autoApprove
+            ]));
+
+            $saleConsultantId = $currentSaleConsultantId ?? 0;
+            $saleIdToNotify = ($saleConsultantId > 0) ? $saleConsultantId : $dbUserId;
+            if ($autoApprove === 1) {
+                try {
+                    notifyNightShiftChange($conn, $saleIdToNotify, $shiftDate, true);
+                } catch (Throwable $e) {
+                    error_log("Night shift notify error: " . $e->getMessage());
+                }
+
+                // Gửi chuông báo cho Quản lý & Admins
+                $saleName = !empty($decodedUser['name']) ? $decodedUser['name'] : 'Nhân viên';
+                $formattedDate = date('d/m/Y', strtotime($shiftDate));
+                $title = "Đăng ký trực ca đêm tự động duyệt";
+                $body = "Sale {$saleName} đã đăng ký trực ca đêm ngày {$formattedDate} (được hệ thống tự động duyệt).";
+                $link = "/attendance";
+
+                $notifyUserIds = [];
+
+                // 1. Lấy admins/directors
+                $adminRes = $conn->query("SELECT id FROM accounts WHERE role IN ('admin', 'superadmin', 'director') AND is_active = 1");
+                if ($adminRes) {
+                    while ($adm = $adminRes->fetch_assoc()) {
+                        $notifyUserIds[] = (int)$adm['id'];
+                    }
+                }
+
+                // 2. Lấy team leader
+                $stmtC = $conn->prepare("
+                    SELECT t.leader_id 
+                    FROM consultants c 
+                    LEFT JOIN teams t ON c.team_id = t.id 
+                    WHERE c.id = ?
+                ");
+                if ($stmtC) {
+                    $stmtC->bind_param("i", $saleIdToNotify);
+                    $stmtC->execute();
+                    $cRow = $stmtC->get_result()->fetch_assoc();
+                    $stmtC->close();
+                    if ($cRow && !empty($cRow['leader_id'])) {
+                        $leaderId = (int)$cRow['leader_id'];
+                        if (!in_array($leaderId, $notifyUserIds)) {
+                            $notifyUserIds[] = $leaderId;
+                        }
+                    }
+                }
+
+                // 3. Gửi thông báo
+                foreach ($notifyUserIds as $uId) {
+                    $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_approval', ?)");
+                    if ($stmtNotif) {
+                        $stmtNotif->bind_param("isss", $uId, $title, $body, $link);
+                        $stmtNotif->execute();
+                        $stmtNotif->close();
+                    }
+                }
+
+                echo json_encode(['success' => true, 'message' => 'Đăng ký trực đêm thành công.']);
+            } else {
+                // Send notification to admins
+                $saleName = !empty($decodedUser['name']) ? $decodedUser['name'] : 'Nhân viên';
+                $title = "Đăng ký trực ca đêm chờ duyệt";
+                $body = "Sale {$saleName} đã đăng ký trực ca đêm ngày {$shiftDate}. Vui lòng phê duyệt.";
+                $link = "/attendance";
+
+                $admins = $conn->query("SELECT id FROM accounts WHERE role IN ('admin', 'superadmin', 'director') AND is_active = 1")->fetch_all(MYSQLI_ASSOC);
+                foreach ($admins as $admin) {
+                    $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_request', ?)");
+                    $stmtNotif->bind_param("isss", $admin['id'], $title, $body, $link);
+                    $stmtNotif->execute();
+                    $stmtNotif->close();
+                }
+
+                echo json_encode(['success' => true, 'message' => 'Đăng ký trực đêm thành công. Vui lòng chờ Admin phê duyệt.', 'pending' => true]);
+            }
+        } else {
+            // Check if user is registered currently
+            $stmtCheckReg = $conn->prepare("SELECT 1 FROM night_shift_registrations WHERE user_id = ? AND shift_date = ? LIMIT 1");
+            $stmtCheckReg->bind_param("is", $dbUserId, $shiftDate);
+            $stmtCheckReg->execute();
+            $existingReg = $stmtCheckReg->get_result()->fetch_assoc();
+            $stmtCheckReg->close();
+
+            if (!$existingReg) {
+                echo json_encode(['success' => true, 'message' => 'Bạn chưa đăng ký trực ca đêm ngày hôm nay.', 'already' => true]);
+                break;
+            }
+
+            $stmt = $conn->prepare("DELETE FROM night_shift_registrations WHERE user_id = ? AND shift_date = ?");
+            $stmt->bind_param("is", $dbUserId, $shiftDate);
+            $stmt->execute();
+            $stmt->close();
+
+            logAdminAction($conn, $dbUserId, 'CANCEL_NIGHT_SHIFT', json_encode([
+                'user_id' => $dbUserId,
+                'shift_date' => $shiftDate
+            ]));
+
+            $saleConsultantId = $currentSaleConsultantId ?? 0;
+            $saleIdToNotify = ($saleConsultantId > 0) ? $saleConsultantId : $dbUserId;
+            try {
+                notifyNightShiftChange($conn, $saleIdToNotify, $shiftDate, false);
+            } catch (Throwable $e) {
+                error_log("Night shift cancel notify error: " . $e->getMessage());
+            }
+            echo json_encode(['success' => true, 'message' => 'Hủy đăng ký trực đêm thành công.']);
+        }
+        break;
+
+    case 'get_weekend_shift_status':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $dbUserId = (int)$decodedUser['id'];
+
+        // Determine next Saturday and Sunday
+        $dayOfWeek = (int)date('N');
+        if ($dayOfWeek == 6) { // today is Sat
+            $satDate = date('Y-m-d');
+            $sunDate = date('Y-m-d', strtotime('+1 day'));
+        } else if ($dayOfWeek == 7) { // today is Sun
+            $satDate = date('Y-m-d', strtotime('-1 day'));
+            $sunDate = date('Y-m-d');
+        } else {
+            $satDate = date('Y-m-d', strtotime('next Saturday'));
+            $sunDate = date('Y-m-d', strtotime('next Sunday'));
+        }
+
+        // Get weekend registration settings
+        $allowWeekend = 1;
+        $leadHours = 0;
+        $setSettings = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('allow_weekend_shift_registration', 'weekend_shift_registration_lead_hours')");
+        if ($setSettings) {
+            while ($sRow = $setSettings->fetch_assoc()) {
+                if ($sRow['setting_key'] === 'allow_weekend_shift_registration') {
+                    $allowWeekend = (int)$sRow['setting_value'];
+                } else if ($sRow['setting_key'] === 'weekend_shift_registration_lead_hours') {
+                    $leadHours = (int)$sRow['setting_value'];
+                }
+            }
+        }
+
+        // Query registrations
+        $satRegistered = false;
+        $satApproved = false;
+        $sunRegistered = false;
+        $sunApproved = false;
+
+        $stmt = $conn->prepare("SELECT shift_date, approved FROM weekend_shift_registrations WHERE user_id = ? AND shift_date IN (?, ?)");
+        $stmt->bind_param("iss", $dbUserId, $satDate, $sunDate);
+        $stmt->execute();
+        $rQuery = $stmt->get_result();
+        while ($row = $rQuery->fetch_assoc()) {
+            if ($row['shift_date'] === $satDate) {
+                $satRegistered = true;
+                $satApproved = (bool)$row['approved'];
+            } else if ($row['shift_date'] === $sunDate) {
+                $sunRegistered = true;
+                $sunApproved = (bool)$row['approved'];
+            }
+        }
+        $stmt->close();
+
+        // Compute deadline and can_toggle
+        $satDeadline = strtotime($satDate . ' 00:00:00') - ($leadHours * 3600);
+        $sunDeadline = strtotime($sunDate . ' 00:00:00') - ($leadHours * 3600);
+
+        $satCanToggle = (time() < $satDeadline);
+        $sunCanToggle = (time() < $sunDeadline);
+
+        echo json_encode([
+            'success' => true,
+            'allow_weekend_registration' => ($allowWeekend === 1),
+            'saturday' => [
+                'date' => $satDate,
+                'registered' => $satRegistered,
+                'approved' => $satApproved,
+                'can_toggle' => $satCanToggle,
+                'deadline_time' => date('Y-m-d H:i', $satDeadline)
+            ],
+            'sunday' => [
+                'date' => $sunDate,
+                'registered' => $sunRegistered,
+                'approved' => $sunApproved,
+                'can_toggle' => $sunCanToggle,
+                'deadline_time' => date('Y-m-d H:i', $sunDeadline)
+            ]
+        ]);
+        break;
+
+    case 'register_weekend_shift':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $dbUserId = (int)$decodedUser['id'];
+        $b = json_decode(file_get_contents('php://input'), true);
+        $targetDate = isset($b['date']) ? trim($b['date']) : '';
+        $register = isset($b['register']) ? (bool)$b['register'] : true;
+
+        if (empty($targetDate)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin ngày đăng ký.']);
+            break;
+        }
+
+        // Validate if it is weekend day
+        $dayNum = date('N', strtotime($targetDate));
+        if ($dayNum != 6 && $dayNum != 7) {
+            echo json_encode(['success' => false, 'message' => 'Chỉ được phép đăng ký trực cuối tuần cho Thứ 7 hoặc Chủ Nhật.']);
+            break;
+        }
+
+        // Get weekend registration settings
+        $allowWeekend = 1;
+        $leadHours = 0;
+        $autoApprove = 1;
+        $setSettings = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('allow_weekend_shift_registration', 'weekend_shift_registration_lead_hours', 'auto_approve_weekend_shift')");
+        if ($setSettings) {
+            while ($sRow = $setSettings->fetch_assoc()) {
+                if ($sRow['setting_key'] === 'allow_weekend_shift_registration') {
+                    $allowWeekend = (int)$sRow['setting_value'];
+                } else if ($sRow['setting_key'] === 'weekend_shift_registration_lead_hours') {
+                    $leadHours = (int)$sRow['setting_value'];
+                } else if ($sRow['setting_key'] === 'auto_approve_weekend_shift') {
+                    $autoApprove = (int)$sRow['setting_value'];
+                }
+            }
+        }
+
+        if ($allowWeekend !== 1) {
+            echo json_encode(['success' => false, 'message' => 'Hệ thống hiện không cho phép đăng ký trực cuối tuần.']);
+            break;
+        }
+
+        // Compute deadline and check if expired
+        $deadline = strtotime($targetDate . ' 00:00:00') - ($leadHours * 3600);
+        if (time() >= $deadline) {
+            $deadlineStr = date('Y-m-d H:i', $deadline);
+            echo json_encode(['success' => false, 'message' => "Đã quá hạn đăng ký trực cuối tuần cho ngày {$targetDate} (Hạn chót: {$deadlineStr})."]);
+            break;
+        }
+
+        if ($register) {
+            // Check if targetDate is a leave day
+            $stmtCheckLeave = $conn->prepare("SELECT 1 FROM consultant_leaves WHERE consultant_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1");
+            $stmtCheckLeave->bind_param("is", $dbUserId, $targetDate);
+            $stmtCheckLeave->execute();
+            $hasLeave = $stmtCheckLeave->get_result()->fetch_assoc();
+            $stmtCheckLeave->close();
+            if ($hasLeave) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không thể đăng ký trực ca vào những ngày đang nghỉ phép.']);
+                break;
+            }
+
+            $stmt = $conn->prepare("INSERT INTO weekend_shift_registrations (user_id, shift_date, approved) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE approved = ?");
+            $stmt->bind_param("isii", $dbUserId, $targetDate, $autoApprove, $autoApprove);
+            $stmt->execute();
+            $stmt->close();
+
+            logAdminAction($conn, $dbUserId, 'REGISTER_WEEKEND_SHIFT', json_encode([
+                'user_id' => $dbUserId,
+                'shift_date' => $targetDate,
+                'approved' => $autoApprove
+            ]));
+
+            if ($autoApprove === 1) {
+                echo json_encode(['success' => true, 'message' => 'Đăng ký trực cuối tuần thành công.']);
+            } else {
+                // Send notification to admins
+                $saleName = !empty($decodedUser['name']) ? $decodedUser['name'] : 'Nhân viên';
+                $title = "Đăng ký trực cuối tuần chờ duyệt";
+                $body = "Sale {$saleName} đã đăng ký trực cuối tuần ngày {$targetDate}. Vui lòng phê duyệt.";
+                $link = "/attendance";
+
+                $admins = $conn->query("SELECT id FROM accounts WHERE role IN ('admin', 'superadmin', 'director') AND is_active = 1")->fetch_all(MYSQLI_ASSOC);
+                foreach ($admins as $admin) {
+                    $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_request', ?)");
+                    $stmtNotif->bind_param("isss", $admin['id'], $title, $body, $link);
+                    $stmtNotif->execute();
+                    $stmtNotif->close();
+                }
+
+                echo json_encode(['success' => true, 'message' => 'Đăng ký trực cuối tuần thành công. Vui lòng chờ Admin phê duyệt.', 'pending' => true]);
+            }
+        } else {
+            $stmt = $conn->prepare("DELETE FROM weekend_shift_registrations WHERE user_id = ? AND shift_date = ?");
+            $stmt->bind_param("is", $dbUserId, $targetDate);
+            $stmt->execute();
+            $stmt->close();
+
+            logAdminAction($conn, $dbUserId, 'CANCEL_WEEKEND_SHIFT', json_encode([
+                'user_id' => $dbUserId,
+                'shift_date' => $targetDate
+            ]));
+
+            echo json_encode(['success' => true, 'message' => 'Hủy đăng ký trực cuối tuần thành công.']);
+        }
+        break;
+
+    case 'get_holiday_shift_status':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $dbUserId = (int)$decodedUser['id'];
+
+        // Get holiday schedules
+        $holidaySchedulesJson = '[]';
+        $resHol = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'holiday_schedules' LIMIT 1");
+        if ($resHol && $hRow = $resHol->fetch_assoc()) {
+            $holidaySchedulesJson = !empty($hRow['setting_value']) ? $hRow['setting_value'] : '[]';
+        }
+        $holidays = json_decode($holidaySchedulesJson, true);
+        if (!is_array($holidays)) {
+            $holidays = [];
+        }
+
+        // Filter for upcoming or active holidays (end date >= today)
+        $todayStr = date('Y-m-d');
+        $activeHolidays = [];
+        foreach ($holidays as $h) {
+            if (!empty($h['end']) && $h['end'] >= $todayStr) {
+                // Generate all dates within start and end
+                $dates = [];
+                $curr = $h['start'];
+                while ($curr <= $h['end']) {
+                    $dates[] = $curr;
+                    $curr = date('Y-m-d', strtotime($curr . ' +1 day'));
+                }
+                $h['dates'] = $dates;
+                $activeHolidays[] = $h;
+            }
+        }
+
+        // Get registrations
+        $registrations = [];
+        $stmt = $conn->prepare("SELECT shift_date, approved, holiday_name FROM holiday_shift_registrations WHERE user_id = ?");
+        $stmt->bind_param("i", $dbUserId);
+        $stmt->execute();
+        $resQuery = $stmt->get_result();
+        while ($row = $resQuery->fetch_assoc()) {
+            $registrations[$row['shift_date']] = [
+                'approved' => (bool)$row['approved'],
+                'holiday_name' => $row['holiday_name']
+            ];
+        }
+        $stmt->close();
+
+        // Build list with status per date
+        $resultHolidays = [];
+        foreach ($activeHolidays as $h) {
+            $datesStatus = [];
+            foreach ($h['dates'] as $d) {
+                $registered = isset($registrations[$d]);
+                $approved = $registered ? $registrations[$d]['approved'] : false;
+                $datesStatus[] = [
+                    'date' => $d,
+                    'registered' => $registered,
+                    'approved' => $approved,
+                    'can_toggle' => true // Holiday registration can be done anytime
+                ];
+            }
+            $resultHolidays[] = [
+                'id' => $h['id'] ?? null,
+                'name' => $h['name'],
+                'start' => $h['start'],
+                'end' => $h['end'],
+                'dates' => $datesStatus
+            ];
+        }
+
+        echo json_encode([
+            'success' => true,
+            'holidays' => $resultHolidays
+        ]);
+        break;
+
+    case 'register_holiday_shift':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $dbUserId = (int)$decodedUser['id'];
+        $b = json_decode(file_get_contents('php://input'), true);
+        $targetDate = isset($b['date']) ? trim($b['date']) : '';
+        $holidayName = isset($b['holiday_name']) ? trim($b['holiday_name']) : '';
+        $register = isset($b['register']) ? (bool)$b['register'] : true;
+
+        if (empty($targetDate) || empty($holidayName)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin ngày hoặc tên ngày lễ.']);
+            break;
+        }
+
+        // Get auto approve setting for holidays
+        $autoApprove = 0; // default 0 (manual approval required)
+        $setHolApprove = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'auto_approve_holiday_shift' LIMIT 1");
+        if ($setHolApprove && $aRow = $setHolApprove->fetch_assoc()) {
+            $autoApprove = (int)$aRow['setting_value'];
+        }
+
+        if ($register) {
+            // Check if targetDate is a leave day
+            $stmtCheckLeave = $conn->prepare("SELECT 1 FROM consultant_leaves WHERE consultant_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1");
+            $stmtCheckLeave->bind_param("is", $dbUserId, $targetDate);
+            $stmtCheckLeave->execute();
+            $hasLeave = $stmtCheckLeave->get_result()->fetch_assoc();
+            $stmtCheckLeave->close();
+            if ($hasLeave) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không thể đăng ký trực ca vào những ngày đang nghỉ phép.']);
+                break;
+            }
+
+            $stmt = $conn->prepare("INSERT INTO holiday_shift_registrations (user_id, shift_date, holiday_name, approved) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE approved = ?");
+            $stmt->bind_param("issii", $dbUserId, $targetDate, $holidayName, $autoApprove, $autoApprove);
+            $stmt->execute();
+            $stmt->close();
+
+            logAdminAction($conn, $dbUserId, 'REGISTER_HOLIDAY_SHIFT', json_encode([
+                'user_id' => $dbUserId,
+                'shift_date' => $targetDate,
+                'holiday_name' => $holidayName,
+                'approved' => $autoApprove
+            ]));
+
+            if ($autoApprove === 1) {
+                echo json_encode(['success' => true, 'message' => "Đăng ký trực lễ {$holidayName} ngày {$targetDate} thành công."]);
+            } else {
+                // Send notification to admins
+                $saleName = !empty($decodedUser['name']) ? $decodedUser['name'] : 'Nhân viên';
+                $title = "Đăng ký trực ngày lễ chờ duyệt";
+                $body = "Sale {$saleName} đã đăng ký trực ngày lễ {$holidayName} ngày {$targetDate}. Vui lòng phê duyệt.";
+                $link = "/attendance";
+
+                $admins = $conn->query("SELECT id FROM accounts WHERE role IN ('admin', 'superadmin', 'director') AND is_active = 1")->fetch_all(MYSQLI_ASSOC);
+                foreach ($admins as $admin) {
+                    $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_request', ?)");
+                    $stmtNotif->bind_param("isss", $admin['id'], $title, $body, $link);
+                    $stmtNotif->execute();
+                    $stmtNotif->close();
+                }
+
+                echo json_encode(['success' => true, 'message' => "Đăng ký trực lễ thành công. Vui lòng chờ Admin phê duyệt.", 'pending' => true]);
+            }
+        } else {
+            $stmt = $conn->prepare("DELETE FROM holiday_shift_registrations WHERE user_id = ? AND shift_date = ?");
+            $stmt->bind_param("is", $dbUserId, $targetDate);
+            $stmt->execute();
+            $stmt->close();
+
+            logAdminAction($conn, $dbUserId, 'CANCEL_HOLIDAY_SHIFT', json_encode([
+                'user_id' => $dbUserId,
+                'shift_date' => $targetDate
+            ]));
+
+            echo json_encode(['success' => true, 'message' => "Hủy đăng ký trực lễ ngày {$targetDate} thành công."]);
+        }
+        break;
+
+    case 'register_weekly_shifts':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $dbUserId = (int)$decodedUser['id'];
+        $b = json_decode(file_get_contents('php://input'), true);
+        $dates = isset($b['dates']) && is_array($b['dates']) ? $b['dates'] : [];
+
+        // Get timeframe constraints: Current week Monday to Sunday
+        $todayStr = date('Y-m-d');
+        $dayOfWeek = (int)date('N');
+        $mondayStr = date('Y-m-d', strtotime('-' . ($dayOfWeek - 1) . ' days'));
+        $sundayStr = date('Y-m-d', strtotime('+' . (7 - $dayOfWeek) . ' days'));
+
+        // Load holiday schedules
+        $holidaySchedulesJson = '[]';
+        $resHol = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'holiday_schedules' LIMIT 1");
+        if ($resHol && $hRow = $resHol->fetch_assoc()) {
+            $holidaySchedulesJson = !empty($hRow['setting_value']) ? $hRow['setting_value'] : '[]';
+        }
+        $holidays = json_decode($holidaySchedulesJson, true);
+        if (!is_array($holidays)) {
+            $holidays = [];
+        }
+
+        // Load weekend config (if Saturday is rest day)
+        $isSatOff = true;
+        $resSched = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_schedule' LIMIT 1");
+        if ($resSched && $sRow = $resSched->fetch_assoc()) {
+            $schedule = json_decode($sRow['setting_value'], true);
+            if (isset($schedule["6"]) && isset($schedule["6"]["active"])) {
+                $isSatOff = !(bool)$schedule["6"]["active"];
+            }
+        }
+
+        // Load night shift start time & deadline settings
+        $nightShiftStart = '18:00';
+        $setRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'night_shift_start_time' LIMIT 1");
+        if ($setRes && $sRow = $setRes->fetch_assoc()) {
+            $nightShiftStart = !empty($sRow['setting_value']) ? $sRow['setting_value'] : '18:00';
+        }
+        $allowLate = 0;
+        $lateMinutes = 0;
+        $advanceMinutes = 0;
+        $resLate = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('allow_late_night_shift_registration', 'late_night_shift_registration_minutes', 'advance_night_shift_registration_minutes')");
+        if ($resLate) {
+            while ($lateRow = $resLate->fetch_assoc()) {
+                if ($lateRow['setting_key'] === 'allow_late_night_shift_registration') {
+                    $allowLate = (int) $lateRow['setting_value'];
+                } else if ($lateRow['setting_key'] === 'late_night_shift_registration_minutes') {
+                    $lateMinutes = (int) $lateRow['setting_value'];
+                } else if ($lateRow['setting_key'] === 'advance_night_shift_registration_minutes') {
+                    $advanceMinutes = (int) $lateRow['setting_value'];
+                }
+            }
+        }
+
+        // Validate each date
+        $validDates = [];
+        foreach ($dates as $date) {
+            $date = trim($date);
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                echo json_encode(['success' => false, 'message' => "Định dạng ngày {$date} không hợp lệ."]);
+                break 2;
+            }
+
+            // Must be in this week
+            if ($date < $mondayStr || $date > $sundayStr) {
+                echo json_encode(['success' => false, 'message' => "Ngày {$date} không nằm trong tuần này."]);
+                break 2;
+            }
+
+            // Must be after yesterday (>= today)
+            if ($date < $todayStr) {
+                echo json_encode(['success' => false, 'message' => "Không được phép đăng ký các ngày trong quá khứ ({$date})."]);
+                break 2;
+            }
+
+            // If it is today, check night shift deadline constraint
+            if ($date === $todayStr) {
+                $deadline = strtotime($todayStr . ' ' . $nightShiftStart);
+                if ($allowLate === 1) {
+                    if ($lateMinutes > 0) {
+                        $deadline = strtotime($todayStr . ' ' . $nightShiftStart . " +{$lateMinutes} minutes");
+                    }
+                } else if ($advanceMinutes > 0) {
+                    $deadline = strtotime($todayStr . ' ' . $nightShiftStart . " -{$advanceMinutes} minutes");
+                }
+                if (time() >= $deadline) {
+                    $deadlineStr = date('H:i', $deadline);
+                    echo json_encode(['success' => false, 'message' => "Đã quá thời hạn đăng ký cho ngày hôm nay ({$deadlineStr})."]);
+                    break 2;
+                }
+            }
+
+            // Check if date is a leave day
+            $stmtCheckLeave = $conn->prepare("SELECT 1 FROM consultant_leaves WHERE consultant_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1");
+            $stmtCheckLeave->bind_param("is", $dbUserId, $date);
+            $stmtCheckLeave->execute();
+            $hasLeave = $stmtCheckLeave->get_result()->fetch_assoc();
+            $stmtCheckLeave->close();
+            if ($hasLeave) {
+                echo json_encode(['success' => false, 'message' => "Bạn không thể đăng ký trực ca cho ngày {$date} vì trùng lịch nghỉ phép."]);
+                break 2;
+            }
+
+            $validDates[] = $date;
+        }
+
+        // Find all dates in the current week that are >= today
+        $allWeekDates = [];
+        $curr = $mondayStr;
+        while ($curr <= $sundayStr) {
+            if ($curr >= $todayStr) {
+                $allWeekDates[] = $curr;
+            }
+            $curr = date('Y-m-d', strtotime($curr . ' +1 day'));
+        }
+
+        // Determine omitted dates (unchecked dates)
+        $omittedDates = array_diff($allWeekDates, $validDates);
+
+        // Perform cancellations for omitted dates
+        foreach ($omittedDates as $date) {
+            if ($date === $todayStr) {
+                // If today is omitted, check night shift deadline constraint
+                $deadline = strtotime($todayStr . ' ' . $nightShiftStart);
+                if ($allowLate === 1) {
+                    if ($lateMinutes > 0) {
+                        $deadline = strtotime($todayStr . ' ' . $nightShiftStart . " +{$lateMinutes} minutes");
+                    }
+                } else if ($advanceMinutes > 0) {
+                    $deadline = strtotime($todayStr . ' ' . $nightShiftStart . " -{$advanceMinutes} minutes");
+                }
+                if (time() >= $deadline) {
+                    // Past deadline - cannot cancel/delete today's registration
+                    continue;
+                }
+            }
+
+            // Safe to delete from all 3 tables
+            $conn->query("DELETE FROM night_shift_registrations WHERE user_id = $dbUserId AND shift_date = '$date'");
+            $conn->query("DELETE FROM weekend_shift_registrations WHERE user_id = $dbUserId AND shift_date = '$date'");
+            $conn->query("DELETE FROM holiday_shift_registrations WHERE user_id = $dbUserId AND shift_date = '$date'");
+        }
+
+        // Perform batch registration
+        $insertedCount = 0;
+        foreach ($validDates as $date) {
+            // Determine shift category: holiday, weekend, night
+            $holidayName = '';
+            foreach ($holidays as $h) {
+                if ($date >= $h['start'] && $date <= $h['end']) {
+                    $holidayName = $h['name'];
+                    break;
+                }
+            }
+
+            $isWeekend = isRestDayForUser($conn, $dbUserId, $date);
+
+            $tableName = 'night_shift_registrations';
+            if (!empty($holidayName)) {
+                $tableName = 'holiday_shift_registrations';
+            } else if ($isWeekend) {
+                $tableName = 'weekend_shift_registrations';
+            }
+
+            // Keep approved = 1 if it is already approved
+            $isAlreadyApproved = false;
+            $checkStmt = $conn->prepare("SELECT approved FROM {$tableName} WHERE user_id = ? AND shift_date = ? LIMIT 1");
+            if ($checkStmt) {
+                $checkStmt->bind_param("is", $dbUserId, $date);
+                $checkStmt->execute();
+                $checkRes = $checkStmt->get_result()->fetch_assoc();
+                $checkStmt->close();
+                if ($checkRes && (int)$checkRes['approved'] === 1) {
+                    $isAlreadyApproved = true;
+                }
+            }
+
+            $approvedValue = $isAlreadyApproved ? 1 : 0;
+
+            if ($tableName === 'holiday_shift_registrations') {
+                $stmt = $conn->prepare("INSERT INTO holiday_shift_registrations (user_id, shift_date, holiday_name, approved) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE approved = ?, holiday_name = VALUES(holiday_name)");
+                $stmt->bind_param("issii", $dbUserId, $date, $holidayName, $approvedValue, $approvedValue);
+                $stmt->execute();
+                $stmt->close();
+            } else {
+                $stmt = $conn->prepare("INSERT INTO {$tableName} (user_id, shift_date, approved) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE approved = ?");
+                $stmt->bind_param("isii", $dbUserId, $date, $approvedValue, $approvedValue);
+                $stmt->execute();
+                $stmt->close();
+            }
+            $insertedCount++;
+        }
+
+        // Send notification to admins about pending weekly registrations
+        $saleName = !empty($decodedUser['name']) ? $decodedUser['name'] : 'Nhân viên';
+        $title = "Đăng ký trực ca tuần mới";
+        $body = "Sale {$saleName} đã lên lịch đăng ký trực cho {$insertedCount} ngày trong tuần này. Vui lòng kiểm duyệt.";
+        $link = "/attendance";
+
+        $admins = $conn->query("SELECT id FROM accounts WHERE role IN ('admin', 'superadmin', 'director') AND is_active = 1")->fetch_all(MYSQLI_ASSOC);
+        foreach ($admins as $admin) {
+            $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_request', ?)");
+            if ($stmtNotif) {
+                $stmtNotif->bind_param("isss", $admin['id'], $title, $body, $link);
+                $stmtNotif->execute();
+                $stmtNotif->close();
+            }
+        }
+
+        logAdminAction($conn, $dbUserId, 'REGISTER_WEEKLY_SHIFTS', json_encode([
+            'user_id' => $dbUserId,
+            'dates' => $validDates
+        ]));
+
+        echo json_encode(['success' => true, 'message' => "Đã gửi đăng ký trực tuần cho {$insertedCount} ngày. Vui lòng chờ phê duyệt."]);
+        break;
+
+    case 'get_shift_registrations_admin':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        if (!in_array(strtolower($decodedUser['role']), ['admin', 'superadmin', 'director', 'manager', 'assistant', 'hr'])) {
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            break;
+        }
+
+        $registrations = [];
+
+        $resNight = $conn->query("SELECT 'night' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, a.name as user_name, '' as holiday_name FROM night_shift_registrations r JOIN accounts a ON r.user_id = a.id ORDER BY r.shift_date DESC LIMIT 200");
+        if ($resNight) {
+            while ($row = $resNight->fetch_assoc()) {
+                $registrations[] = $row;
+            }
+        }
+
+        $resWeekend = $conn->query("SELECT 'weekend' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, a.name as user_name, '' as holiday_name FROM weekend_shift_registrations r JOIN accounts a ON r.user_id = a.id ORDER BY r.shift_date DESC LIMIT 200");
+        if ($resWeekend) {
+            while ($row = $resWeekend->fetch_assoc()) {
+                $registrations[] = $row;
+            }
+        }
+
+        $resHoliday = $conn->query("SELECT 'holiday' as shift_type, r.id, r.user_id, r.shift_date, r.approved, r.created_at, a.name as user_name, r.holiday_name FROM holiday_shift_registrations r JOIN accounts a ON r.user_id = a.id ORDER BY r.shift_date DESC LIMIT 200");
+        if ($resHoliday) {
+            while ($row = $resHoliday->fetch_assoc()) {
+                $registrations[] = $row;
+            }
+        }
+
+        usort($registrations, function ($a, $b) {
+            return strcmp($b['created_at'], $a['created_at']);
+        });
+
+        echo json_encode([
+            'success' => true,
+            'registrations' => $registrations
+        ]);
+        break;
+
+    case 'approve_shift_registration':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        if (!in_array(strtolower($decodedUser['role']), ['admin', 'superadmin', 'director', 'manager', 'assistant', 'hr'])) {
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            break;
+        }
+
+        $b = json_decode(file_get_contents('php://input'), true);
+        $shiftType = isset($b['shift_type']) ? trim($b['shift_type']) : '';
+        $id = isset($b['id']) ? (int)$b['id'] : 0;
+
+        if (empty($shiftType) || $id === 0) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin phê duyệt.']);
+            break;
+        }
+
+        $table = '';
+        $typeLabel = '';
+        if ($shiftType === 'night') {
+            $table = 'night_shift_registrations';
+            $typeLabel = 'Đêm';
+        } else if ($shiftType === 'weekend') {
+            $table = 'weekend_shift_registrations';
+            $typeLabel = 'Cuối tuần';
+        } else if ($shiftType === 'holiday') {
+            $table = 'holiday_shift_registrations';
+            $typeLabel = 'Ngày lễ';
+        }
+
+        if (empty($table)) {
+            echo json_encode(['success' => false, 'message' => 'Loại ca trực không hợp lệ.']);
+            break;
+        }
+
+        $stmtReg = $conn->prepare("SELECT user_id, shift_date FROM $table WHERE id = ?");
+        $stmtReg->bind_param("i", $id);
+        $stmtReg->execute();
+        $reg = $stmtReg->get_result()->fetch_assoc();
+        $stmtReg->close();
+
+        if ($reg) {
+            $stmtUp = $conn->prepare("UPDATE $table SET approved = 1 WHERE id = ?");
+            $stmtUp->bind_param("i", $id);
+            $stmtUp->execute();
+            $stmtUp->close();
+
+            logAdminAction($conn, $decodedUser['id'], 'APPROVE_SHIFT_REGISTRATION', json_encode([
+                'shift_type' => $shiftType,
+                'id' => $id,
+                'target_user_id' => $reg['user_id'],
+                'shift_date' => $reg['shift_date']
+            ]));
+
+            // Notify user
+            $title = "Đăng ký trực ca {$typeLabel} được phê duyệt";
+            $body = "Yêu cầu trực ca {$typeLabel} ngày {$reg['shift_date']} của bạn đã được phê duyệt.";
+            $link = "/workspace";
+            $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_approval', ?)");
+            $stmtNotif->bind_param("isss", $reg['user_id'], $title, $body, $link);
+            $stmtNotif->execute();
+            $stmtNotif->close();
+
+            // Call webhook/internal state notification for night shift
+            if ($shiftType === 'night') {
+                $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = (SELECT email FROM accounts WHERE id = ?)");
+                $stmtC->bind_param("i", $reg['user_id']);
+                $stmtC->execute();
+                $cRow = $stmtC->get_result()->fetch_assoc();
+                $stmtC->close();
+                if ($cRow) {
+                    notifyNightShiftChange($conn, $cRow['id'], $reg['shift_date'], true);
+                }
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Phê duyệt đăng ký thành công.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy bản ghi đăng ký trực ca.']);
+        }
+        break;
+
+    case 'reject_shift_registration':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        if (!in_array(strtolower($decodedUser['role']), ['admin', 'superadmin', 'director', 'manager', 'assistant', 'hr'])) {
+            echo json_encode(['success' => false, 'message' => 'Forbidden']);
+            break;
+        }
+
+        $b = json_decode(file_get_contents('php://input'), true);
+        $shiftType = isset($b['shift_type']) ? trim($b['shift_type']) : '';
+        $id = isset($b['id']) ? (int)$b['id'] : 0;
+
+        if (empty($shiftType) || $id === 0) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin từ chối.']);
+            break;
+        }
+
+        $table = '';
+        $typeLabel = '';
+        if ($shiftType === 'night') {
+            $table = 'night_shift_registrations';
+            $typeLabel = 'Đêm';
+        } else if ($shiftType === 'weekend') {
+            $table = 'weekend_shift_registrations';
+            $typeLabel = 'Cuối tuần';
+        } else if ($shiftType === 'holiday') {
+            $table = 'holiday_shift_registrations';
+            $typeLabel = 'Ngày lễ';
+        }
+
+        if (empty($table)) {
+            echo json_encode(['success' => false, 'message' => 'Loại ca trực không hợp lệ.']);
+            break;
+        }
+
+        $stmtReg = $conn->prepare("SELECT user_id, shift_date FROM $table WHERE id = ?");
+        $stmtReg->bind_param("i", $id);
+        $stmtReg->execute();
+        $reg = $stmtReg->get_result()->fetch_assoc();
+        $stmtReg->close();
+
+        if ($reg) {
+            $stmtDel = $conn->prepare("DELETE FROM $table WHERE id = ?");
+            $stmtDel->bind_param("i", $id);
+            $stmtDel->execute();
+            $stmtDel->close();
+
+            logAdminAction($conn, $decodedUser['id'], 'REJECT_SHIFT_REGISTRATION', json_encode([
+                'shift_type' => $shiftType,
+                'id' => $id,
+                'target_user_id' => $reg['user_id'],
+                'shift_date' => $reg['shift_date']
+            ]));
+
+            // Notify user
+            $title = "Đăng ký trực ca {$typeLabel} bị từ chối";
+            $body = "Yêu cầu trực ca {$typeLabel} ngày {$reg['shift_date']} của bạn đã bị từ chối.";
+            $link = "/workspace";
+            $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'shift_approval', ?)");
+            $stmtNotif->bind_param("isss", $reg['user_id'], $title, $body, $link);
+            $stmtNotif->execute();
+            $stmtNotif->close();
+
+            // Call webhook/internal state notification for night shift
+            if ($shiftType === 'night') {
+                $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = (SELECT email FROM accounts WHERE id = ?)");
+                $stmtC->bind_param("i", $reg['user_id']);
+                $stmtC->execute();
+                $cRow = $stmtC->get_result()->fetch_assoc();
+                $stmtC->close();
+                if ($cRow) {
+                    notifyNightShiftChange($conn, $cRow['id'], $reg['shift_date'], false);
+                }
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Từ chối đăng ký thành công.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy bản ghi đăng ký trực ca.']);
+        }
+        break;
+
+    case 'get_consultant_leaves':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $isSale = $decodedUser['role'] === 'sale';
+        $isAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        $isManager = ($decodedUser['role'] === 'manager');
+
+        $targetConsultantId = null;
+        if ($isSale) {
+            $targetConsultantId = $currentSaleConsultantId ?? 0;
+        } else if (($isAdmin || $isManager) && isset($_GET['consultant_id'])) {
+            $targetConsultantId = (int)$_GET['consultant_id'];
+            if ($isManager) {
+                $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+                if (!isManagerOfConsultant($conn, $currentUserId, $targetConsultantId)) {
+                    echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xem lịch nghỉ của tư vấn viên này']);
+                    break;
+                }
+            }
+        } else {
+            $targetConsultantId = $currentSaleConsultantId ?? 0;
+        }
+
+        if (!$targetConsultantId) {
+            echo json_encode(['success' => false, 'message' => 'Không xác định được ID tư vấn viên.']);
+            break;
+        }
+
+        $stmt = $conn->prepare("SELECT id, start_date, end_date, created_at FROM consultant_leaves WHERE consultant_id = ? ORDER BY start_date DESC");
+        $stmt->bind_param("i", $targetConsultantId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $leaves = [];
+        while ($row = $res->fetch_assoc()) {
+            $leaves[] = $row;
+        }
+        $stmt->close();
+
+        echo json_encode(['success' => true, 'data' => $leaves]);
+        break;
+
+    case 'add_consultant_leave':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $startDate = trim($input['start_date'] ?? '');
+        $endDate = trim($input['end_date'] ?? '');
+
+        $isSale = $decodedUser['role'] === 'sale';
+        $isAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        $isManager = ($decodedUser['role'] === 'manager');
+
+        $targetConsultantId = null;
+        if ($isSale) {
+            $targetConsultantId = $currentSaleConsultantId ?? 0;
+        } else if (($isAdmin || $isManager) && isset($input['consultant_id'])) {
+            $targetConsultantId = (int)$input['consultant_id'];
+            if ($isManager) {
+                $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+                if (!isManagerOfConsultant($conn, $currentUserId, $targetConsultantId)) {
+                    echo json_encode(['success' => false, 'message' => 'Bạn không có quyền đăng ký nghỉ phép cho tư vấn viên này']);
+                    break;
+                }
+            }
+        } else {
+            $targetConsultantId = $currentSaleConsultantId ?? 0;
+        }
+
+        if (!$targetConsultantId) {
+            echo json_encode(['success' => false, 'message' => 'Không xác định được ID tư vấn viên.']);
+            break;
+        }
+
+        if (empty($startDate) || empty($endDate)) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng chọn đầy đủ Từ ngày và Đến ngày.']);
+            break;
+        }
+
+        if ($startDate > $endDate) {
+            echo json_encode(['success' => false, 'message' => 'Ngày bắt đầu không được lớn hơn ngày kết thúc.']);
+            break;
+        }
+
+        // Insert leave period
+        $stmt = $conn->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
+        $stmt->bind_param("iss", $targetConsultantId, $startDate, $endDate);
+        if ($stmt->execute()) {
+            // Delete conflicting shifts (night, weekend, holiday) that overlap with this leave period
+            $stmtDelNight = $conn->prepare("DELETE FROM night_shift_registrations WHERE user_id = ? AND shift_date BETWEEN ? AND ?");
+            $stmtDelNight->bind_param("iss", $targetConsultantId, $startDate, $endDate);
+            $stmtDelNight->execute();
+            $stmtDelNight->close();
+
+            $stmtDelWeekend = $conn->prepare("DELETE FROM weekend_shift_registrations WHERE user_id = ? AND shift_date BETWEEN ? AND ?");
+            $stmtDelWeekend->bind_param("iss", $targetConsultantId, $startDate, $endDate);
+            $stmtDelWeekend->execute();
+            $stmtDelWeekend->close();
+
+            $stmtDelHoliday = $conn->prepare("DELETE FROM holiday_shift_registrations WHERE user_id = ? AND shift_date BETWEEN ? AND ?");
+            $stmtDelHoliday->bind_param("iss", $targetConsultantId, $startDate, $endDate);
+            $stmtDelHoliday->execute();
+            $stmtDelHoliday->close();
+
+            // Recalculate current/upcoming leave in consultants table (underlying users table)
+            $recalcStmt = $conn->prepare("SELECT start_date, end_date FROM consultant_leaves WHERE consultant_id = ? AND end_date >= CURDATE() ORDER BY start_date ASC LIMIT 1");
+            $recalcStmt->bind_param("i", $targetConsultantId);
+            $recalcStmt->execute();
+            $recalcRes = $recalcStmt->get_result()->fetch_assoc();
+            $recalcStmt->close();
+
+            $nextStart = $recalcRes ? $recalcRes['start_date'] : null;
+            $nextEnd = $recalcRes ? $recalcRes['end_date'] : null;
+
+            // Sync to users table by email
+            $stmtEmail = $conn->prepare("SELECT email FROM consultants WHERE id = ? LIMIT 1");
+            $stmtEmail->bind_param("i", $targetConsultantId);
+            $emailRes = null;
+            if ($stmtEmail->execute()) {
+                $emailRes = $stmtEmail->get_result()->fetch_assoc();
+            }
+            $stmtEmail->close();
+
+            if ($emailRes && !empty($emailRes['email'])) {
+                $upStmt = $conn->prepare("UPDATE users SET leave_start = ?, leave_end = ? WHERE email = ?");
+                $upStmt->bind_param("sss", $nextStart, $nextEnd, $emailRes['email']);
+                $upStmt->execute();
+                $upStmt->close();
+            }
+
+            // Sync to consultants table (needed by lead assignment system)
+            $upStmtC = $conn->prepare("UPDATE consultants SET leave_start = ?, leave_end = ? WHERE id = ?");
+            $upStmtC->bind_param("ssi", $nextStart, $nextEnd, $targetConsultantId);
+            $upStmtC->execute();
+            $upStmtC->close();
+
+            logAdminAction($conn, $decodedUser['id'], 'ADD_CONSULTANT_LEAVE', json_encode([
+                'consultant_id' => $targetConsultantId,
+                'start_date' => $startDate,
+                'end_date' => $endDate
+            ]));
+
+            notifyLeaveChange($conn, $targetConsultantId, $startDate, $endDate, 'ADD');
+
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi khi đăng ký nghỉ phép.']);
+        }
+        $stmt->close();
+        break;
+
+    case 'delete_consultant_leave':
+        if (!$decodedUser) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $leaveId = (int)($input['id'] ?? 0);
+
+        if (!$leaveId) {
+            echo json_encode(['success' => false, 'message' => 'ID nghỉ phép không hợp lệ.']);
+            break;
+        }
+
+        $isSale = $decodedUser['role'] === 'sale';
+        $isAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        $isManager = ($decodedUser['role'] === 'manager');
+
+        // First find the consultant_id and dates of this leave to authorize, notify and recalculate
+        $stmt = $conn->prepare("SELECT consultant_id, start_date, end_date FROM consultant_leaves WHERE id = ?");
+        $stmt->bind_param("i", $leaveId);
+        $stmt->execute();
+        $leaveRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$leaveRow) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy đăng ký nghỉ phép.']);
+            break;
+        }
+
+        $targetConsultantId = (int)$leaveRow['consultant_id'];
+        $startDate = $leaveRow['start_date'];
+        $endDate = $leaveRow['end_date'];
+
+        if ($isSale && $targetConsultantId !== ($currentSaleConsultantId ?? 0)) {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xóa đăng ký nghỉ phép của người khác.']);
+            break;
+        }
+
+        if ($isManager) {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfConsultant($conn, $currentUserId, $targetConsultantId)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xóa đăng ký nghỉ phép của tư vấn viên này']);
+                break;
+            }
+        }
+
+        // Delete leave period
+        $stmtDel = $conn->prepare("DELETE FROM consultant_leaves WHERE id = ?");
+        $stmtDel->bind_param("i", $leaveId);
+        if ($stmtDel->execute()) {
+            // Recalculate current/upcoming leave in consultants table (underlying users table)
+            $recalcStmt = $conn->prepare("SELECT start_date, end_date FROM consultant_leaves WHERE consultant_id = ? AND end_date >= CURDATE() ORDER BY start_date ASC LIMIT 1");
+            $recalcStmt->bind_param("i", $targetConsultantId);
+            $recalcStmt->execute();
+            $recalcRes = $recalcStmt->get_result()->fetch_assoc();
+            $recalcStmt->close();
+
+            $nextStart = $recalcRes ? $recalcRes['start_date'] : null;
+            $nextEnd = $recalcRes ? $recalcRes['end_date'] : null;
+
+            // Sync to users table by email
+            $stmtEmail = $conn->prepare("SELECT email FROM consultants WHERE id = ? LIMIT 1");
+            $stmtEmail->bind_param("i", $targetConsultantId);
+            $emailRes = null;
+            if ($stmtEmail->execute()) {
+                $emailRes = $stmtEmail->get_result()->fetch_assoc();
+            }
+            $stmtEmail->close();
+
+            if ($emailRes && !empty($emailRes['email'])) {
+                $upStmt = $conn->prepare("UPDATE users SET leave_start = ?, leave_end = ? WHERE email = ?");
+                $upStmt->bind_param("sss", $nextStart, $nextEnd, $emailRes['email']);
+                $upStmt->execute();
+                $upStmt->close();
+            }
+
+            // Sync to consultants table (needed by lead assignment system)
+            $upStmtC = $conn->prepare("UPDATE consultants SET leave_start = ?, leave_end = ? WHERE id = ?");
+            $upStmtC->bind_param("ssi", $nextStart, $nextEnd, $targetConsultantId);
+            $upStmtC->execute();
+            $upStmtC->close();
+
+            logAdminAction($conn, $decodedUser['id'], 'DELETE_CONSULTANT_LEAVE', json_encode([
+                'id' => $leaveId,
+                'consultant_id' => $targetConsultantId,
+                'start_date' => $startDate,
+                'end_date' => $endDate
+            ]));
+
+            notifyLeaveChange($conn, $targetConsultantId, $startDate, $endDate, 'DELETE');
+
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi khi xóa đăng ký nghỉ phép.']);
+        }
+        $stmtDel->close();
+        break;
+
+    case 'get_consultants':
+        $role = $decodedUser['role'] ?? '';
+        $currentUserId = (int)($decodedUser['id'] ?? 0);
+        $where = "";
+
+
+        $res = $conn->query("
+            SELECT 
+                c.id, 
+                c.full_name AS name, 
+                c.email, 
+                c.phone, 
+                c.role, 
+                c.team_id, 
+                c.avatar_url AS avatar, 
+                c.zalo_chat_id, 
+                c.telegram_chat_id, 
+                c.job_title, 
+                c.leave_start, 
+                c.leave_end, 
+                c.vacation_mode, 
+                c.overtime_mode,
+                c.status,
+                c.last_login_at AS last_login,
+                IF(c.use_custom_work_hours = 1, c.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
+                IF(c.use_custom_work_hours = 1, c.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,
+                IF(c.use_custom_work_hours = 1, c.work_schedule, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_schedule' LIMIT 1)) AS work_schedule,
+                t.name as team_name, 
+                t.branch as team_branch 
+            FROM users c 
+            LEFT JOIN teams t ON c.team_id = t.id 
+            $where
+            ORDER BY c.full_name ASC
+        ");
+        $data = [];
+        if ($res && $res->num_rows > 0) {
+            while ($row = $res->fetch_assoc()) {
+                if (isset($row['work_schedule']) && $row['work_schedule'] !== null) {
+                    $row['work_schedule'] = json_decode($row['work_schedule'], true);
+                }
+                $data[] = $row;
+            }
+        }
+        if (empty($data)) {
+            $uRes = $conn->query("SELECT id, full_name AS name, email, phone, role, avatar_url AS avatar, zalo_chat_id, telegram_chat_id FROM users WHERE is_active = 1 ORDER BY full_name ASC");
+            if ($uRes) {
+                while ($uRow = $uRes->fetch_assoc()) {
+                    $data[] = $uRow;
+                }
+            }
+        }
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'upload_avatar':
+        try {
+            if (!isset($_FILES['avatar'])) {
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy file tải lên']);
+                break;
+            }
+
+            $file = $_FILES['avatar'];
+            if ($file['error'] !== UPLOAD_ERR_OK) {
+                echo json_encode(['success' => false, 'message' => 'Lỗi tải file lên: ' . $file['error']]);
+                break;
+            }
+
+            // Validate file type
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+            // 1. Validate file extension strictly
+            $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            if (empty($extension)) {
+                // Fallback extension based on mime type
+                $mimeToExt = [
+                    'image/jpeg' => 'jpg',
+                    'image/png' => 'png',
+                    'image/gif' => 'gif',
+                    'image/webp' => 'webp'
+                ];
+                $extension = $mimeToExt[$file['type']] ?? 'jpg';
+            }
+            if (!in_array($extension, $allowedExtensions)) {
+                echo json_encode(['success' => false, 'message' => 'Định dạng đuôi file không hợp lệ. Chỉ chấp nhận JPG, PNG, GIF, WEBP.']);
+                break;
+            }
+
+            // 2. Validate real MIME type (prevent Content-Type spoofing)
+            $imageInfo = getimagesize($file['tmp_name']);
+            if ($imageInfo === false) {
+                echo json_encode(['success' => false, 'message' => 'File tải lên không phải là ảnh hợp lệ.']);
+                break;
+            }
+            $realMime = $imageInfo['mime'];
+            if (!in_array($realMime, $allowedTypes)) {
+                echo json_encode(['success' => false, 'message' => 'Nội dung định dạng file không hợp lệ. Chỉ chấp nhận JPG, PNG, GIF, WEBP.']);
+                break;
+            }
+
+            // Validate file size (max 5MB)
+            if ($file['size'] > 5 * 1024 * 1024) {
+                echo json_encode(['success' => false, 'message' => 'Kích thước file quá lớn (tối đa 5MB)']);
+                break;
+            }
+
+            // Ensure upload directory exists
+            $uploadDir = __DIR__ . '/uploads/avatars/';
+            if (!file_exists($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            $newFilename = 'avatar_' . uniqid() . '.' . $extension;
+            $destination = $uploadDir . $newFilename;
+
+            require_once __DIR__ . '/config/ImageHelper.php';
+            $res = ImageHelper::saveUploadedFile($file['tmp_name'], $destination, $file['name']);
+
+            if ($res['success']) {
+                $relativeUrl = 'uploads/avatars/' . $res['filename'];
+
+                // Xóa ảnh cũ nếu có
+                $oldAvatar = $_GET['old_avatar'] ?? '';
+                if (!empty($oldAvatar)) {
+                    deleteServerFile($oldAvatar);
+                }
+
+                echo json_encode(['success' => true, 'url' => $relativeUrl]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Không thể lưu file trên máy chủ']);
+            }
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'add_consultant':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $name = trim($input['name'] ?? '');
+            $email = trim($input['email'] ?? '');
+            $status = $input['status'] ?? 'active';
+            $zalo_chat_id = trim($input['zalo_chat_id'] ?? '');
+            $avatar = trim($input['avatar'] ?? '');
+            if ($avatar === '')
+                $avatar = null;
+            $team_id = !empty($input['team_id']) ? (int)$input['team_id'] : null;
+
+            // NEW-03 fix: validate required fields
+            if (empty($name)) {
+                echo json_encode(['success' => false, 'message' => 'Tên TVV không được để trống']);
+                break;
+            }
+            if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['success' => false, 'message' => 'Email không hợp lệ']);
+                break;
+            }
+            // Check duplicate email
+            $dupChk = $conn->prepare("SELECT id FROM consultants WHERE email = ?");
+            $dupChk->bind_param("s", $email);
+            $dupChk->execute();
+            $isDup = $dupChk->get_result()->num_rows > 0;
+            $dupChk->close();
+            if ($isDup) {
+                echo json_encode(['success' => false, 'message' => 'Email này đã tồn tại trong hệ thống']);
+                break;
+            }
+            $work_start_time = trim($input['work_start_time'] ?? '00:00');
+            $work_end_time = trim($input['work_end_time'] ?? '23:59');
+            if (empty($work_start_time) || !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $work_start_time)) {
+                echo json_encode(['success' => false, 'message' => 'Giờ bắt đầu làm việc không hợp lệ (định dạng HH:MM từ 00:00 đến 23:59)']);
+                break;
+            }
+            if (empty($work_end_time) || !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $work_end_time)) {
+                echo json_encode(['success' => false, 'message' => 'Giờ kết thúc làm việc không hợp lệ (định dạng HH:MM từ 00:00 đến 23:59)']);
+                break;
+            }
+            $work_schedule = isset($input['work_schedule']) ? (is_array($input['work_schedule']) ? json_encode($input['work_schedule']) : $input['work_schedule']) : null;
+            if ($work_schedule !== null && !validateWorkSchedule($work_schedule)) {
+                echo json_encode(['success' => false, 'message' => 'Cấu hình lịch làm việc chi tiết không hợp lệ.']);
+                break;
+            }
+
+            $dob = !empty($input['dob']) ? $input['dob'] : null;
+            $gender = !empty($input['gender']) ? $input['gender'] : null;
+            $citizen_id = !empty($input['citizen_id']) ? $input['citizen_id'] : null;
+            $address = !empty($input['address']) ? $input['address'] : null;
+            $bank_name = !empty($input['bank_name']) ? $input['bank_name'] : null;
+            $bank_account = !empty($input['bank_account']) ? $input['bank_account'] : null;
+            $phone = !empty($input['phone']) ? trim($input['phone']) : null;
+
+            $stmt = $conn->prepare("INSERT INTO consultants (name, email, phone, status, zalo_chat_id, work_start_time, work_end_time, work_schedule, avatar, team_id, dob, gender, citizen_id, address, bank_name, bank_account) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssssssssissssss", $name, $email, $phone, $status, $zalo_chat_id, $work_start_time, $work_end_time, $work_schedule, $avatar, $team_id, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account);
+            $stmt->execute();
+            $newId = $conn->insert_id;
+            $stmt->close();
+
+            // Gửi Email Welcome kèm link Zalo Bot
+            require_once 'mailer.php';
+            $settingStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_link'");
+            $botLink = "https://zalo.me/1185588456243371597"; // Default
+            if ($settingStmt && $settingStmt->num_rows > 0) {
+                $row = $settingStmt->fetch_assoc();
+                if (!empty($row['setting_value']))
+                    $botLink = $row['setting_value'];
+            }
+            sendWelcomeEmailToSale($newId, $email, $name, $botLink, true);
+            logAdminAction($conn, $decodedUser['id'], 'ADD_CONSULTANT', ['id' => $newId, 'name' => $name, 'email' => $email, 'status' => $status]);
+
+            echo json_encode(['success' => true, 'id' => $newId]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'edit_consultant':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+            $name = trim($input['name'] ?? '');
+            $email = trim($input['email'] ?? '');
+            $status = $input['status'] ?? 'active';
+            $leave_start = !empty($input['leave_start']) ? $input['leave_start'] : null;
+            $leave_end = !empty($input['leave_end']) ? $input['leave_end'] : null;
+
+            // Auto-clear past/stale leave dates when setting status to active or inactive
+            if ($status === 'active' || $status === 'inactive') {
+                $today = date('Y-m-d');
+                if (empty($leave_start) || $leave_start <= $today || $status === 'inactive') {
+                    $leave_start = null;
+                    $leave_end = null;
+                }
+            }
+            $zalo_chat_id = !empty($input['zalo_chat_id']) ? trim($input['zalo_chat_id']) : null;
+            $avatar = isset($input['avatar']) ? trim($input['avatar']) : null;
+            if ($avatar === '')
+                $avatar = null;
+            $team_id = !empty($input['team_id']) ? (int)$input['team_id'] : null;
+
+            if (!$id) {
+                echo json_encode(['success' => false, 'message' => 'ID không hợp lệ']);
+                break;
+            }
+            if (empty($name)) {
+                echo json_encode(['success' => false, 'message' => 'Tên TVV không được để trống']);
+                break;
+            }
+            if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['success' => false, 'message' => 'Email không hợp lệ']);
+                break;
+            }
+            // Check duplicate email — but exclude self
+            $dupChk2 = $conn->prepare("SELECT id FROM consultants WHERE email = ? AND id != ?");
+            $dupChk2->bind_param("si", $email, $id);
+            $dupChk2->execute();
+            $isDup = $dupChk2->get_result()->num_rows > 0;
+            $dupChk2->close();
+            if ($isDup) {
+                echo json_encode(['success' => false, 'message' => 'Email này đã tồn tại trong hệ thống']);
+                break;
+            }
+            $work_start_time = trim($input['work_start_time'] ?? '00:00');
+            $work_end_time = trim($input['work_end_time'] ?? '23:59');
+            if (empty($work_start_time) || !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $work_start_time)) {
+                echo json_encode(['success' => false, 'message' => 'Giờ bắt đầu làm việc không hợp lệ (định dạng HH:MM từ 00:00 đến 23:59)']);
+                break;
+            }
+            if (empty($work_end_time) || !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $work_end_time)) {
+                echo json_encode(['success' => false, 'message' => 'Giờ kết thúc làm việc không hợp lệ (định dạng HH:MM từ 00:00 đến 23:59)']);
+                break;
+            }
+            $work_schedule = isset($input['work_schedule']) ? (is_array($input['work_schedule']) ? json_encode($input['work_schedule']) : $input['work_schedule']) : null;
+            if ($work_schedule !== null && !validateWorkSchedule($work_schedule)) {
+                echo json_encode(['success' => false, 'message' => 'Cấu hình lịch làm việc chi tiết không hợp lệ.']);
+                break;
+            }
+
+            if ($status === 'inactive' || $status === 'leave') {
+                $fallbackRounds = getSystemFallbackRoundIds($conn);
+                if (!empty($fallbackRounds)) {
+                    $inRounds = implode(',', array_map('intval', $fallbackRounds));
+                    $stmtF = $conn->prepare("SELECT rc.round_id, r.round_name FROM round_consultants rc JOIN distribution_rounds r ON rc.round_id = r.id WHERE rc.consultant_id = ? AND rc.round_id IN ($inRounds)");
+                    $stmtF->bind_param("i", $id);
+                    $stmtF->execute();
+                    $resF = $stmtF->get_result();
+                    while ($rowF = $resF->fetch_assoc()) {
+                        $rId = $rowF['round_id'];
+                        $rName = $rowF['round_name'];
+
+                        $stmtOther = $conn->prepare("
+                            SELECT COUNT(*) as cnt 
+                            FROM round_consultants rc 
+                            JOIN consultants c ON rc.consultant_id = c.id 
+                            WHERE rc.round_id = ? AND rc.consultant_id != ? AND c.status = 'active'
+                        ");
+                        $stmtOther->bind_param("ii", $rId, $id);
+                        $stmtOther->execute();
+                        $otherActiveCount = (int) ($stmtOther->get_result()->fetch_assoc()['cnt'] ?? 0);
+                        $stmtOther->close();
+
+                        if ($otherActiveCount === 0) {
+                            throw new Exception("Không thể ngưng hoạt động hoặc cho tạm nghỉ TVV này vì họ là người hoạt động duy nhất trong vòng dự phòng (fallback): $rName.");
+                        }
+                    }
+                    $stmtF->close();
+                }
+            }
+
+            $dob = !empty($input['dob']) ? $input['dob'] : null;
+            $gender = !empty($input['gender']) ? $input['gender'] : null;
+            $citizen_id = !empty($input['citizen_id']) ? $input['citizen_id'] : null;
+            $address = !empty($input['address']) ? $input['address'] : null;
+            $bank_name = !empty($input['bank_name']) ? $input['bank_name'] : null;
+            $bank_account = !empty($input['bank_account']) ? $input['bank_account'] : null;
+            $phone = !empty($input['phone']) ? trim($input['phone']) : null;
+
+            // Fetch old consultant state for audit log rollback support
+            $oldRes = $conn->query("SELECT name, email, phone, status, leave_start, leave_end, zalo_chat_id, work_start_time, work_end_time, work_schedule, avatar, team_id, dob, gender, citizen_id, address, bank_name, bank_account FROM consultants WHERE id = " . $id);
+            $oldData = $oldRes ? $oldRes->fetch_assoc() : null;
+
+            if (empty($zalo_chat_id) && !empty($oldData['zalo_chat_id']) && (!array_key_exists('zalo_chat_id', $input) || $input['zalo_chat_id'] === '')) {
+                $zalo_chat_id = $oldData['zalo_chat_id'];
+            }
+
+            $stmt = $conn->prepare("UPDATE consultants SET name=?, email=?, phone=?, status=?, leave_start=?, leave_end=?, zalo_chat_id=?, work_start_time=?, work_end_time=?, work_schedule=?, avatar=?, team_id=?, dob=?, gender=?, citizen_id=?, address=?, bank_name=?, bank_account=? WHERE id=?");
+            $stmt->bind_param("ssssssssssisssssssi", $name, $email, $phone, $status, $leave_start, $leave_end, $zalo_chat_id, $work_start_time, $work_end_time, $work_schedule, $avatar, $team_id, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'EDIT_CONSULTANT', [
+                    'id' => $id,
+                    'old' => $oldData,
+                    'new' => [
+                        'name' => $name,
+                        'email' => $email,
+                        'phone' => $phone,
+                        'status' => $status,
+                        'leave_start' => $leave_start,
+                        'leave_end' => $leave_end,
+                        'zalo_chat_id' => $zalo_chat_id,
+                        'work_start_time' => $work_start_time,
+                        'work_end_time' => $work_end_time,
+                        'work_schedule' => $work_schedule,
+                        'avatar' => $avatar
+                    ]
+                ]);
+            }
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'toggle_consultant_vacation':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+
+            // If logged in as sale, override ID to their own consultant record
+            if ($decodedUser['role'] === 'sale' || $decodedUser['role'] === 'sales' || empty($id) || $id === ($currentSaleConsultantId ?? 0)) {
+                $id = $currentSaleConsultantId ?? 0;
+            }
+
+            if ($decodedUser['role'] === 'manager') {
+                $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+                if (!isManagerOfConsultant($conn, $currentUserId, $id)) {
+                    echo json_encode(['success' => false, 'message' => 'Bạn không có quyền thay đổi trạng thái của tư vấn viên này']);
+                    break;
+                }
+            }
+
+            if (!$id) {
+                echo json_encode(['success' => false, 'message' => 'ID không hợp lệ']);
+                break;
+            }
+
+            // Get current vacation mode
+            $stmt = $conn->prepare("SELECT vacation_mode, name FROM consultants WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            if ($res->num_rows === 0) {
+                $stmt->close();
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy tư vấn viên']);
+                break;
+            }
+            $row = $res->fetch_assoc();
+            $stmt->close();
+
+            $newVacationMode = $row['vacation_mode'] ? 0 : 1;
+
+            $stmtUp = $conn->prepare("UPDATE consultants SET vacation_mode = ? WHERE id = ?");
+            $stmtUp->bind_param("ii", $newVacationMode, $id);
+            $stmtUp->execute();
+            $stmtUp->close();
+
+            // Sync to users table by email
+            $stmtUserUp = $conn->prepare("UPDATE users SET vacation_mode = ? WHERE email = (SELECT email FROM consultants WHERE id = ? LIMIT 1)");
+            $stmtUserUp->bind_param("ii", $newVacationMode, $id);
+            $stmtUserUp->execute();
+            $stmtUserUp->close();
+
+            if ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin') {
+                logAdminAction($conn, $decodedUser['id'], 'TOGGLE_CONSULTANT_VACATION', ['id' => $id, 'name' => $row['name'], 'vacation_mode' => $newVacationMode]);
+            }
+
+            if ($newVacationMode === 1) {
+                // Gửi Zalo thông báo tới toàn bộ admin khi sale tắt nhận data
+                $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+                $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+                if (!empty($botToken)) {
+                    require_once __DIR__ . '/zalo_bot.php';
+                    $allAdmins = getTicketNotifyAdmins($conn);
+                    $adminChatIds = [];
+                    foreach ($allAdmins as $adm) {
+                        if (!empty($adm['zalo_chat_id'])) {
+                            $adminChatIds[] = $adm['zalo_chat_id'];
+                        }
+                    }
+                    if (!empty($adminChatIds)) {
+                        $saleName = $row['name'];
+                        $operatorName = $decodedUser['name'] ?? 'Hệ thống';
+                        $operatorRole = $decodedUser['role'] ?? '';
+                        if ($operatorRole === 'admin' || $operatorRole === 'superadmin') {
+                            $zaloMsg = "[ ADMIN TẠM NGƯNG SALE ]\n\n"
+                                . "Admin $operatorName vừa TẠM NGƯNG nhận data cho Tư vấn viên:\n"
+                                . "  • Tên TVV: $saleName\n"
+                                . "  • ID TVV: $id\n"
+                                . "  • Thời gian: " . date('Y-m-d H:i:s');
+                        } else {
+                            $zaloMsg = "[ CẢNH BÁO TẠM NGƯNG ]\n\n"
+                                . "Tư vấn viên $saleName tự TẮT nhận data (Tạm ngưng):\n"
+                                . "  • Tên TVV: $saleName\n"
+                                . "  • ID TVV: $id\n"
+                                . "  • Thời gian: " . date('Y-m-d H:i:s') . "\n\n"
+                                . "⚠️ Vui lòng lưu ý để điều chỉnh nếu cần thiết.";
+                        }
+                        try {
+                            sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloMsg, false);
+                        } catch (Exception $zEx) {
+                            error_log("Error sending toggle vacation Zalo warning: " . $zEx->getMessage());
+                        }
+                    }
+                }
+            }
+
+            echo json_encode(['success' => true, 'vacation_mode' => $newVacationMode]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'accept_lead':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $lead_id = (int) ($input['lead_id'] ?? 0);
+
+            if (!$lead_id) {
+                echo json_encode(['success' => false, 'message' => 'ID Lead không hợp lệ']);
+                break;
+            }
+
+            $conn->begin_transaction();
+
+            // Lock the lead row for update to prevent race conditions with recall cron
+            $stmtChk = $conn->prepare("
+                SELECT l.assigned_to, l.is_accepted, l.last_interaction_date, l.connection_id,
+                       IFNULL(sc.lead_recall_minutes, 0) as connection_recall_minutes
+                FROM leads l 
+                LEFT JOIN sheet_connections sc ON l.connection_id = sc.id
+                WHERE l.id = ? 
+                FOR UPDATE
+            ");
+            $stmtChk->bind_param("i", $lead_id);
+            $stmtChk->execute();
+            $resChk = $stmtChk->get_result()->fetch_assoc();
+            $stmtChk->close();
+
+            if (!$resChk) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy Lead']);
+                break;
+            }
+
+            if ((int)$resChk['is_accepted'] === 1) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Lead này đã được tiếp nhận trước đó']);
+                break;
+            }
+
+            // Verify timeout limit
+            $timeoutMinutes = get_lead_recall_minutes($conn, $resChk['last_interaction_date'], $resChk['connection_recall_minutes']);
+            $lastInteraction = strtotime($resChk['last_interaction_date']);
+            if ($timeoutMinutes > 0 && (time() - $lastInteraction) > $timeoutMinutes * 60) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Khách hàng này đã bị thu hồi hoặc chuyển cho người khác do quá hạn tiếp nhận']);
+                break;
+            }
+
+            // If logged in as sale, verify the lead is assigned to them
+            if ($decodedUser['role'] === 'sale' || $decodedUser['role'] === 'sales') {
+                $sale_id = $currentSaleConsultantId ?? 0;
+                if ((int)$resChk['assigned_to'] !== $sale_id) {
+                    $conn->rollback();
+                    echo json_encode(['success' => false, 'message' => 'Khách hàng này đã bị thu hồi hoặc chuyển cho người khác do quá hạn tiếp nhận']);
+                    break;
+                }
+            }
+
+            // Check van chống ôm (Đã lược bỏ theo yêu cầu)
+
+            $stmtUp = $conn->prepare("UPDATE leads SET is_accepted = 1, accepted_at = NOW() WHERE id = ?");
+            $stmtUp->bind_param("i", $lead_id);
+            $stmtUp->execute();
+            $stmtUp->close();
+
+            require_once __DIR__ . '/webhook_logic.php';
+            ensurePersonAndContact($conn, $lead_id);
+
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'delete_consultant':
+        $conn->begin_transaction();
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            if (!$id)
+                throw new Exception('ID không hợp lệ');
+
+            // Check if consultant has any assigned leads in distribution_logs
+            $checkLog = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ?");
+            $checkLog->bind_param("i", $id);
+            $checkLog->execute();
+            $hasLogs = (int) $checkLog->get_result()->fetch_assoc()['cnt'] > 0;
+            $checkLog->close();
+            if ($hasLogs) {
+                throw new Exception("TVV này đã nhận Data, không thể xóa để bảo toàn thống kê. Vui lòng chọn 'Ngưng hoạt động'.");
+            }
+
+            $fallbackRounds = getSystemFallbackRoundIds($conn);
+            if (!empty($fallbackRounds)) {
+                $inRounds = implode(',', array_map('intval', $fallbackRounds));
+                $stmtF = $conn->prepare("SELECT rc.round_id, r.round_name FROM round_consultants rc JOIN distribution_rounds r ON rc.round_id = r.id WHERE rc.consultant_id = ? AND rc.round_id IN ($inRounds)");
+                $stmtF->bind_param("i", $id);
+                $stmtF->execute();
+                $resF = $stmtF->get_result();
+                while ($rowF = $resF->fetch_assoc()) {
+                    $rId = $rowF['round_id'];
+                    $rName = $rowF['round_name'];
+
+                    $stmtOther = $conn->prepare("
+                        SELECT COUNT(*) as cnt 
+                        FROM round_consultants rc 
+                        JOIN consultants c ON rc.consultant_id = c.id 
+                        WHERE rc.round_id = ? AND rc.consultant_id != ? AND c.status = 'active'
+                    ");
+                    $stmtOther->bind_param("ii", $rId, $id);
+                    $stmtOther->execute();
+                    $otherActiveCount = (int) ($stmtOther->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $stmtOther->close();
+
+                    if ($otherActiveCount === 0) {
+                        throw new Exception("Không thể xóa TVV này vì họ là người hoạt động duy nhất trong vòng dự phòng (fallback): $rName.");
+                    }
+                }
+                $stmtF->close();
+            }
+
+            $stmtD1 = $conn->prepare("DELETE FROM round_consultants WHERE consultant_id = ?");
+            $stmtD1->bind_param("i", $id);
+            $stmtD1->execute();
+            $stmtD1->close();
+
+            $stmtD2 = $conn->prepare("DELETE FROM data_reports WHERE consultant_id = ?");
+            $stmtD2->bind_param("i", $id);
+            $stmtD2->execute();
+            $stmtD2->close();
+
+            $stmtD3 = $conn->prepare("DELETE FROM consultants WHERE id = ?");
+            $stmtD3->bind_param("i", $id);
+            $stmtD3->execute();
+            $stmtD3->close();
+            logAdminAction($conn, $decodedUser['id'], 'DELETE_CONSULTANT', ['id' => $id]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'get_consultant_stats':
+        $consultantId = isset($_GET['consultant_id']) ? (int) $_GET['consultant_id'] : 0;
+        if (empty($consultantId)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu consultant_id']);
+            break;
+        }
+
+        if ($decodedUser['role'] === 'manager') {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfConsultant($conn, $currentUserId, $consultantId)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xem thông số của tư vấn viên này']);
+                break;
+            }
+        }
+
+        $dateMode = $_GET['date_mode'] ?? 'all';
+        $startDate = $_GET['start_date'] ?? '';
+        $endDate = $_GET['end_date'] ?? '';
+
+        $today = date('Y-m-d');
+        $dateCondition = "1=1";
+        $params = [];
+        $types = "";
+
+        if ($dateMode === 'today') {
+            $dateCondition = "dl.received_at >= ? AND dl.received_at <= ?";
+            $params[] = $today . ' 00:00:00';
+            $params[] = $today . ' 23:59:59';
+            $types .= "ss";
+        } elseif ($dateMode === 'yesterday') {
+            $yesterday = date('Y-m-d', strtotime('-1 day'));
+            $dateCondition = "dl.received_at >= ? AND dl.received_at <= ?";
+            $params[] = $yesterday . ' 00:00:00';
+            $params[] = $yesterday . ' 23:59:59';
+            $types .= "ss";
+        } elseif ($dateMode === '7_days') {
+            $dateCondition = "dl.received_at >= ?";
+            $params[] = date('Y-m-d', strtotime('-7 days')) . ' 00:00:00';
+            $types .= "s";
+        } elseif ($dateMode === '30_days') {
+            $dateCondition = "dl.received_at >= ?";
+            $params[] = date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
+            $types .= "s";
+        } elseif ($dateMode === 'this_month') {
+            $dateCondition = "dl.received_at >= ?";
+            $params[] = date('Y-m-01') . ' 00:00:00';
+            $types .= "s";
+        } elseif ($dateMode === 'last_month') {
+            $dateCondition = "dl.received_at >= ? AND dl.received_at < ?";
+            $params[] = date('Y-m-01', strtotime('first day of last month')) . ' 00:00:00';
+            $params[] = date('Y-m-01') . ' 00:00:00';
+            $types .= "ss";
+        } elseif ($dateMode === 'custom' && !empty($startDate) && !empty($endDate)) {
+            $dateCondition = "dl.received_at >= ? AND dl.received_at <= ?";
+            $params[] = $startDate . ' 00:00:00';
+            $params[] = $endDate . ' 23:59:59';
+            $types .= "ss";
+        }
+
+        $statsTypes = "i" . $types;
+        $statsParams = array_merge([$consultantId], $params);
+        // 1. Summary stats
+        $systemTotalSuccessful = 0;
+        $sqlSystemStats = "
+            SELECT COUNT(*) as system_successful
+            FROM distribution_logs dl
+            WHERE dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours') AND $dateCondition
+        ";
+        $stmtSystem = $conn->prepare($sqlSystemStats);
+        if ($stmtSystem) {
+            if (!empty($types)) {
+                $stmtSystem->bind_param($types, ...$params);
+            }
+            $stmtSystem->execute();
+            $systemRaw = $stmtSystem->get_result()->fetch_assoc();
+            $systemTotalSuccessful = (int) ($systemRaw['system_successful'] ?? 0);
+            $stmtSystem->close();
+        }
+
+        $sqlStats = "
+            SELECT 
+                SUM(CASE WHEN status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours') THEN 1 ELSE 0 END) as successful,
+                SUM(CASE WHEN status = 'reminder' THEN 1 ELSE 0 END) as reminder,
+                SUM(CASE WHEN status IN ('duplicate', 'error', 'no_consultant', 'blacklisted') THEN 1 ELSE 0 END) as error,
+                SUM(CASE WHEN status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'reminder', 'duplicate', 'error', 'no_consultant', 'blacklisted') THEN 1 ELSE 0 END) as total
+            FROM distribution_logs dl
+            WHERE dl.assigned_to = ? AND $dateCondition
+        ";
+        $stmtStats = $conn->prepare($sqlStats);
+        if ($stmtStats) {
+            if (!empty($statsTypes)) {
+                $stmtStats->bind_param($statsTypes, ...$statsParams);
+            }
+            $stmtStats->execute();
+            $summaryRaw = $stmtStats->get_result()->fetch_assoc();
+            $stmtStats->close();
+
+            $summary = [
+                'total' => (int) ($summaryRaw['total'] ?? 0),
+                'successful' => (int) ($summaryRaw['successful'] ?? 0),
+                'reminder' => (int) ($summaryRaw['reminder'] ?? 0),
+                'error' => (int) ($summaryRaw['error'] ?? 0),
+                'system_total_successful' => $systemTotalSuccessful
+            ];
+        } else {
+            $summary = ['total' => 0, 'successful' => 0, 'reminder' => 0, 'error' => 0, 'system_total_successful' => 0];
+        }
+
+        // Tải thêm thông số đồng bộ như card của bên sale từ bảng contacts
+        $saleUserId = 0;
+        $tid = 1;
+        $stmtUser = $conn->prepare("SELECT u.id, u.tenant_id FROM users u JOIN consultants cons ON u.email = cons.email WHERE cons.id = ?");
+        if ($stmtUser) {
+            $stmtUser->bind_param("i", $consultantId);
+            $stmtUser->execute();
+            $resUser = $stmtUser->get_result()->fetch_assoc();
+            if ($resUser) {
+                $saleUserId = (int)$resUser['id'];
+                $tid = (int)$resUser['tenant_id'];
+            }
+            $stmtUser->close();
+        }
+
+        $contactsCount = 0;
+        $distributedCount = 0;
+        $coopCount = 0;
+        $databankCount = 0;
+        $selfCount = 0;
+        $errorTicketCount = 0;
+
+        if ($saleUserId > 0) {
+            $contactsDateCondition = "1=1";
+            if ($dateMode === 'today') {
+                $contactsDateCondition = "c.created_at >= '$today 00:00:00' AND c.created_at <= '$today 23:59:59'";
+            } elseif ($dateMode === 'yesterday') {
+                $yesterday = date('Y-m-d', strtotime('-1 day'));
+                $contactsDateCondition = "c.created_at >= '$yesterday 00:00:00' AND c.created_at <= '$yesterday 23:59:59'";
+            } elseif ($dateMode === '7_days') {
+                $dateLimit = date('Y-m-d', strtotime('-7 days'));
+                $contactsDateCondition = "c.created_at >= '$dateLimit 00:00:00'";
+            } elseif ($dateMode === '30_days') {
+                $dateLimit = date('Y-m-d', strtotime('-30 days'));
+                $contactsDateCondition = "c.created_at >= '$dateLimit 00:00:00'";
+            } elseif ($dateMode === 'this_month') {
+                $dateLimit = date('Y-m-01');
+                $contactsDateCondition = "c.created_at >= '$dateLimit 00:00:00'";
+            } elseif ($dateMode === 'last_month') {
+                $firstLastMonth = date('Y-m-01', strtotime('first day of last month'));
+                $firstThisMonth = date('Y-m-01');
+                $contactsDateCondition = "c.created_at >= '$firstLastMonth 00:00:00' AND c.created_at < '$firstThisMonth 00:00:00'";
+            } elseif ($dateMode === 'custom' && !empty($startDate) && !empty($endDate)) {
+                $startEsc = $conn->real_escape_string($startDate);
+                $endEsc = $conn->real_escape_string($endDate);
+                $contactsDateCondition = "c.created_at >= '$startEsc 00:00:00' AND c.created_at <= '$endEsc 23:59:59'";
+            }
+
+            $contactsWhereClause = "c.tenant_id = $tid AND c.deleted_at IS NULL AND (c.owner_id = $saleUserId OR FIND_IN_SET($saleUserId, c.collaborator_ids)) AND $contactsDateCondition";
+
+            $resTotal = $conn->query("SELECT COUNT(*) as cnt FROM contacts c WHERE $contactsWhereClause");
+            if ($resTotal) {
+                $contactsCount = (int) ($resTotal->fetch_assoc()['cnt'] ?? 0);
+            }
+
+            // DATA LỖI & TICKET
+            $resErrorTicket = $conn->query("
+                SELECT COUNT(DISTINCT c.id) as cnt 
+                FROM contacts c 
+                WHERE $contactsWhereClause 
+                  AND (
+                    EXISTS (
+                        SELECT 1 FROM data_reports dr 
+                        JOIN leads l2 ON dr.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM leads l2 
+                        JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id AND dl2.assigned_to = $consultantId AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                    )
+                  )
+            ");
+            $errorTicketCount = 0;
+            if ($resErrorTicket) {
+                $errorTicketCount = (int) ($resErrorTicket->fetch_assoc()['cnt'] ?? 0);
+            }
+
+            $resDb = $conn->query("
+                SELECT COUNT(DISTINCT c.id) as cnt 
+                FROM contacts c 
+                WHERE $contactsWhereClause 
+                  AND NOT (
+                    EXISTS (
+                        SELECT 1 FROM data_reports dr 
+                        JOIN leads l2 ON dr.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM leads l2 
+                        JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id AND dl2.assigned_to = $consultantId AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                    )
+                  )
+                  AND (c.source = 'databank' OR EXISTS (
+                      SELECT 1 FROM leads l2 
+                      JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                      WHERE l2.person_id = c.person_id AND dl2.assigned_to = $consultantId AND dl2.status = 'databank_claim'
+                  ))
+            ");
+            if ($resDb) {
+                $databankCount = (int) ($resDb->fetch_assoc()['cnt'] ?? 0);
+            }
+
+            $resDist = $conn->query("
+                SELECT COUNT(DISTINCT c.id) as cnt 
+                FROM contacts c 
+                WHERE $contactsWhereClause 
+                  AND NOT (
+                    EXISTS (
+                        SELECT 1 FROM data_reports dr 
+                        JOIN leads l2 ON dr.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM leads l2 
+                        JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id AND dl2.assigned_to = $consultantId AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                    )
+                  )
+                  AND c.source NOT IN ('databank', 'ca_nhan', 'gioi_thieu')
+                  AND (c.collaborator_ids IS NULL OR c.collaborator_ids = '')
+                  AND EXISTS (
+                      SELECT 1 FROM leads l2 
+                      JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                      WHERE l2.person_id = c.person_id AND dl2.assigned_to = $consultantId AND dl2.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
+                  )
+            ");
+            if ($resDist) {
+                $distributedCount = (int) ($resDist->fetch_assoc()['cnt'] ?? 0);
+            }
+
+            $resCoop = $conn->query("
+                SELECT COUNT(DISTINCT c.id) as cnt 
+                FROM contacts c 
+                WHERE c.tenant_id = $tid AND c.deleted_at IS NULL AND $contactsDateCondition
+                  AND NOT (
+                    EXISTS (
+                        SELECT 1 FROM data_reports dr 
+                        JOIN leads l2 ON dr.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM leads l2 
+                        JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                        WHERE l2.person_id = c.person_id AND dl2.assigned_to = $consultantId AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                    )
+                  )
+                  AND (FIND_IN_SET($saleUserId, c.collaborator_ids) OR (c.owner_id = $saleUserId AND c.collaborator_ids IS NOT NULL AND c.collaborator_ids != ''))
+            ");
+            if ($resCoop) {
+                $coopCount = (int) ($resCoop->fetch_assoc()['cnt'] ?? 0);
+            }
+
+            $selfCount = max(0, $contactsCount - $errorTicketCount - $databankCount - $distributedCount - $coopCount);
+        }
+
+        $summary['total_received'] = $contactsCount;
+        $summary['distributed_count'] = $distributedCount;
+        $summary['coop_count'] = $coopCount;
+        $summary['databank_count'] = $databankCount;
+        $summary['self_count'] = $selfCount;
+        $summary['error_ticket_count'] = $errorTicketCount;
+
+        // 2. Breakdown stats by round
+        $sqlRoundStats = "
+            SELECT 
+                dl.round_id, 
+                IFNULL(dr.round_name, 'Không rõ vòng') as round_name, 
+                SUM(CASE WHEN dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'reminder', 'duplicate', 'error', 'no_consultant', 'blacklisted') THEN 1 ELSE 0 END) as total_count,
+                SUM(CASE WHEN dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours') THEN 1 ELSE 0 END) as successful_count,
+                SUM(CASE WHEN dl.status = 'reminder' THEN 1 ELSE 0 END) as reminder_count,
+                SUM(CASE WHEN dl.status IN ('duplicate', 'error', 'no_consultant', 'blacklisted') THEN 1 ELSE 0 END) as error_count
+            FROM distribution_logs dl
+            LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
+            WHERE dl.assigned_to = ? AND $dateCondition
+            GROUP BY dl.round_id, dr.round_name
+            ORDER BY total_count DESC
+        ";
+        $roundsStats = [];
+        $stmtRound = $conn->prepare($sqlRoundStats);
+        if ($stmtRound) {
+            if (!empty($statsTypes)) {
+                $stmtRound->bind_param($statsTypes, ...$statsParams);
+            }
+            $stmtRound->execute();
+            $resRound = $stmtRound->get_result();
+            while ($row = $resRound->fetch_assoc()) {
+                $roundsStats[] = [
+                    'round_id' => $row['round_id'] !== null ? (int) $row['round_id'] : null,
+                    'round_name' => $row['round_name'],
+                    'total_count' => (int) $row['total_count'],
+                    'successful_count' => (int) $row['successful_count'],
+                    'reminder_count' => (int) $row['reminder_count'],
+                    'error_count' => (int) $row['error_count']
+                ];
+            }
+            $stmtRound->close();
+        }
+
+        // 3. Daily trend stats
+        $byDate = [];
+        $sqlByDate = "
+            SELECT DATE_FORMAT(dl.received_at, '%Y-%m-%d') as date_str, COUNT(*) as count
+            FROM distribution_logs dl
+            WHERE dl.assigned_to = ? AND $dateCondition AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours')
+            GROUP BY DATE(dl.received_at)
+            ORDER BY date_str ASC
+        ";
+        $stmtByDate = $conn->prepare($sqlByDate);
+        if ($stmtByDate) {
+            if (!empty($statsTypes)) {
+                $stmtByDate->bind_param($statsTypes, ...$statsParams);
+            }
+            $stmtByDate->execute();
+            $resByDate = $stmtByDate->get_result();
+            while ($row = $resByDate->fetch_assoc()) {
+                $byDate[] = [
+                    'date' => date('d/m', strtotime($row['date_str'])),
+                    'count' => (int) $row['count']
+                ];
+            }
+            $stmtByDate->close();
+        }
+
+        // 4. Source distribution stats
+        $bySource = [];
+        $sqlBySource = "
+            SELECT IFNULL(l.source, 'Không rõ nguồn') as source_name, COUNT(*) as count
+            FROM distribution_logs dl
+            JOIN leads l ON dl.lead_id = l.id
+            WHERE dl.assigned_to = ? AND $dateCondition AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours')
+            GROUP BY l.source
+            ORDER BY count DESC
+        ";
+        $stmtBySource = $conn->prepare($sqlBySource);
+        if ($stmtBySource) {
+            if (!empty($statsTypes)) {
+                $stmtBySource->bind_param($statsTypes, ...$statsParams);
+            }
+            $stmtBySource->execute();
+            $resBySource = $stmtBySource->get_result();
+            while ($row = $resBySource->fetch_assoc()) {
+                $bySource[] = [
+                    'source' => $row['source_name'],
+                    'count' => (int) $row['count']
+                ];
+            }
+            $stmtBySource->close();
+        }
+
+        // 5. Ticket reports stats
+        $ticketCondition = "1=1";
+        $ticketParams = [];
+        $ticketTypes = "";
+
+        if ($dateMode === 'today') {
+            $ticketCondition = "created_at >= ? AND created_at <= ?";
+            $ticketParams[] = $today . ' 00:00:00';
+            $ticketParams[] = $today . ' 23:59:59';
+            $ticketTypes .= "ss";
+        } elseif ($dateMode === 'yesterday') {
+            $yesterday = date('Y-m-d', strtotime('-1 day'));
+            $ticketCondition = "created_at >= ? AND created_at <= ?";
+            $ticketParams[] = $yesterday . ' 00:00:00';
+            $ticketParams[] = $yesterday . ' 23:59:59';
+            $ticketTypes .= "ss";
+        } elseif ($dateMode === '7_days') {
+            $ticketCondition = "created_at >= ?";
+            $ticketParams[] = date('Y-m-d', strtotime('-7 days')) . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === '30_days') {
+            $ticketCondition = "created_at >= ?";
+            $ticketParams[] = date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === 'this_month') {
+            $ticketCondition = "created_at >= ?";
+            $ticketParams[] = date('Y-m-01') . ' 00:00:00';
+            $ticketTypes .= "s";
+        } elseif ($dateMode === 'last_month') {
+            $ticketCondition = "created_at >= ? AND created_at < ?";
+            $ticketParams[] = date('Y-m-01', strtotime('first day of last month')) . ' 00:00:00';
+            $ticketParams[] = date('Y-m-01') . ' 00:00:00';
+            $ticketTypes .= "ss";
+        } elseif ($dateMode === 'custom' && !empty($startDate) && !empty($endDate)) {
+            $ticketCondition = "created_at >= ? AND created_at <= ?";
+            $ticketParams[] = $startDate . ' 00:00:00';
+            $ticketParams[] = $endDate . ' 23:59:59';
+            $ticketTypes .= "ss";
+        }
+
+        $stmtTickets = $conn->prepare("
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status IN ('approved', 'approved_no_comp') THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+            FROM data_reports
+            WHERE consultant_id = ? AND $ticketCondition
+        ");
+        $ticketsStats = ['total' => 0, 'approved' => 0, 'rejected' => 0, 'pending' => 0];
+        $activeCompSum = 0;
+        $blacklistCompCount = 0;
+        if ($stmtTickets) {
+            $bindTypes = "i" . $ticketTypes;
+            $bindParams = array_merge([$consultantId], $ticketParams);
+            $stmtTickets->bind_param($bindTypes, ...$bindParams);
+            $stmtTickets->execute();
+            $rawTickets = $stmtTickets->get_result()->fetch_assoc();
+            $ticketsStats = [
+                'total' => (int) ($rawTickets['total'] ?? 0),
+                'approved' => (int) ($rawTickets['approved'] ?? 0),
+                'rejected' => (int) ($rawTickets['rejected'] ?? 0),
+                'pending' => (int) ($rawTickets['pending'] ?? 0)
+            ];
+            $stmtTickets->close();
+
+            // Cộng thêm "Bù chủ động" từ active_compensation_logs vào Đã bù (và tổng gửi đi)
+            $sqlActiveComp = "
+                SELECT IFNULL(SUM(amount), 0) as active_comp_sum
+                FROM active_compensation_logs
+                WHERE consultant_id = ? AND $ticketCondition
+            ";
+            $stmtActiveComp = $conn->prepare($sqlActiveComp);
+            if ($stmtActiveComp) {
+                $bindTypesComp = "i" . $ticketTypes;
+                $bindParamsComp = array_merge([$consultantId], $ticketParams);
+                $stmtActiveComp->bind_param($bindTypesComp, ...$bindParamsComp);
+                $stmtActiveComp->execute();
+                $resActiveComp = $stmtActiveComp->get_result()->fetch_assoc();
+                $activeCompSum = (int) ($resActiveComp['active_comp_sum'] ?? 0);
+                $stmtActiveComp->close();
+            }
+
+            // Cộng thêm "Bù blacklist" từ admin_logs vào Đã bù (và tổng gửi đi)
+            $sqlBlacklistLogs = "
+                SELECT COUNT(*) as cnt FROM admin_logs
+                WHERE action = 'BLOCK_LEAD_BLACKLIST'
+                  AND JSON_VALUE(details, '$.old_consultant_id') = ?
+                  AND (JSON_VALUE(details, '$.compensate_sale') = 'true'
+                       OR JSON_VALUE(details, '$.compensate_sale') = 1
+                       OR JSON_VALUE(details, '$.compensate_sale') = '1')
+                  AND $ticketCondition
+            ";
+            $stmtBlacklistLogs = $conn->prepare($sqlBlacklistLogs);
+            if ($stmtBlacklistLogs) {
+                $bindTypesB = "i" . $ticketTypes;
+                $bindParamsB = array_merge([$consultantId], $ticketParams);
+                $stmtBlacklistLogs->bind_param($bindTypesB, ...$bindParamsB);
+                $stmtBlacklistLogs->execute();
+                $resBlacklistLogs = $stmtBlacklistLogs->get_result()->fetch_assoc();
+                $blacklistCompCount = (int) ($resBlacklistLogs['cnt'] ?? 0);
+                $stmtBlacklistLogs->close();
+            }
+            // $ticketsStats['approved'] += $activeCompSum + $blacklistCompCount;
+            // $ticketsStats['total'] += $activeCompSum + $blacklistCompCount;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'summary' => $summary,
+            'rounds' => $roundsStats,
+            'by_date' => $byDate,
+            'by_source' => $bySource,
+            'tickets' => $ticketsStats,
+            'active_compensation' => $activeCompSum,
+            'blacklist_compensation' => $blacklistCompCount
+        ]);
+        break;
+
+    case 'unlink_zalo':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+        $type = $input['type'] ?? ''; // 'consultant' or 'account'
+
+        if (!$id) {
+            echo json_encode(['success' => false, 'message' => 'ID không hợp lệ']);
+            break;
+        }
+
+        $isAdmin = $decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'super_admin';
+        if (!$isAdmin) {
+            if ($type === 'account' && $id !== (int)$decodedUser['id']) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền hủy liên kết Zalo của tài khoản này']);
+                break;
+            }
+            if ($type === 'consultant') {
+                $stmtC = $conn->prepare("SELECT email FROM consultants WHERE id = ? LIMIT 1");
+                if ($stmtC) {
+                    $stmtC->bind_param("i", $id);
+                    $stmtC->execute();
+                    $cRow = $stmtC->get_result()->fetch_assoc();
+                    $stmtC->close();
+                    if (!$cRow || $cRow['email'] !== $decodedUser['email']) {
+                        echo json_encode(['success' => false, 'message' => 'Bạn không có quyền hủy liên kết Zalo của tư vấn viên này']);
+                        break;
+                    }
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Lỗi chuẩn bị truy vấn SQL']);
+                    break;
+                }
+            }
+        }
+
+        if ($type === 'consultant') {
+            $stmt = $conn->prepare("UPDATE consultants SET zalo_chat_id = NULL WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("i", $id);
+                if ($stmt->execute()) {
+                    logAdminAction($conn, $decodedUser['id'], 'UNLINK_ZALO_CONSULTANT', ['id' => $id]);
+                    echo json_encode(['success' => true]);
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Không thể hủy liên kết Zalo']);
+                }
+                $stmt->close();
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Lỗi chuẩn bị truy vấn SQL']);
+            }
+        } else if ($type === 'account') {
+            $stmt = $conn->prepare("UPDATE accounts SET zalo_chat_id = NULL WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("i", $id);
+                if ($stmt->execute()) {
+                    logAdminAction($conn, $decodedUser['id'], 'UNLINK_ZALO_ACCOUNT', ['id' => $id]);
+                    echo json_encode(['success' => true]);
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Không thể hủy liên kết Zalo']);
+                }
+                $stmt->close();
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Lỗi chuẩn bị truy vấn SQL']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Loại tài khoản không hợp lệ']);
+        }
+        break;
+
+    case 'unlink_telegram':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+        $type = $input['type'] ?? ''; // 'consultant' or 'account'
+
+        if (!$id) {
+            echo json_encode(['success' => false, 'message' => 'ID không hợp lệ']);
+            break;
+        }
+
+        $isAdmin = $decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'super_admin';
+        if (!$isAdmin) {
+            if ($type === 'account' && $id !== (int)$decodedUser['id']) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền hủy liên kết Telegram của tài khoản này']);
+                break;
+            }
+            if ($type === 'consultant') {
+                $stmtC = $conn->prepare("SELECT email FROM consultants WHERE id = ? LIMIT 1");
+                if ($stmtC) {
+                    $stmtC->bind_param("i", $id);
+                    $stmtC->execute();
+                    $cRow = $stmtC->get_result()->fetch_assoc();
+                    $stmtC->close();
+                    if (!$cRow || $cRow['email'] !== $decodedUser['email']) {
+                        echo json_encode(['success' => false, 'message' => 'Bạn không có quyền hủy liên kết Telegram của tư vấn viên này']);
+                        break;
+                    }
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Lỗi chuẩn bị truy vấn SQL']);
+                    break;
+                }
+            }
+        }
+
+        if ($type === 'consultant') {
+            $stmt = $conn->prepare("UPDATE consultants SET telegram_chat_id = NULL WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("i", $id);
+                if ($stmt->execute()) {
+                    logAdminAction($conn, $decodedUser['id'], 'UNLINK_TELEGRAM_CONSULTANT', ['id' => $id]);
+                    echo json_encode(['success' => true]);
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Không thể hủy liên kết Telegram']);
+                }
+                $stmt->close();
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Lỗi chuẩn bị truy vấn SQL']);
+            }
+        } else if ($type === 'account') {
+            $stmt = $conn->prepare("UPDATE accounts SET telegram_chat_id = NULL WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("i", $id);
+                if ($stmt->execute()) {
+                    logAdminAction($conn, $decodedUser['id'], 'UNLINK_TELEGRAM_ACCOUNT', ['id' => $id]);
+                    echo json_encode(['success' => true]);
+                } else {
+                    echo json_encode(['success' => false, 'message' => 'Không thể hủy liên kết Telegram']);
+                }
+                $stmt->close();
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Lỗi chuẩn bị truy vấn SQL']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Loại tài khoản không hợp lệ']);
+        }
+        break;
+
+    case 'get_rounds':
+        $isManager = (isset($decodedUser['role']) && $decodedUser['role'] === 'manager');
+        $isDirector = (isset($decodedUser['role']) && $decodedUser['role'] === 'director');
+        $isProjManager = false;
+        $projIds = [];
+        if ($isManager) {
+            $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+            if ($pRes) {
+                while ($pRow = $pRes->fetch_assoc()) {
+                    if (!empty($pRow['manager_ids'])) {
+                        $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                        if (in_array((int)$decodedUser['user_id'], $mIds, true)) {
+                            $projIds[] = (int)$pRow['id'];
+                            $isProjManager = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        $roundFilter = "";
+        if ($isProjManager) {
+            if (!empty($projIds)) {
+                $roundFilter = " WHERE r.project_id IN (" . implode(',', $projIds) . ") ";
+            } else {
+                $roundFilter = " WHERE 1=0 ";
+            }
+        }
+
+        $res = $conn->query("SELECT r.*, p.name as project_name,
+                                    GROUP_CONCAT(c.name ORDER BY c.id ASC) as consultants, 
+                                    GROUP_CONCAT(c.id ORDER BY c.id ASC) as consultant_ids,
+                                    (SELECT c2.name FROM consultants c2 WHERE c2.id = r.last_assigned_consultant_id) as last_assigned_name
+                               FROM distribution_rounds r 
+                               LEFT JOIN projects p ON r.project_id = p.id
+                               LEFT JOIN round_consultants rc ON r.id = rc.round_id
+                               LEFT JOIN consultants c ON rc.consultant_id = c.id AND c.status = 'active'
+                               $roundFilter
+                               GROUP BY r.id");
+        $fbRoundId = 0;
+        $fbTypeStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_type' LIMIT 1");
+        $fbType = ($fbTypeStmt && $fbTypeStmt->num_rows > 0) ? $fbTypeStmt->fetch_assoc()['setting_value'] : 'round';
+        if ($fbType === 'round') {
+            $fbStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_round_id' LIMIT 1");
+            if ($fbStmt && $fbStmt->num_rows > 0) {
+                $fbRoundId = (int) $fbStmt->fetch_assoc()['setting_value'];
+            }
+        }
+        $data = [];
+        $roundIds = [];
+        while ($row = $res->fetch_assoc()) {
+            $row['is_active'] = (int) $row['is_active'];
+            $row['is_fallback'] = ((int) $row['id'] === $fbRoundId);
+            $cIds = $row['consultant_ids'] ? explode(',', $row['consultant_ids']) : [];
+            $cNames = $row['consultants'] ? explode(',', $row['consultants']) : [];
+
+            $nextName = null;
+            $nextId = null;
+            if (!empty($cIds)) {
+                $nextName = $cNames[0]; // default
+                $nextId = $cIds[0];
+                if ($row['last_assigned_consultant_id']) {
+                    $idx = array_search($row['last_assigned_consultant_id'], $cIds);
+                    if ($idx !== false && isset($cNames[$idx + 1])) {
+                        $nextName = $cNames[$idx + 1];
+                        $nextId = $cIds[$idx + 1];
+                    } else {
+                        // Loop back to start
+                        $nextName = $cNames[0];
+                        $nextId = $cIds[0];
+                    }
+                }
+            }
+            $row['next_assigned_name'] = $nextName;
+            $row['next_consultant_id'] = $nextId;
+            $row['ratios'] = [];
+            $row['data_per_turns'] = [];
+            $row['compensations'] = [];
+            $row['skipped_credits'] = [];
+            $row['consultant_lead_counts'] = [];
+
+            $data[$row['id']] = $row;
+            $roundIds[] = $row['id'];
+        }
+
+        if (!empty($roundIds)) {
+            $idsStr = implode(',', $roundIds);
+
+            // 1. Fetch ratios, compensations and group active consultants in each round
+            $ratioRes = $conn->query("SELECT rc.round_id, rc.consultant_id, rc.receive_ratio, rc.data_per_turn, rc.compensation_count, rc.skipped_credit, c.name 
+                                      FROM round_consultants rc
+                                      JOIN consultants c ON rc.consultant_id = c.id
+                                      WHERE rc.round_id IN ($idsStr) AND c.status = 'active'");
+            $roundActiveConsultants = [];
+            while ($rr = $ratioRes->fetch_assoc()) {
+                $rId = $rr['round_id'];
+                $cId = $rr['consultant_id'];
+                $data[$rId]['ratios'][$cId] = (int) $rr['receive_ratio'];
+                $data[$rId]['data_per_turns'][$cId] = (int) ($rr['data_per_turn'] ?? 1);
+                $data[$rId]['compensations'][$cId] = (int) $rr['compensation_count'];
+                $data[$rId]['skipped_credits'][$cId] = (int) ($rr['skipped_credit'] ?? 0);
+
+                $roundActiveConsultants[$rId][] = [
+                    'id' => $cId,
+                    'receive_ratio' => (int) $rr['receive_ratio'],
+                    'skipped_credit' => (int) ($rr['skipped_credit'] ?? 0)
+                ];
+            }
+
+            // 2. Fetch stats to compute fairness index (defaults to 7 ngày qua)
+            $date = isset($_GET['date']) ? trim($_GET['date']) : '7 ngày qua';
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+
+            if ($date === 'all' || $date === '') {
+                $dateCondition = "1=1";
+            } else if ($date === 'Hôm nay') {
+                $dateCondition = "received_at >= CURDATE() AND received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+            } else if ($date === 'Hôm qua') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND received_at < CURDATE()";
+            } else if ($date === 'Tuần này') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND received_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === 'Tuần trước') {
+                $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+            } else if ($date === 'Tuần trước nữa') {
+                $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === '7 ngày qua') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+            } else if ($date === '30 ngày qua') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+            } else if ($date === 'Tháng này') {
+                $dateCondition = "received_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND received_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+            } else if ($date === 'Tháng trước') {
+                $dateCondition = "received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+            } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+                $start = $conn->real_escape_string($matches[1]);
+                $end = $conn->real_escape_string($matches[2]);
+                $dateCondition = "received_at >= '$start 00:00:00' AND received_at <= '$end 23:59:59'";
+            }
+
+            $counts = [];
+            $countsQuery = "SELECT assigned_to, round_id, status, COUNT(*) as cnt 
+                            FROM distribution_logs 
+                            WHERE round_id IN ($idsStr)
+                              AND $dateCondition
+                              AND status IN ('assigned', 'compensation', 'error', 'rule_6_month', 'pending_work_hours') 
+                            GROUP BY assigned_to, round_id, status";
+            $countsRes = $conn->query($countsQuery);
+            if ($countsRes) {
+                while ($row = $countsRes->fetch_assoc()) {
+                    $cId = (int) $row['assigned_to'];
+                    $rId = (int) $row['round_id'];
+                    $status = $row['status'];
+                    $cnt = (int) $row['cnt'];
+                    $counts[$rId][$cId][$status] = $cnt;
+                }
+            }
+
+            // 3. Calculate Fairness Index & Total Leads for each round
+            foreach ($roundIds as $rId) {
+                $activeCons = $roundActiveConsultants[$rId] ?? [];
+                $N = count($activeCons);
+
+                $rawCounts = [];
+                $normalizedCounts = [];
+                $totalLeads = 0;
+
+                foreach ($activeCons as $c) {
+                    $cId = $c['id'];
+                    $ratio = max(1, $c['receive_ratio']);
+
+                    $sc = $counts[$rId][$cId] ?? [];
+                    $assigned = $sc['assigned'] ?? 0;
+                    $comp = $sc['compensation'] ?? 0;
+                    $rule6 = $sc['rule_6_month'] ?? 0;
+                    $pending = $sc['pending_work_hours'] ?? 0;
+                    $err = $sc['error'] ?? 0;
+
+                    $assignedCount = $assigned + $comp + $rule6 + $pending + max(0, $err - $comp);
+                    $rawCounts[] = $assignedCount;
+                    $normalizedCounts[] = $assignedCount * $ratio;
+                    $totalLeads += $assignedCount;
+                    $data[$rId]['consultant_lead_counts'][$cId] = $assignedCount;
+                }
+
+                $data[$rId]['total_leads'] = $totalLeads;
+
+                if ($N <= 1) {
+                    $data[$rId]['fairness_index'] = 100.0;
+                    continue;
+                }
+
+                $giniNormalized = 0;
+                $sumNorm = array_sum($normalizedCounts);
+                if ($sumNorm > 0) {
+                    $doubleSumDiffNorm = 0;
+                    for ($i = 0; $i < $N; $i++) {
+                        for ($j = 0; $j < $N; $j++) {
+                            $doubleSumDiffNorm += abs($normalizedCounts[$i] - $normalizedCounts[$j]);
+                        }
+                    }
+                    $giniNormalized = $doubleSumDiffNorm / (2 * $N * $sumNorm);
+                }
+
+                $fairnessIndex = (1 - $giniNormalized) * 100;
+                $data[$rId]['fairness_index'] = round($fairnessIndex, 1);
+            }
+        }
+
+        echo json_encode(['success' => true, 'data' => array_values($data)]);
+        break;
+
+    case 'add_round':
+        $conn->begin_transaction();
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $name = $input['round_name'] ?? '';
+            $cc = $input['cc_emails'] ?? '';
+            $status = $input['is_active'] ?? 1;
+            $consultants = $input['consultants'] ?? [];
+            $starting_consultant_id = $input['starting_consultant_id'] ?? null;
+
+            $is_fallback = filter_var($input['is_fallback'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($is_fallback) {
+                if ((int) $status !== 1) {
+                    throw new Exception("Không thể tắt hoạt động của vòng dự phòng (fallback).");
+                }
+                $hasActiveConsultant = false;
+                if (!empty($consultants)) {
+                    $inClause = implode(',', array_map('intval', $consultants));
+                    $chkActive = $conn->query("SELECT COUNT(*) as cnt FROM consultants WHERE id IN ($inClause) AND status = 'active'");
+                    if ($chkActive && (int) $chkActive->fetch_assoc()['cnt'] > 0) {
+                        $hasActiveConsultant = true;
+                    }
+                }
+                if (!$hasActiveConsultant) {
+                    throw new Exception("Vòng dự phòng (fallback) phải có ít nhất một tư vấn viên đang hoạt động.");
+                }
+            }
+
+            $last_assigned = null;
+            if ($starting_consultant_id && !empty($consultants)) {
+                $sorted_consultants = $consultants;
+                sort($sorted_consultants);
+                $idx = array_search($starting_consultant_id, $sorted_consultants);
+                if ($idx !== false) {
+                    if ($idx === 0) {
+                        $last_assigned = end($sorted_consultants);
+                        reset($sorted_consultants);
+                    } else {
+                        $last_assigned = $sorted_consultants[$idx - 1];
+                    }
+                }
+            }
+
+            $project_id = isset($input['project_id']) && $input['project_id'] !== '' ? (int)$input['project_id'] : null;
+            $stmt = $conn->prepare("INSERT INTO distribution_rounds (round_name, is_active, cc_emails, last_assigned_consultant_id, project_id) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sisii", $name, $status, $cc, $last_assigned, $project_id);
+            $stmt->execute();
+            $roundId = $conn->insert_id;
+            $stmt->close();
+
+            $ratios = $input['ratios'] ?? [];
+            $per_turns = $input['data_per_turns'] ?? [];
+
+            $compensations = $input['compensations'] ?? [];
+
+            if (!empty($consultants)) {
+                $stmtC = $conn->prepare("INSERT INTO round_consultants (round_id, consultant_id, receive_ratio, data_per_turn, compensation_count) VALUES (?, ?, ?, ?, ?)");
+                foreach ($consultants as $cid) {
+                    $ratio = isset($ratios[$cid]) ? max(1, (int) $ratios[$cid]) : 1;
+                    $perTurn = isset($per_turns[$cid]) ? max(1, (int) $per_turns[$cid]) : 1;
+                    $comp = isset($compensations[$cid]) ? max(0, (int) $compensations[$cid]) : 0;
+                    $stmtC->bind_param("iiiii", $roundId, $cid, $ratio, $perTurn, $comp);
+                    $stmtC->execute();
+                }
+                $stmtC->close();
+            }
+
+            $is_fallback = filter_var($input['is_fallback'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($is_fallback) {
+                $fbStmt = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('fallback_round_id', ?)");
+                $fbRoundIdStr = (string) $roundId;
+                $fbStmt->bind_param("s", $fbRoundIdStr);
+                $fbStmt->execute();
+                $fbStmt->close();
+                $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('fallback_type', 'round')");
+            }
+
+            logAdminAction($conn, $decodedUser['id'], 'ADD_ROUND', ['id' => $roundId, 'round_name' => $name, 'consultants' => $consultants]);
+            $conn->commit();
+            echo json_encode(['success' => true, 'id' => $roundId]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'edit_round':
+        $conn->begin_transaction();
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+
+            // Check write access for GĐKD Dự án vs GĐKD Toàn sàn
+            $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            $userRole = $decodedUser['role'] ?? '';
+            $isAdminOrSuper = in_array($userRole, ['admin', 'superadmin', 'super_admin'], true);
+            if (!$isAdminOrSuper) {
+                $isProjManager = false;
+                $projIds = [];
+                $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+                if ($pRes) {
+                    while ($pRow = $pRes->fetch_assoc()) {
+                        if (!empty($pRow['manager_ids'])) {
+                            $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                            if (in_array((int)$userId, $mIds, true)) {
+                                $projIds[] = (int)$pRow['id'];
+                                $isProjManager = true;
+                            }
+                        }
+                    }
+                }
+
+                if ($userRole === 'director') {
+                    // GĐKD Toàn sàn has global access
+                } else if ($isProjManager) {
+                    $stmtCheckProj = $conn->prepare("SELECT project_id FROM distribution_rounds WHERE id = ?");
+                    $stmtCheckProj->bind_param("i", $id);
+                    $stmtCheckProj->execute();
+                    $resCheckProj = $stmtCheckProj->get_result();
+                    $rRow = $resCheckProj ? $resCheckProj->fetch_assoc() : null;
+                    $rProjId = $rRow ? $rRow['project_id'] : null;
+                    $stmtCheckProj->close();
+                    if (!$rProjId || !in_array((int)$rProjId, $projIds, true)) {
+                        throw new Exception("Bạn không có quyền chỉnh sửa Vòng phân bổ thuộc dự án khác.");
+                    }
+                } else {
+                    throw new Exception("Bạn không có quyền chỉnh sửa Vòng phân bổ.");
+                }
+            }
+
+            $name = $input['round_name'] ?? '';
+            $cc = $input['cc_emails'] ?? '';
+            $status = $input['is_active'] ?? 1;
+            $consultants = $input['consultants'] ?? [];
+            $starting_consultant_id = $input['starting_consultant_id'] ?? null;
+
+            $is_fallback = filter_var($input['is_fallback'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $isFallbackRound = $is_fallback || in_array($id, getSystemFallbackRoundIds($conn));
+            if ($isFallbackRound) {
+                if ((int) $status !== 1) {
+                    throw new Exception("Không thể tắt hoạt động của vòng dự phòng (fallback).");
+                }
+                $hasActiveConsultant = false;
+                if (!empty($consultants)) {
+                    $inClause = implode(',', array_map('intval', $consultants));
+                    $chkActive = $conn->query("SELECT COUNT(*) as cnt FROM consultants WHERE id IN ($inClause) AND status = 'active'");
+                    if ($chkActive && (int) $chkActive->fetch_assoc()['cnt'] > 0) {
+                        $hasActiveConsultant = true;
+                    }
+                }
+                if (!$hasActiveConsultant) {
+                    throw new Exception("Vòng dự phòng (fallback) phải có ít nhất một tư vấn viên đang hoạt động.");
+                }
+            }
+
+            $last_assigned = null;
+            if ($starting_consultant_id && !empty($consultants)) {
+                $sorted_consultants = $consultants;
+                sort($sorted_consultants);
+                $idx = array_search($starting_consultant_id, $sorted_consultants);
+                if ($idx !== false) {
+                    if ($idx === 0) {
+                        $last_assigned = end($sorted_consultants);
+                        reset($sorted_consultants);
+                    } else {
+                        $last_assigned = $sorted_consultants[$idx - 1];
+                    }
+                }
+            }
+
+            $project_id = isset($input['project_id']) && $input['project_id'] !== '' ? (int)$input['project_id'] : null;
+            if ($starting_consultant_id) {
+                $stmt = $conn->prepare("UPDATE distribution_rounds SET round_name=?, is_active=?, cc_emails=?, last_assigned_consultant_id=?, project_id=? WHERE id=?");
+                $stmt->bind_param("sisiii", $name, $status, $cc, $last_assigned, $project_id, $id);
+            } else {
+                $stmt = $conn->prepare("UPDATE distribution_rounds SET round_name=?, is_active=?, cc_emails=?, project_id=? WHERE id=?");
+                $stmt->bind_param("sisii", $name, $status, $cc, $project_id, $id);
+            }
+            $stmt->execute();
+            $stmt->close();
+
+            // Delete consultants that are no longer in this round
+            if (empty($consultants)) {
+                $stmtDel = $conn->prepare("DELETE FROM round_consultants WHERE round_id=?");
+                $stmtDel->bind_param("i", $id);
+                $stmtDel->execute();
+                $stmtDel->close();
+            } else {
+                $placeholders = implode(',', array_fill(0, count($consultants), '?'));
+                $stmtDel = $conn->prepare("DELETE FROM round_consultants WHERE round_id=? AND consultant_id NOT IN ($placeholders)");
+                $params = array_merge([$id], $consultants);
+                $types = str_repeat('i', count($params));
+                $stmtDel->bind_param($types, ...$params);
+                $stmtDel->execute();
+                $stmtDel->close();
+            }
+
+            $ratios = $input['ratios'] ?? [];
+            $per_turns = $input['data_per_turns'] ?? [];
+            $compensations = $input['compensations'] ?? [];
+            $skipped_credits = isset($input['skipped_credits']) ? $input['skipped_credits'] : null;
+
+            if (!empty($consultants)) {
+                if ($skipped_credits !== null) {
+                    $stmtC = $conn->prepare("INSERT INTO round_consultants (round_id, consultant_id, receive_ratio, data_per_turn, compensation_count, skipped_credit) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE receive_ratio = VALUES(receive_ratio), data_per_turn = VALUES(data_per_turn), compensation_count = VALUES(compensation_count), skipped_credit = VALUES(skipped_credit), current_turn_remaining = 0");
+                    foreach ($consultants as $cid) {
+                        $ratio = isset($ratios[$cid]) ? max(1, (int) $ratios[$cid]) : 1;
+                        $perTurn = isset($per_turns[$cid]) ? max(1, (int) $per_turns[$cid]) : 1;
+                        $comp = isset($compensations[$cid]) ? max(0, (int) $compensations[$cid]) : 0;
+                        $skipCred = isset($skipped_credits[$cid]) ? max(0, (int) $skipped_credits[$cid]) : 0;
+                        $stmtC->bind_param("iiiiii", $id, $cid, $ratio, $perTurn, $comp, $skipCred);
+                        $stmtC->execute();
+                    }
+                } else {
+                    $stmtC = $conn->prepare("INSERT INTO round_consultants (round_id, consultant_id, receive_ratio, data_per_turn, compensation_count) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE receive_ratio = VALUES(receive_ratio), data_per_turn = VALUES(data_per_turn), compensation_count = VALUES(compensation_count), current_turn_remaining = 0");
+                    foreach ($consultants as $cid) {
+                        $ratio = isset($ratios[$cid]) ? max(1, (int) $ratios[$cid]) : 1;
+                        $perTurn = isset($per_turns[$cid]) ? max(1, (int) $per_turns[$cid]) : 1;
+                        $comp = isset($compensations[$cid]) ? max(0, (int) $compensations[$cid]) : 0;
+                        $stmtC->bind_param("iiiii", $id, $cid, $ratio, $perTurn, $comp);
+                        $stmtC->execute();
+                    }
+                }
+                $stmtC->close();
+            }
+
+            $is_fallback = filter_var($input['is_fallback'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($is_fallback) {
+                $fbStmt = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('fallback_round_id', ?)");
+                $fbRoundIdStr = (string) $id;
+                $fbStmt->bind_param("s", $fbRoundIdStr);
+                $fbStmt->execute();
+                $fbStmt->close();
+                $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('fallback_type', 'round')");
+            } else {
+                $chkStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_round_id' LIMIT 1");
+                if ($chkStmt && $chkStmt->num_rows > 0) {
+                    $currFb = $chkStmt->fetch_assoc()['setting_value'];
+                    if ((int) $currFb === $id) {
+                        $conn->query("DELETE FROM system_settings WHERE setting_key = 'fallback_round_id'");
+                    }
+                }
+            }
+
+            logAdminAction($conn, $userId, 'EDIT_ROUND', ['id' => $id, 'round_name' => $name, 'consultants' => $consultants]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'update_round_ratios':
+        $conn->begin_transaction();
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $roundId = (int) ($input['round_id'] ?? 0);
+            $ratios = $input['ratios'] ?? [];
+
+            if ($roundId <= 0) {
+                echo json_encode(['success' => false, 'message' => 'ID Vòng không hợp lệ']);
+                break;
+            }
+
+            // Check if round exists
+            $chk = $conn->query("SELECT id FROM distribution_rounds WHERE id = $roundId");
+            if ($chk->num_rows === 0) {
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy vòng phân bổ']);
+                break;
+            }
+
+            $stmt = $conn->prepare("UPDATE round_consultants SET receive_ratio = ? WHERE round_id = ? AND consultant_id = ?");
+            foreach ($ratios as $cid => $ratio) {
+                $cIdInt = (int) $cid;
+                $ratioInt = max(0, (int) $ratio);
+                $stmt->bind_param("iii", $ratioInt, $roundId, $cIdInt);
+                $stmt->execute();
+            }
+            $stmt->close();
+
+            logAdminAction($conn, $decodedUser['id'], 'UPDATE_ROUND_RATIOS', ['round_id' => $roundId, 'ratios' => $ratios]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'update_compensations':
+        $adminName = 'Quản trị viên';
+        if (isset($decodedUser['id'])) {
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $roundId = (int) ($input['round_id'] ?? 0);
+            $compensations = $input['compensations'] ?? [];
+            $reasons = $input['reasons'] ?? [];
+
+            $notificationQueue = [];
+
+            if ($roundId > 0 && !empty($compensations)) {
+                // Fetch round name
+                $rStmt = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ?");
+                $rStmt->bind_param("i", $roundId);
+                $rStmt->execute();
+                $rRes = $rStmt->get_result();
+                $roundRow = $rRes->fetch_assoc();
+                $roundName = $roundRow ? $roundRow['round_name'] : "Vòng ID $roundId";
+                $rStmt->close();
+
+                $stmtFetch = $conn->prepare("
+                    SELECT rc.compensation_count, c.name, c.email
+                    FROM round_consultants rc
+                    JOIN consultants c ON rc.consultant_id = c.id
+                    WHERE rc.round_id = ? AND rc.consultant_id = ?
+                ");
+
+                $stmtComp = $conn->prepare("UPDATE round_consultants SET compensation_count = ? WHERE round_id = ? AND consultant_id = ?");
+                foreach ($compensations as $cid => $compCount) {
+                    $c = (int) $cid;
+                    $count = max(0, (int) $compCount);
+
+                    $stmtFetch->bind_param("ii", $roundId, $c);
+                    $stmtFetch->execute();
+                    $fRes = $stmtFetch->get_result();
+
+                    if ($fRow = $fRes->fetch_assoc()) {
+                        $oldCount = (int) $fRow['compensation_count'];
+                        $delta = $count - $oldCount;
+
+                        $stmtComp->bind_param("iii", $count, $roundId, $c);
+                        $stmtComp->execute();
+
+                        if ($delta > 0) {
+                            $reasonText = isset($reasons[$cid]) ? trim($reasons[$cid]) : '';
+
+                            // Ghi log vào active_compensation_logs
+                            $logStmt = $conn->prepare("INSERT INTO active_compensation_logs (round_id, consultant_id, admin_id, amount, reason) VALUES (?, ?, ?, ?, ?)");
+                            $adminIdInt = (int) $decodedUser['id'];
+                            $logStmt->bind_param("iiiis", $roundId, $c, $adminIdInt, $delta, $reasonText);
+                            $logStmt->execute();
+                            $logStmt->close();
+
+                            $notificationQueue[] = [
+                                'consultant_id' => $c,
+                                'email' => $fRow['email'],
+                                'name' => $fRow['name'],
+                                'round_name' => $roundName,
+                                'delta' => $delta,
+                                'admin_name' => $adminName,
+                                'reason' => $reasonText,
+                                'time' => date('H:i:s d/m/Y')
+                            ];
+                        }
+                    } else {
+                        $stmtComp->bind_param("iii", $count, $roundId, $c);
+                        $stmtComp->execute();
+                    }
+                }
+            }
+            logAdminAction($conn, $decodedUser['id'], 'UPDATE_COMPENSATIONS', ['round_id' => $roundId, 'compensations' => $compensations]);
+            $conn->commit();
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // Đã commit giao dịch thành công. Bắt đầu gửi thông báo ngoài transaction
+        if (!empty($notificationQueue)) {
+            try {
+                require_once __DIR__ . '/mailer.php';
+                require_once __DIR__ . '/zalo_bot.php';
+
+                // Lấy danh sách Ticket Admins nhận thông báo
+                $adminEmails = getTicketNotifyAdmins($conn);
+
+                foreach ($notificationQueue as $notify) {
+                    try {
+                        if (!empty($notify['email'])) {
+                            sendCompensationAddedEmailToSale(
+                                $notify['email'],
+                                $notify['name'],
+                                $notify['round_name'],
+                                $notify['delta'],
+                                $notify['admin_name'],
+                                $notify['reason'],
+                                $notify['time']
+                            );
+                        }
+                    } catch (Exception $mailEx) {
+                        error_log("Error sending compensation email to sale " . $notify['consultant_id'] . ": " . $mailEx->getMessage());
+                    }
+
+                    try {
+                        sendCompensationAddedZaloMessageToSale(
+                            $notify['consultant_id'],
+                            $notify['name'],
+                            $notify['round_name'],
+                            $notify['delta'],
+                            $notify['admin_name'],
+                            $notify['reason'],
+                            $notify['time']
+                        );
+                    } catch (Exception $zaloEx) {
+                        error_log("Error sending compensation Zalo to sale " . $notify['consultant_id'] . ": " . $zaloEx->getMessage());
+                    }
+
+                    // Báo cáo cho các admin thông báo
+                    if (!empty($adminEmails)) {
+                        foreach ($adminEmails as $adm) {
+                            try {
+                                if (!empty($adm['email'])) {
+                                    sendActiveCompensationEmailToAdmins(
+                                        $adm['email'],
+                                        $adm['name'],
+                                        $notify['name'],
+                                        $notify['round_name'],
+                                        $notify['delta'],
+                                        $notify['admin_name'],
+                                        $notify['reason'],
+                                        $notify['time']
+                                    );
+                                }
+                            } catch (Exception $mailEx2) {
+                                error_log("Error sending active compensation report email to admin " . $adm['id'] . ": " . $mailEx2->getMessage());
+                            }
+
+                            try {
+                                if (!empty($adm['zalo_chat_id'])) {
+                                    sendCompensationAddedZaloMessageToAdmin(
+                                        $adm['zalo_chat_id'],
+                                        $adm['name'],
+                                        $notify['name'],
+                                        $notify['round_name'],
+                                        $notify['delta'],
+                                        $notify['admin_name'],
+                                        $notify['reason'],
+                                        $notify['time']
+                                    );
+                                }
+                            } catch (Exception $zaloEx2) {
+                                error_log("Error sending active compensation report Zalo to admin " . $adm['id'] . ": " . $zaloEx2->getMessage());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $notifyEx) {
+                error_log("General notification error in update_compensations: " . $notifyEx->getMessage());
+            }
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'delete_round':
+        $conn->begin_transaction();
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+
+            // Check if round has any distribution logs
+            $checkLog = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE round_id = ?");
+            $checkLog->bind_param("i", $id);
+            $checkLog->execute();
+            $logCount = (int) ($checkLog->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $checkLog->close();
+            if ($logCount > 0) {
+                throw new Exception("Vòng này đã phân bổ Data, không thể xóa để bảo toàn thống kê. Vui lòng chuyển sang Ngừng hoạt động.");
+            }
+
+            // Check if this round is a fallback round
+            $fallbackRounds = getSystemFallbackRoundIds($conn);
+            if (in_array($id, $fallbackRounds)) {
+                throw new Exception("Không thể xóa vòng này vì nó đang được cấu hình làm vòng dự phòng (fallback). Vui lòng cấu hình vòng dự phòng sang vòng khác trước.");
+            }
+
+            $stmt1 = $conn->prepare("DELETE FROM round_consultants WHERE round_id=?");
+            $stmt1->bind_param("i", $id);
+            $stmt1->execute();
+            $stmt1->close();
+
+            $stmt2 = $conn->prepare("DELETE FROM data_reports WHERE round_id=?");
+            $stmt2->bind_param("i", $id);
+            $stmt2->execute();
+            $stmt2->close();
+
+            $stmt = $conn->prepare("DELETE FROM distribution_rounds WHERE id=?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $stmt->close();
+
+            $chkStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_round_id' LIMIT 1");
+            if ($chkStmt && $chkStmt->num_rows > 0) {
+                $currFb = $chkStmt->fetch_assoc()['setting_value'];
+                if ((int) $currFb === $id) {
+                    $conn->query("DELETE FROM system_settings WHERE setting_key = 'fallback_round_id'");
+                }
+            }
+
+            logAdminAction($conn, $decodedUser['id'], 'DELETE_ROUND', ['id' => $id]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'get_connections':
+        $type = $_GET['type'] ?? '';
+        if ($type === 'inventory_sheets') {
+            $res = $conn->query("SELECT * FROM sheet_connections WHERE connection_type = 'inventory_sheets' ORDER BY created_at DESC");
+        } else {
+            $res = $conn->query("SELECT * FROM sheet_connections WHERE connection_type != 'inventory_sheets' ORDER BY created_at DESC");
+        }
+        $conns = [];
+        while ($row = $res->fetch_assoc()) {
+            $row['stats'] = [
+                'total' => 0,
+                'assigned' => 0,
+                'duplicate' => 0,
+                'reminder' => 0,
+                'error' => 0
+            ];
+            $conns[] = $row;
+        }
+
+        // Fetch stats grouped by connection_id for the last 30 days to prevent full table join bottleneck
+        $statsRes = $conn->query("
+            SELECT 
+                l.connection_id,
+                l.source,
+                COUNT(DISTINCT l.id) as total_leads,
+                SUM(CASE WHEN dl.status = 'assigned' THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN dl.status = 'duplicate' THEN 1 ELSE 0 END) as duplicate_count,
+                SUM(CASE WHEN dl.status = 'reminder' THEN 1 ELSE 0 END) as reminder_count,
+                SUM(CASE WHEN dl.status = 'error' THEN 1 ELSE 0 END) as error_count
+            FROM leads l
+            LEFT JOIN distribution_logs dl ON l.id = dl.lead_id
+            WHERE (l.connection_id IS NOT NULL OR l.source IS NOT NULL)
+              AND l.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            GROUP BY l.connection_id, l.source
+        ");
+
+        $sourceStats = [];
+        if ($statsRes) {
+            while ($row = $statsRes->fetch_assoc()) {
+                $sourceStats[] = $row; // Store all rows instead of keying by source
+            }
+        }
+
+        foreach ($conns as &$c) {
+            $src = $c['sheet_name'];
+            $connId = $c['id'];
+
+            // Sum up all matching stats (either by connection_id, or by fallback source if connection_id is null)
+            foreach ($sourceStats as $stat) {
+                if ($stat['connection_id'] == $connId || (empty($stat['connection_id']) && !empty($stat['source']) && $stat['source'] == $src)) {
+                    $c['stats']['total'] += (int) $stat['total_leads'];
+                    $c['stats']['assigned'] += (int) $stat['assigned_count'];
+                    $c['stats']['duplicate'] += (int) $stat['duplicate_count'];
+                    $c['stats']['reminder'] += (int) $stat['reminder_count'];
+                    $c['stats']['error'] += (int) $stat['error_count'];
+                }
+            }
+        }
+
+        echo json_encode(['success' => true, 'data' => $conns]);
+        break;
+
+    case 'add_connection':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $name = $input['sheet_name'] ?? '';
+            $spreadsheetId = $input['spreadsheet_id'] ?? '';
+            $webhookToken = $input['webhook_token'] ?? '';
+            $isActive = (int) ($input['is_active'] ?? 1);
+            $syncInterval = (int) ($input['sync_interval'] ?? 15);
+            $requireBoth = (int) ($input['require_both_contact'] ?? 0);
+            $connectionType = $input['connection_type'] ?? 'sheets';
+            $syncMode = $input['sync_mode'] ?? 'all';
+            $isSilent = (int) ($input['is_silent'] ?? 0);
+            $syncSaleperson = (int) ($input['sync_saleperson'] ?? 0);
+            $emailTemplate = $input['email_template'] ?? null;
+            $twoWaySync = (int) ($input['two_way_sync'] ?? 0);
+            $googleScriptUrl = $input['google_script_url'] ?? null;
+            $leadRecallMinutes = (int) ($input['lead_recall_minutes'] ?? 0);
+            $notifyAdmin = isset($input['notify_admin']) ? (int) $input['notify_admin'] : ($connectionType === 'landing_page' ? 1 : 0);
+
+            $stmt = $conn->prepare("INSERT INTO sheet_connections (sheet_name, spreadsheet_id, webhook_token, is_active, sync_interval, require_both_contact, connection_type, sync_mode, is_silent, sync_saleperson, email_template, two_way_sync, google_script_url, is_initialized, lead_recall_minutes, notify_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
+            $stmt->bind_param("sssiiissiisiiii", $name, $spreadsheetId, $webhookToken, $isActive, $syncInterval, $requireBoth, $connectionType, $syncMode, $isSilent, $syncSaleperson, $emailTemplate, $twoWaySync, $googleScriptUrl, $leadRecallMinutes, $notifyAdmin);
+            if ($stmt->execute()) {
+                $insertId = $stmt->insert_id;
+                logAdminAction($conn, $decodedUser['id'], 'ADD_CONNECTION', ['id' => $insertId, 'sheet_name' => $name]);
+            } else {
+                $insertId = 0;
+            }
+            $stmt->close();
+            echo json_encode(['success' => true, 'id' => $insertId]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'edit_connection':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+            $name = $input['sheet_name'] ?? '';
+            $spreadsheetId = $input['spreadsheet_id'] ?? '';
+            $isActive = (int) ($input['is_active'] ?? 1);
+            $syncInterval = (int) ($input['sync_interval'] ?? 15);
+            $requireBoth = (int) ($input['require_both_contact'] ?? 0);
+            $connectionType = $input['connection_type'] ?? 'sheets';
+            $syncMode = $input['sync_mode'] ?? 'all';
+            $isSilent = (int) ($input['is_silent'] ?? 0);
+            $syncSaleperson = (int) ($input['sync_saleperson'] ?? 0);
+            $emailTemplate = $input['email_template'] ?? null;
+            $twoWaySync = (int) ($input['two_way_sync'] ?? 0);
+            $googleScriptUrl = $input['google_script_url'] ?? null;
+            $leadRecallMinutes = (int) ($input['lead_recall_minutes'] ?? 0);
+            $notifyAdmin = isset($input['notify_admin']) ? (int) $input['notify_admin'] : ($connectionType === 'landing_page' ? 1 : 0);
+
+            $stmt = $conn->prepare("UPDATE sheet_connections SET sheet_name=?, spreadsheet_id=?, is_active=?, sync_interval=?, require_both_contact=?, connection_type=?, sync_mode=?, is_silent=?, sync_saleperson=?, email_template=?, two_way_sync=?, google_script_url=?, lead_recall_minutes=?, notify_admin=?, is_initialized=0, last_sync_at=NULL, sync_status='idle', last_error=NULL WHERE id=?");
+            $stmt->bind_param("ssiiissiisiisii", $name, $spreadsheetId, $isActive, $syncInterval, $requireBoth, $connectionType, $syncMode, $isSilent, $syncSaleperson, $emailTemplate, $twoWaySync, $googleScriptUrl, $leadRecallMinutes, $notifyAdmin, $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'EDIT_CONNECTION', ['id' => $id, 'sheet_name' => $name]);
+            }
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'delete_connection':
+        $conn->begin_transaction();
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+
+            $stmt1 = $conn->prepare("DELETE FROM field_mappings WHERE connection_id=?");
+            $stmt1->bind_param("i", $id);
+            $stmt1->execute();
+            $stmt1->close();
+
+            $stmt2 = $conn->prepare("DELETE FROM routing_rules WHERE connection_id=?");
+            $stmt2->bind_param("i", $id);
+            $stmt2->execute();
+            $stmt2->close();
+
+            $stmt3 = $conn->prepare("DELETE FROM sheet_sync_records WHERE connection_id=?");
+            $stmt3->bind_param("i", $id);
+            $stmt3->execute();
+            $stmt3->close();
+
+            $stmt = $conn->prepare("DELETE FROM sheet_connections WHERE id=?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $stmt->close();
+            logAdminAction($conn, $decodedUser['id'], 'DELETE_CONNECTION', ['id' => $id]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'fetch_sheets':
+        $sheetId = $_GET['id'] ?? '';
+        if (empty($sheetId)) {
+            echo json_encode(['success' => false, 'message' => 'Missing ID']);
+            break;
+        }
+        $url = "https://docs.google.com/spreadsheets/d/" . trim($sheetId) . "/htmlview";
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15); // MISSING-FIX: Tránh server treo vô hạn khi Google Sheets không phản hồi
+        curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        $html = curl_exec($ch);
+        curl_close($ch);
+
+        $sheets = [];
+
+        // Pattern 1: JS items array (most reliable for modern Google Sheets htmlview)
+        if (preg_match_all('/items\.push\(\{name:\s*"([^"]+)"/i', $html, $matches)) {
+            $sheets = array_map(function ($val) {
+                return str_replace('\/', '/', $val);
+            }, (array)$matches[1]);
+        }
+
+        // Pattern 2: HTML sheet buttons tab menu (for published public pages or older sheets)
+        if (empty($sheets) && preg_match_all('/<li\s+id="sheet-button-.*?"><a\s+href=".*?">(.*?)<\/a><\/li>/i', $html, $matches)) {
+            $sheets = (array)$matches[1];
+        }
+
+        // Pattern 3: Naive JSON property fallback
+        if (empty($sheets) && preg_match_all('/"name"\s*:\s*"([^"]+)"\s*,\s*"sheetId"/i', $html, $matches)) {
+            $sheets = array_values(array_unique((array)$matches[1]));
+            $sheets = array_filter($sheets, function ($v) {
+                return !in_array($v, ['Arial', 'Verdana', 'Helvetica', 'Times New Roman']);
+            });
+            $sheets = array_values($sheets);
+        }
+
+        echo json_encode(['success' => true, 'sheets' => $sheets]);
+        break;
+
+    case 'fetch_columns':
+        $sheetId = $_GET['id'] ?? '';
+        $sheetName = $_GET['name'] ?? '';
+        if (empty($sheetId)) {
+            echo json_encode(['success' => false, 'message' => 'Missing ID']);
+            break;
+        }
+
+        $csvUrl = "https://docs.google.com/spreadsheets/d/" . trim($sheetId) . "/gviz/tq?tqx=out:csv";
+        if (!empty($sheetName)) {
+            $csvUrl .= "&sheet=" . urlencode($sheetName);
+        }
+
+        $ch = curl_init($csvUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15); // MISSING-FIX: Tránh server treo vô hạn khi Google Sheets không phản hồi
+        curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        // Force IPv4 to prevent misconfigured IPv6 gateway from causing connection timeout
+        curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        $csvData = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || empty($csvData) || stripos($csvData, '<html') !== false || stripos($csvData, '<!DOCTYPE') !== false) {
+            echo json_encode(['success' => false, 'message' => 'Failed to fetch spreadsheet columns. Spreadsheet might be private or invalid.']);
+            break;
+        }
+
+        $columns = [];
+        $stream = fopen("php://temp", "r+");
+        fwrite($stream, $csvData);
+        rewind($stream);
+
+        $row = fgetcsv($stream);
+        if ($row !== FALSE) {
+            $columns = array_map(function ($h) {
+                return trim($h ?? '', "\" ");
+            }, $row);
+            $columns = array_filter($columns, function ($c) {
+                return $c !== '';
+            });
+            $columns = array_values($columns);
+        }
+        fclose($stream);
+
+        echo json_encode(['success' => true, 'columns' => $columns]);
+        break;
+
+    case 'toggle_connection':
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            $active = (int) ($_GET['active'] ?? 0);
+            $stmt = $conn->prepare("UPDATE sheet_connections SET is_active=? WHERE id=?");
+            $stmt->bind_param("ii", $active, $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'TOGGLE_CONNECTION', ['id' => $id, 'is_active' => $active]);
+            }
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'toggle_require_both':
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            $require = (int) ($_GET['require'] ?? 0);
+            $stmt = $conn->prepare("UPDATE sheet_connections SET require_both_contact=? WHERE id=?");
+            $stmt->bind_param("ii", $require, $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'TOGGLE_REQUIRE_BOTH', ['id' => $id, 'require_both_contact' => $require]);
+            }
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'toggle_notify_admin':
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            $notify = (int) ($_GET['notify'] ?? 0);
+            $stmt = $conn->prepare("UPDATE sheet_connections SET notify_admin=? WHERE id=?");
+            $stmt->bind_param("ii", $notify, $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'TOGGLE_NOTIFY_ADMIN', ['id' => $id, 'notify_admin' => $notify]);
+            }
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'get_rules':
+        $res = $conn->query("SELECT rr.*, r.round_name 
+                               FROM routing_rules rr 
+                               LEFT JOIN distribution_rounds r ON rr.target_round_id = r.id 
+                               ORDER BY rr.priority ASC");
+        $data = [];
+        while ($row = $res->fetch_assoc())
+            $data[] = $row;
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'add_rule':
+        /** @var mysqli_stmt|null $stmt */
+        $stmt = null;
+        $target = 0;
+        $logical_operator = 'AND';
+        $newRuleId = 0;
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $col = $input['condition_column'] ?? '';
+            $op = $input['condition_operator'] ?? '';
+            $val = $input['condition_value'] ?? '';
+            $conditions_json = isset($input['conditions_json']) ? json_encode($input['conditions_json']) : null;
+            $logical_operator = $input['logical_operator'] ?? 'AND';
+            $target = (int) ($input['target_round_id'] ?? 0);
+            $conn_id = isset($input['connection_id']) && $input['connection_id'] !== 'all' ? (string) $input['connection_id'] : null;
+
+            // Ensure column can store comma-separated values
+            $conn->query("ALTER TABLE routing_rules MODIFY connection_id VARCHAR(255) NULL");
+
+            $stmt = $conn->prepare("INSERT INTO routing_rules (connection_id, condition_column, condition_operator, condition_value, target_round_id, conditions_json, logical_operator) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssiss", $conn_id, $col, $op, $val, $target, $conditions_json, $logical_operator);
+
+            if (!$stmt->execute()) {
+                // If it's a foreign key constraint error due to negative IDs
+                if (strpos($stmt->error, 'foreign key constraint fails') !== false) {
+                    $conn->query("ALTER TABLE routing_rules DROP FOREIGN KEY routing_rules_ibfk_1");
+                    // Retry execution
+                    if (!$stmt->execute()) {
+                        throw new Exception($stmt->error);
+                    }
+                } else {
+                    throw new Exception($stmt->error);
+                }
+            }
+            $newRuleId = $conn->insert_id;
+            logAdminAction($conn, $decodedUser['id'], 'ADD_RULE', ['id' => $newRuleId, 'target_round_id' => $target, 'logical_operator' => $logical_operator]);
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            // Self-healing attempt 2: maybe the constraint name is different
+            if (strpos($e->getMessage(), 'foreign key constraint fails') !== false) {
+                // Try to find the constraint name dynamically
+                $res = $conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_NAME = 'routing_rules' AND COLUMN_NAME = 'connection_id' AND REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1");
+                if ($res && $res->num_rows > 0) {
+                    $fkName = $res->fetch_assoc()['CONSTRAINT_NAME'];
+                    $conn->query("ALTER TABLE routing_rules DROP FOREIGN KEY " . $fkName);
+                    // Retry again
+                    $stmt->execute();
+                    $newRuleId = $conn->insert_id;
+                    logAdminAction($conn, $decodedUser['id'], 'ADD_RULE', ['id' => $newRuleId, 'target_round_id' => $target, 'logical_operator' => $logical_operator]);
+                    $stmt->close();
+                    echo json_encode(['success' => true]);
+                    break;
+                }
+            }
+            if (!empty($stmt) && $stmt instanceof mysqli_stmt) {
+                @$stmt->close();
+            }
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'delete_rule':
+        $id = (int) ($_GET['id'] ?? 0);
+        $stmt = $conn->prepare("DELETE FROM routing_rules WHERE id=?");
+        $stmt->bind_param("i", $id);
+        if ($stmt->execute()) {
+            logAdminAction($conn, $decodedUser['id'], 'DELETE_RULE', ['id' => $id]);
+        }
+        $stmt->close();
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'edit_rule':
+        /** @var mysqli_stmt|null $stmt */
+        $stmt = null;
+        $id = 0;
+        $target = 0;
+        $logical_operator = 'AND';
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+            $col = $input['condition_column'] ?? '';
+            $op = $input['condition_operator'] ?? '';
+            $val = $input['condition_value'] ?? '';
+            $conditions_json = isset($input['conditions_json']) ? json_encode($input['conditions_json']) : null;
+            $logical_operator = $input['logical_operator'] ?? 'AND';
+            $target = (int) ($input['target_round_id'] ?? 0);
+            $conn_id = isset($input['connection_id']) && $input['connection_id'] !== 'all' ? (string) $input['connection_id'] : null;
+
+            // Ensure column can store comma-separated values
+            $conn->query("ALTER TABLE routing_rules MODIFY connection_id VARCHAR(255) NULL");
+
+            $stmt = $conn->prepare("UPDATE routing_rules SET connection_id=?, condition_column=?, condition_operator=?, condition_value=?, target_round_id=?, conditions_json=?, logical_operator=? WHERE id=?");
+            $stmt->bind_param("ssssissi", $conn_id, $col, $op, $val, $target, $conditions_json, $logical_operator, $id);
+
+            if (!$stmt->execute()) {
+                // If it's a foreign key constraint error due to negative IDs
+                if (strpos($stmt->error, 'foreign key constraint fails') !== false) {
+                    $conn->query("ALTER TABLE routing_rules DROP FOREIGN KEY routing_rules_ibfk_1");
+                    // Retry execution
+                    if (!$stmt->execute()) {
+                        throw new Exception($stmt->error);
+                    }
+                } else {
+                    throw new Exception($stmt->error);
+                }
+            }
+            logAdminAction($conn, $decodedUser['id'], 'EDIT_RULE', ['id' => $id, 'target_round_id' => $target, 'logical_operator' => $logical_operator]);
+            $stmt->close();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            // Self-healing attempt 2: maybe the constraint name is different
+            if (strpos($e->getMessage(), 'foreign key constraint fails') !== false) {
+                // Try to find the constraint name dynamically
+                $res = $conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_NAME = 'routing_rules' AND COLUMN_NAME = 'connection_id' AND REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1");
+                if ($res && $res->num_rows > 0) {
+                    $fkName = $res->fetch_assoc()['CONSTRAINT_NAME'];
+                    $conn->query("ALTER TABLE routing_rules DROP FOREIGN KEY " . $fkName);
+                    // Retry again
+                    if (!empty($stmt)) {
+                        $stmt->execute();
+                        logAdminAction($conn, $decodedUser['id'], 'EDIT_RULE', ['id' => $id, 'target_round_id' => $target, 'logical_operator' => $logical_operator]);
+                        $stmt->close();
+                    }
+                    echo json_encode(['success' => true]);
+                    break;
+                }
+            }
+            if (!empty($stmt) && $stmt instanceof mysqli_stmt) {
+                @$stmt->close();
+            }
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'reorder_rules':
+        $conn->begin_transaction();
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $order = $input['order'] ?? [];
+            $stmt = $conn->prepare("UPDATE routing_rules SET priority=? WHERE id=?");
+            foreach ($order as $index => $id) {
+                $id = (int) $id;
+                $priority = $index + 1;
+                $stmt->bind_param("ii", $priority, $id);
+                $stmt->execute();
+            }
+            $stmt->close();
+            logAdminAction($conn, $decodedUser['id'], 'REORDER_RULES', ['order' => $order]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+        }
+        break;
+
+    case 'evaluate_rules_ai':
+        try {
+            $apiKey = get_system_setting($conn, 'gemini_api_key');
+            $model = get_system_setting($conn, 'gemini_model') ?: 'gemini-2.5-flash-lite';
+
+            if (empty($apiKey)) {
+                echo json_encode(['success' => false, 'message' => 'Gemini API Key chưa được cấu hình trong phần Cài đặt.']);
+                break;
+            }
+
+            // Read POST JSON input
+            $input = json_decode(file_get_contents('php://input'), true);
+            $sentRules = $input['rules'] ?? null;
+
+            $rules = [];
+            if (is_array($sentRules)) {
+                // Use sent rules
+                $roundRes = $conn->query("SELECT id, round_name FROM distribution_rounds");
+                $roundMap = [];
+                while ($rRow = $roundRes->fetch_assoc()) {
+                    $roundMap[$rRow['id']] = $rRow['round_name'];
+                }
+                foreach ($sentRules as $r) {
+                    $target_round_id = $r['target_round_id'] ?? 0;
+                    $rName = $r['round_name'] ?? ($roundMap[$target_round_id] ?? ("Vòng ID " . $target_round_id));
+                    $rules[] = [
+                        'id' => $r['id'] ?? 0,
+                        'connection_id' => $r['connection_id'] ?? '',
+                        'condition_column' => $r['condition_column'] ?? '',
+                        'condition_operator' => $r['condition_operator'] ?? '',
+                        'condition_value' => $r['condition_value'] ?? '',
+                        'conditions_json' => is_array($r['conditions_json']) ? json_encode($r['conditions_json'], JSON_UNESCAPED_UNICODE) : ($r['conditions_json'] ?? ''),
+                        'target_round_id' => $target_round_id,
+                        'round_name' => $rName
+                    ];
+                }
+            } else {
+                // Fetch all rules from database as fallback
+                $res = $conn->query("SELECT rr.*, r.round_name FROM routing_rules rr LEFT JOIN distribution_rounds r ON rr.target_round_id = r.id ORDER BY rr.priority ASC, rr.id ASC");
+                while ($row = $res->fetch_assoc()) {
+                    $rules[] = $row;
+                }
+            }
+
+            if (empty($rules)) {
+                echo json_encode(['success' => false, 'message' => 'Hệ thống hiện tại chưa có quy tắc định tuyến nào để đánh giá.']);
+                break;
+            }
+
+            // Fetch connections
+            $connRes = $conn->query("SELECT id, sheet_name FROM sheet_connections");
+            $connMap = [];
+            while ($cRow = $connRes->fetch_assoc()) {
+                $connMap[$cRow['id']] = $cRow['sheet_name'];
+            }
+
+            // Build rules text representation for prompt
+            $rulesDesc = "";
+            foreach ($rules as $idx => $r) {
+                $priority = $idx + 1;
+                $connStr = "Tất cả kết nối";
+                if ($r['connection_id'] !== null && $r['connection_id'] !== '' && $r['connection_id'] !== 'all') {
+                    $cIds = explode(',', $r['connection_id']);
+                    $cNames = [];
+                    foreach ($cIds as $cId) {
+                        $cId = trim($cId);
+                        if ($cId === '-1') $cNames[] = "Tất cả Google Sheets";
+                        elseif ($cId === '-2') $cNames[] = "Tất cả API / Landing Pages";
+                        elseif ($cId === '-3') $cNames[] = "Data Nhập tay";
+                        elseif (isset($connMap[$cId])) $cNames[] = $connMap[$cId];
+                        else $cNames[] = "Kết nối ID $cId";
+                    }
+                    $connStr = implode(', ', $cNames);
+                }
+
+                $conditions = [];
+                if (!empty($r['conditions_json'])) {
+                    $branches = json_decode($r['conditions_json'], true);
+                    if (is_array($branches)) {
+                        foreach ($branches as $bIdx => $branch) {
+                            $condsStr = [];
+                            $conds = $branch['conditions'] ?? [];
+                            foreach ($conds as $c) {
+                                $condsStr[] = "{$c['col']} {$c['op']} '{$c['val']}'";
+                            }
+                            $conditions[] = ($bIdx > 0 ? "HOẶC " : "") . "(" . implode(" VÀ ", $condsStr) . ")";
+                        }
+                    }
+                }
+
+                if (empty($conditions)) {
+                    $conditions[] = "{$r['condition_column']} {$r['condition_operator']} '{$r['condition_value']}'";
+                }
+
+                $condsDesc = implode(" ", $conditions);
+                $roundName = $r['round_name'] ?: "Vòng ID " . $r['target_round_id'];
+
+                $rulesDesc .= "Ưu tiên {$priority} (ID: {$r['id']}):\n";
+                $rulesDesc .= "  - Áp dụng cho: {$connStr}\n";
+                $rulesDesc .= "  - Điều kiện: {$condsDesc}\n";
+                $rulesDesc .= "  - Hành động xử lý (Phân phối về vòng): {$roundName}\n\n";
+            }
+
+            // Build Prompt
+            $prompt = "Bạn là một chuyên gia cao cấp về thiết kế hệ thống phân phối dữ liệu khách hàng (Routing Rule Engine).\n"
+                . "Dưới đây là danh sách các quy tắc định tuyến của chúng tôi (được sắp xếp theo thứ tự ưu tiên giảm dần từ trên xuống dưới, nghĩa là quy tắc khớp trước sẽ được áp dụng trước và dừng tìm kiếm):\n\n"
+                . $rulesDesc
+                . "Hãy phân tích toàn bộ cấu hình quy tắc trên và phản hồi bằng định dạng Markdown (tiếng Việt), tập trung vào các nội dung sau:\n"
+                . "1. **Tổng quan**: Đánh giá ngắn gọn số lượng và độ phủ của các quy tắc.\n"
+                . "2. **Xung đột logic hoặc Trùng lặp**: Chỉ ra các quy tắc bị che phủ bởi quy tắc ưu tiên cao hơn (Redundant/Shadowed rules - ví dụ: một quy tắc ở dưới có điều kiện hẹp hơn hoặc bằng quy tắc ở trên cùng kết nối và cùng vòng/khác vòng, khiến nó không bao giờ được chạy), hoặc mâu thuẫn điều kiện.\n"
+                . "3. **Khe hở định tuyến (Gaps)**: Có trường hợp dữ liệu nào đổ về có nguy cơ không khớp bất kỳ quy tắc nào và bị trôi nổi không (thiếu quy tắc fallback cuối cùng).\n"
+                . "4. **Đề xuất tối ưu hóa cụ thể**: Đề xuất cụ thể cách sắp xếp lại thứ tự, chỉnh sửa hoặc gộp các quy tắc để tăng độ tin cậy và chính xác.\n\n"
+                . "Hãy trình bày mạch lạc, dễ hiểu, định dạng đẹp mắt bằng Markdown, chỉ tập trung phân tích logic của quy tắc.";
+
+            // Make Gemini request
+            $payload = [
+                'contents' => [
+                    [
+                        'parts' => [
+                            ['text' => $prompt]
+                        ]
+                    ]
+                ]
+            ];
+
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($response === false || $httpCode !== 200) {
+                echo json_encode(['success' => false, 'message' => "Lỗi kết nối Gemini API (HTTP $httpCode)"]);
+                break;
+            }
+
+            $resJson = json_decode($response, true);
+            $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+            if (empty($rawText)) {
+                echo json_encode(['success' => false, 'message' => "Gemini API trả về kết quả trống."]);
+                break;
+            }
+
+            echo json_encode(['success' => true, 'feedback' => $rawText]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    // --- REPORT DATA ENDPOINTS ---
+    case 'get_report_context':
+        // PUBLIC: Load lead/consultant/round info for the report page
+        $lead_id = (int) ($_GET['lead_id'] ?? 0);
+        $sale_id = (int) ($_GET['sale_id'] ?? 0);
+        $round_id = (int) ($_GET['round_id'] ?? 0);
+
+        if (!$lead_id || !$sale_id) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu tham số']);
+            break;
+        }
+
+        // Auto-discover original assignment if this is a reminder lead (status = 'reminder') or round_id = 0
+        $isReminder = false;
+        if ($round_id <= 0) {
+            $isReminder = true;
+        } else {
+            $chkLog = $conn->prepare("SELECT status FROM distribution_logs WHERE lead_id = ? AND assigned_to = ? AND round_id = ? LIMIT 1");
+            if ($chkLog) {
+                $chkLog->bind_param("iii", $lead_id, $sale_id, $round_id);
+                $chkLog->execute();
+                $resLog = $chkLog->get_result()->fetch_assoc();
+                if ($resLog && $resLog['status'] === 'reminder') {
+                    $isReminder = true;
+                }
+                $chkLog->close();
+            }
+        }
+
+        if ($isReminder) {
+            $findOrigStmt = $conn->prepare("
+                SELECT dl.round_id, dl.assigned_to
+                FROM distribution_logs dl
+                WHERE dl.lead_id = ? AND dl.status IN ('assigned', 'compensation') AND dl.round_id > 0
+                ORDER BY dl.received_at DESC
+            ");
+            if ($findOrigStmt) {
+                $findOrigStmt->bind_param("i", $lead_id);
+                $findOrigStmt->execute();
+                $origRes = $findOrigStmt->get_result();
+                $findOrigStmt->close();
+
+                $foundOriginal = false;
+                while ($origRow = $origRes->fetch_assoc()) {
+                    $origRoundId = (int)$origRow['round_id'];
+                    $origSaleId = (int)$origRow['assigned_to'];
+
+                    // Check if ticket is processed (approved or rejected)
+                    $ticketChk = $conn->prepare("
+                        SELECT id FROM data_reports 
+                        WHERE lead_id = ? AND consultant_id = ? AND round_id = ? AND status IN ('approved', 'rejected') 
+                        LIMIT 1
+                    ");
+                    if ($ticketChk) {
+                        $ticketChk->bind_param("iii", $lead_id, $origSaleId, $origRoundId);
+                        $ticketChk->execute();
+                        $ticketRes = $ticketChk->get_result();
+                        $hasTicketProcessed = ($ticketRes->num_rows > 0);
+                        $ticketChk->close();
+
+                        if (!$hasTicketProcessed) {
+                            $round_id = $origRoundId;
+                            $sale_id = $origSaleId;
+                            $foundOriginal = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!$foundOriginal) {
+                    echo json_encode([
+                        'success' => false,
+                        'message' => 'Không thể báo cáo lỗi cho dữ liệu nhắc lại và không tìm thấy lượt phân bổ gốc chưa được xử lý.'
+                    ]);
+                    break;
+                }
+            }
+        }
+
+        // Verify ownership: lead must be assigned to this consultant in this round
+        $verifyStmt = $conn->prepare("
+            SELECT dl.id, dl.status, l.name as lead_name, l.phone as lead_phone, l.email as lead_email, l.source, l.type as lead_type, l.note, l.is_accepted,
+                   c.name as consultant_name, c.email as consultant_email,
+                   dr.round_name, dl.received_at, l.last_interaction_date,
+                   IFNULL(sc.lead_recall_minutes, 0) as lead_recall_minutes
+            FROM distribution_logs dl
+            JOIN leads l ON dl.lead_id = l.id
+            JOIN consultants c ON dl.assigned_to = c.id
+            JOIN distribution_rounds dr ON dl.round_id = dr.id
+            LEFT JOIN sheet_connections sc ON l.connection_id = sc.id
+            WHERE dl.lead_id = ? AND dl.assigned_to = ? AND dl.round_id = ?
+            ORDER BY dl.received_at DESC LIMIT 1
+        ");
+        $verifyStmt->bind_param("iii", $lead_id, $sale_id, $round_id);
+        $verifyStmt->execute();
+        $ctx = $verifyStmt->get_result()->fetch_assoc();
+
+        if ($ctx) {
+            $ctx['lead_recall_minutes'] = get_lead_recall_minutes($conn, $ctx['last_interaction_date'] ?: $ctx['received_at'], $ctx['lead_recall_minutes']);
+        }
+
+        if (!$ctx) {
+            echo json_encode(['success' => false, 'message' => 'Đường dẫn không hợp lệ hoặc thông tin không khớp với hệ thống.']);
+            break;
+        }
+
+        if (($ctx['status'] ?? '') === 'databank_claim') {
+            echo json_encode(['success' => false, 'message' => 'Khách hàng tự nhận từ Kho Data không được phép gửi ticket bù data.']);
+            break;
+        }
+
+        // Check if already has a pending report
+        $pendingChk = $conn->prepare("SELECT id, status FROM data_reports WHERE lead_id=? AND consultant_id=? AND round_id=? ORDER BY created_at DESC LIMIT 1");
+        $pendingChk->bind_param("iii", $lead_id, $sale_id, $round_id);
+        $pendingChk->execute();
+        $existingReport = $pendingChk->get_result()->fetch_assoc();
+
+        $cEmail = $ctx['consultant_email'];
+        $cRole = 'sale';
+        $roleStmt = $conn->prepare("SELECT role FROM accounts WHERE email = ? LIMIT 1");
+        if ($roleStmt) {
+            $roleStmt->bind_param("s", $cEmail);
+            $roleStmt->execute();
+            $roleRes = $roleStmt->get_result()->fetch_assoc();
+            if ($roleRes) {
+                $cRole = $roleRes['role'];
+            }
+            $roleStmt->close();
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'lead_id' => $lead_id,
+                'sale_id' => $sale_id,
+                'round_id' => $round_id,
+                'lead_name' => $ctx['lead_name'],
+                'lead_phone' => $ctx['lead_phone'],
+                'lead_email' => $ctx['lead_email'],
+                'lead_source' => $ctx['source'],
+                'lead_type' => $ctx['lead_type'],
+                'lead_note' => $ctx['note'],
+                'consultant_name' => $ctx['consultant_name'],
+                'consultant_email' => $ctx['consultant_email'],
+                'round_name' => $ctx['round_name'],
+                'assigned_at' => $ctx['received_at'],
+                'is_accepted' => (int)$ctx['is_accepted'],
+                'lead_recall_minutes' => (int)$ctx['lead_recall_minutes'],
+                'existing_report' => $existingReport ? $existingReport['status'] : null,
+                'duplicate_check_months' => (int) get_system_setting($conn, 'duplicate_check_months') ?: 6,
+                'report_error_reasons' => get_normalized_report_error_reasons($conn),
+                'is_allowed_to_report' => true,
+                'consultant_role' => $cRole
+            ]
+        ]);
+        break;
+
+    case 'submit_report':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $lead_id = (int) ($input['lead_id'] ?? 0);
+        $sale_id = (int) ($input['sale_id'] ?? 0);
+        $round_id = (int) ($input['round_id'] ?? 0);
+        $reason = trim($input['reason'] ?? '');
+
+        // Auto-discover original assignment if this is a reminder lead (status = 'reminder') or round_id = 0
+        $isReminder = false;
+        if ($round_id <= 0) {
+            $isReminder = true;
+        } else {
+            $chkLog = $conn->prepare("SELECT status FROM distribution_logs WHERE lead_id = ? AND assigned_to = ? AND round_id = ? LIMIT 1");
+            if ($chkLog) {
+                $chkLog->bind_param("iii", $lead_id, $sale_id, $round_id);
+                $chkLog->execute();
+                $resLog = $chkLog->get_result()->fetch_assoc();
+                if ($resLog && $resLog['status'] === 'reminder') {
+                    $isReminder = true;
+                }
+                $chkLog->close();
+            }
+        }
+
+        if ($isReminder) {
+            $findOrigStmt = $conn->prepare("
+                SELECT dl.round_id, dl.assigned_to
+                FROM distribution_logs dl
+                WHERE dl.lead_id = ? AND dl.status IN ('assigned', 'compensation') AND dl.round_id > 0
+                ORDER BY dl.received_at DESC
+            ");
+            if ($findOrigStmt) {
+                $findOrigStmt->bind_param("i", $lead_id);
+                $findOrigStmt->execute();
+                $origRes = $findOrigStmt->get_result();
+                $findOrigStmt->close();
+
+                $foundOriginal = false;
+                while ($origRow = $origRes->fetch_assoc()) {
+                    $origRoundId = (int)$origRow['round_id'];
+                    $origSaleId = (int)$origRow['assigned_to'];
+
+                    // Check if ticket is processed (approved or rejected)
+                    $ticketChk = $conn->prepare("
+                        SELECT id FROM data_reports 
+                        WHERE lead_id = ? AND consultant_id = ? AND round_id = ? AND status IN ('approved', 'rejected') 
+                        LIMIT 1
+                    ");
+                    if ($ticketChk) {
+                        $ticketChk->bind_param("iii", $lead_id, $origSaleId, $origRoundId);
+                        $ticketChk->execute();
+                        $ticketRes = $ticketChk->get_result();
+                        $hasTicketProcessed = ($ticketRes->num_rows > 0);
+                        $ticketChk->close();
+
+                        if (!$hasTicketProcessed) {
+                            $round_id = $origRoundId;
+                            $sale_id = $origSaleId;
+                            $foundOriginal = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!$foundOriginal) {
+                    echo json_encode([
+                        'success' => false,
+                        'message' => 'Không thể báo cáo lỗi cho dữ liệu nhắc lại và không tìm thấy lượt phân bổ gốc chưa được xử lý.'
+                    ]);
+                    break;
+                }
+            }
+        }
+
+        if (!$lead_id || !$sale_id || !$round_id || empty($reason)) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin bắt buộc']);
+            break;
+        }
+
+        require_once __DIR__ . '/webhook_logic.php';
+        $fallbackRoundIds = getAllFallbackRoundIds($conn);
+        if (in_array((int) $round_id, $fallbackRoundIds)) {
+            echo json_encode(['success' => false, 'message' => 'Không thể báo cáo lỗi cho dữ liệu dưới chuẩn.']);
+            break;
+        }
+
+
+
+        // SECURITY: Verify ownership — lead must truly belong to this consultant in this round
+        $verifyStmt = $conn->prepare("
+            SELECT id, status FROM distribution_logs 
+            WHERE lead_id = ? AND assigned_to = ? AND round_id = ? 
+            LIMIT 1
+        ");
+        $verifyStmt->bind_param("iii", $lead_id, $sale_id, $round_id);
+        $verifyStmt->execute();
+        $verifyRes = $verifyStmt->get_result();
+        $verifyStmt->close();
+        if ($verifyRes->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'Thông tin không hợp lệ: Data này không thuộc về bạn trong vòng này.']);
+            break;
+        }
+        $logRow = $verifyRes->fetch_assoc();
+        if (($logRow['status'] ?? '') === 'reminder') {
+            echo json_encode(['success' => false, 'message' => 'Không thể báo cáo lỗi cho dữ liệu nhắc lại.']);
+            break;
+        }
+        if (($logRow['status'] ?? '') === 'databank_claim') {
+            echo json_encode(['success' => false, 'message' => 'Khách hàng tự nhận từ Kho Data không được phép gửi ticket bù data.']);
+            break;
+        }
+
+        // Prevent duplicate pending reports for same lead + consultant + round
+        $checkStmt = $conn->prepare("SELECT id FROM data_reports WHERE lead_id=? AND consultant_id=? AND round_id=? AND status='pending'");
+        $checkStmt->bind_param("iii", $lead_id, $sale_id, $round_id);
+        $checkStmt->execute();
+        $checkRes = $checkStmt->get_result();
+        $checkStmt->close();
+        if ($checkRes->num_rows > 0) {
+            echo json_encode(['success' => false, 'message' => 'Bạn đã báo cáo Lead này và đang chờ duyệt!']);
+            break;
+        }
+
+        // Fetch lead's connection_id
+        $leadConnId = 0;
+        $leadQuery = $conn->prepare("SELECT connection_id FROM leads WHERE id = ? LIMIT 1");
+        $leadQuery->bind_param("i", $lead_id);
+        $leadQuery->execute();
+        $resLeadInfo = $leadQuery->get_result()->fetch_assoc();
+        if ($resLeadInfo) {
+            $leadConnId = (int) $resLeadInfo['connection_id'];
+        }
+        $leadQuery->close();
+
+        // Auto-approve check using rules
+        $autoAppEnabled = false;
+        $enabledRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'ticket_auto_approve_enabled' LIMIT 1");
+        if ($enabledRes && $row = $enabledRes->fetch_assoc()) {
+            $autoAppEnabled = ($row['setting_value'] === '1' || $row['setting_value'] === 1 || $row['setting_value'] == 1);
+        }
+
+        $autoApproved = false;
+        $matchedKeyword = '';
+        $matchedRuleName = '';
+
+        if ($autoAppEnabled) {
+            $autoAppRulesSetting = '';
+            $settingsRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'ticket_auto_approve_rules' LIMIT 1");
+            if ($settingsRes && $row = $settingsRes->fetch_assoc()) {
+                $autoAppRulesSetting = trim($row['setting_value']);
+            }
+
+            if (!empty($autoAppRulesSetting)) {
+                $rules = json_decode($autoAppRulesSetting, true);
+                if (is_array($rules)) {
+                    $reasonLower = mb_strtolower($reason, 'UTF-8');
+                    foreach ($rules as $rule) {
+                        if (empty($rule['active'])) {
+                            continue;
+                        }
+
+                        // 1. Check round condition
+                        $roundMatch = false;
+                        $ruleRounds = $rule['rounds'] ?? [];
+                        if (!is_array($ruleRounds)) {
+                            $ruleRounds = is_string($ruleRounds) ? array_map('trim', explode(',', $ruleRounds)) : [$ruleRounds];
+                        }
+                        if (empty($ruleRounds) || in_array('all', $ruleRounds) || in_array((string) $round_id, array_map('strval', $ruleRounds))) {
+                            $roundMatch = true;
+                        }
+                        if (!$roundMatch) {
+                            continue;
+                        }
+
+                        // 2. Check sale condition
+                        $saleMatch = false;
+                        $ruleSales = $rule['sales'] ?? [];
+                        if (!is_array($ruleSales)) {
+                            $ruleSales = is_string($ruleSales) ? array_map('trim', explode(',', $ruleSales)) : [$ruleSales];
+                        }
+                        if (empty($ruleSales) || in_array('all', $ruleSales) || in_array((string) $sale_id, array_map('strval', $ruleSales))) {
+                            $saleMatch = true;
+                        }
+                        if (!$saleMatch) {
+                            continue;
+                        }
+
+                        // 3. Check source (connection_id) condition
+                        $sourceMatch = false;
+                        $ruleConnections = $rule['connections'] ?? [];
+                        if (!is_array($ruleConnections)) {
+                            $ruleConnections = is_string($ruleConnections) ? array_map('trim', explode(',', $ruleConnections)) : [$ruleConnections];
+                        }
+                        if (empty($ruleConnections) || in_array('all', $ruleConnections) || in_array((string) $leadConnId, array_map('strval', $ruleConnections))) {
+                            $sourceMatch = true;
+                        }
+                        if (!$sourceMatch) {
+                            continue;
+                        }
+
+                        // 4. Check keywords/reasons
+                        $keywords = $rule['keywords'] ?? [];
+                        if (!is_array($keywords)) {
+                            if (is_string($keywords)) {
+                                $keywords = array_map('trim', explode(',', $keywords));
+                            } else {
+                                $keywords = [];
+                            }
+                        }
+                        $keywords = array_filter($keywords);
+
+                        foreach ($keywords as $kw) {
+                            $kwLower = mb_strtolower($kw, 'UTF-8');
+                            if (mb_strpos($reasonLower, $kwLower) !== false) {
+                                $autoApproved = true;
+                                $matchedKeyword = $kw;
+                                $matchedRuleName = $rule['name'] ?? 'Luật tự động';
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($autoApproved) {
+            $conn->begin_transaction();
+            try {
+                // 1. Insert report as approved
+                $stmt = $conn->prepare("INSERT INTO data_reports (lead_id, consultant_id, round_id, reason, status, resolved_by, created_at, resolved_at) VALUES (?, ?, ?, ?, 'approved', 'Hệ thống', (SELECT created_at FROM leads WHERE id = ?), (SELECT created_at FROM leads WHERE id = ?))");
+                $stmt->bind_param("iiisii", $lead_id, $sale_id, $round_id, $reason, $lead_id, $lead_id);
+                $stmt->execute();
+                $report_id = $stmt->insert_id;
+                $stmt->close();
+
+                // 2. Mark lead as faulty
+                $faultyMsg = "[LỖI - TỰ ĐỘNG DUYỆT (Luật: $matchedRuleName, Từ khóa: $matchedKeyword)]: " . $reason . " | Admin duyệt: Hệ thống | Thời gian: " . date('d/m/Y H:i:s');
+                $updLead = $conn->prepare("UPDATE leads SET note = CONCAT(IFNULL(note, ''), '\n', ?) WHERE id=?");
+                $updLead->bind_param("si", $faultyMsg, $lead_id);
+                $updLead->execute();
+                $updLead->close();
+
+                // 3. Mark distribution_logs as error - chỉ áp dụng cho lượt đang hoạt động gần nhất
+                $updLog = $conn->prepare("UPDATE distribution_logs SET status='error' WHERE lead_id=? AND assigned_to=? AND round_id=? AND status IN ('assigned', 'compensation') ORDER BY id DESC LIMIT 1");
+                $updLog->bind_param("iii", $lead_id, $sale_id, $round_id);
+                $updLog->execute();
+                $updLog->close();
+
+                // 4. Increment compensation_count for the consultant in that round
+                $updComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id=? AND consultant_id=?");
+                $updComp->bind_param("ii", $round_id, $sale_id);
+                $updComp->execute();
+                $updComp->close();
+
+                logAdminAction($conn, 0, 'AUTO_APPROVE_REPORT', [
+                    'report_id' => $report_id,
+                    'lead_id' => $lead_id,
+                    'consultant_id' => $sale_id,
+                    'round_id' => $round_id,
+                    'rule_name' => $matchedRuleName,
+                    'keyword' => $matchedKeyword
+                ]);
+
+                $conn->commit();
+
+                // Fetch Sale & Lead info for notifications
+                $consultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+                $consultStmt->bind_param("i", $sale_id);
+                $consultStmt->execute();
+                $consultant = $consultStmt->get_result()->fetch_assoc();
+                $consultStmt->close();
+
+                $leadStmt = $conn->prepare("SELECT name, phone FROM leads WHERE id = ? LIMIT 1");
+                $leadStmt->bind_param("i", $lead_id);
+                $leadStmt->execute();
+                $lead = $leadStmt->get_result()->fetch_assoc();
+                $leadStmt->close();
+
+                $cName = $consultant['name'] ?? 'Bạn';
+                $lName = $lead['name'] ?? 'Khách hàng';
+                $lPhone = $lead['phone'] ?? 'Không rõ';
+
+                // Send Zalo to Sale
+                require_once __DIR__ . '/zalo_bot.php';
+                $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+                $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+                if (!empty($botToken) && !empty($consultant['zalo_chat_id'])) {
+                    $zaloMsg = "[ TICKET ĐÃ ĐƯỢC TỰ ĐỘNG DUYỆT ]\n\n"
+                        . "Chào $cName, báo cáo lỗi Data của bạn đã được HỆ THỐNG TỰ ĐỘNG PHÊ DUYỆT.\n\n"
+                        . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                        . "  • Khách hàng: $lName ($lPhone)\n"
+                        . "  • Lỗi bạn báo: $reason\n"
+                        . "  • Luật áp dụng: $matchedRuleName\n"
+                        . "  • Từ khóa tự động: $matchedKeyword\n\n"
+                        . "Hệ thống đã ghi nhận 1 lượt đền bù. Bạn sẽ nhận được Data mới vào lần phân bổ tiếp theo.";
+                    sendZaloMessage($botToken, $consultant['zalo_chat_id'], $zaloMsg, false);
+                }
+
+                // Send Email to Sale
+                if (!empty($consultant['email'])) {
+                    require_once __DIR__ . '/mailer.php';
+                    $emailSubj = "[BOT] Ticket Lỗi Data Đã Được Tự Động Duyệt - $lName";
+                    $emailBody = "<h3>Báo cáo lỗi Data được tự động phê duyệt</h3>
+                                  <p>Chào $cName,</p>
+                                  <p>Báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã được hệ thống tự động phê duyệt.</p>
+                                  <p><strong>Luật áp dụng:</strong> $matchedRuleName</p>
+                                  <p><strong>Từ khóa kích hoạt:</strong> $matchedKeyword</p>
+                                  <p>Hệ thống đã tự động cộng 1 lượt đền bù cho bạn trong vòng phân bổ hiện tại.</p>";
+                    sendEmailNotification($consultant['email'], $emailSubj, 'Kết quả Báo cáo', $emailBody, '');
+                }
+
+                // Notify Admins
+                $adminEmails = getTicketNotifyAdmins($conn);
+
+                if (!empty($adminEmails)) {
+                    // Zalo to admins
+                    if (!empty($botToken)) {
+                        $adminChatIds = [];
+                        foreach ($adminEmails as $adm) {
+                            if (!empty($adm['zalo_chat_id'])) {
+                                $adminChatIds[] = $adm['zalo_chat_id'];
+                            }
+                        }
+                        if (!empty($adminChatIds)) {
+                            $zaloAdminMsg = "[ TICKET TỰ ĐỘNG DUYỆT ]\n\n"
+                                . "Hệ thống đã tự động duyệt báo cáo lỗi Data từ Sale:\n\n"
+                                . "❖ THÔNG TIN BÁO CÁO:\n"
+                                . "  • Sale báo cáo: $cName\n"
+                                . "  • Khách hàng: $lName ($lPhone)\n\n"
+                                . "❖ CHI TIẾT TỰ ĐỘNG DUYỆT:\n"
+                                . "  • Lý do: $reason\n"
+                                . "  • Từ khóa kích hoạt: $matchedKeyword\n\n"
+                                . "Lượt đền bù đã được tự động cộng cho Sale.";
+                            sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloAdminMsg, false);
+                        }
+                    }
+
+                    // Email to admins
+                    require_once __DIR__ . '/mailer.php';
+                    $toAdmin = array_shift($adminEmails);
+                    $ccList = array_map(fn($a) => $a['email'], $adminEmails);
+                    $ccString = implode(',', array_filter($ccList));
+
+                    $emailSubjAdmin = "[IDEAS DATA] Thông báo Ticket Tự động duyệt - Sale: $cName";
+                    $emailBodyAdmin = "<h3>Thông báo Ticket Tự động duyệt</h3>
+                                      <p>Hệ thống đã tự động duyệt báo cáo lỗi của Sale <strong>$cName</strong> đối với khách hàng <strong>$lName ($lPhone)</strong>.</p>
+                                      <p><strong>Lý do lỗi:</strong> $reason</p>
+                                      <p><strong>Từ khóa kích hoạt:</strong> $matchedKeyword</p>
+                                      <p>Lượt đền bù đã được tự động cộng cho Sale thành công.</p>";
+                    sendEmailNotification($toAdmin['email'], $emailSubjAdmin, 'Thông báo Hệ thống', $emailBodyAdmin, $ccString);
+                }
+
+                echo json_encode(['success' => true, 'auto_approved' => true]);
+                break;
+            } catch (Exception $e) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Lỗi xử lý tự động duyệt: ' . $e->getMessage()]);
+                break;
+            }
+        }
+
+        $stmt = $conn->prepare("INSERT INTO data_reports (lead_id, consultant_id, round_id, reason, created_at) VALUES (?, ?, ?, ?, (SELECT created_at FROM leads WHERE id = ?))");
+        $stmt->bind_param("iiisi", $lead_id, $sale_id, $round_id, $reason, $lead_id);
+        $success = $stmt->execute();
+        $ticketId = $conn->insert_id;
+        $stmt->close();
+
+        if ($success) {
+            // FEATURE: Gửi email thông báo tới admin được thiết lập nhận ticket (dùng chung cấu hình báo cáo ngày)
+            require_once __DIR__ . '/mailer.php';
+
+            $adminEmails = getTicketNotifyAdmins($conn);
+
+            if (!empty($adminEmails)) {
+                // Lấy thông tin consultant và lead để gửi email
+                $ctxForEmail = $conn->prepare("
+                    SELECT l.name as lead_name, l.phone as lead_phone, l.email as lead_email, l.source as lead_source, l.type as lead_type, l.note as lead_note, c.name as consultant_name, c.zalo_chat_id, dr.round_name
+                    FROM distribution_logs dl
+                    LEFT JOIN leads l ON dl.lead_id = l.id
+                    LEFT JOIN consultants c ON dl.assigned_to = c.id
+                    LEFT JOIN distribution_rounds dr ON dl.round_id = dr.id
+                    WHERE dl.lead_id = ? AND dl.assigned_to = ? AND dl.round_id = ?
+                    LIMIT 1
+                ");
+                $ctxForEmail->bind_param("iii", $lead_id, $sale_id, $round_id);
+                $ctxForEmail->execute();
+                $ctxData = $ctxForEmail->get_result()->fetch_assoc();
+                $ctxForEmail->close();
+
+                $toAdmin = array_shift($adminEmails); // Admin đầu tiên là recipient chính
+                $ccList = array_map(fn($a) => $a['email'], $adminEmails); // Còn lại là CC
+                $ccString = implode(',', array_filter($ccList));
+
+                // 1. Gửi Email
+                sendTicketNotificationToAdmins(
+                    $toAdmin['email'],
+                    $toAdmin['name'],
+                    $ctxData['lead_name'] ?? 'Khách hàng',
+                    $ctxData['lead_phone'] ?? '',
+                    $reason,
+                    $ctxData['consultant_name'] ?? '',
+                    $ctxData['round_name'] ?? '',
+                    $ccString,
+                    $ctxData['lead_email'] ?? '',
+                    $ctxData['lead_source'] ?? '',
+                    $ctxData['lead_type'] ?? '',
+                    $ctxData['lead_note'] ?? ''
+                );
+
+                // 2. Gửi Zalo Message cho toàn bộ admin có zalo_chat_id
+                require_once __DIR__ . '/zalo_bot.php';
+                $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+                $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+                if (!empty($botToken)) {
+                    $allAdmins = array_merge([$toAdmin], $adminEmails);
+                    $leadName = $ctxData['lead_name'] ?? 'Khách hàng';
+                    $leadPhone = $ctxData['lead_phone'] ?? 'Không rõ';
+                    $leadEmail = $ctxData['lead_email'] ?? 'Không rõ';
+                    $leadSource = $ctxData['lead_source'] ?? 'Không rõ';
+                    $leadType = $ctxData['lead_type'] ?? 'Không rõ';
+                    $leadNote = $ctxData['lead_note'] ?? 'Không rõ';
+                    $consultName = $ctxData['consultant_name'] ?? 'Không rõ';
+
+                    $zaloMsg = "[ YÊU CẦU DUYỆT TICKET ]\n\n"
+                        . "Một nhân viên vừa gửi báo cáo lỗi Data:\n\n"
+                        . "❖ THÔNG TIN BÁO CÁO:\n"
+                        . "  • Sale báo cáo: $consultName\n"
+                        . "  • Khách hàng: $leadName\n"
+                        . "  • Số điện thoại: $leadPhone\n"
+                        . "  • Email: $leadEmail\n"
+                        . "  • Nguồn Data: $leadSource\n"
+                        . "  • Loại Data: $leadType\n"
+                        . "  • Ghi chú: $leadNote\n\n"
+                        . "❖ LÝ DO LỖI:\n"
+                        . "  $reason";
+
+                    $adminChatIds = [];
+                    foreach ($allAdmins as $adm) {
+                        if (!empty($adm['zalo_chat_id'])) {
+                            $adminChatIds[] = $adm['zalo_chat_id'];
+                        }
+                    }
+                    if (!empty($adminChatIds)) {
+                        sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloMsg, false);
+                    }
+                }
+            }
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi lưu báo cáo']);
+        }
+        break;
+
+
+    case 'get_support_tickets_count':
+        $role = $decodedUser['role'] ?? '';
+        if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+            echo json_encode(['success' => true, 'count' => 0]);
+            break;
+        }
+        $tenantId = (int)($decodedUser['tenant_id'] ?? 1);
+        $statusParam = $_GET['status'] ?? '';
+        if ($statusParam === 'open') {
+            $stmtC = $conn->prepare("SELECT COUNT(*) FROM tickets WHERE tenant_id = ? AND status = 'open'");
+        } else {
+            $stmtC = $conn->prepare("SELECT COUNT(*) FROM tickets WHERE tenant_id = ? AND status IN ('open', 'in_progress', 'waiting')");
+        }
+        $stmtC->bind_param("i", $tenantId);
+        $stmtC->execute();
+        $resC = $stmtC->get_result();
+        $count = $resC->fetch_row()[0] ?? 0;
+        $stmtC->close();
+        echo json_encode(['success' => true, 'count' => (int)$count]);
+        break;
+
+
+    case 'get_all_pending_counts':
+        $role = $decodedUser['role'] ?? '';
+        $tenantId = (int)($decodedUser['tenant_id'] ?? 1);
+        $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+
+        $ticketsCount = 0;
+        $heldCount = 0;
+        $checkinsCount = 0;
+        $coopsCount = 0;
+        $supportCount = 0;
+        $expensesCount = 0;
+        $salesPendingSignCount = 0;
+
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isHR = ($role === 'hr');
+        $isAccountant = ($role === 'accountant');
+        $isManager = ($role === 'manager');
+        $isAdminOrManager = $isGlobalAdmin || $isManager || $isHR || $isAccountant;
+
+        if ($isAdminOrManager) {
+            // 1. Tickets (Reports) count
+            $isManager = ($role === 'manager');
+            $managedConsultantIds = [];
+            if ($isManager) {
+                $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                $stmtM->bind_param("i", $userId);
+                $stmtM->execute();
+                $resM = $stmtM->get_result();
+                while ($rowM = $resM->fetch_assoc()) {
+                    $managedConsultantIds[] = (int)$rowM['id'];
+                }
+                $stmtM->close();
+            }
+
+            if (!$isManager || !empty($managedConsultantIds)) {
+                $sqlRep = "SELECT COUNT(*) FROM data_reports r WHERE r.status = 'pending'";
+                if ($isManager) {
+                    $placeholders = implode(',', array_fill(0, count($managedConsultantIds), '?'));
+                    $sqlRep .= " AND r.consultant_id IN ($placeholders)";
+                }
+                $stmtRep = $conn->prepare($sqlRep);
+                if ($isManager) {
+                    $stmtRep->bind_param(str_repeat("i", count($managedConsultantIds)), ...$managedConsultantIds);
+                }
+                $stmtRep->execute();
+                $ticketsCount = (int)($stmtRep->get_result()->fetch_row()[0] ?? 0);
+                $stmtRep->close();
+            }
+
+            // 2. Held Leads count
+            $isDirector = ($role === 'director');
+            $isProjManager = false;
+            $projIds = [];
+            if ($isManager) {
+                $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+                if ($pRes) {
+                    while ($pRow = $pRes->fetch_assoc()) {
+                        if (!empty($pRow['manager_ids'])) {
+                            $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                            if (in_array($userId, $mIds, true)) {
+                                $projIds[] = (int)$pRow['id'];
+                                $isProjManager = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $campIds = [];
+            if ($isProjManager && !empty($projIds)) {
+                $projIdsStr = implode(',', $projIds);
+                $cRes = $conn->query("SELECT id FROM marketing_campaigns WHERE project_id IN ($projIdsStr)");
+                if ($cRes) {
+                    while ($cRow = $cRes->fetch_assoc()) {
+                        $campIds[] = (int)$cRow['id'];
+                    }
+                }
+            }
+
+            $sqlHeld = "
+                SELECT COUNT(*) 
+                FROM leads l
+                WHERE l.status = 'pending_approval' 
+                  AND NOT ( (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) )
+            ";
+            if ($isProjManager) {
+                if (!empty($campIds)) {
+                    $sqlHeld .= " AND l.campaign_id IN (" . implode(',', $campIds) . ")";
+                } else {
+                    $sqlHeld .= " AND 1=0";
+                }
+            }
+            $stmtHeld = $conn->prepare($sqlHeld);
+            $stmtHeld->execute();
+            $heldCount = (int)($stmtHeld->get_result()->fetch_row()[0] ?? 0);
+            $stmtHeld->close();
+
+            // 3. Check-ins count
+            $sqlCheck = "
+                SELECT COUNT(*) 
+                FROM check_ins c
+                JOIN users u ON c.user_id = u.id
+                WHERE u.tenant_id = ? AND c.status = 'pending_approval'
+            ";
+            if ($role === 'manager') {
+                $sqlCheck .= " AND (u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))) OR (u.team_id IS NOT NULL AND u.team_id = (SELECT team_id FROM users WHERE id = ?)))";
+            }
+            $stmtCheck = $conn->prepare($sqlCheck);
+            if ($role === 'manager') {
+                $stmtCheck->bind_param("iiii", $tenantId, $userId, $userId, $userId);
+            } else {
+                $stmtCheck->bind_param("i", $tenantId);
+            }
+            $stmtCheck->execute();
+            $checkinsCount = (int)($stmtCheck->get_result()->fetch_row()[0] ?? 0);
+            $stmtCheck->close();
+
+            // 4. Cooperation slips count
+            $sqlCoop = "
+                SELECT COUNT(*)
+                FROM cooperation_slips cs
+                JOIN contacts c ON cs.contact_id = c.id
+                WHERE c.tenant_id = ?
+                  AND (cs.status = 'pending_manager_approval' OR (cs.status = 'approved' AND cs.adjustment_request_user_id > 0))
+            ";
+            $scope = getModulePermissionScope($conn, $decodedUser, 'cooperation', 'read');
+            if ($scope === 'team') {
+                $sqlCoop .= " AND (
+                    (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(? AS CHAR))))
+                    OR cs.created_by = ?
+                    OR EXISTS (
+                        SELECT 1 FROM users u2 
+                        WHERE u2.team_id IN (SELECT id FROM teams WHERE leader_id = ?)
+                        AND (
+                            (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(u2.id AS CHAR))))
+                            OR cs.created_by = u2.id
+                        )
+                    )
+                )";
+            } else if ($scope === 'own') {
+                $sqlCoop .= " AND (
+                    (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(? AS CHAR))))
+                    OR cs.created_by = ?
+                )";
+            } else if ($scope !== 'all') {
+                $sqlCoop .= ' AND 1=0';
+            }
+
+            $stmtCoop = $conn->prepare($sqlCoop);
+            if ($scope === 'team') {
+                $stmtCoop->bind_param("iiii", $tenantId, $userId, $userId, $userId);
+            } else if ($scope === 'own') {
+                $stmtCoop->bind_param("iii", $tenantId, $userId, $userId);
+            } else {
+                $stmtCoop->bind_param("i", $tenantId);
+            }
+            $stmtCoop->execute();
+            $coopsCount = (int)($stmtCoop->get_result()->fetch_row()[0] ?? 0);
+            $stmtCoop->close();
+
+            // 5. Support tickets count
+            $isSupportRole = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+            if ($isSupportRole) {
+                $stmtC = $conn->prepare("SELECT COUNT(*) FROM tickets WHERE tenant_id = ? AND status = 'open'");
+                $stmtC->bind_param("i", $tenantId);
+                $stmtC->execute();
+                $supportCount = (int)($stmtC->get_result()->fetch_row()[0] ?? 0);
+                $stmtC->close();
+            }
+
+            // 6. Expenses count
+            if ($isGlobalAdmin) {
+                $sqlExp = "SELECT COUNT(*) FROM expenses e WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL";
+                $stmtExp = $conn->prepare($sqlExp);
+                $stmtExp->bind_param("i", $tenantId);
+            } else if ($isManager) {
+                $userIds = [$userId];
+                $stmtTeam = $conn->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                $stmtTeam->bind_param("i", $userId);
+                $stmtTeam->execute();
+                $resTeam = $stmtTeam->get_result();
+                while ($rowTeam = $resTeam->fetch_assoc()) {
+                    $userIds[] = (int)$rowTeam['id'];
+                }
+                $stmtTeam->close();
+
+                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
+                $sqlExp = "SELECT COUNT(*) FROM expenses e WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL AND (e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
+                $stmtExp = $conn->prepare($sqlExp);
+                $allParams = array_merge([$tenantId], $userIds, [$userId, $userId, $userId]);
+                $types = str_repeat("i", count($allParams));
+                $stmtExp->bind_param($types, ...$allParams);
+            } else {
+                // For HR, Accountant, or any designated approver
+                $sqlExp = "SELECT COUNT(*) FROM expenses e WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL AND (e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
+                $stmtExp = $conn->prepare($sqlExp);
+                $stmtExp->bind_param("iiii", $tenantId, $userId, $userId, $userId);
+            }
+            $stmtExp->execute();
+            $expensesCount = (int)($stmtExp->get_result()->fetch_row()[0] ?? 0);
+            $stmtExp->close();
+        }
+
+        // 7. For Sales Pending signatures:
+        $salesCoopStmt = $conn->prepare("
+            SELECT cs.shares_json, cs.signatures_json 
+            FROM cooperation_slips cs
+            JOIN contacts c ON cs.contact_id = c.id
+            WHERE c.tenant_id = ? 
+              AND cs.status IN ('pending_signatures', 'approved_pending_signatures')
+        ");
+        $salesCoopStmt->bind_param("i", $tenantId);
+        $salesCoopStmt->execute();
+        $salesCoopRes = $salesCoopStmt->get_result();
+        while ($salesCoopRow = $salesCoopRes->fetch_assoc()) {
+            $shares = json_decode($salesCoopRow['shares_json'] ?? '[]', true) ?: [];
+            $sigs = json_decode($salesCoopRow['signatures_json'] ?? '[]', true) ?: [];
+            if (isset($shares[$userId]) && !isset($sigs[$userId])) {
+                $salesPendingSignCount++;
+            }
+        }
+        $salesCoopStmt->close();
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'ticketsCount' => $ticketsCount,
+                'heldCount' => $heldCount,
+                'checkinsCount' => $checkinsCount,
+                'coopsCount' => $coopsCount,
+                'supportCount' => $supportCount,
+                'expensesCount' => $expensesCount,
+                'salesPendingSignCount' => $salesPendingSignCount
+            ]
+        ]);
+        break;
+
+
+    case 'get_reports':
+        // Retrieve query parameters
+        $round_id = isset($_GET['round_id']) ? (int) $_GET['round_id'] : 0;
+        $status = isset($_GET['status']) ? trim($_GET['status']) : 'all';
+        $consultant = isset($_GET['consultant']) ? trim($_GET['consultant']) : '';
+
+        $consultantId = isset($_GET['consultant_id']) && $_GET['consultant_id'] !== '' ? (int) $_GET['consultant_id'] : 0;
+        if ($decodedUser['role'] === 'sale') {
+            $consultantId = $currentSaleConsultantId ?? 0;
+            if ($consultantId <= 0) {
+                echo json_encode([
+                    'success' => true,
+                    'data' => [],
+                    'total_count' => 0,
+                    'stats' => [
+                        'pending' => 0,
+                        'approved' => 0,
+                        'rejected' => 0,
+                        'all' => 0
+                    ]
+                ]);
+                break;
+            }
+        }
+
+        $managedConsultantIds = [];
+        $isManager = (isset($decodedUser['role']) && $decodedUser['role'] === 'manager');
+        if ($isManager) {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+            $stmtM->bind_param("i", $currentUserId);
+            $stmtM->execute();
+            $resM = $stmtM->get_result();
+            while ($rowM = $resM->fetch_assoc()) {
+                $managedConsultantIds[] = (int)$rowM['id'];
+            }
+            $stmtM->close();
+
+            if (empty($managedConsultantIds)) {
+                echo json_encode([
+                    'success' => true,
+                    'data' => [],
+                    'total_count' => 0,
+                    'stats' => [
+                        'pending' => 0,
+                        'approved' => 0,
+                        'rejected' => 0,
+                        'all' => 0
+                    ]
+                ]);
+                break;
+            }
+
+            if ($consultantId > 0) {
+                if (!in_array($consultantId, $managedConsultantIds)) {
+                    echo json_encode([
+                        'success' => true,
+                        'data' => [],
+                        'total_count' => 0,
+                        'stats' => [
+                            'pending' => 0,
+                            'approved' => 0,
+                            'rejected' => 0,
+                            'all' => 0
+                        ]
+                    ]);
+                    break;
+                }
+            } else if ($consultant !== '' && $consultant !== 'all') {
+                $stmtCName = $conn->prepare("SELECT id FROM consultants WHERE name = ? LIMIT 1");
+                $stmtCName->bind_param("s", $consultant);
+                $stmtCName->execute();
+                $cNameRow = $stmtCName->get_result()->fetch_assoc();
+                $stmtCName->close();
+
+                $cNameId = $cNameRow ? (int)$cNameRow['id'] : 0;
+                if (!$cNameId || !in_array($cNameId, $managedConsultantIds)) {
+                    echo json_encode([
+                        'success' => true,
+                        'data' => [],
+                        'total_count' => 0,
+                        'stats' => [
+                            'pending' => 0,
+                            'approved' => 0,
+                            'rejected' => 0,
+                            'all' => 0
+                        ]
+                    ]);
+                    break;
+                }
+            }
+        }
+
+        $date = isset($_GET['date']) ? trim($_GET['date']) : 'Tháng này';
+
+        $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+        $pageSize = isset($_GET['pageSize']) ? (int) $_GET['pageSize'] : 50;
+        if ($page < 1)
+            $page = 1;
+        if ($pageSize < 1)
+            $pageSize = 50;
+        $offset = ($page - 1) * $pageSize;
+
+        // Build base condition and types/params for prepared statement
+        $conds = [];
+        $params = [];
+        $types = "";
+
+        if ($round_id > 0) {
+            $conds[] = "r.round_id = ?";
+            $params[] = $round_id;
+            $types .= "i";
+        }
+        if ($consultantId > 0) {
+            $conds[] = "r.consultant_id = ?";
+            $params[] = $consultantId;
+            $types .= "i";
+        } else if ($consultant !== '' && $consultant !== 'all') {
+            $conds[] = "c.name = ?";
+            $params[] = $consultant;
+            $types .= "s";
+        }
+
+        if ($isManager && $consultantId <= 0 && ($consultant === '' || $consultant === 'all')) {
+            $placeholders = implode(',', array_fill(0, count($managedConsultantIds), '?'));
+            $conds[] = "r.consultant_id IN ($placeholders)";
+            foreach ($managedConsultantIds as $mId) {
+                $params[] = $mId;
+                $types .= "i";
+            }
+        }
+
+        // Parse date condition using the same logic (against r.created_at)
+        $dateCondition = "r.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND r.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+
+        if ($date === 'all' || $date === '') {
+            $dateCondition = "1=1";
+        } else if ($date === 'Hôm nay') {
+            $dateCondition = "r.created_at >= CURDATE() AND r.created_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } else if ($date === 'Hôm qua') {
+            $dateCondition = "r.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND r.created_at < CURDATE()";
+        } else if ($date === 'Tuần này') {
+            $dateCondition = "r.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND r.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === 'Tuần trước') {
+            $dateCondition = "r.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND r.created_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } else if ($date === 'Tuần trước nữa') {
+            $dateCondition = "r.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND r.created_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === '7 ngày qua') {
+            $dateCondition = "r.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } else if ($date === '30 ngày qua') {
+            $dateCondition = "r.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } else if ($date === 'Tháng này') {
+            $dateCondition = "r.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND r.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } else if ($date === 'Tháng trước') {
+            $dateCondition = "r.created_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND r.created_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+            $start = $conn->real_escape_string($matches[1]);
+            $end = $conn->real_escape_string($matches[2]);
+            $dateCondition = "r.created_at >= '$start 00:00:00' AND r.created_at <= '$end 23:59:59'";
+        }
+
+        $baseConds = $conds;
+        $baseParams = $params;
+        $baseTypes = $types;
+
+        // Records Condition (includes status and conditionally dateCondition)
+        $recordsConds = $baseConds;
+        $recordsParams = $baseParams;
+        $recordsTypes = $baseTypes;
+        if ($status === 'pending') {
+            $recordsConds[] = "r.status = 'pending'";
+        } else if ($status === 'approved_no_comp') {
+            $recordsConds[] = "r.status = 'approved_no_comp'";
+            if ($dateCondition !== "1=1") {
+                $recordsConds[] = $dateCondition;
+            }
+        } else if ($status === 'approved' || $status === 'rejected') {
+            $recordsConds[] = "r.status = ?";
+            $recordsParams[] = $status;
+            $recordsTypes .= "s";
+            if ($dateCondition !== "1=1") {
+                $recordsConds[] = $dateCondition;
+            }
+        } else {
+            // $status === 'all'
+            if ($dateCondition !== "1=1") {
+                $recordsConds[] = "(r.status = 'pending' OR (r.status IN ('approved', 'rejected', 'approved_no_comp') AND $dateCondition))";
+            }
+        }
+
+        $recordsWhere = count($recordsConds) > 0 ? "WHERE " . implode(" AND ", $recordsConds) : "";
+
+        // Query 1: Get Stats per status (for badges)
+        $statsSql = "
+            SELECT 
+                SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) as pending_cnt,
+                SUM(CASE WHEN r.status = 'approved' AND ($dateCondition) THEN 1 ELSE 0 END) as approved_cnt,
+                SUM(CASE WHEN r.status = 'approved_no_comp' AND ($dateCondition) THEN 1 ELSE 0 END) as approved_no_comp_cnt,
+                SUM(CASE WHEN r.status = 'rejected' AND ($dateCondition) THEN 1 ELSE 0 END) as rejected_cnt
+            FROM data_reports r
+            LEFT JOIN leads l ON r.lead_id = l.id
+            LEFT JOIN consultants c ON r.consultant_id = c.id
+            LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+            " . (count($baseConds) > 0 ? "WHERE " . implode(" AND ", $baseConds) : "") . "
+        ";
+        $rowStats = [];
+        $stmtStats = $conn->prepare($statsSql);
+        if ($stmtStats) {
+            if (count($baseParams) > 0) {
+                $stmtStats->bind_param($baseTypes, ...$baseParams);
+            }
+            $stmtStats->execute();
+            $resStats = $stmtStats->get_result();
+            if ($resStats) {
+                $rowStats = $resStats->fetch_assoc() ?: [];
+            }
+            $stmtStats->close();
+        }
+
+        $stats = [
+            'pending' => (int) ($rowStats['pending_cnt'] ?? 0),
+            'approved' => (int) ($rowStats['approved_cnt'] ?? 0),
+            'approved_no_comp' => (int) ($rowStats['approved_no_comp_cnt'] ?? 0),
+            'rejected' => (int) ($rowStats['rejected_cnt'] ?? 0),
+        ];
+        $stats['all'] = $stats['pending'] + $stats['approved'] + $stats['approved_no_comp'] + $stats['rejected'];
+
+        // Query 2: Get total records count for pagination
+        $countSql = "
+            SELECT COUNT(*) as cnt
+            FROM data_reports r
+            LEFT JOIN leads l ON r.lead_id = l.id
+            LEFT JOIN consultants c ON r.consultant_id = c.id
+            LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+            $recordsWhere
+        ";
+        $totalCount = 0;
+        $stmtCount = $conn->prepare($countSql);
+        if ($stmtCount) {
+            if (count($recordsParams) > 0) {
+                $stmtCount->bind_param($recordsTypes, ...$recordsParams);
+            }
+            $stmtCount->execute();
+            $totalCount = (int) ($stmtCount->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtCount->close();
+        }
+
+        // Query 3: Get paginated records
+        $recordsSql = "
+            SELECT r.*, l.name as lead_name, l.phone as lead_phone, l.email as lead_email,
+                   l.source as lead_source, l.type as lead_type, l.note as lead_note,
+                   l.created_at as lead_created_at, l.ai_screener_status, l.ai_evaluation,
+                   c.name as consultant_name, c.zalo_chat_id, c.avatar as consultant_avatar, dr.round_name,
+                   dl.id as log_id,
+                   dl.status as log_status,
+                   dl.received_at as log_received_at,
+                   (SELECT MAX(dl2.received_at) FROM distribution_logs dl2 WHERE dl2.lead_id = r.lead_id AND dl2.id < dl.id) as last_activity_at,
+                   a.avatar as resolved_by_avatar
+            FROM data_reports r
+            LEFT JOIN leads l ON r.lead_id = l.id
+            LEFT JOIN consultants c ON r.consultant_id = c.id
+            LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+            LEFT JOIN (
+                SELECT lead_id, assigned_to, round_id, MAX(id) as max_id
+                FROM distribution_logs
+                GROUP BY lead_id, assigned_to, round_id
+            ) dl_max ON r.lead_id = dl_max.lead_id AND r.consultant_id = dl_max.assigned_to AND r.round_id = dl_max.round_id
+            LEFT JOIN distribution_logs dl ON dl.id = dl_max.max_id
+            LEFT JOIN accounts a ON r.resolved_by = a.name
+            $recordsWhere
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        ";
+        $stmtRecords = $conn->prepare($recordsSql);
+
+        $data = [];
+        if ($stmtRecords) {
+            // Append limit and offset to parameters
+            $recordsParams[] = $pageSize;
+            $recordsParams[] = $offset;
+            $recordsTypes .= "ii";
+
+            $stmtRecords->bind_param($recordsTypes, ...$recordsParams);
+            $stmtRecords->execute();
+            $resRecords = $stmtRecords->get_result();
+
+            if ($resRecords) {
+                while ($row = $resRecords->fetch_assoc()) {
+                    $data[] = $row;
+                }
+            }
+            $stmtRecords->close();
+        }
+
+        // Query 4: Get unique consultants who have reports
+        $consultantsRes = $conn->query("
+            SELECT DISTINCT c.name 
+            FROM data_reports r 
+            JOIN consultants c ON r.consultant_id = c.id 
+            ORDER BY c.name ASC
+        ");
+        $consultants = [];
+        if ($consultantsRes) {
+            while ($row = $consultantsRes->fetch_assoc()) {
+                $consultants[] = $row['name'];
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => $data,
+            'stats' => $stats,
+            'consultants' => $consultants,
+            'total_count' => $totalCount,
+            'page' => $page,
+            'pageSize' => $pageSize
+        ]);
+        break;
+
+    case 'get_active_compensation_logs':
+        $round_id = isset($_GET['round_id']) ? (int) $_GET['round_id'] : 0;
+        if ($round_id <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID Vòng không hợp lệ']);
+            break;
+        }
+        $stmt = $conn->prepare("
+            SELECT acl.*, c.name as consultant_name, c.avatar as consultant_avatar, a.name as admin_name, a.avatar as admin_avatar
+            FROM active_compensation_logs acl
+            JOIN consultants c ON acl.consultant_id = c.id
+            JOIN accounts a ON acl.admin_id = a.id
+            WHERE acl.round_id = ?
+            ORDER BY acl.created_at DESC
+        ");
+        $stmt->bind_param("i", $round_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $data = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $data[] = $row;
+            }
+        }
+        $stmt->close();
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'approve_report':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $report_id = (int) ($input['id'] ?? 0);
+        $approval_reason = trim($input['approval_reason'] ?? '');
+        $new_consultant_id = isset($input['new_consultant_id']) ? (int) $input['new_consultant_id'] : 0;
+        $no_compensation = isset($input['no_compensation']) ? (bool) $input['no_compensation'] : false;
+        if (!$report_id) {
+            echo json_encode(['success' => false, 'message' => 'ID báo cáo không hợp lệ']);
+            break;
+        }
+
+        // Lấy thông tin admin thực hiện sớm để ghi vào DB
+        $adminName = 'Quản trị viên';
+        $adminAccountId = 0;
+        if (isset($decodedUser['id'])) {
+            $adminAccountId = (int) $decodedUser['id'];
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            // 1. Get report info (with consultant_name)
+            $stmt = $conn->prepare("
+                SELECT r.lead_id, r.consultant_id, r.round_id, r.reason, r.status, dr.cc_emails, c.name as consultant_name
+                FROM data_reports r
+                LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+                LEFT JOIN consultants c ON r.consultant_id = c.id
+                WHERE r.id = ? FOR UPDATE
+            ");
+            $stmt->bind_param("i", $report_id);
+            $stmt->execute();
+            $report = $stmt->get_result()->fetch_assoc();
+
+            if (!$report || $report['status'] !== 'pending') {
+                throw new Exception("Báo cáo không tồn tại hoặc đã được xử lý.");
+            }
+
+            if ($decodedUser['role'] === 'manager') {
+                $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+                if (!isManagerOfConsultant($conn, $currentUserId, $report['consultant_id'])) {
+                    throw new Exception("Bạn không có quyền duyệt báo cáo này.");
+                }
+            }
+
+            $newConsultantName = '';
+            if ($new_consultant_id > 0) {
+                // Fetch new consultant details and make sure they exist and are active
+                $newConsultStmt = $conn->prepare("SELECT name, status FROM consultants WHERE id = ? LIMIT 1");
+                $newConsultStmt->bind_param("i", $new_consultant_id);
+                $newConsultStmt->execute();
+                $newCInfo = $newConsultStmt->get_result()->fetch_assoc();
+                $newConsultStmt->close();
+
+                if (!$newCInfo) {
+                    throw new Exception("Tư vấn viên mới nhận nhắc lại không tồn tại.");
+                }
+                if ($newCInfo['status'] !== 'active') {
+                    throw new Exception("Tư vấn viên mới nhận nhắc lại đang không hoạt động.");
+                }
+                $newConsultantName = $newCInfo['name'];
+            }
+
+            // 2. Mark report as approved or approved_no_comp
+            $statusVal = $no_compensation ? 'approved_no_comp' : 'approved';
+            $updRep = $conn->prepare("UPDATE data_reports SET status=?, approval_reason=?, resolved_by=?, resolved_at=(SELECT created_at FROM leads WHERE id=data_reports.lead_id) WHERE id=?");
+            $updRep->bind_param("sssi", $statusVal, $approval_reason, $adminName, $report_id);
+            $updRep->execute();
+
+            // 3. Mark lead as faulty (Append to note and optionally assign to new consultant)
+            $notePrefix = $no_compensation ? "[LỖI - DUYỆT KHÔNG BÙ]" : "[LỖI - ĐÃ DUYỆT]";
+            $faultyMsg = $notePrefix . ": " . $report['reason'];
+            if (!empty($approval_reason)) {
+                $faultyMsg .= " | Lý do duyệt: " . $approval_reason;
+            }
+            $faultyMsg .= " | Admin duyệt: " . $adminName . " | Thời gian: " . date('d/m/Y H:i:s');
+
+            if ($new_consultant_id > 0) {
+                $faultyMsg .= " | Nhắc lại cho TVV: " . $newConsultantName;
+                $updLead = $conn->prepare("UPDATE leads SET assigned_to = ?, note = CONCAT(IFNULL(note, ''), '\n', ?) WHERE id=?");
+                $updLead->bind_param("isi", $new_consultant_id, $faultyMsg, $report['lead_id']);
+            } else {
+                $updLead = $conn->prepare("UPDATE leads SET note = CONCAT(IFNULL(note, ''), '\n', ?) WHERE id=?");
+                $updLead->bind_param("si", $faultyMsg, $report['lead_id']);
+            }
+            $updLead->execute();
+
+            if (!$no_compensation) {
+                // Mark distribution_logs as error - chỉ áp dụng cho lượt đang hoạt động gần nhất
+                $updLog = $conn->prepare("UPDATE distribution_logs SET status='error' WHERE lead_id=? AND assigned_to=? AND round_id=? AND status IN ('assigned', 'compensation') ORDER BY id DESC LIMIT 1");
+                $updLog->bind_param("iii", $report['lead_id'], $report['consultant_id'], $report['round_id']);
+                $updLog->execute();
+
+                // 4. Increment compensation_count for the consultant in that round
+                $updComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id=? AND consultant_id=?");
+                $updComp->bind_param("ii", $report['round_id'], $report['consultant_id']);
+                $updComp->execute();
+            }
+
+            // 5. Create reminder distribution log if new consultant selected
+            if ($new_consultant_id > 0) {
+                $reminderMsg = "Nhắc lại do duyệt trùng từ báo cáo của " . ($report['consultant_name'] ?? 'Tư vấn viên cũ') . ".";
+                if (!empty($approval_reason)) {
+                    $reminderMsg .= " Lý do duyệt: " . $approval_reason;
+                }
+                $stmtRemLog = $conn->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message) VALUES (?, ?, ?, 'reminder', ?)");
+                $stmtRemLog->bind_param("iiis", $report['lead_id'], $new_consultant_id, $report['round_id'], $reminderMsg);
+                $stmtRemLog->execute();
+                $stmtRemLog->close();
+            }
+
+            $adminActionType = $no_compensation ? 'APPROVE_REPORT_NO_COMP' : 'APPROVE_REPORT';
+            logAdminAction($conn, $decodedUser['id'], $adminActionType, [
+                'report_id' => $report_id,
+                'lead_id' => $report['lead_id'],
+                'consultant_id' => $report['consultant_id'],
+                'round_id' => $report['round_id'],
+                'approval_reason' => $approval_reason,
+                'new_consultant_id' => $new_consultant_id
+            ]);
+            $conn->commit();
+            // Trigger Live Two-Way Sync to Google Sheets
+            triggerTwoWaySync($conn, $report['lead_id']);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // Đã commit DB thành công. Bắt đầu xử lý thông báo ngoài giao dịch DB
+        try {
+            // Lấy thông tin Sale & Lead để gửi thông báo
+            $consultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+            $consultStmt->bind_param("i", $report['consultant_id']);
+            $consultStmt->execute();
+            $consultant = $consultStmt->get_result()->fetch_assoc();
+            $consultStmt->close(); // Close open statement properly to avoid out of sync errors
+
+
+            $leadStmt = $conn->prepare("SELECT name, phone FROM leads WHERE id = ? LIMIT 1");
+            $leadStmt->bind_param("i", $report['lead_id']);
+            $leadStmt->execute();
+            $lead = $leadStmt->get_result()->fetch_assoc();
+            $leadStmt->close();
+
+            $cName = $consultant['name'] ?? 'Tư vấn viên';
+            $lName = $lead['name'] ?? 'Khách hàng';
+            $lPhone = $lead['phone'] ?? 'Không rõ';
+
+            // Lấy danh sách Ticket Admins nhận thông báo
+            $adminEmails = getTicketNotifyAdmins($conn);
+
+            // Thông báo qua Zalo Bot
+            require_once __DIR__ . '/zalo_bot.php';
+            $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+            $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+            // Zalo cho Sale
+            if (!empty($botToken) && !empty($consultant['zalo_chat_id'])) {
+                try {
+                    if ($no_compensation) {
+                        $zaloMsg = "[ TICKET ĐÃ ĐƯỢC DUYỆT KHÔNG ĐỀN BÙ ]\n\n"
+                            . "Chào $cName, báo cáo lỗi Data của bạn đã ĐƯỢC DUYỆT KHÔNG ĐỀN BÙ bởi $adminName.\n\n"
+                            . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                            . "  • Khách hàng: $lName ($lPhone)\n"
+                            . "  • Lỗi bạn báo: {$report['reason']}\n\n"
+                            . "❖ LÝ DO DUYỆT:\n"
+                            . "  " . (!empty($approval_reason) ? $approval_reason : "Không có lý do cụ thể") . "\n\n"
+                            . "Lưu ý: Bạn vẫn sở hữu lead này và hệ thống KHÔNG cộng lượt đền bù cho ticket này.";
+                    } else {
+                        $zaloMsg = "[ TICKET ĐÃ ĐƯỢC DUYỆT ]\n\n"
+                            . "Chào $cName, báo cáo lỗi Data của bạn đã ĐƯỢC PHÊ DUYỆT bởi $adminName.\n\n"
+                            . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                            . "  • Khách hàng: $lName ($lPhone)\n"
+                            . "  • Lỗi bạn báo: {$report['reason']}\n\n"
+                            . "❖ LÝ DO DUYỆT:\n"
+                            . "  " . (!empty($approval_reason) ? $approval_reason : "Không có lý do cụ thể") . "\n\n"
+                            . "Hệ thống đã ghi nhận 1 lượt đền bù. Bạn sẽ nhận được Data mới vào lần phân bổ tiếp theo.";
+                    }
+                    sendZaloMessage($botToken, $consultant['zalo_chat_id'], $zaloMsg, false);
+                } catch (Exception $zEx1) {
+                    error_log("Error sending Zalo message to consultant in approve_report: " . $zEx1->getMessage());
+                }
+            }
+
+            // Thông báo qua Email cho Sale (kèm CC)
+            if (!empty($consultant['email'])) {
+                try {
+                    require_once __DIR__ . '/mailer.php';
+
+                    // Gom danh sách CC (Round CC + Ticket Admins, lọc trùng và loại bỏ email của Sale nhận số)
+                    $ccEmailsArr = [];
+                    if (!empty($report['cc_emails'])) {
+                        $parts = explode(',', $report['cc_emails']);
+                        foreach ($parts as $p) {
+                            $p = trim($p);
+                            if (!empty($p) && filter_var($p, FILTER_VALIDATE_EMAIL)) {
+                                $ccEmailsArr[] = strtolower($p);
+                            }
+                        }
+                    }
+                    $ccEmailsArr = array_unique($ccEmailsArr);
+                    $saleEmail = strtolower(trim($consultant['email']));
+                    $ccEmailsArr = array_filter($ccEmailsArr, fn($e) => $e !== $saleEmail);
+                    $ccString = implode(',', $ccEmailsArr);
+
+                    if ($no_compensation) {
+                        $emailSubj = "[BOT] Ticket Lỗi Data Đã Được Duyệt Không Đền Bù - $lName";
+                        $emailBody = "<h3>Báo cáo lỗi Data được duyệt không đền bù</h3>
+                                      <p>Chào $cName,</p>
+                                      <p>Báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã được Quản trị viên <strong>$adminName</strong> duyệt không đền bù.</p>
+                                      <p><strong>Lý do duyệt:</strong> " . (!empty($approval_reason) ? htmlspecialchars($approval_reason) : "Không có lý do cụ thể") . "</p>
+                                      <p>Bạn vẫn sở hữu lead này và hệ thống không cộng lượt đền bù cho ticket này.</p>";
+                    } else {
+                        $emailSubj = "[BOT] Ticket Lỗi Data Đã Được Duyệt - $lName";
+                        $emailBody = "<h3>Báo cáo lỗi Data được phê duyệt</h3>
+                                      <p>Chào $cName,</p>
+                                      <p>Báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã được Quản trị viên <strong>$adminName</strong> duyệt thành công.</p>
+                                      <p><strong>Lý do duyệt:</strong> " . (!empty($approval_reason) ? htmlspecialchars($approval_reason) : "Không có lý do cụ thể") . "</p>
+                                      <p>Hệ thống đã tự động cộng 1 lượt đền bù cho bạn trong vòng phân bổ hiện tại.</p>";
+                    }
+                    sendEmailNotification($consultant['email'], $emailSubj, 'Kết quả Báo cáo', $emailBody, $ccString);
+                } catch (Exception $emailEx) {
+                    error_log("Error sending email in approve_report: " . $emailEx->getMessage());
+                }
+            }
+
+            // --- ADD REASSIGN REMINDER NOTIFICATION ---
+            if ($new_consultant_id > 0) {
+                try {
+                    // Fetch new consultant details again for notification
+                    $newConsultStmt2 = $conn->prepare("SELECT name, email, zalo_chat_id, status FROM consultants WHERE id = ? LIMIT 1");
+                    $newConsultStmt2->bind_param("i", $new_consultant_id);
+                    $newConsultStmt2->execute();
+                    $newC = $newConsultStmt2->get_result()->fetch_assoc();
+                    $newConsultStmt2->close();
+
+                    if ($newC && $newC['status'] === 'active') {
+                        // Fetch complete lead details
+                        $leadDetailsStmt = $conn->prepare("SELECT name, phone, email, source, type, note FROM leads WHERE id = ? LIMIT 1");
+                        $leadDetailsStmt->bind_param("i", $report['lead_id']);
+                        $leadDetailsStmt->execute();
+                        $lDetails = $leadDetailsStmt->get_result()->fetch_assoc();
+                        $leadDetailsStmt->close();
+
+                        // Fetch round name
+                        $roundName = '';
+                        if ($report['round_id'] > 0) {
+                            $roundStmt = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ? LIMIT 1");
+                            $roundStmt->bind_param("i", $report['round_id']);
+                            $roundStmt->execute();
+                            $roundName = $roundStmt->get_result()->fetch_assoc()['round_name'] ?? '';
+                            $roundStmt->close();
+                        }
+
+                        if ($lDetails) {
+                            require_once __DIR__ . '/mailer.php';
+                            require_once __DIR__ . '/zalo_bot.php';
+                            require_once __DIR__ . '/webhook_logic.php';
+
+                            $timeline = getLeadHistoryTimeline($conn, $report['lead_id'], true);
+
+                            // Send Zalo reminder
+                            try {
+                                sendLeadReminderZaloMessageToSale(
+                                    $new_consultant_id,
+                                    $newC['name'],
+                                    $lDetails['name'],
+                                    $lDetails['phone'],
+                                    $lDetails['note'],
+                                    $lDetails['source'],
+                                    $roundName,
+                                    $timeline,
+                                    $report['lead_id'],
+                                    $lDetails['email'],
+                                    $lDetails['type']
+                                );
+                            } catch (Exception $zaloEx) {
+                                error_log("Error sending reassigned duplicate reminder Zalo: " . $zaloEx->getMessage());
+                            }
+
+                            // Send Email reminder (kèm CC)
+                            try {
+                                sendLeadReminderEmailToSale(
+                                    $newC['email'],
+                                    $newC['name'],
+                                    $lDetails['name'],
+                                    $lDetails['phone'],
+                                    $lDetails['note'],
+                                    $lDetails['source'],
+                                    $report['cc_emails'] ?? '',
+                                    $roundName,
+                                    $timeline,
+                                    $report['lead_id']
+                                );
+                            } catch (Exception $mailEx) {
+                                error_log("Error sending reassigned duplicate reminder email: " . $mailEx->getMessage());
+                            }
+                        }
+                    }
+                } catch (Exception $newCEx) {
+                    error_log("Error sending reassigned notifications: " . $newCEx->getMessage());
+                }
+            }
+        } catch (Exception $notifyOuterEx) {
+            error_log("Outer notification error in approve_report: " . $notifyOuterEx->getMessage());
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'compensate_approved_no_comp':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $report_id = (int) ($input['id'] ?? 0);
+        if (!$report_id) {
+            echo json_encode(['success' => false, 'message' => 'ID báo cáo không hợp lệ']);
+            break;
+        }
+
+        // Lấy thông tin admin thực hiện
+        $adminName = 'Quản trị viên';
+        $adminAccountId = 0;
+        if (isset($decodedUser['id'])) {
+            $adminAccountId = (int) $decodedUser['id'];
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            // Fetch report information
+            $stmt = $conn->prepare("
+                SELECT r.lead_id, r.consultant_id, r.round_id, r.reason, r.status, c.name as consultant_name
+                FROM data_reports r
+                LEFT JOIN consultants c ON r.consultant_id = c.id
+                WHERE r.id = ? FOR UPDATE
+            ");
+            $stmt->bind_param("i", $report_id);
+            $stmt->execute();
+            $report = $stmt->get_result()->fetch_assoc();
+
+            if (!$report) {
+                throw new Exception("Báo cáo không tồn tại.");
+            }
+            if ($report['status'] !== 'approved_no_comp') {
+                throw new Exception("Báo cáo không ở trạng thái Duyệt không bù.");
+            }
+
+            // 1. Update report status to 'approved'
+            $updRep = $conn->prepare("UPDATE data_reports SET status='approved', resolved_by=?, resolved_at=(SELECT created_at FROM leads WHERE id=data_reports.lead_id) WHERE id=?");
+            $updRep->bind_param("si", $adminName, $report_id);
+            $updRep->execute();
+
+            // 2. Add compensation note to lead
+            $compMsg = "\n[LỖI - ĐÃ BÙ LỖI TRỄ]: Chuyển trạng thái sang đền bù | Admin duyệt: " . $adminName . " | Thời gian: " . date('d/m/Y H:i:s');
+            $updLead = $conn->prepare("UPDATE leads SET note = CONCAT(IFNULL(note, ''), ?) WHERE id=?");
+            $updLead->bind_param("si", $compMsg, $report['lead_id']);
+            $updLead->execute();
+
+            // 3. Update distribution_logs status to 'error' - chỉ áp dụng cho lượt đang hoạt động gần nhất
+            $updLog = $conn->prepare("UPDATE distribution_logs SET status='error' WHERE lead_id=? AND assigned_to=? AND round_id=? AND status IN ('assigned', 'compensation') ORDER BY id DESC LIMIT 1");
+            $updLog->bind_param("iii", $report['lead_id'], $report['consultant_id'], $report['round_id']);
+            $updLog->execute();
+
+            // 4. Increment compensation_count
+            $updComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id=? AND consultant_id=?");
+            $updComp->bind_param("ii", $report['round_id'], $report['consultant_id']);
+            $updComp->execute();
+
+            logAdminAction($conn, $decodedUser['id'], 'COMPENSATE_APPROVED_NO_COMP', [
+                'report_id' => $report_id,
+                'lead_id' => $report['lead_id'],
+                'consultant_id' => $report['consultant_id'],
+                'round_id' => $report['round_id']
+            ]);
+
+            $conn->commit();
+
+            // Trigger Live Two-Way Sync
+            require_once __DIR__ . '/webhook_logic.php';
+            triggerTwoWaySync($conn, $report['lead_id']);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // DB committed successfully, now handle Zalo and Email notifications
+        try {
+            // Get consultant details
+            $consultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+            $consultStmt->bind_param("i", $report['consultant_id']);
+            $consultStmt->execute();
+            $consultant = $consultStmt->get_result()->fetch_assoc();
+            $consultStmt->close();
+
+            // Get lead details
+            $leadStmt = $conn->prepare("SELECT name, phone FROM leads WHERE id = ? LIMIT 1");
+            $leadStmt->bind_param("i", $report['lead_id']);
+            $leadStmt->execute();
+            $lead = $leadStmt->get_result()->fetch_assoc();
+            $leadStmt->close();
+
+            $cName = $consultant['name'] ?? 'Tư vấn viên';
+            $lName = $lead['name'] ?? 'Khách hàng';
+            $lPhone = $lead['phone'] ?? 'Không rõ';
+
+            // Send Zalo Notification
+            require_once __DIR__ . '/zalo_bot.php';
+            $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+            $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+            if (!empty($botToken) && !empty($consultant['zalo_chat_id'])) {
+                try {
+                    $zaloMsg = "[ BÙ LỖI TICKET THÀNH CÔNG ]\n\n"
+                        . "Chào $cName, ticket lỗi trước đó cho khách hàng $lName ($lPhone) của bạn đã được bù lỗi trễ bởi $adminName.\n\n"
+                        . "Hệ thống đã cộng 1 lượt đền bù. Bạn sẽ nhận được Data mới vào lần phân bổ tiếp theo.";
+                    sendZaloMessage($botToken, $consultant['zalo_chat_id'], $zaloMsg, false);
+                } catch (Exception $zEx) {
+                    error_log("Error sending Zalo message for late compensation: " . $zEx->getMessage());
+                }
+            }
+
+            // Send Email Notification
+            if (!empty($consultant['email'])) {
+                try {
+                    require_once __DIR__ . '/mailer.php';
+                    $emailSubj = "[BOT] Ticket Lỗi Data Đã Được Bù Lỗi Trễ - $lName";
+                    $emailBody = "<h3>Báo cáo lỗi Data đã được bù lỗi trễ</h3>
+                                  <p>Chào $cName,</p>
+                                  <p>Ticket báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã được chuyển sang trạng thái <strong>Đền bù</strong> bởi Quản trị viên <strong>$adminName</strong>.</p>
+                                  <p>Hệ thống đã tự động cộng 1 lượt đền bù cho bạn trong vòng phân bổ hiện tại.</p>";
+                    sendEmailNotification($consultant['email'], $emailSubj, 'Kết quả Báo cáo', $emailBody, '');
+                } catch (Exception $emailEx) {
+                    error_log("Error sending email for late compensation: " . $emailEx->getMessage());
+                }
+            }
+        } catch (Exception $notifyEx) {
+            error_log("Outer notification error in compensate_approved_no_comp: " . $notifyEx->getMessage());
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'reject_report':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $report_id = (int) ($input['id'] ?? 0);
+        $reject_reason = trim($input['reject_reason'] ?? '');
+
+        if (!$report_id) {
+            echo json_encode(['success' => false, 'message' => 'ID báo cáo không hợp lệ']);
+            break;
+        }
+
+        if (empty($reject_reason)) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng nhập lý do từ chối']);
+            break;
+        }
+
+        // Lấy thông tin admin thực hiện sớm để ghi vào DB
+        $adminName = 'Quản trị viên';
+        $adminAccountId = 0;
+        if (isset($decodedUser['id'])) {
+            $adminAccountId = (int) $decodedUser['id'];
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            // Check status first — prevent rejecting already-processed reports
+            $chkStmt = $conn->prepare("
+                SELECT r.lead_id, r.consultant_id, r.round_id, r.reason, r.status, dr.cc_emails
+                FROM data_reports r
+                LEFT JOIN distribution_rounds dr ON r.round_id = dr.id
+                WHERE r.id = ? FOR UPDATE
+            ");
+            $chkStmt->bind_param("i", $report_id);
+            $chkStmt->execute();
+            $report = $chkStmt->get_result()->fetch_assoc();
+
+            if (!$report || $report['status'] !== 'pending') {
+                throw new Exception("Báo cáo không tồn tại hoặc đã được xử lý rồi.");
+            }
+
+            if ($decodedUser['role'] === 'manager') {
+                $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+                if (!isManagerOfConsultant($conn, $currentUserId, $report['consultant_id'])) {
+                    throw new Exception("Bạn không có quyền từ chối báo cáo này.");
+                }
+            }
+
+            $stmt = $conn->prepare("UPDATE data_reports SET status='rejected', reject_reason=?, resolved_by=?, resolved_at=(SELECT created_at FROM leads WHERE id=data_reports.lead_id) WHERE id=?");
+            $stmt->bind_param("ssi", $reject_reason, $adminName, $report_id);
+            $stmt->execute();
+
+            $rejectMsg = "[LỖI - ĐÃ TỪ CHỐI]: " . $report['reason'];
+            if (!empty($reject_reason)) {
+                $rejectMsg .= " | Lý do từ chối: " . $reject_reason;
+            }
+            $rejectMsg .= " | Admin từ chối: " . $adminName . " | Thời gian: " . date('d/m/Y H:i:s');
+
+            $updLead = $conn->prepare("UPDATE leads SET note = CONCAT(IFNULL(note, ''), '\n', ?) WHERE id=?");
+            $updLead->bind_param("si", $rejectMsg, $report['lead_id']);
+            $updLead->execute();
+
+            logAdminAction($conn, $decodedUser['id'], 'REJECT_REPORT', [
+                'report_id' => $report_id,
+                'lead_id' => $report['lead_id'],
+                'consultant_id' => $report['consultant_id'],
+                'round_id' => $report['round_id'],
+                'reject_reason' => $reject_reason
+            ]);
+            $conn->commit();
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // Đã commit DB thành công. Bắt đầu xử lý thông báo ngoài giao dịch DB
+        try {
+            // Lấy thông tin Sale & Lead để gửi thông báo
+            $consultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+            $consultStmt->bind_param("i", $report['consultant_id']);
+            $consultStmt->execute();
+            $consultant = $consultStmt->get_result()->fetch_assoc();
+            $consultStmt->close(); // Close open statement properly to avoid out of sync errors
+
+            $leadStmt = $conn->prepare("SELECT name, phone FROM leads WHERE id = ? LIMIT 1");
+            $leadStmt->bind_param("i", $report['lead_id']);
+            $leadStmt->execute();
+            $lead = $leadStmt->get_result()->fetch_assoc();
+            $leadStmt->close(); // Close open statement properly to avoid out of sync errors
+
+
+            $cName = $consultant['name'] ?? 'Tư vấn viên';
+            $lName = $lead['name'] ?? 'Khách hàng';
+            $lPhone = $lead['phone'] ?? 'Không rõ';
+
+            // Lấy danh sách Ticket Admins nhận thông báo
+            $adminEmails = getTicketNotifyAdmins($conn);
+
+            // Thông báo qua Zalo Bot
+            require_once __DIR__ . '/zalo_bot.php';
+            $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+            $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+            // Zalo cho Sale
+            if (!empty($botToken) && !empty($consultant['zalo_chat_id'])) {
+                try {
+                    $zaloMsg = "[ TICKET BỊ TỪ CHỐI ]\n\n"
+                        . "Chào $cName, báo cáo lỗi Data của bạn đã BỊ TỪ CHỐI bởi $adminName.\n\n"
+                        . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                        . "  • Khách hàng: $lName ($lPhone)\n"
+                        . "  • Lỗi bạn báo: {$report['reason']}\n\n"
+                        . "❖ LÝ DO TỪ CHỐI:\n"
+                        . "  $reject_reason\n\n"
+                        . "Bạn sẽ không được đền bù Data cho trường hợp này.";
+                    sendZaloMessage($botToken, $consultant['zalo_chat_id'], $zaloMsg, false);
+                } catch (Exception $zEx1) {
+                    error_log("Error sending Zalo to sale in reject_report: " . $zEx1->getMessage());
+                }
+            }
+
+            // [TẠM TẮT] Zalo cho các Ticket Admins (trừ admin thực hiện)
+            /*
+            if (!empty($botToken) && !empty($adminEmails)) {
+                $adminChatIds = [];
+                foreach ($adminEmails as $adm) {
+                    if (!empty($adm['zalo_chat_id'])) {
+                        $adminChatIds[] = $adm['zalo_chat_id'];
+                    }
+                }
+                if (!empty($adminChatIds)) {
+                    try {
+                        $zaloAdminMsg = "[ THÔNG BÁO TICKET BỊ TỪ CHỐI ]\n\n"
+                            . "Admin $adminName đã từ chối ticket của Sale $cName.\n\n"
+                            . "❖ THÔNG TIN KHÁCH HÀNG:\n"
+                            . "  • Khách hàng: $lName ($lPhone)\n"
+                            . "  • Lỗi báo cáo: {$report['reason']}\n\n"
+                            . "❖ LÝ DO TỪ CHỐI:\n"
+                            . "  $reject_reason";
+                        sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloAdminMsg, false);
+                    } catch (Exception $zEx2) {
+                        error_log("Error sending Zalo to multiple admins in reject_report: " . $zEx2->getMessage());
+                    }
+                }
+            }
+            */
+
+            // Thông báo qua Email (gửi cho Sale kèm CC)
+            if (!empty($consultant['email'])) {
+                try {
+                    require_once __DIR__ . '/mailer.php';
+
+                    // Gom danh sách CC (Round CC + Ticket Admins, lọc trùng và loại bỏ email của Sale nhận số)
+                    $ccEmailsArr = [];
+                    if (!empty($report['cc_emails'])) {
+                        $parts = explode(',', $report['cc_emails']);
+                        foreach ($parts as $p) {
+                            $p = trim($p);
+                            if (!empty($p) && filter_var($p, FILTER_VALIDATE_EMAIL)) {
+                                $ccEmailsArr[] = strtolower($p);
+                            }
+                        }
+                    }
+                    // [TẠM TẮT CC ADMIN]
+                    /*
+                    foreach ($adminEmails as $adm) {
+                        if (!empty($adm['email'])) {
+                            $email = trim($adm['email']);
+                            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                $ccEmailsArr[] = strtolower($email);
+                            }
+                        }
+                    }
+                    */
+                    $ccEmailsArr = array_unique($ccEmailsArr);
+                    $saleEmail = strtolower(trim($consultant['email']));
+                    $ccEmailsArr = array_filter($ccEmailsArr, fn($e) => $e !== $saleEmail);
+                    $ccString = implode(',', $ccEmailsArr);
+
+                    $emailSubj = "[BOT] Ticket Lỗi Data Bị Từ Chối - $lName";
+                    $emailBody = "<h3>Báo cáo lỗi Data bị từ chối</h3>
+                                  <p>Chào $cName,</p>
+                                  <p>Báo cáo lỗi của bạn cho khách hàng <strong>$lName ($lPhone)</strong> đã bị Quản trị viên <strong>$adminName</strong> từ chối.</p>
+                                  <p><strong>Lý do từ chối:</strong> " . htmlspecialchars($reject_reason) . "</p>
+                                  <p>Bạn sẽ không được nhận Data đền bù cho trường hợp này.</p>";
+                    sendEmailNotification($consultant['email'], $emailSubj, 'Kết quả Báo cáo', $emailBody, $ccString);
+                } catch (Exception $emailEx) {
+                    error_log("Error sending email in reject_report: " . $emailEx->getMessage());
+                }
+            }
+        } catch (Exception $notifyOuterEx) {
+            error_log("Outer notification error in reject_report: " . $notifyOuterEx->getMessage());
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'get_held_leads':
+        // Retrieve query parameters
+        $status = isset($_GET['status']) ? trim($_GET['status']) : 'pending_approval';
+        $consultant = isset($_GET['consultant']) ? trim($_GET['consultant']) : ''; // unused but matched format
+        $date = isset($_GET['date']) ? trim($_GET['date']) : 'Tháng này';
+
+        $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+        $pageSize = isset($_GET['pageSize']) ? (int) $_GET['pageSize'] : 50;
+        if ($page < 1)
+            $page = 1;
+        if ($pageSize < 1)
+            $pageSize = 50;
+        $offset = ($page - 1) * $pageSize;
+
+        // Build base condition
+        $conds = [];
+        $params = [];
+        $types = "";
+        $commonConds = [];
+
+        // Scoping for GĐKD Dự án
+        $isManager = (isset($decodedUser['role']) && $decodedUser['role'] === 'manager');
+        $isDirector = (isset($decodedUser['role']) && $decodedUser['role'] === 'director');
+        $isProjManager = false;
+        $projIds = [];
+        if ($isManager) {
+            $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+            if ($pRes) {
+                while ($pRow = $pRes->fetch_assoc()) {
+                    if (!empty($pRow['manager_ids'])) {
+                        $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                        if (in_array((int)$decodedUser['user_id'], $mIds, true)) {
+                            $projIds[] = (int)$pRow['id'];
+                            $isProjManager = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($isProjManager) {
+            $campIds = [];
+            if (!empty($projIds)) {
+                $projIdsStr = implode(',', $projIds);
+                $cRes = $conn->query("SELECT id FROM marketing_campaigns WHERE project_id IN ($projIdsStr)");
+                if ($cRes) {
+                    while ($cRow = $cRes->fetch_assoc()) {
+                        $campIds[] = (int)$cRow['id'];
+                    }
+                }
+            }
+            if (!empty($campIds)) {
+                $conds[] = "l.campaign_id IN (" . implode(',', $campIds) . ")";
+                $commonConds[] = "l.campaign_id IN (" . implode(',', $campIds) . ")";
+            } else {
+                $conds[] = "1=0";
+                $commonConds[] = "1=0";
+            }
+        }
+
+        // Filter by queue status, rejected substandard, or approved substandard leads
+        if ($status === 'rejected') {
+            $conds[] = "l.status IN ('rejected', 'blacklisted')";
+        } else if ($status === 'approved') {
+            $conds[] = "(l.status = 'active' AND (l.ai_screener_status IN ('failed', 'error') OR l.note LIKE '%[Duyệt %'))";
+        } else if ($status === 'ai_pending') {
+            $conds[] = "l.status = 'pending_approval' AND (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)";
+        } else {
+            $conds[] = "l.status = 'pending_approval' AND NOT ( (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) )";
+        }
+
+        // Search text filter
+        $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+        $searchVal = "%$search%";
+        if ($search !== '') {
+            $conds[] = "(l.name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?)";
+            $params[] = $searchVal;
+            $params[] = $searchVal;
+            $params[] = $searchVal;
+            $types .= "sss";
+        }
+
+        // Parse date condition using l.created_at
+        $dateCondition = "l.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND l.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+
+        if ($date === 'all' || $date === '') {
+            $dateCondition = "1=1";
+        } else if ($date === 'Hôm nay') {
+            $dateCondition = "l.created_at >= CURDATE() AND l.created_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } else if ($date === 'Hôm qua') {
+            $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND l.created_at < CURDATE()";
+        } else if ($date === 'Tuần này') {
+            $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND l.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === 'Tuần trước') {
+            $dateCondition = "l.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND l.created_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } else if ($date === 'Tuần trước nữa') {
+            $dateCondition = "l.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND l.created_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === '7 ngày qua') {
+            $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } else if ($date === '30 ngày qua') {
+            $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } else if ($date === 'Tháng này') {
+            $dateCondition = "l.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND l.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } else if ($date === 'Tháng trước') {
+            $dateCondition = "l.created_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND l.created_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+            $start = $conn->real_escape_string($matches[1]);
+            $end = $conn->real_escape_string($matches[2]);
+            $dateCondition = "l.created_at >= '$start 00:00:00' AND l.created_at <= '$end 23:59:59'";
+        }
+
+        if (in_array($status, ['rejected', 'approved'])) {
+            if ($dateCondition !== "1=1") {
+                $conds[] = $dateCondition;
+            }
+        }
+
+        $where = count($conds) > 0 ? "WHERE " . implode(" AND ", $conds) : "";
+
+        // Query 1: Get counts for all tabs under current search and date filters
+        $commonConds = [];
+        if ($isProjManager) {
+            if (!empty($campIds)) {
+                $commonConds[] = "l.campaign_id IN (" . implode(',', $campIds) . ")";
+            } else {
+                $commonConds[] = "1=0";
+            }
+        }
+        $commonParams = [];
+        $commonTypes = "";
+        if ($search !== '') {
+            $commonConds[] = "(l.name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?)";
+            $commonParams[] = $searchVal;
+            $commonParams[] = $searchVal;
+            $commonParams[] = $searchVal;
+            $commonTypes .= "sss";
+        }
+        $whereCommon = count($commonConds) > 0 ? "WHERE " . implode(" AND ", $commonConds) : "";
+
+        $countsSql = "
+            SELECT 
+                SUM(CASE WHEN l.status = 'pending_approval' AND NOT ( (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) ) THEN 1 ELSE 0 END) as queue_cnt,
+                SUM(CASE WHEN l.status = 'pending_approval' AND ( (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) ) THEN 1 ELSE 0 END) as ai_pending_cnt,
+                SUM(CASE WHEN (l.status IN ('rejected', 'blacklisted')) AND ($dateCondition) THEN 1 ELSE 0 END) as substandard_cnt,
+                SUM(CASE WHEN (l.status = 'active' AND (l.ai_screener_status IN ('failed', 'error') OR l.note LIKE '%[Duyệt %')) AND ($dateCondition) THEN 1 ELSE 0 END) as assigned_cnt
+            FROM leads l
+            $whereCommon
+        ";
+        $stmtCounts = $conn->prepare($countsSql);
+        if (count($commonParams) > 0) {
+            $stmtCounts->bind_param($commonTypes, ...$commonParams);
+        }
+        $stmtCounts->execute();
+        $countsRes = $stmtCounts->get_result()->fetch_assoc();
+        $stmtCounts->close();
+
+        $queueCount = (int) ($countsRes['queue_cnt'] ?? 0);
+        $aiPendingCount = (int) ($countsRes['ai_pending_cnt'] ?? 0);
+        $substandardCount = (int) ($countsRes['substandard_cnt'] ?? 0);
+        $assignedCount = (int) ($countsRes['assigned_cnt'] ?? 0);
+
+        if ($status === 'rejected') {
+            $totalCount = $substandardCount;
+        } else if ($status === 'approved') {
+            $totalCount = $assignedCount;
+        } else if ($status === 'ai_pending') {
+            $totalCount = $aiPendingCount;
+        } else {
+            $totalCount = $queueCount;
+        }
+
+        // Query 2: Get paginated records
+        $recordsSql = "
+            SELECT l.*, dr.round_name, c.name as consultant_name, c.avatar as consultant_avatar,
+                   (SELECT dl.status FROM distribution_logs dl WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1) as log_status
+            FROM leads l
+            LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+            LEFT JOIN consultants c ON l.assigned_to = c.id
+            $where
+            ORDER BY l.created_at DESC
+            LIMIT ? OFFSET ?
+        ";
+        $stmtRecords = $conn->prepare($recordsSql);
+
+        $recordsParams = $params;
+        $recordsTypes = $types;
+        $recordsParams[] = $pageSize;
+        $recordsParams[] = $offset;
+        $recordsTypes .= "ii";
+
+        $stmtRecords->bind_param($recordsTypes, ...$recordsParams);
+        $stmtRecords->execute();
+        $resRecords = $stmtRecords->get_result();
+
+        $data = [];
+        if ($resRecords) {
+            while ($row = $resRecords->fetch_assoc()) {
+                $data[] = $row;
+            }
+        }
+        $stmtRecords->close();
+
+        $adminAvatars = [];
+        $avatarQuery = $conn->query("SELECT name, avatar FROM accounts WHERE (role = 'admin' OR role = 'superadmin') OR role = 'superadmin'");
+        if ($avatarQuery) {
+            while ($row = $avatarQuery->fetch_assoc()) {
+                if (!empty($row['avatar'])) {
+                    $adminAvatars[$row['name']] = $row['avatar'];
+                }
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => $data,
+            'total_count' => $totalCount,
+            'admin_avatars' => $adminAvatars,
+            'counts' => [
+                'queue' => $queueCount,
+                'ai_pending' => $aiPendingCount,
+                'substandard' => $substandardCount,
+                'assigned' => $assignedCount
+            ],
+            'stats' => [
+                'pending' => $totalCount
+            ]
+        ]);
+        break;
+
+    case 'check_lead_duplicate':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = trim($_GET['input'] ?? '');
+        if (empty($input)) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng nhập số điện thoại hoặc email.']);
+            break;
+        }
+
+        $phone = '';
+        $email = '';
+        if (filter_var($input, FILTER_VALIDATE_EMAIL)) {
+            $email = $input;
+        } else {
+            $phone = normalizePhone($input);
+        }
+
+        $dupCheckMonths = (int)get_system_setting($conn, 'duplicate_check_months');
+        if ($dupCheckMonths <= 0) {
+            $dupCheckMonths = 6;
+        }
+
+        $crmCheck = checkCRMInteraction($conn, $phone, $email, true);
+
+        // Fetch matched lead history
+        $leads = [];
+        $p1 = $phone;
+        $p2 = '84' . ltrim($phone, '0');
+
+        $sql = "
+            SELECT l.*, 
+                   COALESCE(dr.round_name, (SELECT r.round_name FROM distribution_logs dl JOIN distribution_rounds r ON dl.round_id = r.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as round_name,
+                   COALESCE(c.name, (SELECT c2.name FROM distribution_logs dl JOIN consultants c2 ON dl.assigned_to = c2.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as consultant_name,
+                   COALESCE(c.avatar, (SELECT c2.avatar FROM distribution_logs dl JOIN consultants c2 ON dl.assigned_to = c2.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as consultant_avatar
+            FROM leads l
+            LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+            LEFT JOIN consultants c ON l.assigned_to = c.id
+            WHERE 1=0
+        ";
+        if (!empty($phone)) {
+            $sql = "
+                SELECT l.*, 
+                       COALESCE(dr.round_name, (SELECT r.round_name FROM distribution_logs dl JOIN distribution_rounds r ON dl.round_id = r.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as round_name,
+                       COALESCE(c.name, (SELECT c2.name FROM distribution_logs dl JOIN consultants c2 ON dl.assigned_to = c2.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as consultant_name,
+                       COALESCE(c.avatar, (SELECT c2.avatar FROM distribution_logs dl JOIN consultants c2 ON dl.assigned_to = c2.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as consultant_avatar
+                FROM leads l
+                LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+                LEFT JOIN consultants c ON l.assigned_to = c.id
+                WHERE l.phone = ? OR l.phone = ? OR l.phone LIKE ?
+                ORDER BY l.last_interaction_date DESC, l.created_at DESC
+            ";
+        } else if (!empty($email)) {
+            $sql = "
+                SELECT l.*, 
+                       COALESCE(dr.round_name, (SELECT r.round_name FROM distribution_logs dl JOIN distribution_rounds r ON dl.round_id = r.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as round_name,
+                       COALESCE(c.name, (SELECT c2.name FROM distribution_logs dl JOIN consultants c2 ON dl.assigned_to = c2.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as consultant_name,
+                       COALESCE(c.avatar, (SELECT c2.avatar FROM distribution_logs dl JOIN consultants c2 ON dl.assigned_to = c2.id WHERE dl.lead_id = l.id ORDER BY dl.id DESC LIMIT 1)) as consultant_avatar
+                FROM leads l
+                LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+                LEFT JOIN consultants c ON l.assigned_to = c.id
+                WHERE l.email = ?
+                ORDER BY l.last_interaction_date DESC, l.created_at DESC
+            ";
+        }
+
+        $stmt = $conn->prepare($sql);
+        if ($stmt) {
+            if (!empty($phone)) {
+                $likePhone = '%' . $phone . '%';
+                $stmt->bind_param("sss", $p1, $p2, $likePhone);
+            } else if (!empty($email)) {
+                $stmt->bind_param("s", $email);
+            }
+
+            $stmt->execute();
+            $res = $stmt->get_result();
+            while ($row = $res->fetch_assoc()) {
+                $leads[] = $row;
+            }
+            $stmt->close();
+        }
+
+        echo json_encode([
+            'success' => true,
+            'duplicate_check_months' => $dupCheckMonths,
+            'crm_check' => $crmCheck,
+            'history' => $leads
+        ]);
+        break;
+
+    case 'get_gatekeeper_stats':
+        try {
+            $date = isset($_GET['date']) ? trim($_GET['date']) : 'Tháng này';
+
+            // Parse date condition using l.created_at
+            $dateCondition = "l.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND l.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+            if ($date === 'all' || $date === '') {
+                $dateCondition = "1=1";
+            } else if ($date === 'Hôm nay') {
+                $dateCondition = "l.created_at >= CURDATE() AND l.created_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+            } else if ($date === 'Hôm qua') {
+                $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND l.created_at < CURDATE()";
+            } else if ($date === 'Tuần này') {
+                $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND l.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === 'Tuần trước') {
+                $dateCondition = "l.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND l.created_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+            } else if ($date === 'Tuần trước nữa') {
+                $dateCondition = "l.created_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND l.created_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === '7 ngày qua') {
+                $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+            } else if ($date === '30 ngày qua') {
+                $dateCondition = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+            } else if ($date === 'Tháng này') {
+                $dateCondition = "l.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND l.created_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+            } else if ($date === 'Tháng trước') {
+                $dateCondition = "l.created_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND l.created_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+            } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+                $start = $conn->real_escape_string($matches[1]);
+                $end = $conn->real_escape_string($matches[2]);
+                $dateCondition = "l.created_at >= '$start 00:00:00' AND l.created_at <= '$end 23:59:59'";
+            }
+
+            // Helper to execute query safely and throw exception on error
+            $safeQuery = function ($sql) use ($conn) {
+                $res = $conn->query($sql);
+                if (!$res) {
+                    throw new Exception("Query failed: " . $conn->error . " | SQL: " . $sql);
+                }
+                return $res;
+            };
+
+            // Calculate 4 categories
+            $countDuyetSql = "SELECT COUNT(*) as cnt FROM leads l WHERE l.status = 'active' AND l.ai_screener_status = 'passed' AND l.note NOT LIKE '%[Duyệt %' AND $dateCondition";
+            $countDuyet = (int) ($safeQuery($countDuyetSql)->fetch_assoc()['cnt'] ?? 0);
+
+            $countAiGiuSql = "SELECT COUNT(*) as cnt FROM leads l WHERE l.status = 'pending_approval' AND $dateCondition";
+            $countAiGiu = (int) ($safeQuery($countAiGiuSql)->fetch_assoc()['cnt'] ?? 0);
+
+            $countDuoiChuanSql = "SELECT COUNT(*) as cnt FROM leads l WHERE l.status IN ('rejected', 'blacklisted') AND $dateCondition";
+            $countDuoiChuan = (int) ($safeQuery($countDuoiChuanSql)->fetch_assoc()['cnt'] ?? 0);
+
+            $countGiaoLeadSql = "SELECT COUNT(*) as cnt FROM leads l WHERE l.status = 'active' AND (l.ai_screener_status IN ('failed', 'error') OR l.note LIKE '%[Duyệt %') AND $dateCondition";
+            $countGiaoLead = (int) ($safeQuery($countGiaoLeadSql)->fetch_assoc()['cnt'] ?? 0);
+
+            $totalLeads = $countDuyet + $countAiGiu + $countDuoiChuan + $countGiaoLead;
+            $totalBelowStandard = $countDuoiChuan;
+            $totalHeld = $countAiGiu;
+            $totalRejected = $countDuoiChuan;
+
+            $ratio = $totalLeads > 0 ? round(($totalBelowStandard / $totalLeads) * 100, 1) : 0;
+
+            // 2. Breakdown by Vòng phân bổ (Rounds)
+            $roundsSql = "
+                SELECT 
+                    l.target_round_id, 
+                    COALESCE(dr.round_name, 'Chưa phân vòng') as round_name, 
+                    COUNT(*) as cnt
+                FROM leads l
+                LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+                WHERE l.status IN ('rejected', 'blacklisted') AND $dateCondition
+                GROUP BY l.target_round_id, dr.round_name
+                ORDER BY cnt DESC
+            ";
+            $roundsRes = $safeQuery($roundsSql);
+            $roundsBreakdown = [];
+            if ($roundsRes) {
+                while ($row = $roundsRes->fetch_assoc()) {
+                    $roundsBreakdown[] = [
+                        'round_id' => $row['target_round_id'],
+                        'round_name' => $row['round_name'],
+                        'count' => (int) $row['cnt']
+                    ];
+                }
+            }
+
+            // 3. Breakdown by Nguồn kết nối / Source (fixed sc.name -> sc.sheet_name)
+            $sourcesSql = "
+                SELECT 
+                    l.connection_id,
+                    COALESCE(sc.sheet_name, l.source, 'Khác/Tự nhập') as source_name,
+                    COUNT(*) as cnt
+                FROM leads l
+                LEFT JOIN sheet_connections sc ON l.connection_id = sc.id
+                WHERE l.status IN ('rejected', 'blacklisted') AND $dateCondition
+                GROUP BY l.connection_id, sc.sheet_name, l.source
+                ORDER BY cnt DESC
+            ";
+            $sourcesRes = $safeQuery($sourcesSql);
+            $sourcesBreakdown = [];
+            if ($sourcesRes) {
+                while ($row = $sourcesRes->fetch_assoc()) {
+                    $sourcesBreakdown[] = [
+                        'connection_id' => $row['connection_id'],
+                        'source_name' => $row['source_name'],
+                        'count' => (int) $row['cnt']
+                    ];
+                }
+            }
+
+            // 4. Breakdown by Reasons (dynamic from database, not hardcoded)
+            $reasonsSql = "
+                SELECT 
+                    COALESCE(NULLIF(TRIM(l.ai_evaluation), ''), NULLIF(TRIM(l.note), ''), 'Chưa rõ lý do') as reason_name,
+                    COUNT(*) as cnt
+                FROM leads l
+                WHERE l.status IN ('rejected', 'blacklisted') AND $dateCondition
+                GROUP BY reason_name
+                ORDER BY cnt DESC
+                LIMIT 5
+            ";
+            $reasonsRes = $safeQuery($reasonsSql);
+            $reasonsBreakdown = [];
+            if ($reasonsRes) {
+                while ($row = $reasonsRes->fetch_assoc()) {
+                    $reasonText = trim($row['reason_name']);
+                    if (mb_strlen($reasonText) > 60) {
+                        $reasonText = mb_substr($reasonText, 0, 60) . '...';
+                    }
+                    $reasonsBreakdown[] = [
+                        'reason' => $reasonText,
+                        'count' => (int) $row['cnt']
+                    ];
+                }
+            }
+
+            // 5. Fetch recent below-standard leads for pagination
+            $recentSql = "
+                SELECT l.id, l.name, l.phone, l.email, l.source, l.note, l.ai_evaluation, l.status, l.created_at, dr.round_name
+                FROM leads l
+                LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+                WHERE l.status IN ('rejected', 'blacklisted') AND $dateCondition
+                ORDER BY l.created_at DESC
+            ";
+            $recentRes = $safeQuery($recentSql);
+            $recentBelowStandard = [];
+            if ($recentRes) {
+                while ($row = $recentRes->fetch_assoc()) {
+                    $recentBelowStandard[] = $row;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'stats' => [
+                    'total_leads' => $totalLeads,
+                    'total_below_standard' => $totalBelowStandard,
+                    'ratio_below_standard' => $ratio,
+                    'total_held' => $totalHeld,
+                    'total_rejected' => $totalRejected,
+                    'count_duyet' => $countDuyet,
+                    'count_ai_giu' => $countAiGiu,
+                    'count_duoi_chuan' => $countDuoiChuan,
+                    'count_giao_lead' => $countGiaoLead
+                ],
+                'rounds_breakdown' => $roundsBreakdown,
+                'sources_breakdown' => $sourcesBreakdown,
+                'reasons_breakdown' => $reasonsBreakdown,
+                'recent_below_standard' => $recentBelowStandard
+            ]);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Lỗi SQL/PHP: ' . $e->getMessage()
+            ]);
+        }
+        break;
+
+    case 'get_ai_token_stats':
+        try {
+            $date = isset($_GET['date']) ? trim($_GET['date']) : 'Tháng này';
+            $dbVer = 0;
+            $vStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'db_version' LIMIT 1");
+            if ($vStmt && $vStmt->num_rows > 0) {
+                $dbVer = (int)$vStmt->fetch_assoc()['setting_value'];
+            }
+            $dateField = ($dbVer >= 140) ? "COALESCE(l.ai_screening_started_at, l.created_at)" : "l.created_at";
+
+            // Parse date condition using l.created_at fallback
+            $dateCondition = "$dateField >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND $dateField < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+            if ($date === 'all' || $date === '') {
+                $dateCondition = "1=1";
+            } else if ($date === 'Hôm nay') {
+                $dateCondition = "$dateField >= CURDATE() AND $dateField < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+            } else if ($date === 'Hôm qua') {
+                $dateCondition = "$dateField >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND $dateField < CURDATE()";
+            } else if ($date === 'Tuần này') {
+                $dateCondition = "$dateField >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND $dateField < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === 'Tuần trước') {
+                $dateCondition = "$dateField >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND $dateField < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+            } else if ($date === 'Tuần trước nữa') {
+                $dateCondition = "$dateField >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND $dateField < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === '7 ngày qua') {
+                $dateCondition = "$dateField >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+            } else if ($date === '30 ngày qua') {
+                $dateCondition = "$dateField >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+            } else if ($date === 'Tháng này') {
+                $dateCondition = "$dateField >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND $dateField < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+            } else if ($date === 'Tháng trước') {
+                $dateCondition = "$dateField >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND $dateField < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+            } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+                $start = $conn->real_escape_string($matches[1]);
+                $end = $conn->real_escape_string($matches[2]);
+                $dateCondition = "$dateField >= '$start 00:00:00' AND $dateField <= '$end 23:59:59'";
+            }
+
+            // Helper to execute query safely and throw exception on error
+            $safeQuery = function ($sql) use ($conn) {
+                $res = $conn->query($sql);
+                if (!$res) {
+                    throw new Exception("Query failed: " . $conn->error . " | SQL: " . $sql);
+                }
+                return $res;
+            };
+
+            // 1. General stats
+            $genSql = "
+                SELECT 
+                    COUNT(*) as total_leads,
+                    IFNULL(SUM(l.ai_prompt_tokens), 0) as prompt_tokens,
+                    IFNULL(SUM(l.ai_completion_tokens), 0) as completion_tokens,
+                    IFNULL(SUM(l.ai_total_tokens), 0) as total_tokens
+                FROM leads l
+                WHERE l.ai_screener_status != 'not_screened' AND $dateCondition
+            ";
+            $genRow = $safeQuery($genSql)->fetch_assoc();
+            $stats = [
+                'total_leads' => (int)($genRow['total_leads'] ?? 0),
+                'prompt_tokens' => (int)($genRow['prompt_tokens'] ?? 0),
+                'completion_tokens' => (int)($genRow['completion_tokens'] ?? 0),
+                'total_tokens' => (int)($genRow['total_tokens'] ?? 0)
+            ];
+
+            // 2. Breakdown by Rounds
+            $roundsSql = "
+                SELECT 
+                    l.target_round_id, 
+                    COALESCE(dr.round_name, 'Chưa phân vòng') as round_name, 
+                    COUNT(*) as lead_count,
+                    IFNULL(SUM(l.ai_prompt_tokens), 0) as prompt_tokens,
+                    IFNULL(SUM(l.ai_completion_tokens), 0) as completion_tokens,
+                    IFNULL(SUM(l.ai_total_tokens), 0) as total_tokens
+                FROM leads l
+                LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+                WHERE l.ai_screener_status != 'not_screened' AND $dateCondition
+                GROUP BY l.target_round_id, dr.round_name
+                ORDER BY total_tokens DESC
+            ";
+            $roundsRes = $safeQuery($roundsSql);
+            $roundsBreakdown = [];
+            while ($row = $roundsRes->fetch_assoc()) {
+                $roundsBreakdown[] = [
+                    'round_id' => $row['target_round_id'],
+                    'round_name' => $row['round_name'],
+                    'lead_count' => (int)$row['lead_count'],
+                    'prompt_tokens' => (int)$row['prompt_tokens'],
+                    'completion_tokens' => (int)$row['completion_tokens'],
+                    'total_tokens' => (int)$row['total_tokens']
+                ];
+            }
+
+            // 3. Breakdown by Connection
+            $sourcesSql = "
+                SELECT 
+                    l.connection_id,
+                    COALESCE(sc.sheet_name, l.source, 'Khác/Tự nhập') as source_name,
+                    COUNT(*) as lead_count,
+                    IFNULL(SUM(l.ai_prompt_tokens), 0) as prompt_tokens,
+                    IFNULL(SUM(l.ai_completion_tokens), 0) as completion_tokens,
+                    IFNULL(SUM(l.ai_total_tokens), 0) as total_tokens
+                FROM leads l
+                LEFT JOIN sheet_connections sc ON l.connection_id = sc.id
+                WHERE l.ai_screener_status != 'not_screened' AND $dateCondition
+                GROUP BY l.connection_id, sc.sheet_name, l.source
+                ORDER BY total_tokens DESC
+            ";
+            $sourcesRes = $safeQuery($sourcesSql);
+            $sourcesBreakdown = [];
+            while ($row = $sourcesRes->fetch_assoc()) {
+                $sourcesBreakdown[] = [
+                    'connection_id' => $row['connection_id'],
+                    'source_name' => $row['source_name'],
+                    'lead_count' => (int)$row['lead_count'],
+                    'prompt_tokens' => (int)$row['prompt_tokens'],
+                    'completion_tokens' => (int)$row['completion_tokens'],
+                    'total_tokens' => (int)$row['total_tokens']
+                ];
+            }
+
+            // 4. Recent AI leads (Paginated for performance optimization)
+            $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+            $pageSize = isset($_GET['pageSize']) ? max(1, (int)$_GET['pageSize']) : 20;
+            $offset = ($page - 1) * $pageSize;
+
+            $countSql = "
+                SELECT COUNT(*) as cnt 
+                FROM leads l 
+                WHERE l.ai_screener_status != 'not_screened' AND $dateCondition
+            ";
+            $countRow = $safeQuery($countSql)->fetch_assoc();
+            $totalRecentLeads = (int)($countRow['cnt'] ?? 0);
+
+            $recentSql = "
+                SELECT 
+                    l.id, 
+                    l.name, 
+                    l.phone, 
+                    l.email, 
+                    l.source, 
+                    l.ai_screener_status, 
+                    l.ai_prompt_tokens, 
+                    l.ai_completion_tokens, 
+                    l.ai_total_tokens, 
+                    " . (($dbVer >= 140) ? "COALESCE(l.ai_screening_started_at, l.created_at)" : "l.created_at") . " as created_at, 
+                    COALESCE(dr.round_name, 'Chưa phân vòng') as round_name
+                FROM leads l
+                LEFT JOIN distribution_rounds dr ON l.target_round_id = dr.id
+                WHERE l.ai_screener_status != 'not_screened' AND $dateCondition
+                ORDER BY " . (($dbVer >= 140) ? "COALESCE(l.ai_screening_started_at, l.created_at)" : "l.created_at") . " DESC
+                LIMIT $pageSize OFFSET $offset
+            ";
+            $recentRes = $safeQuery($recentSql);
+            $recentLeads = [];
+            while ($row = $recentRes->fetch_assoc()) {
+                $recentLeads[] = $row;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'stats' => $stats,
+                'rounds_breakdown' => $roundsBreakdown,
+                'sources_breakdown' => $sourcesBreakdown,
+                'recent_leads' => $recentLeads,
+                'total_recent_leads' => $totalRecentLeads
+            ]);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Lỗi SQL/PHP: ' . $e->getMessage()
+            ]);
+        }
+        break;
+
+    case 'preview_held_lead_assignment':
+        require_once __DIR__ . '/webhook_logic.php';
+        $lead_id = (int) ($_GET['lead_id'] ?? 0);
+        if ($lead_id <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID data không hợp lệ.']);
+            break;
+        }
+
+        $stmt = $conn->prepare("SELECT target_round_id FROM leads WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $lead_id);
+        $stmt->execute();
+        $lead = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$lead) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy data tương ứng.']);
+            break;
+        }
+
+        $roundId = (int) ($_GET['round_id'] ?? $lead['target_round_id'] ?? 0);
+        if ($roundId <= 0) {
+            echo json_encode(['success' => true, 'consultant' => null, 'message' => 'Không chỉ định vòng phân bổ. Sẽ chuyển thẳng cho Admin mặc định.']);
+            break;
+        }
+
+        $preview = simulateNextConsultantInRound($conn, $roundId);
+        if ($preview) {
+            echo json_encode([
+                'success' => true,
+                'consultant' => $preview,
+                'message' => 'Tư vấn viên tiếp theo dự kiến nhận số.'
+            ]);
+        } else {
+            echo json_encode([
+                'success' => true,
+                'consultant' => null,
+                'message' => 'Không có tư vấn viên nào đang hoạt động trong vòng này.'
+            ]);
+        }
+        break;
+
+    case 'approve_held_lead':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $lead_id = (int) ($input['lead_id'] ?? 0);
+        if (!$lead_id) {
+            echo json_encode(['success' => false, 'message' => 'ID data không hợp lệ']);
+            break;
+        }
+
+        $adminName = 'Quản trị viên';
+        $adminAccountId = 0;
+        if (isset($decodedUser['id'])) {
+            $adminAccountId = (int) $decodedUser['id'];
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            // 1. Fetch and lock lead
+            $stmt = $conn->prepare("SELECT * FROM leads WHERE id = ? AND status = 'pending_approval' FOR UPDATE");
+            $stmt->bind_param("i", $lead_id);
+            $stmt->execute();
+            $lead = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!$lead) {
+                throw new Exception("Lead không tồn tại hoặc đã được xử lý duyệt trước đó.");
+            }
+
+            $targetRoundId = (int) ($input['round_id'] ?? $lead['target_round_id'] ?? 0);
+            $assignedConsultantId = null;
+            $status = 'unassigned';
+            $message = 'Không khớp vòng phân bổ hoặc vòng không hoạt động.';
+
+            $isFallbackAdmin = false;
+            $fallbackAdminData = null;
+            $fallbackCcEmails = '';
+
+            // --- Check CRM (Duplication & dynamic threshold rule) ---
+            require_once __DIR__ . '/webhook_logic.php';
+            $phone = $lead['phone'] ?? '';
+            $email = $lead['email'] ?? '';
+            $crmCheckResult = checkCRMInteraction($conn, $phone, $email, false, $lead_id);
+
+            // Load dynamic duplicate check threshold
+            $dupCheckMonths = (int)get_system_setting($conn, 'duplicate_check_months');
+            if ($dupCheckMonths <= 0) {
+                $dupCheckMonths = 6;
+            }
+
+            $isDuplicate = false;
+            if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+                $assignedConsultantId = $crmCheckResult['assignedTo'];
+                $status = 'reminder';
+                $message = 'Khách cũ đăng ký lại < ' . $dupCheckMonths . ' tháng.';
+                $isDuplicate = true;
+            }
+
+            $dupSuffix = '';
+            if ($crmCheckResult['isDuplicate']) {
+                $oldSaleName = !empty($crmCheckResult['assignedName']) ? $crmCheckResult['assignedName'] : 'Không rõ';
+                $oldSaleMonths = $crmCheckResult['monthsSinceLastInteraction'];
+                $dupSuffix = " (Trùng số: Sale cũ $oldSaleName > $oldSaleMonths tháng).";
+            }
+
+            // Append duplicate note if duplicate exists
+            if ($crmCheckResult['isDuplicate']) {
+                $prevName = $crmCheckResult['assignedName'] ?? 'Sale cũ';
+                $prevDate = !empty($crmCheckResult['lastInteractionDate']) ? date('d/m/Y', strtotime($crmCheckResult['lastInteractionDate'])) : 'Không rõ';
+                $dupMonths = $crmCheckResult['monthsSinceLastInteraction'] ?? $dupCheckMonths;
+                $noteAppend = "\n[Lưu ý: Trùng số của $prevName trên $dupMonths tháng. Cập nhật lần cuối: $prevDate]";
+                $lead['note'] .= $noteAppend;
+            }
+
+            // Run Round Robin assignment
+            if ($isDuplicate) {
+                // Skip Round-Robin, keep duplicate owner
+            } else if ($targetRoundId > 0) {
+                $assignResult = getNextConsultantInRound($conn, $targetRoundId);
+                if ($assignResult) {
+                    $assignedConsultantId = $assignResult['id'];
+                    $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
+                    $message = $assignResult['is_compensation']
+                        ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.')
+                        : 'Được phân bổ tự động qua vòng xoay.';
+                    $message .= $dupSuffix;
+
+                    // Check work hours
+                    $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");
+                    $whStmt->bind_param("i", $assignedConsultantId);
+                    $whStmt->execute();
+                    $whRes = $whStmt->get_result();
+                    if ($whRes && $whRow = $whRes->fetch_assoc()) {
+                        $whStart = $whRow['work_start_time'] ?? '00:00';
+                        $whEnd = $whRow['work_end_time'] ?? '23:59';
+                        $workSchedule = $whRow['work_schedule'] ?? null;
+                        $currentTime = date('H:i');
+                        if (!isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $assignedConsultantId, $conn)) {
+                            $status = 'pending_work_hours';
+                            $message .= ' (Trì hoãn: ngoài khung giờ làm việc)';
+                        }
+                    }
+                    $whStmt->close();
+                } else {
+                    $status = 'pending';
+                    $message = 'No active consultants in this round.' . $dupSuffix;
+                }
+            } else {
+                // Direct routing to Fallback Admin
+                $fbSettings = [];
+                $fbRes = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('fallback_type', 'fallback_admin_id', 'fallback_cc_email')");
+                if ($fbRes) {
+                    while ($row = $fbRes->fetch_assoc()) {
+                        $fbSettings[$row['setting_key']] = $row['setting_value'];
+                    }
+                }
+
+                $fbType = $fbSettings['fallback_type'] ?? 'round';
+                $fbCc = $fbSettings['fallback_cc_email'] ?? '';
+
+                if ($fbType === 'admin') {
+                    $fbAdminId = (int) ($fbSettings['fallback_admin_id'] ?? 0);
+                    if ($fbAdminId > 0) {
+                        $admStmt = $conn->prepare("SELECT id, name, email, zalo_chat_id FROM accounts WHERE id = ? AND (role = 'admin' OR role = 'superadmin') LIMIT 1");
+                        if ($admStmt) {
+                            $admStmt->bind_param("i", $fbAdminId);
+                            $admStmt->execute();
+                            $admRes = $admStmt->get_result();
+                            if ($admRes->num_rows > 0) {
+                                $fallbackAdminData = $admRes->fetch_assoc();
+                                $isFallbackAdmin = true;
+                                $status = 'fallback';
+                                $message = 'No matching rule. Routed directly to fallback Admin: ' . $fallbackAdminData['name'];
+                                $fallbackCcEmails = $fbCc;
+                            }
+                            $admStmt->close();
+                        }
+                    }
+                }
+            }
+
+            // Append admin note
+            $approveReason = trim($input['reason'] ?? '');
+            if (empty($approveReason)) {
+                $approveReason = 'Phê duyệt phân bổ lead';
+            }
+            $adminNote = "\n[Duyệt AI]: " . $approveReason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+            $note = $lead['note'] . $adminNote;
+
+            // 2. Update Lead Table
+            $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), target_round_id = ?, ai_screener_status = 'passed' WHERE id = ?");
+            $updLead->bind_param("isii", $assignedConsultantId, $note, $targetRoundId, $lead_id);
+            $updLead->execute();
+            $updLead->close();
+
+            // 3. Log Distribution (Clean up pending logs and insert approved log)
+            $logMsg = $message . " (Admin phê duyệt)";
+            $delStmt = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval'");
+            $delStmt->bind_param("i", $lead_id);
+            $delStmt->execute();
+            $delStmt->close();
+
+            logDistribution($conn, $lead_id, $assignedConsultantId, $targetRoundId > 0 ? $targetRoundId : null, $status, $logMsg, false);
+
+            logAdminAction($conn, $decodedUser['id'], 'APPROVE_HELD_LEAD', [
+                'lead_id' => $lead_id,
+                'name' => $lead['name'],
+                'phone' => $lead['phone'],
+                'assigned_to' => $assignedConsultantId,
+                'round_id' => $targetRoundId
+            ]);
+            $conn->commit();
+            triggerTwoWaySync($conn, $lead_id);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            break;
+        }
+
+        // Send notifications outside transaction
+        try {
+            require_once __DIR__ . '/mailer.php';
+            require_once __DIR__ . '/zalo_bot.php';
+
+            $ccEmails = '';
+            $roundName = '';
+            if ($targetRoundId > 0) {
+                $stmtQ = $conn->prepare("SELECT round_name, cc_emails FROM distribution_rounds WHERE id = ?");
+                if ($stmtQ) {
+                    $stmtQ->bind_param("i", $targetRoundId);
+                    $stmtQ->execute();
+                    $rData = $stmtQ->get_result()->fetch_assoc();
+                    $ccEmails = $rData['cc_emails'] ?? '';
+                    $roundName = $rData['round_name'] ?? '';
+                    $stmtQ->close();
+                }
+            }
+
+            if ($isFallbackAdmin && $fallbackAdminData) {
+                try {
+                    sendLeadAssignedEmailToSale(
+                        $fallbackAdminData['email'],
+                        $fallbackAdminData['name'],
+                        $lead['name'],
+                        $lead['phone'],
+                        $lead['note'],
+                        $lead['source'],
+                        $fallbackCcEmails,
+                        'Fallback Admin',
+                        $lead_id,
+                        0,
+                        0
+                    );
+                } catch (Exception $e) {
+                }
+                if (!empty($fallbackAdminData['zalo_chat_id'])) {
+                    try {
+                        sendLeadAssignedZaloMessageToAdmin(
+                            $fallbackAdminData['zalo_chat_id'],
+                            $fallbackAdminData['name'],
+                            $lead['name'],
+                            $lead['phone'],
+                            $lead['note'],
+                            $lead['source'],
+                            $lead_id,
+                            $lead['email'],
+                            $lead['type']
+                        );
+                    } catch (Exception $e) {
+                    }
+                }
+            } else if ($assignedConsultantId > 0 && $status !== 'pending_work_hours') {
+                $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                if ($stmtC) {
+                    $stmtC->bind_param("i", $assignedConsultantId);
+                    $stmtC->execute();
+                    $c = $stmtC->get_result()->fetch_assoc();
+                    $stmtC->close();
+                    if ($c) {
+                        if ($status === 'reminder') {
+                            try {
+                                $timeline = getLeadHistoryTimeline($conn, $lead_id, true);
+                                sendLeadReminderEmailToSale(
+                                    $c['email'],
+                                    $c['name'],
+                                    $lead['name'],
+                                    $lead['phone'],
+                                    $lead['note'],
+                                    $lead['source'],
+                                    $ccEmails,
+                                    $roundName,
+                                    $timeline,
+                                    $lead_id
+                                );
+                            } catch (Exception $e) {
+                            }
+                            try {
+                                $timeline = getLeadHistoryTimeline($conn, $lead_id, true);
+                                sendLeadReminderZaloMessageToSale(
+                                    $assignedConsultantId,
+                                    $c['name'],
+                                    $lead['name'],
+                                    $lead['phone'],
+                                    $lead['note'],
+                                    $lead['source'],
+                                    $roundName,
+                                    $timeline,
+                                    $lead_id,
+                                    $lead['email'],
+                                    $lead['type']
+                                );
+                            } catch (Exception $e) {
+                            }
+                        } else {
+                            try {
+                                sendLeadAssignedEmailToSale($c['email'], $c['name'], $lead['name'], $lead['phone'], $lead['note'], $lead['source'], $ccEmails, $roundName, $lead_id, $assignedConsultantId, $targetRoundId);
+                            } catch (Exception $e) {
+                            }
+                            try {
+                                sendLeadAssignedZaloMessageToSale($assignedConsultantId, $c['name'], $lead['name'], $lead['phone'], $lead['note'], $lead['source'], $roundName, $lead_id, $targetRoundId, $lead['email'], $lead['type']);
+                            } catch (Exception $e) {
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception $notifyEx) {
+            error_log("Error sending notifications after approve_held_lead: " . $notifyEx->getMessage());
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'reject_held_lead':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $lead_id = (int) ($input['lead_id'] ?? 0);
+        $reason = trim($input['reason'] ?? '');
+
+        if (!$lead_id) {
+            echo json_encode(['success' => false, 'message' => 'ID data không hợp lệ']);
+            break;
+        }
+        if (empty($reason)) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng nhập lý do từ chối']);
+            break;
+        }
+
+        $adminName = 'Quản trị viên';
+        if (isset($decodedUser['id'])) {
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            $stmt = $conn->prepare("SELECT * FROM leads WHERE id = ? AND status = 'pending_approval' FOR UPDATE");
+            $stmt->bind_param("i", $lead_id);
+            $stmt->execute();
+            $lead = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!$lead) {
+                throw new Exception("Lead không tồn tại hoặc đã được xử lý trước đó.");
+            }
+
+            $config = getScreenerConfigForRound($conn, $lead['target_round_id']);
+            $bsFallbackEnabled = 0;
+            $bsFallbackRoundId = 0;
+            if ($config) {
+                $bsFallbackEnabled = !empty($config['below_standard_fallback_enabled']) ? 1 : 0;
+                $bsFallbackRoundId = !empty($config['below_standard_fallback_round_id']) ? (int) $config['below_standard_fallback_round_id'] : 0;
+            } else {
+                $bsFallbackEnabled = (int) get_system_setting($conn, 'ai_screener_below_standard_fallback_enabled');
+                $bsFallbackRoundId = (int) get_system_setting($conn, 'ai_screener_below_standard_fallback_round_id');
+            }
+
+            if ($bsFallbackEnabled === 1 && $bsFallbackRoundId > 0) {
+                // Route to fallback round!
+                $targetRoundId = $bsFallbackRoundId;
+                $assignedConsultantId = null;
+                $status = 'unassigned';
+                $message = 'Không khớp vòng phân bổ hoặc vòng không hoạt động.';
+
+                $assignResult = getNextConsultantInRound($conn, $targetRoundId);
+                if ($assignResult) {
+                    $assignedConsultantId = $assignResult['id'];
+                    $status = $assignResult['is_compensation'] ? 'compensation' : 'assigned';
+                    $message = $assignResult['is_compensation']
+                        ? (isset($assignResult['is_starvation']) ? 'Được phân bổ bù lượt ngoài giờ/nghỉ phép (Starvation Prevention).' : 'Được phân bổ đền bù lượt lỗi.')
+                        : 'Được phân bổ tự động qua vòng xoay.';
+
+                    // Check work hours
+                    $whStmt = $conn->prepare("SELECT work_start_time, work_end_time, work_schedule FROM consultants WHERE id = ?");
+                    $whStmt->bind_param("i", $assignedConsultantId);
+                    $whStmt->execute();
+                    $whRes = $whStmt->get_result();
+                    if ($whRes && $whRow = $whRes->fetch_assoc()) {
+                        $whStart = $whRow['work_start_time'] ?? '00:00';
+                        $whEnd = $whRow['work_end_time'] ?? '23:59';
+                        $workSchedule = $whRow['work_schedule'] ?? null;
+                        $currentTime = date('H:i');
+                        if (!isConsultantInWorkHours($currentTime, $whStart, $whEnd, $workSchedule, $assignedConsultantId, $conn)) {
+                            $status = 'pending_work_hours';
+                            $message .= ' (Trì hoãn: ngoài khung giờ làm việc)';
+                        }
+                    }
+                    $whStmt->close();
+                } else {
+                    $status = 'pending';
+                    $message = 'No active consultants in this round.';
+                }
+
+                $adminNote = "\n[Xác nhận dưới chuẩn - Fallback]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+                $note = $lead['note'] . $adminNote;
+
+                $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed' WHERE id = ?");
+                $upd->bind_param("iisi", $targetRoundId, $assignedConsultantId, $note, $lead_id);
+                $upd->execute();
+                $upd->close();
+
+                $logMsg = $message . " (Admin xác nhận dưới chuẩn & Fallback)";
+                $delStmt = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval'");
+                $delStmt->bind_param("i", $lead_id);
+                $delStmt->execute();
+                $delStmt->close();
+
+                logDistribution($conn, $lead_id, $assignedConsultantId, $targetRoundId, $status, $logMsg, false);
+
+                logAdminAction($conn, $decodedUser['id'], 'REJECT_HELD_LEAD', [
+                    'lead_id' => $lead_id,
+                    'name' => $lead['name'],
+                    'phone' => $lead['phone'],
+                    'reason' => $reason . " (Fallback to round " . $targetRoundId . ")"
+                ]);
+
+                $conn->commit();
+                triggerTwoWaySync($conn, $lead_id);
+
+                // Notifications
+                try {
+                    if ($assignedConsultantId && ($status === 'assigned' || $status === 'compensation')) {
+                        $ccEmails = '';
+                        $roundName = 'Vòng dưới chuẩn';
+                        $stmtQ = $conn->prepare("SELECT round_name, cc_emails FROM distribution_rounds WHERE id = ?");
+                        if ($stmtQ) {
+                            $stmtQ->bind_param("i", $targetRoundId);
+                            $stmtQ->execute();
+                            $rData = $stmtQ->get_result()->fetch_assoc();
+                            if ($rData) {
+                                $ccEmails = $rData['cc_emails'] ?? '';
+                                $roundName = $rData['round_name'] ?? 'Vòng dưới chuẩn';
+                            }
+                            $stmtQ->close();
+                        }
+
+                        $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                        if ($stmtC) {
+                            $stmtC->bind_param("i", $assignedConsultantId);
+                            $stmtC->execute();
+                            $c = $stmtC->get_result()->fetch_assoc();
+                            $stmtC->close();
+                            if ($c) {
+                                require_once __DIR__ . '/mailer.php';
+                                require_once __DIR__ . '/zalo_bot.php';
+                                try {
+                                    sendLeadAssignedEmailToSale($c['email'], $c['name'], $lead['name'], $lead['phone'], $note, $lead['source'], $ccEmails, $roundName, $lead_id, $assignedConsultantId, $targetRoundId);
+                                } catch (Exception $e) {
+                                }
+                                try {
+                                    sendLeadAssignedZaloMessageToSale($assignedConsultantId, $c['name'], $lead['name'], $lead['phone'], $note, $lead['source'], $roundName, $lead_id, $targetRoundId, $lead['email'], $lead['type']);
+                                } catch (Exception $e) {
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception $notifyEx) {
+                    error_log("Error sending notifications after reject_held_lead with fallback: " . $notifyEx->getMessage());
+                }
+            } else {
+                $adminNote = "\n[Từ chối AI]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+                $note = $lead['note'] . $adminNote;
+
+                $upd = $conn->prepare("UPDATE leads SET status = 'rejected', note = ?, ai_screener_status = 'failed' WHERE id = ?");
+                $upd->bind_param("si", $note, $lead_id);
+                $upd->execute();
+                $upd->close();
+
+                $logMsg = "Từ chối bởi Admin: " . $reason;
+                $chkLog = $conn->prepare("SELECT id FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval' LIMIT 1");
+                $chkLog->bind_param("i", $lead_id);
+                $chkLog->execute();
+                $logRow = $chkLog->get_result()->fetch_assoc();
+                $chkLog->close();
+
+                if ($logRow) {
+                    $updLog = $conn->prepare("UPDATE distribution_logs SET status = 'rejected', message = ? WHERE id = ?");
+                    $updLog->bind_param("si", $logMsg, $logRow['id']);
+                    $updLog->execute();
+                    $updLog->close();
+                } else {
+                    logDistribution($conn, $lead_id, null, $lead['target_round_id'] ? $lead['target_round_id'] : null, 'rejected', $logMsg, false, $lead['created_at']);
+                }
+
+                logAdminAction($conn, $decodedUser['id'], 'REJECT_HELD_LEAD', [
+                    'lead_id' => $lead_id,
+                    'name' => $lead['name'],
+                    'phone' => $lead['phone'],
+                    'reason' => $reason
+                ]);
+                $conn->commit();
+                triggerTwoWaySync($conn, $lead_id);
+            }
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            break;
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'blacklist_held_lead':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $lead_id = (int) ($input['lead_id'] ?? 0);
+        $reason = trim($input['reason'] ?? '');
+
+        if (!$lead_id) {
+            echo json_encode(['success' => false, 'message' => 'ID data không hợp lệ']);
+            break;
+        }
+        if (empty($reason)) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng nhập lý do đưa vào danh sách đen']);
+            break;
+        }
+
+        $adminName = 'Quản trị viên';
+        if (isset($decodedUser['id'])) {
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        $conn->begin_transaction();
+        try {
+            $stmt = $conn->prepare("SELECT * FROM leads WHERE id = ? AND status = 'pending_approval' FOR UPDATE");
+            $stmt->bind_param("i", $lead_id);
+            $stmt->execute();
+            $lead = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!$lead) {
+                throw new Exception("Lead không tồn tại hoặc đã được xử lý trước đó.");
+            }
+
+            $adminNote = "\n[Blacklist AI]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
+            $note = $lead['note'] . $adminNote;
+
+            $upd = $conn->prepare("UPDATE leads SET status = 'blacklisted', note = ?, ai_screener_status = 'failed' WHERE id = ?");
+            $upd->bind_param("si", $note, $lead_id);
+            $upd->execute();
+            $upd->close();
+
+            // Append to global_exclusion_contacts
+            $blacklistContacts = get_system_setting($conn, 'global_exclusion_contacts');
+            $contactsArray = !empty($blacklistContacts) ? array_map('trim', explode(',', $blacklistContacts)) : [];
+
+            $added = false;
+            if (!empty($lead['phone']) && !in_array($lead['phone'], $contactsArray)) {
+                $contactsArray[] = $lead['phone'];
+                $added = true;
+            }
+            if (!empty($lead['email']) && !in_array($lead['email'], $contactsArray)) {
+                $contactsArray[] = $lead['email'];
+                $added = true;
+            }
+
+            if ($added) {
+                $newBlacklist = implode(', ', $contactsArray);
+                $updSetting = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('global_exclusion_contacts', ?)");
+                $updSetting->bind_param("s", $newBlacklist);
+                $updSetting->execute();
+                $updSetting->close();
+            }
+
+            $logMsg = "Chặn Blacklist bởi Admin: " . $reason;
+            $chkLog = $conn->prepare("SELECT id FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval' LIMIT 1");
+            $chkLog->bind_param("i", $lead_id);
+            $chkLog->execute();
+            $logRow = $chkLog->get_result()->fetch_assoc();
+            $chkLog->close();
+
+            if ($logRow) {
+                // Giữ nguyên ngày nhận lead ban đầu (không cập nhật received_at)
+                $updLog = $conn->prepare("UPDATE distribution_logs SET status = 'blacklisted', message = ? WHERE id = ?");
+                $updLog->bind_param("si", $logMsg, $logRow['id']);
+                $updLog->execute();
+                $updLog->close();
+            } else {
+                logDistribution($conn, $lead_id, null, $lead['target_round_id'] ? $lead['target_round_id'] : null, 'blacklisted', $logMsg, false, $lead['created_at']);
+            }
+
+            logAdminAction($conn, $decodedUser['id'], 'BLACKLIST_HELD_LEAD', [
+                'lead_id' => $lead_id,
+                'name' => $lead['name'],
+                'phone' => $lead['phone'],
+                'reason' => $reason
+            ]);
+            $conn->commit();
+            triggerTwoWaySync($conn, $lead_id);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            break;
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'get_mappings':
+        $res = $conn->query("SELECT * FROM field_mappings ORDER BY created_at DESC");
+        $data = [];
+        while ($row = $res->fetch_assoc())
+            $data[] = $row;
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'add_mapping':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $conn_id = (int) ($input['connection_id'] ?? 0);
+            $sheet_col = trim($input['sheet_column'] ?? '');
+            $sys_field = trim($input['system_field'] ?? '');
+            $custom_label = isset($input['custom_label']) ? trim($input['custom_label']) : null;
+            if (empty($custom_label)) {
+                $custom_label = null;
+            }
+
+            if ($conn_id <= 0 || empty($sheet_col) || empty($sys_field)) {
+                throw new Exception("Dữ liệu đầu vào không hợp lệ.");
+            }
+
+            // Check connection exists
+            $connCheck = $conn->prepare("SELECT id FROM sheet_connections WHERE id = ?");
+            $connCheck->bind_param("i", $conn_id);
+            $connCheck->execute();
+            if (!$connCheck->get_result()->fetch_assoc()) {
+                $connCheck->close();
+                throw new Exception("Kết nối không tồn tại.");
+            }
+            $connCheck->close();
+
+            // Validate unique system fields
+            $uniqueFields = ['phone', 'email', 'name', 'assigned_to', 'saleperson'];
+            if (in_array($sys_field, $uniqueFields)) {
+                $checkStmt = $conn->prepare("SELECT id FROM field_mappings WHERE connection_id = ? AND system_field = ?");
+                $checkStmt->bind_param("is", $conn_id, $sys_field);
+                $checkStmt->execute();
+                if ($checkStmt->get_result()->fetch_assoc()) {
+                    $checkStmt->close();
+                    throw new Exception("Trường hệ thống này đã được liên kết với một cột khác.");
+                }
+                $checkStmt->close();
+            }
+
+            // Validate exact duplicate mapping
+            $dupStmt = $conn->prepare("SELECT id FROM field_mappings WHERE connection_id = ? AND sheet_column = ? AND system_field = ?");
+            $dupStmt->bind_param("iss", $conn_id, $sheet_col, $sys_field);
+            $dupStmt->execute();
+            if ($dupStmt->get_result()->fetch_assoc()) {
+                $dupStmt->close();
+                throw new Exception("Cột này đã được liên kết với trường hệ thống này.");
+            }
+            $dupStmt->close();
+
+            $stmt = $conn->prepare("INSERT INTO field_mappings (connection_id, sheet_column, system_field, custom_label) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("isss", $conn_id, $sheet_col, $sys_field, $custom_label);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'ADD_MAPPING', ['connection_id' => $conn_id, 'sheet_column' => $sheet_col, 'system_field' => $sys_field]);
+            }
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'edit_mapping':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+            $sheet_col = trim($input['sheet_column'] ?? '');
+            $sys_field = trim($input['system_field'] ?? '');
+            $custom_label = isset($input['custom_label']) ? trim($input['custom_label']) : null;
+            if (empty($custom_label)) {
+                $custom_label = null;
+            }
+
+            if ($id <= 0 || empty($sheet_col) || empty($sys_field)) {
+                throw new Exception("Dữ liệu đầu vào không hợp lệ.");
+            }
+
+            // Get connection_id and check if mapping exists
+            $mappingCheck = $conn->prepare("SELECT connection_id FROM field_mappings WHERE id = ?");
+            $mappingCheck->bind_param("i", $id);
+            $mappingCheck->execute();
+            $mappingRow = $mappingCheck->get_result()->fetch_assoc();
+            if (!$mappingRow) {
+                $mappingCheck->close();
+                throw new Exception("Mapping không tồn tại.");
+            }
+            $conn_id = (int) $mappingRow['connection_id'];
+            $mappingCheck->close();
+
+            // Validate unique system fields
+            $uniqueFields = ['phone', 'email', 'name', 'assigned_to', 'saleperson'];
+            if (in_array($sys_field, $uniqueFields)) {
+                $checkStmt = $conn->prepare("SELECT id FROM field_mappings WHERE connection_id = ? AND system_field = ? AND id != ?");
+                $checkStmt->bind_param("isi", $conn_id, $sys_field, $id);
+                $checkStmt->execute();
+                if ($checkStmt->get_result()->fetch_assoc()) {
+                    $checkStmt->close();
+                    throw new Exception("Trường hệ thống này đã được liên kết với một cột khác.");
+                }
+                $checkStmt->close();
+            }
+
+            // Validate exact duplicate mapping
+            $dupStmt = $conn->prepare("SELECT id FROM field_mappings WHERE connection_id = ? AND sheet_column = ? AND system_field = ? AND id != ?");
+            $dupStmt->bind_param("issi", $conn_id, $sheet_col, $sys_field, $id);
+            $dupStmt->execute();
+            if ($dupStmt->get_result()->fetch_assoc()) {
+                $dupStmt->close();
+                throw new Exception("Cột này đã được liên kết với trường hệ thống này.");
+            }
+            $dupStmt->close();
+
+            $stmt = $conn->prepare("UPDATE field_mappings SET sheet_column=?, system_field=?, custom_label=? WHERE id=?");
+            $stmt->bind_param("sssi", $sheet_col, $sys_field, $custom_label, $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'EDIT_MAPPING', ['id' => $id, 'sheet_column' => $sheet_col, 'system_field' => $sys_field]);
+            }
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'delete_mapping':
+        try {
+            $id = (int) ($_GET['id'] ?? 0);
+            $stmt = $conn->prepare("DELETE FROM field_mappings WHERE id=?");
+            $stmt->bind_param("i", $id);
+            if ($stmt->execute()) {
+                logAdminAction($conn, $decodedUser['id'], 'DELETE_MAPPING', ['id' => $id]);
+            }
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'setup_telegram_webhook':
+        if (empty($decodedUser['role']) || ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin')) {
+            echo json_encode(['success' => false, 'message' => 'Quyền truy cập bị từ chối. Chỉ dành cho Admin.']);
+            break;
+        }
+        $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_bot_token' LIMIT 1");
+        $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+        if (empty($botToken)) {
+            echo json_encode(['success' => false, 'message' => 'Chưa cấu hình Telegram Bot Token trong Cài đặt']);
+            break;
+        }
+        $stmtUrl = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+        $frontendUrl = $stmtUrl->fetch_assoc()['setting_value'] ?? '';
+        $domain = '';
+        if (!empty($frontendUrl)) {
+            $parsed = parse_url($frontendUrl);
+            $domain = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '') . (($parsed['port'] ?? '') ? (':' . $parsed['port']) : '');
+        }
+        if (empty($domain)) {
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $domain = $scheme . '://' . $_SERVER['HTTP_HOST'];
+        }
+        // Tự động phát hiện cấu trúc thư mục (local dùng /backend/ còn production giải nén trực tiếp vào root)
+        if (file_exists(__DIR__ . '/telegram_webhook.php') && !file_exists(__DIR__ . '/../backend/telegram_webhook.php')) {
+            $webhookUrl = rtrim($domain, '/') . '/telegram_webhook.php';
+        } else {
+            $webhookUrl = rtrim($domain, '/') . '/backend/telegram_webhook.php';
+        }
+        $url = "https://api.telegram.org/bot" . $botToken . "/setWebhook?url=" . urlencode($webhookUrl);
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($httpCode === 200) {
+            $resData = json_decode($res, true);
+            if (!empty($resData['ok'])) {
+                // Send welcome message to admin group if configured
+                $stmtAdminChat = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_admin_group_chat_id' LIMIT 1");
+                $adminChatId = $stmtAdminChat->fetch_assoc()['setting_value'] ?? '';
+                if (!empty($adminChatId)) {
+                    $msg = "🔔 <b>[Thông báo] Khởi tạo Bot thành công</b>\n\nWebhook của hệ thống IDEAS đã được cấu hình và kích hoạt thành công trên Telegram Server!";
+                    $testUrl = "https://api.telegram.org/bot" . $botToken . "/sendMessage?chat_id=" . urlencode($adminChatId) . "&text=" . urlencode($msg) . "&parse_mode=HTML";
+                    @file_get_contents($testUrl);
+                }
+                echo json_encode(['success' => true, 'message' => 'Đăng ký Webhook thành công', 'data' => $resData]);
+            } else {
+                echo json_encode(['success' => false, 'message' => $resData['description'] ?? 'Telegram API error']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi kết nối tới Telegram API (HTTP ' . $httpCode . ')']);
+        }
+        break;
+
+    case 'get_settings':
+        $res = $conn->query("SELECT * FROM system_settings");
+        $data = [];
+        while ($row = $res->fetch_assoc()) {
+            $data[$row['setting_key']] = $row['setting_value'];
+        }
+        $data['backend_version'] = defined('BACKEND_VERSION') ? BACKEND_VERSION : '1.5.3';
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'get_db_stats':
+        if (empty($decodedUser['role']) || ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin')) {
+            echo json_encode(['success' => false, 'message' => 'Quyền truy cập bị từ chối. Chỉ dành cho Admin.']);
+            break;
+        }
+        try {
+            $dbName = $_ENV['DB_NAME'] ?? ($dbname ?? 'vhvxoigh_myerp');
+            $res = $conn->query("
+                SELECT 
+                    TABLE_NAME AS name, 
+                    TABLE_ROWS AS `rows`, 
+                    DATA_LENGTH AS data_size, 
+                    INDEX_LENGTH AS index_size, 
+                    DATA_FREE AS overhead 
+                FROM information_schema.TABLES 
+                WHERE TABLE_SCHEMA = '$dbName'
+                ORDER BY (DATA_LENGTH + INDEX_LENGTH) DESC
+            ");
+            $tables = [];
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $tables[] = [
+                        'name' => $row['name'],
+                        'rows' => (int) $row['rows'],
+                        'data_size' => (int) $row['data_size'],
+                        'index_size' => (int) $row['index_size'],
+                        'overhead' => (int) $row['overhead']
+                    ];
+                }
+            }
+            echo json_encode(['success' => true, 'tables' => $tables]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'get_db_schema':
+        if (empty($decodedUser['role']) || ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin')) {
+            echo json_encode(['success' => false, 'message' => 'Quyền truy cập bị từ chối. Chỉ dành cho Admin.']);
+            break;
+        }
+        $schemaPath = __DIR__ . '/db_schema.json';
+        if (file_exists($schemaPath)) {
+            $data = json_decode(file_get_contents($schemaPath), true);
+            echo json_encode(['success' => true, 'schema' => $data['schema']]);
+        } else {
+            try {
+                $tablesRes = $conn->query("SHOW TABLES");
+                $schema = [];
+                while ($tRow = $tablesRes->fetch_row()) {
+                    $tableName = $tRow[0];
+                    $colsRes = $conn->query("SHOW COLUMNS FROM `$tableName`");
+                    $columns = [];
+                    while ($cRow = $colsRes->fetch_assoc()) {
+                        $columns[] = [
+                            'field'   => $cRow['Field'],
+                            'type'    => $cRow['Type'],
+                            'null'    => $cRow['Null'],
+                            'key'     => $cRow['Key'],
+                            'default' => $cRow['Default'],
+                            'extra'   => $cRow['Extra']
+                        ];
+                    }
+                    $schema[$tableName] = $columns;
+                }
+                echo json_encode(['success' => true, 'schema' => $schema]);
+            } catch (Exception $e) {
+                echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            }
+        }
+        break;
+
+    case 'optimize_db':
+        if (empty($decodedUser['role']) || ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin')) {
+            echo json_encode(['success' => false, 'message' => 'Quyền truy cập bị từ chối. Chỉ dành cho Admin.']);
+            break;
+        }
+        $input = json_decode(file_get_contents('php://input'), true) ?: [];
+        $actionType = $input['action_type'] ?? 'optimize';
+        try {
+            $logResults = [];
+            if ($actionType === 'optimize') {
+                $tablesToOptimize = ['leads', 'contacts', 'cooperation_slips', 'deposits', 'zalo_queue', 'mail_queue', 'activities', 'audit_logs', 'users', 'persons'];
+                foreach ($tablesToOptimize as $tbl) {
+                    $conn->query("OPTIMIZE TABLE `$tbl`");
+                    $logResults[] = "Đã tối ưu hóa bảng `$tbl` thành công.";
+                }
+            } else if ($actionType === 'clean_orphans') {
+                $conn->query("DELETE rc FROM round_consultants rc LEFT JOIN distribution_rounds r ON rc.round_id = r.id WHERE r.id IS NULL");
+                $orphansRc = $conn->affected_rows;
+                $logResults[] = "Đã dọn dẹp $orphansRc phân bổ vòng mồ côi (round_consultants).";
+
+                $conn->query("DELETE rc FROM round_consultants rc LEFT JOIN users u ON rc.consultant_id = u.id WHERE u.id IS NULL");
+                $orphansRcUsers = $conn->affected_rows;
+                $logResults[] = "Đã dọn dẹp $orphansRcUsers nhân viên mồ côi trong vòng phân bổ.";
+
+                $conn->query("DELETE pr FROM project_roster pr LEFT JOIN projects p ON pr.project_id = p.id WHERE p.id IS NULL");
+                $orphansPr = $conn->affected_rows;
+                $logResults[] = "Đã dọn dẹp $orphansPr dự án mồ côi trong danh sách bán hàng.";
+
+                $conn->query("DELETE fm FROM field_mappings fm LEFT JOIN sheet_connections sc ON fm.connection_id = sc.id WHERE sc.id IS NULL");
+                $orphansFm = $conn->affected_rows;
+                $logResults[] = "Đã dọn dẹp $orphansFm ánh xạ cột mồ côi (field_mappings).";
+            } else if ($actionType === 'fix_indexes') {
+                ob_start();
+                require_once __DIR__ . '/run_migrations.php';
+                ob_clean();
+                $logResults[] = "Đã tự động kiểm tra và tái kích hoạt các INDEX tối ưu hiệu năng cơ sở dữ liệu.";
+            } else if ($actionType === 'run_tests') {
+                if (!defined('DIAG_TOKEN')) {
+                    define('DIAG_TOKEN', true);
+                }
+                ob_start();
+                include __DIR__ . '/master_all_backend_test_runner.php';
+                $rawOutput = ob_get_clean();
+                $logResults = array_values(array_filter(explode("\n", $rawOutput), function($line) {
+                    return trim($line) !== '';
+                }));
+            }
+
+            logAdminAction($conn, $decodedUser['id'], 'DB_MAINTENANCE', ['action_type' => $actionType, 'results' => $logResults]);
+            echo json_encode(['success' => true, 'results' => $logResults]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'save_settings':
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input) {
+            echo json_encode(['success' => false, 'message' => 'Invalid data']);
+            break;
+        }
+
+        // Validate AI pre-screener configurations to prevent corrupt settings
+        foreach ($input as $k => $v) {
+            if ($k === 'ai_screener_enabled') {
+                if ($v !== '0' && $v !== '1' && $v !== 0 && $v !== 1) {
+                    echo json_encode(['success' => false, 'message' => 'Cấu hình trạng thái AI Pre-screener không hợp lệ (phải là 0 hoặc 1).']);
+                    break 2;
+                }
+            }
+            if ($k === 'fallback_round_id') {
+                $val = (int) $v;
+                if ($val > 0) {
+                    $chk = $conn->prepare("SELECT is_active, round_name FROM distribution_rounds WHERE id = ?");
+                    $chk->bind_param("i", $val);
+                    $chk->execute();
+                    $r = $chk->get_result()->fetch_assoc();
+                    $chk->close();
+                    if (!$r) {
+                        echo json_encode(['success' => false, 'message' => "Không tìm thấy vòng phân bổ dự phòng (ID: $val)."]);
+                        break 2;
+                    }
+                    if ((int) $r['is_active'] !== 1) {
+                        echo json_encode(['success' => false, 'message' => "Vòng phân bổ dự phòng '{$r['round_name']}' đang ngưng hoạt động, không thể chọn làm fallback."]);
+                        break 2;
+                    }
+                    $chkActive = $conn->prepare("
+                        SELECT COUNT(*) as cnt 
+                        FROM round_consultants rc 
+                        JOIN consultants c ON rc.consultant_id = c.id 
+                        WHERE rc.round_id = ? AND c.status = 'active'
+                    ");
+                    $chkActive->bind_param("i", $val);
+                    $chkActive->execute();
+                    $activeCount = (int) ($chkActive->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $chkActive->close();
+                    if ($activeCount === 0) {
+                        echo json_encode(['success' => false, 'message' => "Vòng phân bổ dự phòng '{$r['round_name']}' phải có ít nhất một TVV đang hoạt động."]);
+                        break 2;
+                    }
+                }
+            }
+            if ($k === 'ai_screener_below_standard_fallback_round_id') {
+                $val = (int) $v;
+                if ($val > 0) {
+                    $chk = $conn->prepare("SELECT is_active, round_name FROM distribution_rounds WHERE id = ?");
+                    $chk->bind_param("i", $val);
+                    $chk->execute();
+                    $r = $chk->get_result()->fetch_assoc();
+                    $chk->close();
+                    if (!$r) {
+                        echo json_encode(['success' => false, 'message' => "Không tìm thấy vòng phân bổ dưới chuẩn (ID: $val)."]);
+                        break 2;
+                    }
+                    if ((int) $r['is_active'] !== 1) {
+                        echo json_encode(['success' => false, 'message' => "Vòng phân bổ dưới chuẩn '{$r['round_name']}' đang ngưng hoạt động, không thể chọn làm fallback."]);
+                        break 2;
+                    }
+                    $chkActive = $conn->prepare("
+                        SELECT COUNT(*) as cnt 
+                        FROM round_consultants rc 
+                        JOIN consultants c ON rc.consultant_id = c.id 
+                        WHERE rc.round_id = ? AND c.status = 'active'
+                    ");
+                    $chkActive->bind_param("i", $val);
+                    $chkActive->execute();
+                    $activeCount = (int) ($chkActive->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $chkActive->close();
+                    if ($activeCount === 0) {
+                        echo json_encode(['success' => false, 'message' => "Vòng phân bổ dưới chuẩn '{$r['round_name']}' phải có ít nhất một TVV đang hoạt động."]);
+                        break 2;
+                    }
+                }
+            }
+            if ($k === 'ai_screener_configs') {
+                $configs = is_array($v) ? $v : json_decode($v, true);
+                if (!is_array($configs)) {
+                    echo json_encode(['success' => false, 'message' => 'Cấu hình nhóm lọc AI (ai_screener_configs) không đúng định dạng JSON.']);
+                    break 2;
+                }
+                foreach ($configs as $idx => $cfg) {
+                    $cfgName = $cfg['name'] ?? ('Nhóm thứ ' . ($idx + 1));
+                    if (!isset($cfg['rounds']) || !is_array($cfg['rounds'])) {
+                        echo json_encode(['success' => false, 'message' => "Cấu hình '$cfgName' thiếu danh sách vòng phân bổ áp dụng."]);
+                        break 3;
+                    }
+                    $mode = $cfg['mode'] ?? 'ai';
+                    if (!in_array($mode, ['ai', 'manual', 'hybrid'])) {
+                        echo json_encode(['success' => false, 'message' => "Chế độ lọc '$mode' của nhóm '$cfgName' không hợp lệ."]);
+                        break 3;
+                    }
+                    $manual_action = $cfg['manual_action'] ?? 'hold';
+                    if (!in_array($manual_action, ['hold', 'pass'])) {
+                        echo json_encode(['success' => false, 'message' => "Hành động lọc thủ công '$manual_action' của nhóm '$cfgName' không hợp lệ."]);
+                        break 3;
+                    }
+                    if (isset($cfg['manual_rules']) && !is_array($cfg['manual_rules'])) {
+                        echo json_encode(['success' => false, 'message' => "Bộ lọc thủ công của nhóm '$cfgName' phải là danh sách quy tắc (array)."]);
+                        break 3;
+                    }
+
+                    // Validate fallback settings logic
+                    $fb_enabled = !empty($cfg['below_standard_fallback_enabled']) ? 1 : 0;
+                    if ($fb_enabled) {
+                        $fb_round = (int) ($cfg['below_standard_fallback_round_id'] ?? 0);
+                        if ($fb_round <= 0) {
+                            echo json_encode(['success' => false, 'message' => "Nhóm '$cfgName' đã bật phân bổ dưới chuẩn nhưng chưa chọn vòng phân bổ fallback hợp lệ."]);
+                            break 3;
+                        }
+                        // Fallback round cannot be in the list of applied rounds for this configuration
+                        $appliedRounds = array_map('intval', $cfg['rounds']);
+                        if (in_array($fb_round, $appliedRounds)) {
+                            echo json_encode(['success' => false, 'message' => "Vòng fallback (ID: $fb_round) không được trùng với các vòng áp dụng của nhóm '$cfgName'."]);
+                            break 3;
+                        }
+
+                        // Validate active round & active consultants
+                        $chk = $conn->prepare("SELECT is_active, round_name FROM distribution_rounds WHERE id = ?");
+                        $chk->bind_param("i", $fb_round);
+                        $chk->execute();
+                        $r = $chk->get_result()->fetch_assoc();
+                        $chk->close();
+                        if (!$r) {
+                            echo json_encode(['success' => false, 'message' => "Không tìm thấy vòng phân bổ fallback (ID: $fb_round) cho nhóm '$cfgName'."]);
+                            break 3;
+                        }
+                        if ((int) $r['is_active'] !== 1) {
+                            echo json_encode(['success' => false, 'message' => "Vòng phân bổ fallback '{$r['round_name']}' của nhóm '$cfgName' đang ngưng hoạt động, không thể chọn làm fallback."]);
+                            break 3;
+                        }
+                        $chkActive = $conn->prepare("
+                            SELECT COUNT(*) as cnt 
+                            FROM round_consultants rc 
+                            JOIN consultants c ON rc.consultant_id = c.id 
+                            WHERE rc.round_id = ? AND c.status = 'active'
+                        ");
+                        $chkActive->bind_param("i", $fb_round);
+                        $chkActive->execute();
+                        $activeCount = (int) ($chkActive->get_result()->fetch_assoc()['cnt'] ?? 0);
+                        $chkActive->close();
+                        if ($activeCount === 0) {
+                            echo json_encode(['success' => false, 'message' => "Vòng phân bổ fallback '{$r['round_name']}' của nhóm '$cfgName' phải có ít nhất một TVV đang hoạt động."]);
+                            break 3;
+                        }
+                    }
+                }
+            }
+            if ($k === 'ai_screener_mode') {
+                if (!in_array($v, ['ai', 'manual', 'hybrid'])) {
+                    echo json_encode(['success' => false, 'message' => 'Chế độ ai_screener_mode không hợp lệ.']);
+                    break 2;
+                }
+            }
+            if ($k === 'ai_screener_manual_action') {
+                if (!in_array($v, ['hold', 'pass'])) {
+                    echo json_encode(['success' => false, 'message' => 'Hành động lọc thủ công không hợp lệ.']);
+                    break 2;
+                }
+            }
+            if ($k === 'ai_screener_manual_rules') {
+                $rules = is_array($v) ? $v : json_decode($v, true);
+                if ($v !== null && $v !== '' && !is_array($rules)) {
+                    echo json_encode(['success' => false, 'message' => 'Cấu hình quy tắc lọc thủ công không hợp lệ.']);
+                    break 2;
+                }
+            }
+        }
+
+        $stmt = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)");
+        foreach ($input as $k => $v) {
+            // Array values (e.g. daily_report_admins) must be JSON-encoded before storage
+            if (is_array($v)) {
+                $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+            }
+            $stmt->bind_param("ss", $k, $v);
+            $stmt->execute();
+        }
+        $stmt->close();
+
+        // Synchronize pipeline_stages table with pipeline_status_hierarchy settings
+        $resH = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy'");
+        $rowH = $resH->fetch_assoc();
+        $hierarchyJson = $rowH['setting_value'] ?? null;
+
+        $resL = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_labels'");
+        $rowL = $resL->fetch_assoc();
+        $labelsJson = $rowL['setting_value'] ?? null;
+
+        if ($hierarchyJson && $labelsJson) {
+            $hierarchy = json_decode($hierarchyJson, true);
+            $labels = json_decode($labelsJson, true);
+            if (is_array($hierarchy) && is_array($labels)) {
+                $tenantId = (int)($decodedUser['tenant_id'] ?? 1);
+
+                // Get existing stages for this tenant
+                $resS = $conn->query("SELECT id FROM pipeline_stages WHERE tenant_id = $tenantId ORDER BY order_index");
+                $existingStages = [];
+                while ($rowS = $resS->fetch_assoc()) {
+                    $existingStages[] = $rowS;
+                }
+
+                $keepIds = [];
+                $colors = ['#3b82f6', '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#14b8a6', '#10b981'];
+
+                $dealWonStatus = $input['deal_won_status'] ?? 'dong_deal';
+                if (!$dealWonStatus) {
+                    $dealWonStatus = 'dong_deal';
+                }
+
+                foreach ($hierarchy as $idx => $slug) {
+                    $name = $labels[$slug] ?? $slug;
+                    $color = $colors[$idx % count($colors)];
+                    $isWon = ($slug === $dealWonStatus) ? 1 : 0;
+                    $isLost = ($slug === 'that_bai' || $slug === 'lost') ? 1 : 0;
+
+                    if (isset($existingStages[$idx])) {
+                        $stageId = (int)$existingStages[$idx]['id'];
+                        $stmtUp = $conn->prepare("UPDATE pipeline_stages SET name = ?, color = ?, order_index = ?, is_won = ?, is_lost = ?, system_slug = ? WHERE id = ?");
+                        $stmtUp->bind_param("ssiiisi", $name, $color, $idx, $isWon, $isLost, $slug, $stageId);
+                        $stmtUp->execute();
+                        $stmtUp->close();
+                        $keepIds[] = $stageId;
+                    } else {
+                        $stmtIns = $conn->prepare("INSERT INTO pipeline_stages (tenant_id, name, color, order_index, is_won, is_lost, system_slug) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $stmtIns->bind_param("issiiis", $tenantId, $name, $color, $idx, $isWon, $isLost, $slug);
+                        $stmtIns->execute();
+                        $keepIds[] = (int)$stmtIns->insert_id;
+                        $stmtIns->close();
+                    }
+                }
+
+                if (!empty($keepIds)) {
+                    $inClause = implode(',', $keepIds);
+                    $conn->query("DELETE FROM pipeline_stages WHERE tenant_id = $tenantId AND id NOT IN ($inClause)");
+                }
+            }
+        }
+
+        logAdminAction($conn, $decodedUser['id'], 'SAVE_SETTINGS', ['keys' => array_keys($input)]);
+        echo json_encode(['success' => true]);
+        break;
+
+
+
+    case 'test_master_sync':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $url = $input['google_script_url'] ?? '';
+            $sheetName = $input['sheet_name'] ?? '';
+
+            if (empty($url)) {
+                echo json_encode(['success' => false, 'message' => 'Thiếu URL Web App Apps Script']);
+                break;
+            }
+
+            // Tạo payload thử nghiệm
+            $payload = [
+                'sheet_name' => $sheetName,
+                'search_col_phone' => 'Số điện thoại',
+                'search_val_phone' => '0999999999',
+                'search_col_email' => 'Email',
+                'search_val_email' => 'test@Ideas.test',
+                'allow_insert' => true,
+                'updates' => [
+                    'Thời gian' => date('Y-m-d H:i:s'),
+                    'Nguồn' => 'TEST CONNECTION',
+                    'Vòng' => 'Vòng chia Test',
+                    'Sale phụ trách' => 'Sale Test',
+                    'Họ tên' => 'Khách hàng Thử nghiệm',
+                    'Số điện thoại' => '0999999999',
+                    'Email' => 'test@Ideas.test',
+                    'Ghi chú' => 'Đồng bộ thử nghiệm thành công! Kết nối hoạt động tốt.',
+                    'Trạng thái' => 'Kiểm thử'
+                ]
+            ];
+
+            $jsonData = json_encode($payload, JSON_UNESCAPED_UNICODE);
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Content-Length: ' . strlen($jsonData)
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 6); // Timeout 6s tối đa cho kiểm thử
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 IDEAS CRM Client");
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                $errDetail = !empty($curlError) ? " (Lỗi: $curlError)" : " (Mã phản hồi HTTP: $httpCode)";
+                echo json_encode(['success' => false, 'message' => 'Không thể kết nối đến Web App Apps Script' . $errDetail]);
+                break;
+            }
+
+            $resObj = json_decode($response, true);
+            if (!$resObj) {
+                echo json_encode(['success' => false, 'message' => 'Apps Script trả về định dạng phản hồi không hợp lệ: ' . substr($response, 0, 100)]);
+                break;
+            }
+
+            if (($resObj['status'] ?? '') === 'error') {
+                echo json_encode(['success' => false, 'message' => 'Apps Script trả về lỗi: ' . ($resObj['message'] ?? 'Không rõ lý do')]);
+                break;
+            }
+
+            echo json_encode(['success' => true, 'data' => $resObj]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'ai_training':
+        require_once __DIR__ . '/controllers/ai_training_handler.php';
+        break;
+
+    case 'ai_chat':
+        require_once __DIR__ . '/controllers/ai_chat_handler.php';
+        break;
+
+    case 'test_email':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $email = trim($input['email'] ?? '');
+        $type = $input['type'] ?? 'system';
+
+        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['success' => false, 'message' => 'Email không hợp lệ']);
+            break;
+        }
+
+        require_once __DIR__ . '/mailer.php';
+
+        if ($type === 'assignment') {
+            // Send a REAL-FORMAT email using the actual template with mock data
+            // Mock IDs that clearly don't exist in DB (0 = test mode)
+            $mockLeadId = 0;
+            $mockConsultantId = 0;
+            $mockRoundId = 0;
+
+            // Build frontend URL for the report link (same logic as real emails)
+            $frontendUrl = '';
+            $urlSetting = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='frontend_url' LIMIT 1");
+            if ($urlSetting && $urlSetting->num_rows > 0) {
+                $frontendUrl = rtrim($urlSetting->fetch_assoc()['setting_value'], '/');
+            }
+            if (empty($frontendUrl)) {
+                $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $frontendUrl = $proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+            }
+            // For test, use ?test=1 — frontend shows mock data, disables submit
+            $reportUrl = $frontendUrl . "/report-data?test=1";
+
+            // Mock lead data — realistic Vietnamese customer
+            $mockPhone = '0912 345 678';
+            $mockName = 'Trần Thị Mai Anh';
+            $mockEmail = 'maianh.tran@gmail.com';
+            $mockSource = 'Facebook Ads — Chiến dịch Tuyển sinh T5/2026';
+            $mockType = 'Học viên tiềm năng';
+            $mockNote = "Quan tâm: Khóa Marketing Online\nNgân sách: 5–10 triệu\nThời gian học: Buổi tối / Cuối tuần\nGhi chú: Đã nhắn tin fanpage hỏi lịch khai giảng";
+            $mockRound = 'Vòng A — Facebook Inbound';
+            $consultantName = 'Bạn (Test)';
+
+            $formattedNote = nl2br(htmlspecialchars($mockNote));
+            $formattedSource = htmlspecialchars($mockSource);
+            $formattedType = htmlspecialchars($mockType);
+            $formattedEmail = htmlspecialchars($mockEmail);
+            $phoneEncoded = urlencode(str_replace(' ', '', $mockPhone));
+
+            $subject = "[TEST] Bạn vừa nhận được Lead {$mockName} — {$mockRound}";
+
+            $content = '
+                <div style="background:#fff3cd;border-left:4px solid #ffc107;padding:12px 16px;margin-bottom:28px;border-radius:0 8px 8px 0;font-size:14px;color:#856404;">
+                    ⚠️ <strong>Email thử nghiệm</strong> — Đây là email kiểm tra hệ thống, không phải Data thật.
+                </div>
+                
+                <p style="color: #475569; font-size: 16px; line-height: 1.7; margin-bottom: 24px;">
+                    Chào <strong>' . htmlspecialchars($consultantName) . '</strong>,<br><br>
+                    Hệ thống vừa phân bổ tự động cho bạn 1 khách hàng mới từ ' . (!empty($mockRound) ? 'vòng ' . htmlspecialchars($mockRound) : 'chiến dịch Inbound') . '.
+                </p>
+                
+                <div style="background-color: #fefce8; border-left: 4px solid #eab308; padding: 24px; margin: 30px 0; border-radius: 0 12px 12px 0;">
+                    <p style="color: #0f172a; font-size: 16px; margin: 0 0 15px 0; font-weight: bold; line-height: 1.6; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                        Thông tin chi tiết Khách hàng:
+                    </p>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.6; color: #334155;">
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; width: 140px; vertical-align: top; color: #64748b;">Họ và Tên:</td>
+                            <td style="padding: 6px 0; font-weight: 700; color: #0f172a; vertical-align: top;">' . htmlspecialchars($mockName) . '</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; vertical-align: top; color: #64748b;">Số điện thoại:</td>
+                            <td style="padding: 6px 0; font-weight: 700; color: #d97706; vertical-align: top;">' . htmlspecialchars($mockPhone) . '</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; vertical-align: top; color: #64748b;">Email:</td>
+                            <td style="padding: 6px 0; color: #0f172a; vertical-align: top;">' . $formattedEmail . '</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; vertical-align: top; color: #64748b;">Nguồn Data:</td>
+                            <td style="padding: 6px 0; color: #0f172a; vertical-align: top;">' . $formattedSource . '</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; vertical-align: top; color: #64748b;">Loại Data:</td>
+                            <td style="padding: 6px 0; color: #0f172a; vertical-align: top;">' . $formattedType . '</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; vertical-align: top; color: #64748b;">Ghi chú / Khác:</td>
+                            <td style="padding: 6px 0; color: #0f172a; vertical-align: top; line-height: 1.5;">' . $formattedNote . '</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; font-weight: 600; vertical-align: top; color: #64748b;">Vòng phân bổ:</td>
+                            <td style="padding: 6px 0; font-weight: 500; color: #334155; vertical-align: top;">' . htmlspecialchars($mockRound) . '</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div style="text-align: center; margin-bottom: 20px;">
+                </div>
+
+                <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px dashed #cbd5e1;">
+                    <p style="color: #ef4444; font-weight: 700; font-size: 15px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.5px;">Báo cáo Data</p>
+                    <p style="color: #64748b; font-size: 14px; margin: 0 0 12px;">Nếu Data này bị sai SĐT, Spam hoặc trùng lặp, vui lòng nhấn nút bên dưới để báo cáo và nhận Data bù.</p>
+                    <a href="' . $reportUrl . '" style="display: inline-block; background-color: #ef4444; color: white; text-decoration: none; padding: 7px 22px; border-radius: 8px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);">
+                        BÁO CÁO DATA
+                    </a>
+                    <p style="color: #94a3b8; font-size: 12px; margin-top: 10px;">(Trong email test, link sẽ mở trang xem thử — không gửi báo cáo thật)</p>
+                </div>
+            ';
+
+            $success = sendEmailNotification($email, $subject, "Có Data Mới Về!", $content);
+        } else if ($type === 'zalo_sale') {
+            sendWelcomeEmailToSale(99, $email, "Sale Test", "https://zalo.me/1185588456243371597");
+            $success = true;
+        } else if ($type === 'zalo_admin') {
+            sendWelcomeEmailToAdminTicket(1, $email, "Admin Test", "https://zalo.me/1185588456243371597");
+            $success = true;
+        } else if ($type === 'ticket_admin') {
+            sendTicketNotificationToAdmins($email, "Admin Test", "Khách Nguyễn Văn A", "0912345678", "Gọi không nghe máy, khách chặn số", "Sale Test", "Vòng A");
+            $success = true;
+        } else if ($type === 'ticket_sale_success') {
+            sendQuickMessageEmailToSale($email, "Sale Test", "Admin đã duyệt Ticket của bạn cho khách hàng Nguyễn Văn A. Bạn đã được cộng lại 1 Data vào vòng phân bổ tiếp theo.");
+            $success = true;
+        } else if ($type === 'ticket_sale_fail') {
+            sendQuickMessageEmailToSale($email, "Sale Test", "Admin ĐÃ TỪ CHỐI Ticket của bạn cho khách hàng Nguyễn Văn A. Lý do: Số điện thoại vẫn đổ chuông bình thường.");
+            $success = true;
+        } else if ($type === 'admin_confirm') {
+            sendAdminConfirmationEmail($email, "Admin Test", "https://open.Ideas.test/confirm?token=123456");
+            $success = true;
+        } else if ($type === 'daily_report') {
+            $statsHtml = "<li>Sale Test 1: <b>15</b> data</li><li>Sale Test 2: <b>12</b> data</li>";
+            sendDailyReportEmailToAdmins($email, "Admin Test", 27, $statsHtml, 3);
+            $success = true;
+        } else {
+            $subject = "Test Cấu hình Email từ IDEAS";
+            $body = "<p>Nếu bạn nhận được email này, nghĩa là cấu hình gửi mail của bạn (Amazon SES hoặc AppScript) đang hoạt động hoàn hảo!</p><p style='color:#64748b;font-size:14px;'>Gửi lúc: " . date('d/m/Y H:i:s') . "</p>";
+            $success = sendEmailNotification($email, $subject, "Kết nối thành công ✅", $body, '', true);
+        }
+
+        echo json_encode(['success' => $success, 'message' => $success ? 'Email đã được gửi thành công!' : 'Gửi email thất bại, kiểm tra cấu hình.']);
+        break;
+
+    case 'alter_schema':
+        $sql = "ALTER TABLE sheet_connections ADD COLUMN connection_type VARCHAR(20) DEFAULT 'sheets' AFTER spreadsheet_id";
+        if ($conn->query($sql)) {
+            echo json_encode(['success' => true, 'message' => 'Schema updated successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Schema update failed: ' . $conn->error]);
+        }
+        break;
+
+
+    case 'get_accounts':
+        $res = $conn->query("SELECT id, username, name, email, role, created_at, zalo_chat_id, telegram_chat_id, is_confirmed, last_login, avatar, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active, team_id FROM accounts ORDER BY created_at DESC");
+        $data = [];
+        while ($row = $res->fetch_assoc()) {
+            if (isset($row['role']) && $row['role'] === 'sales') {
+                $row['role'] = 'sale';
+            }
+            $data[] = $row;
+        }
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'rollback_admin_action':
+        if ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin') {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền thực hiện hành động này.']);
+            break;
+        }
+
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $logId = (int) ($input['log_id'] ?? 0);
+
+            if (!$logId) {
+                throw new Exception('ID log không hợp lệ');
+            }
+
+            // Fetch the log
+            $stmt = $conn->prepare("SELECT * FROM admin_logs WHERE id = ?");
+            $stmt->bind_param("i", $logId);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            if ($res->num_rows === 0) {
+                $stmt->close();
+                throw new Exception('Không tìm thấy bản ghi nhật ký hoạt động.');
+            }
+            $log = $res->fetch_assoc();
+            $stmt->close();
+
+            if ((int)$log['is_rolled_back'] === 1) {
+                throw new Exception('Hành động này đã được hoàn tác trước đó.');
+            }
+
+            $action = $log['action'];
+            $details = json_decode($log['details'], true) ?: [];
+
+            $conn->begin_transaction();
+
+            switch ($action) {
+                case 'REASSIGN_LEAD':
+                    $leadId = (int) ($details['lead_id'] ?? 0);
+                    $oldConsultantId = (int) ($details['old_consultant_id'] ?? 0);
+                    $newConsultantId = (int) ($details['new_consultant_id'] ?? 0);
+                    $compensated = !empty($details['compensated']);
+
+                    if (!$leadId || !$oldConsultantId) {
+                        throw new Exception('Dữ liệu nhật ký không đầy đủ để hoàn tác.');
+                    }
+
+                    // 1. Reassign the lead's assigned_to back
+                    $updLead = $conn->prepare("UPDATE leads SET assigned_to = ?, status = 'assigned' WHERE id = ?");
+                    $updLead->bind_param("ii", $oldConsultantId, $leadId);
+                    $updLead->execute();
+                    $updLead->close();
+
+                    // 2. Revert distribution_logs entries
+                    // Delete the reassignment log entry
+                    $delDistLog = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND assigned_to = ? AND status = 'reassigned' ORDER BY id DESC LIMIT 1");
+                    $delDistLog->bind_param("ii", $leadId, $newConsultantId);
+                    $delDistLog->execute();
+                    $delDistLog->close();
+
+                    // Update the original entry back to 'assigned'
+                    $updOriginalDist = $conn->prepare("UPDATE distribution_logs SET status = 'assigned' WHERE lead_id = ? AND assigned_to = ? ORDER BY id DESC LIMIT 1");
+                    $updOriginalDist->bind_param("ii", $leadId, $oldConsultantId);
+                    $updOriginalDist->execute();
+                    $updOriginalDist->close();
+
+                    // 3. Revert compensation if it was given
+                    if ($compensated) {
+                        $roundId = isset($details['round_id']) ? (int)$details['round_id'] : 0;
+                        if (!$roundId) {
+                            $rRes = $conn->query("SELECT round_id FROM distribution_logs WHERE lead_id = " . $leadId . " ORDER BY id DESC LIMIT 1");
+                            if ($rRes && $rRes->num_rows > 0) {
+                                $roundId = (int) $rRes->fetch_assoc()['round_id'];
+                            }
+                        }
+
+                        if ($roundId) {
+                            $updRC = $conn->prepare("UPDATE round_consultants SET compensation_count = GREATEST(0, compensation_count - 1) WHERE round_id = ? AND consultant_id = ?");
+                            $updRC->bind_param("ii", $roundId, $oldConsultantId);
+                            $updRC->execute();
+                            $updRC->close();
+
+                            $reasonLike = "%chuyển giao Lead%sang cho TVV%";
+                            $delComp = $conn->prepare("DELETE FROM active_compensation_logs WHERE round_id = ? AND consultant_id = ? AND reason LIKE ? ORDER BY id DESC LIMIT 1");
+                            $delComp->bind_param("iis", $roundId, $oldConsultantId, $reasonLike);
+                            $delComp->execute();
+                            $delComp->close();
+                        }
+                    }
+                    break;
+
+                case 'TOGGLE_CONSULTANT_VACATION':
+                    $consId = (int) ($details['id'] ?? 0);
+                    $loggedVacationMode = (int) ($details['vacation_mode'] ?? 0);
+
+                    if (!$consId) {
+                        throw new Exception('ID tư vấn viên không hợp lệ trong log.');
+                    }
+
+                    $oldVacationMode = $loggedVacationMode ? 0 : 1;
+                    $updVac = $conn->prepare("UPDATE consultants SET vacation_mode = ? WHERE id = ?");
+                    $updVac->bind_param("ii", $oldVacationMode, $consId);
+                    $updVac->execute();
+                    $updVac->close();
+                    break;
+
+                case 'EDIT_CONSULTANT':
+                    $consId = (int) ($details['id'] ?? 0);
+                    $oldData = $details['old'] ?? null;
+
+                    if (!$consId || !$oldData) {
+                        throw new Exception('Không tìm thấy dữ liệu cũ để hoàn tác.');
+                    }
+
+                    $updCons = $conn->prepare("UPDATE consultants SET name=?, email=?, status=?, leave_start=?, leave_end=?, zalo_chat_id=?, work_start_time=?, work_end_time=?, work_schedule=?, avatar=? WHERE id=?");
+                    $updCons->bind_param(
+                        "ssssssssssi",
+                        $oldData['name'],
+                        $oldData['email'],
+                        $oldData['status'],
+                        $oldData['leave_start'],
+                        $oldData['leave_end'],
+                        $oldData['zalo_chat_id'],
+                        $oldData['work_start_time'],
+                        $oldData['work_end_time'],
+                        $oldData['work_schedule'],
+                        $oldData['avatar'],
+                        $consId
+                    );
+                    $updCons->execute();
+                    $updCons->close();
+                    break;
+
+                case 'APPROVE_REPORT':
+                    $leadId = (int) ($details['lead_id'] ?? 0);
+                    $consId = (int) ($details['consultant_id'] ?? 0);
+                    $roundId = (int) ($details['round_id'] ?? 0);
+
+                    if (!$leadId) {
+                        throw new Exception('ID lead không hợp lệ trong log.');
+                    }
+
+                    $updReport = $conn->prepare("UPDATE data_reports SET status = 'pending', resolved_at = NULL, resolved_by = NULL, approval_reason = NULL WHERE lead_id = ?");
+                    $updReport->bind_param("i", $leadId);
+                    $updReport->execute();
+                    $updReport->close();
+
+                    $updLead = $conn->prepare("UPDATE leads SET status = 'error' WHERE id = ?");
+                    $updLead->bind_param("i", $leadId);
+                    $updLead->execute();
+                    $updLead->close();
+
+                    if ($roundId && $consId) {
+                        $updRC = $conn->prepare("UPDATE round_consultants SET compensation_count = GREATEST(0, compensation_count - 1) WHERE round_id = ? AND consultant_id = ?");
+                        $updRC->bind_param("ii", $roundId, $consId);
+                        $updRC->execute();
+                        $updRC->close();
+                    }
+                    break;
+
+                case 'APPROVE_REPORT_NO_COMP':
+                    $leadId = (int) ($details['lead_id'] ?? 0);
+
+                    if (!$leadId) {
+                        throw new Exception('ID lead không hợp lệ trong log.');
+                    }
+
+                    $updReport = $conn->prepare("UPDATE data_reports SET status = 'pending', resolved_at = NULL, resolved_by = NULL, approval_reason = NULL WHERE lead_id = ?");
+                    $updReport->bind_param("i", $leadId);
+                    $updReport->execute();
+                    $updReport->close();
+
+                    $updLead = $conn->prepare("UPDATE leads SET status = 'error' WHERE id = ?");
+                    $updLead->bind_param("i", $leadId);
+                    $updLead->execute();
+                    $updLead->close();
+                    break;
+
+                case 'COMPENSATE_APPROVED_NO_COMP':
+                    $leadId = (int) ($details['lead_id'] ?? 0);
+                    $consId = (int) ($details['consultant_id'] ?? 0);
+                    $roundId = (int) ($details['round_id'] ?? 0);
+
+                    if (!$leadId) {
+                        throw new Exception('ID lead không hợp lệ trong log.');
+                    }
+
+                    $updReport = $conn->prepare("UPDATE data_reports SET status = 'approved_no_comp' WHERE lead_id = ?");
+                    $updReport->bind_param("i", $leadId);
+                    $updReport->execute();
+                    $updReport->close();
+
+                    if ($consId && $roundId) {
+                        $updLog = $conn->prepare("UPDATE distribution_logs SET status = 'assigned' WHERE lead_id = ? AND assigned_to = ? AND round_id = ? AND status = 'error'");
+                        $updLog->bind_param("iii", $leadId, $consId, $roundId);
+                        $updLog->execute();
+                        $updLog->close();
+
+                        $updRC = $conn->prepare("UPDATE round_consultants SET compensation_count = GREATEST(0, compensation_count - 1) WHERE round_id = ? AND consultant_id = ?");
+                        $updRC->bind_param("ii", $roundId, $consId);
+                        $updRC->execute();
+                        $updRC->close();
+                    }
+                    break;
+
+                case 'REJECT_REPORT':
+                    $leadId = (int) ($details['lead_id'] ?? 0);
+
+                    if (!$leadId) {
+                        throw new Exception('ID lead không hợp lệ trong log.');
+                    }
+
+                    $updReport = $conn->prepare("UPDATE data_reports SET status = 'pending', resolved_at = NULL, resolved_by = NULL, reject_reason = NULL WHERE lead_id = ?");
+                    $updReport->bind_param("i", $leadId);
+                    $updReport->execute();
+                    $updReport->close();
+
+                    $updLead = $conn->prepare("UPDATE leads SET status = 'error' WHERE id = ?");
+                    $updLead->bind_param("i", $leadId);
+                    $updLead->execute();
+                    $updLead->close();
+                    break;
+
+                default:
+                    throw new Exception('Hành động này không hỗ trợ hoàn tác.');
+            }
+
+            // Mark the original log as rolled back
+            $updLog = $conn->prepare("UPDATE admin_logs SET is_rolled_back = 1 WHERE id = ?");
+            $updLog->bind_param("i", $logId);
+            $updLog->execute();
+            $updLog->close();
+
+            logAdminAction($conn, $decodedUser['id'], 'ROLLBACK_ACTION', [
+                'target_log_id' => $logId,
+                'target_action' => $action
+            ]);
+
+            $conn->commit();
+            echo json_encode(['success' => true, 'message' => 'Hoàn tác thành công!']);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'get_admin_logs':
+        $res = $conn->query("SELECT al.*, a.name as account_name, a.email as account_email, a.avatar as account_avatar 
+                             FROM admin_logs al 
+                             LEFT JOIN accounts a ON al.account_id = a.id 
+                             ORDER BY al.created_at DESC 
+                             LIMIT 1000");
+        $data = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $data[] = $row;
+            }
+        }
+        echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'get_system_activity_feed':
+        $distLogs = [];
+        // Query recent distribution logs
+        $sqlDist = "SELECT dl.id, dl.lead_id, dl.assigned_to, dl.round_id, dl.status, dl.message, dl.received_at as timestamp,
+                           l.name as lead_name, l.phone as lead_phone,
+                           c.name as consultant_name, c.avatar as consultant_avatar,
+                           r.round_name
+                    FROM distribution_logs dl
+                    LEFT JOIN leads l ON dl.lead_id = l.id
+                    LEFT JOIN consultants c ON dl.assigned_to = c.id
+                    LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+                    WHERE dl.status != 'silent'
+                    ORDER BY dl.id DESC LIMIT 1000";
+        $resDist = $conn->query($sqlDist);
+        if ($resDist) {
+            while ($row = $resDist->fetch_assoc()) {
+                $status = $row['status'];
+                $leadName = $row['lead_name'] ?: 'Khách hàng ẩn danh';
+                $leadNameEscaped = htmlspecialchars($leadName, ENT_QUOTES, 'UTF-8');
+                $leadPhoneRaw = $row['lead_phone'] ?: '';
+                $leadPhone = '';
+                if (!empty($leadPhoneRaw)) {
+                    $len = strlen($leadPhoneRaw);
+                    if ($len > 3) {
+                        $leadPhone = substr($leadPhoneRaw, 0, $len - 3) . '***';
+                    } else {
+                        $leadPhone = '***';
+                    }
+                }
+                $leadPhoneEscaped = htmlspecialchars($leadPhone, ENT_QUOTES, 'UTF-8');
+                $consultantName = $row['consultant_name'] ?: '';
+                $consultantNameEscaped = htmlspecialchars($consultantName, ENT_QUOTES, 'UTF-8');
+                $roundName = $row['round_name'] ?: '';
+
+                $title = "";
+                $description = "";
+                $tag = "";
+                $tagColor = "neutral";
+
+                switch ($status) {
+                    case 'assigned':
+                        $title = "Bàn giao lead mới";
+                        $description = "Bàn giao lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) cho Sale <strong>$consultantNameEscaped</strong>.";
+                        $tag = $roundName ?: "Đã chia";
+                        $tagColor = "success";
+                        break;
+                    case 'compensation':
+                        $title = "Bù lead";
+                        $description = "Bù lượt lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) cho Sale <strong>$consultantNameEscaped</strong>.";
+                        $tag = "Bù lượt";
+                        $tagColor = "success";
+                        break;
+                    case 'pending_work_hours':
+                        $title = "Tạm giữ ngoài giờ";
+                        $description = "Tạm giữ lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) ngoài giờ làm việc của Sale <strong>$consultantNameEscaped</strong>.";
+                        $tag = "Chờ giờ làm";
+                        $tagColor = "warning";
+                        break;
+                    case 'duplicate':
+                        $title = "Từ chối trùng lặp";
+                        $description = "Từ chối phân bổ lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) do trùng số điện thoại hệ thống.";
+                        $tag = "Trùng lặp";
+                        $tagColor = "danger";
+                        break;
+                    case 'blacklisted':
+                        $title = "Chặn danh sách đen";
+                        $description = "Chặn lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) do trùng số điện thoại/email trong Blacklist.";
+                        $tag = "Blacklist";
+                        $tagColor = "danger";
+                        break;
+                    case 'reallocated':
+                        $title = "Thu hồi lead";
+                        $description = "Thu hồi lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) từ Sale <strong>$consultantNameEscaped</strong>.";
+                        $tag = "Tái phân bổ";
+                        $tagColor = "info";
+                        break;
+                    case 'silent':
+                        $title = "Đồng bộ im lặng";
+                        $description = "Đồng bộ lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) nhưng không chia (chế độ Silent).";
+                        $tag = "Chỉ đồng bộ";
+                        $tagColor = "neutral";
+                        break;
+                    default:
+                        $title = "Phân bổ lead";
+                        $description = "Trạng thái phân bổ của lead <strong>$leadNameEscaped</strong> ($leadPhoneEscaped) là " . htmlspecialchars($status) . ".";
+                        $tag = $status;
+                        $tagColor = "neutral";
+                        break;
+                }
+
+                $distLogs[] = [
+                    'id' => 'dist_' . $row['id'],
+                    'type' => 'distribution',
+                    'timestamp' => $row['timestamp'],
+                    'title' => $title,
+                    'description' => $description,
+                    'tag' => $tag,
+                    'tag_color' => $tagColor,
+                    'details' => $row['message'] ?: '',
+                    'consultant_name' => $row['consultant_name'],
+                    'consultant_avatar' => $row['consultant_avatar']
+                ];
+            }
+        }
+
+        // Query recent admin logs
+        $adminLogs = [];
+        $sqlAdmin = "SELECT al.id, al.account_id, al.action, al.details, al.created_at as timestamp, al.ip_address,
+                            a.name as admin_name, a.avatar as admin_avatar
+                     FROM admin_logs al
+                     LEFT JOIN accounts a ON al.account_id = a.id
+                     ORDER BY al.id DESC LIMIT 1000";
+        $resAdmin = $conn->query($sqlAdmin);
+        if ($resAdmin) {
+            while ($row = $resAdmin->fetch_assoc()) {
+                $action = $row['action'];
+                $adminName = $row['admin_name'] ?: ($row['account_id'] == 0 ? 'Hệ thống' : 'Người dùng ẩn danh');
+                $adminNameEscaped = htmlspecialchars($adminName, ENT_QUOTES, 'UTF-8');
+                $detailsStr = $row['details'] ?: '';
+
+                $title = "";
+                $description = "";
+                $tag = "";
+                $tagColor = "info";
+
+                $detailsObj = json_decode($detailsStr, true);
+                if (is_array($detailsObj)) {
+                    if (isset($detailsObj['phone'])) {
+                        $p = trim($detailsObj['phone']);
+                        $len = strlen($p);
+                        $detailsObj['phone'] = ($len > 3) ? substr($p, 0, $len - 3) . '***' : '***';
+                    }
+                    $detailsStr = json_encode($detailsObj, JSON_UNESCAPED_UNICODE);
+                }
+
+                switch ($action) {
+                    case 'BLOCK_LEAD_BLACKLIST':
+                        $type = $detailsObj['type'] ?? 'manual';
+                        $leadPhone = $detailsObj['phone'] ?? '';
+                        $leadPhoneEscaped = htmlspecialchars($leadPhone, ENT_QUOTES, 'UTF-8');
+                        if ($type === 'auto') {
+                            $title = "Chặn Blacklist tự động";
+                            $description = "Hệ thống tự động chặn liên hệ <strong>$leadPhoneEscaped</strong> khớp danh sách đen.";
+                            $tag = "Tự động";
+                        } else {
+                            $title = "Chặn Blacklist thủ công";
+                            $description = "Admin <strong>$adminNameEscaped</strong> chặn thủ công liên hệ <strong>$leadPhoneEscaped</strong>.";
+                            $tag = "Thủ công";
+                        }
+                        $tagColor = "danger";
+                        break;
+                    case 'IMPORT_BLACKLIST':
+                        $count = $detailsObj['count'] ?? 0;
+                        $title = "Nhập danh sách đen";
+                        $description = "Admin <strong>$adminNameEscaped</strong> tải lên <strong>$count</strong> liên hệ chặn vào Blacklist.";
+                        $tag = "Excel/CSV";
+                        $tagColor = "warning";
+                        break;
+                    case 'UPDATE_SETTINGS':
+                        $title = "Cập nhật cấu hình";
+                        $description = "Admin <strong>$adminNameEscaped</strong> thay đổi các thiết lập hệ thống.";
+                        $tag = "Cấu hình";
+                        $tagColor = "info";
+                        break;
+                    case 'LOGIN':
+                        $title = "Đăng nhập";
+                        $description = "Người dùng <strong>$adminNameEscaped</strong> đăng nhập vào hệ thống quản trị.";
+                        $tag = "Bảo mật";
+                        $tagColor = "success";
+                        break;
+                    case 'APPROVE_REPORT_ZALO':
+                    case 'APPROVE_REPORT_NO_COMP':
+                    case 'APPROVE_REPORT':
+                        $leadId = $detailsObj['lead_id'] ?? 0;
+                        $title = "Duyệt báo cáo lỗi";
+                        $description = "Admin <strong>$adminNameEscaped</strong> duyệt báo cáo lỗi cho lead ID <strong>#$leadId</strong>.";
+                        $tag = "Duyệt ticket";
+                        $tagColor = "success";
+                        break;
+                    case 'REJECT_REPORT_ZALO':
+                    case 'REJECT_REPORT':
+                        $leadId = $detailsObj['lead_id'] ?? 0;
+                        $title = "Từ chối báo cáo lỗi";
+                        $description = "Admin <strong>$adminNameEscaped</strong> từ chối báo cáo lỗi cho lead ID <strong>#$leadId</strong>.";
+                        $tag = "Từ chối ticket";
+                        $tagColor = "danger";
+                        break;
+                    case 'AUTO_APPROVE_REPORT':
+                        $leadId = $detailsObj['lead_id'] ?? 0;
+                        $title = "Tự động duyệt báo cáo lỗi";
+                        $description = "Hệ thống tự động duyệt báo cáo lỗi cho lead ID <strong>#$leadId</strong>.";
+                        $tag = "Tự động duyệt";
+                        $tagColor = "success";
+                        break;
+                    case 'REASSIGN_LEAD':
+                        $leadId = $detailsObj['lead_id'] ?? 0;
+                        $title = "Giao lại lead";
+                        $description = "Admin <strong>$adminNameEscaped</strong> giao lại lead ID <strong>#$leadId</strong>.";
+                        $tag = "Giao lại";
+                        $tagColor = "info";
+                        break;
+                    case 'FORCE_SYNC':
+                        $title = "Ép buộc đồng bộ";
+                        $description = "Admin <strong>$adminNameEscaped</strong> kích hoạt ép buộc đồng bộ dữ liệu.";
+                        $tag = "Đồng bộ";
+                        $tagColor = "info";
+                        break;
+                    case 'ADD_CONSULTANT':
+                        $name = $detailsObj['name'] ?? '';
+                        $title = "Thêm TVV";
+                        $description = "Admin <strong>$adminNameEscaped</strong> thêm Tư vấn viên <strong>" . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . "</strong>.";
+                        $tag = "Nhân sự";
+                        $tagColor = "success";
+                        break;
+                    case 'EDIT_CONSULTANT':
+                        $name = $detailsObj['name'] ?? '';
+                        $title = "Sửa TVV";
+                        $description = "Admin <strong>$adminNameEscaped</strong> sửa thông tin Tư vấn viên <strong>" . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . "</strong>.";
+                        $tag = "Nhân sự";
+                        $tagColor = "info";
+                        break;
+                    case 'DELETE_CONSULTANT':
+                        $title = "Xóa TVV";
+                        $description = "Admin <strong>$adminNameEscaped</strong> xóa nhân sự Tư vấn viên.";
+                        $tag = "Nhân sự";
+                        $tagColor = "danger";
+                        break;
+                    default:
+                        $title = "Thao tác quản trị";
+                        $description = "Admin <strong>$adminNameEscaped</strong> thực hiện hành động: <strong>$action</strong>.";
+                        $tag = $action;
+                        $tagColor = "info";
+                        break;
+                }
+
+                $adminLogs[] = [
+                    'id' => 'admin_' . $row['id'],
+                    'type' => 'admin',
+                    'timestamp' => $row['timestamp'],
+                    'title' => $title,
+                    'description' => $description,
+                    'tag' => $tag,
+                    'tag_color' => $tagColor,
+                    'details' => $detailsStr,
+                    'admin_name' => $adminName,
+                    'consultant_avatar' => $row['admin_avatar']
+                ];
+            }
+        }
+
+        // Query recent data reports (Tickets)
+        $ticketLogs = [];
+        $sqlTicket = "SELECT dr.id, dr.lead_id, dr.consultant_id, dr.reason, dr.status, dr.created_at as timestamp,
+                             c.name as consultant_name, c.avatar as consultant_avatar,
+                             l.name as lead_name
+                      FROM data_reports dr
+                      LEFT JOIN consultants c ON dr.consultant_id = c.id
+                      LEFT JOIN leads l ON dr.lead_id = l.id
+                      ORDER BY dr.id DESC LIMIT 1000";
+        $resTicket = $conn->query($sqlTicket);
+        if ($resTicket) {
+            while ($row = $resTicket->fetch_assoc()) {
+                $status = $row['status'];
+                $consultantName = $row['consultant_name'] ?: 'Ẩn danh';
+                $consultantNameEscaped = htmlspecialchars($consultantName, ENT_QUOTES, 'UTF-8');
+                $leadName = $row['lead_name'] ?: 'Khách hàng ẩn danh';
+                $leadNameEscaped = htmlspecialchars($leadName, ENT_QUOTES, 'UTF-8');
+                $reason = $row['reason'] ?: 'Không có lý do';
+                $reasonEscaped = htmlspecialchars($reason, ENT_QUOTES, 'UTF-8');
+
+                $title = "Báo cáo lỗi Ticket";
+                $description = "";
+                $tag = "";
+                $tagColor = "warning";
+
+                switch ($status) {
+                    case 'pending':
+                        $description = "Sale <strong>$consultantNameEscaped</strong> gửi báo cáo lỗi cho lead <strong>$leadNameEscaped</strong>. Lý do: <em>$reasonEscaped</em>.";
+                        $tag = "Chờ duyệt";
+                        $tagColor = "warning";
+                        break;
+                    case 'resolved':
+                        $description = "Báo cáo lỗi cho lead <strong>$leadNameEscaped</strong> từ Sale <strong>$consultantNameEscaped</strong> đã được phê duyệt.";
+                        $tag = "Đã duyệt";
+                        $tagColor = "success";
+                        break;
+                    case 'rejected':
+                        $description = "Báo cáo lỗi cho lead <strong>$leadNameEscaped</strong> từ Sale <strong>$consultantNameEscaped</strong> đã bị từ chối.";
+                        $tag = "Bị từ chối";
+                        $tagColor = "danger";
+                        break;
+                }
+
+                $ticketLogs[] = [
+                    'id' => 'ticket_' . $row['id'],
+                    'type' => 'ticket',
+                    'timestamp' => $row['timestamp'],
+                    'title' => $title,
+                    'description' => $description,
+                    'tag' => $tag,
+                    'tag_color' => $tagColor,
+                    'details' => "Lý do báo cáo: " . $reason,
+                    'consultant_name' => $row['consultant_name'],
+                    'consultant_avatar' => $row['consultant_avatar']
+                ];
+            }
+        }
+
+        // Merge arrays
+        $merged = array_merge($distLogs, $adminLogs, $ticketLogs);
+
+        // Sort by timestamp DESC
+        usort($merged, function ($a, $b) {
+            return strcmp($b['timestamp'], $a['timestamp']);
+        });
+
+        // Limit to 1000 items
+        $merged = array_slice($merged, 0, 1000);
+
+        echo json_encode(['success' => true, 'data' => $merged]);
+        break;
+
+    case 'get_notification_logs':
+        if (!isset($decodedUser) || !$decodedUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+
+        $channel = $_GET['channel'] ?? 'all'; // all, email, zalo
+        $type = $_GET['type'] ?? 'all';       // all, sale, admin
+        $saleId = isset($_GET['sale']) && $_GET['sale'] !== 'all' ? (int)$_GET['sale'] : 0;
+        $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        $pageSize = isset($_GET['pageSize']) ? (int)$_GET['pageSize'] : 10;
+        if ($page < 1) $page = 1;
+        if ($pageSize < 1) $pageSize = 10;
+
+        $saleEmail = '';
+        $saleZaloChatId = '';
+        $saleTelegramChatId = '';
+        if ($saleId > 0) {
+            $stmtC = $conn->prepare("SELECT email, zalo_chat_id, telegram_chat_id FROM consultants WHERE id = ? LIMIT 1");
+            if ($stmtC) {
+                $stmtC->bind_param("i", $saleId);
+                $stmtC->execute();
+                $cRow = $stmtC->get_result()->fetch_assoc();
+                if ($cRow) {
+                    $saleEmail = trim($cRow['email'] ?? '');
+                    $saleZaloChatId = trim($cRow['zalo_chat_id'] ?? '');
+                    $saleTelegramChatId = trim($cRow['telegram_chat_id'] ?? '');
+                }
+                $stmtC->close();
+            }
+        }
+
+        $mailLogs = [];
+        if ($channel === 'all' || $channel === 'email') {
+            $mailConds = ["1=1"];
+            $mailParams = [];
+            $mailTypes = "";
+            if ($saleId > 0) {
+                if (!empty($saleEmail)) {
+                    $mailConds[] = "to_email = ?";
+                    $mailParams[] = $saleEmail;
+                    $mailTypes .= "s";
+                } else {
+                    $mailConds[] = "1=0";
+                }
+            }
+            if (!empty($search)) {
+                $searchParam = '%' . $search . '%';
+                $mailConds[] = "(to_email LIKE ? OR subject LIKE ? OR body_html LIKE ?)";
+                $mailParams[] = $searchParam;
+                $mailParams[] = $searchParam;
+                $mailParams[] = $searchParam;
+                $mailTypes .= "sss";
+            }
+            $mailWhere = implode(" AND ", $mailConds);
+            $stmtM = $conn->prepare("
+                SELECT id, to_email as target, subject, body_html as body, status, created_at, sent_at 
+                FROM mail_queue 
+                WHERE $mailWhere 
+                ORDER BY id DESC LIMIT 1000
+            ");
+            if ($stmtM) {
+                if (!empty($mailTypes)) {
+                    $stmtM->bind_param($mailTypes, ...$mailParams);
+                }
+                $stmtM->execute();
+                $resMail = $stmtM->get_result();
+                while ($row = $resMail->fetch_assoc()) {
+                    $mailLogs[] = [
+                        'id' => 'mail_' . $row['id'],
+                        'channel' => 'email',
+                        'target' => $row['target'],
+                        'subject' => $row['subject'],
+                        'body' => strip_tags($row['body']),
+                        'status' => $row['status'],
+                        'created_at' => $row['created_at'],
+                        'sent_at' => $row['sent_at'] ?: $row['created_at']
+                    ];
+                }
+                $stmtM->close();
+            }
+        }
+
+        $zaloQueueLogs = [];
+        if ($channel === 'all' || $channel === 'zalo') {
+            $zaloConds = ["1=1"];
+            $zaloParams = [];
+            $zaloTypes = "";
+            if ($saleId > 0) {
+                if (!empty($saleZaloChatId)) {
+                    $zaloConds[] = "chat_id = ?";
+                    $zaloParams[] = $saleZaloChatId;
+                    $zaloTypes .= "s";
+                } else {
+                    $zaloConds[] = "1=0";
+                }
+            }
+            if (!empty($search)) {
+                $searchParam = '%' . $search . '%';
+                $zaloConds[] = "(chat_id LIKE ? OR body_text LIKE ?)";
+                $zaloParams[] = $searchParam;
+                $zaloParams[] = $searchParam;
+                $zaloTypes .= "ss";
+            }
+            $zaloWhere = implode(" AND ", $zaloConds);
+            $stmtZ = $conn->prepare("
+                SELECT id, chat_id as target, body_text as body, status, created_at, sent_at 
+                FROM zalo_queue 
+                WHERE $zaloWhere 
+                ORDER BY id DESC LIMIT 1000
+            ");
+            if ($stmtZ) {
+                if (!empty($zaloTypes)) {
+                    $stmtZ->bind_param($zaloTypes, ...$zaloParams);
+                }
+                $stmtZ->execute();
+                $resZalo = $stmtZ->get_result();
+                while ($row = $resZalo->fetch_assoc()) {
+                    $zaloQueueLogs[] = [
+                        'id' => 'zalo_' . $row['id'],
+                        'channel' => 'zalo',
+                        'target' => $row['target'],
+                        'subject' => 'Zalo Message',
+                        'body' => $row['body'],
+                        'status' => $row['status'],
+                        'created_at' => $row['created_at'],
+                        'sent_at' => $row['sent_at'] ?: $row['created_at']
+                    ];
+                }
+                $stmtZ->close();
+            }
+        }
+
+        $zaloDirectLogs = [];
+        if ($channel === 'all' || $channel === 'zalo') {
+            $zaloLogFile = __DIR__ . '/zalo_send_log.txt';
+            $zaloDirectLogs = parse_zalo_direct_logs($zaloLogFile, $conn);
+
+            // Deduplicate direct logs with zalo queue logs in memory
+            $dedupedDirectLogs = [];
+            foreach ($zaloDirectLogs as $dirLog) {
+                $isDup = false;
+                $dirTime = strtotime($dirLog['created_at']);
+                $dirBodyTrim = trim($dirLog['body']);
+
+                foreach ($zaloQueueLogs as $qLog) {
+                    if ($qLog['target'] === $dirLog['target'] && trim($qLog['body']) === $dirBodyTrim) {
+                        $qTime = strtotime($qLog['created_at']);
+                        if (abs($dirTime - $qTime) <= 180) {
+                            $isDup = true;
+                            break;
+                        }
+                    }
+                }
+                if (!$isDup) {
+                    $dedupedDirectLogs[] = $dirLog;
+                }
+            }
+            $zaloDirectLogs = $dedupedDirectLogs;
+        }
+
+        $telegramDirectLogs = [];
+        if ($channel === 'all' || $channel === 'telegram') {
+            $telegramLogFile = __DIR__ . '/telegram_send_log.txt';
+            $telegramDirectLogs = parse_telegram_direct_logs($telegramLogFile, $conn);
+        }
+
+        $rawLogs = array_merge($mailLogs, $zaloQueueLogs, $zaloDirectLogs, $telegramDirectLogs);
+
+        $filteredLogs = [];
+        foreach ($rawLogs as $item) {
+            $lowerBody = mb_strtolower($item['body'], 'UTF-8');
+            $lowerSubject = mb_strtolower($item['subject'], 'UTF-8');
+
+            $isAdmin = false;
+            if (
+                strpos($lowerBody, 'duyệt') !== false &&
+                (strpos($lowerBody, '/duyet') !== false || strpos($lowerBody, '/tuchoi') !== false || strpos($lowerBody, 'lệnh duyệt nhanh') !== false)
+            ) {
+                $isAdmin = true;
+            } else if (
+                strpos($lowerBody, 'cảnh báo data dưới chuẩn') !== false ||
+                strpos($lowerBody, 'cảnh báo sót lead') !== false ||
+                strpos($lowerBody, 'dưới chuẩn') !== false
+            ) {
+                $isAdmin = true;
+            } else if (
+                strpos($lowerSubject, 'cảnh báo') !== false ||
+                strpos($lowerSubject, 'sót lead') !== false
+            ) {
+                $isAdmin = true;
+            }
+
+            $item['type'] = $isAdmin ? 'admin' : 'sale';
+
+            if ($type !== 'all' && $item['type'] !== $type) {
+                continue;
+            }
+            // Check direct logs for saleId and search filter since parse_zalo_direct_logs returns raw log entries
+            if (!empty($item['is_direct'])) {
+                if ($saleId > 0) {
+                    $isMatchSale = false;
+                    $cleanTarget = strtolower(trim($item['target']));
+                    if (!empty($saleEmail) && strtolower($saleEmail) === $cleanTarget) {
+                        $isMatchSale = true;
+                    }
+                    if (!empty($saleZaloChatId) && strtolower($saleZaloChatId) === $cleanTarget) {
+                        $isMatchSale = true;
+                    }
+                    if (!empty($saleTelegramChatId) && strtolower($saleTelegramChatId) === $cleanTarget) {
+                        $isMatchSale = true;
+                    }
+                    if (!$isMatchSale) {
+                        continue;
+                    }
+                }
+                if (!empty($search)) {
+                    $lowerSearch = mb_strtolower($search, 'UTF-8');
+                    $matchSearch = (
+                        strpos(mb_strtolower($item['target'], 'UTF-8'), $lowerSearch) !== false ||
+                        strpos(mb_strtolower($item['subject'], 'UTF-8'), $lowerSearch) !== false ||
+                        strpos($lowerBody, $lowerSearch) !== false
+                    );
+                    if (!$matchSearch) {
+                        continue;
+                    }
+                }
+            }
+
+            $filteredLogs[] = $item;
+        }
+
+        usort($filteredLogs, function ($a, $b) {
+            return strcmp($b['created_at'], $a['created_at']);
+        });
+
+        $totalCount = count($filteredLogs);
+        $offset = ($page - 1) * $pageSize;
+        $paginatedLogs = array_slice($filteredLogs, $offset, $pageSize);
+
+        echo json_encode([
+            'success' => true,
+            'data' => $paginatedLogs,
+            'total_count' => $totalCount,
+            'page' => $page,
+            'pageSize' => $pageSize
+        ]);
+        break;
+
+    case 'add_account':
+        if ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin') {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền tạo tài khoản mới']);
+            break;
+        }
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $username = trim($input['username'] ?? '');
+            $password = $input['password'] ?? '';
+            $name = trim($input['name'] ?? '');
+            $role = $input['role'] ?? 'viewer';
+            if ($role === 'sale') {
+                $role = 'sales';
+            }
+            $email = trim($input['email'] ?? '');
+            $zalo_chat_id = trim($input['zalo_chat_id'] ?? '');
+            $avatar = isset($input['avatar']) ? trim($input['avatar']) : null;
+            if ($avatar === '')
+                $avatar = null;
+
+            if (empty($username) || empty($password) || empty($name)) {
+                echo json_encode(['success' => false, 'message' => 'Tên hiển thị, username và mật khẩu là bắt buộc']);
+                break;
+            }
+            // FEATURE: Email bắt buộc cho tất cả tài khoản (trừ Super Admin id=1 là tài khoản đặc biệt)
+            if (empty($email)) {
+                echo json_encode(['success' => false, 'message' => 'Email là bắt buộc để đăng nhập']);
+                break;
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['success' => false, 'message' => 'Định dạng email không hợp lệ']);
+                break;
+            }
+
+            $phone = trim($input['phone'] ?? '');
+            $dob = !empty($input['dob']) ? trim($input['dob']) : null;
+            $gender = !empty($input['gender']) ? trim($input['gender']) : null;
+            $citizen_id = !empty($input['citizen_id']) ? trim($input['citizen_id']) : null;
+            $address = !empty($input['address']) ? trim($input['address']) : null;
+            $bank_name = !empty($input['bank_name']) ? trim($input['bank_name']) : null;
+            $bank_account = !empty($input['bank_account']) ? trim($input['bank_account']) : null;
+            $is_active = isset($input['is_active']) ? (int)$input['is_active'] : 1;
+
+            $hash = password_hash($password, PASSWORD_DEFAULT);
+            $token = bin2hex(random_bytes(32));
+
+            $stmt = $conn->prepare("INSERT INTO accounts (username, password_hash, name, role, email, is_confirmed, confirm_token, zalo_chat_id, avatar, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active) VALUES (?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssssssssssssi", $username, $hash, $name, $role, $email, $zalo_chat_id, $avatar, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $phone, $is_active);
+
+            if ($stmt->execute()) {
+                $newId = $conn->insert_id;
+
+                // Save manager_behavior_mode if provided
+                if (isset($input['manager_behavior_mode'])) {
+                    $stmtBeh = $conn->prepare("UPDATE users SET manager_behavior_mode = ? WHERE id = ?");
+                    $stmtBeh->bind_param("si", $input['manager_behavior_mode'], $newId);
+                    $stmtBeh->execute();
+                    $stmtBeh->close();
+                }
+
+                // Save permissions_json if provided
+                if (isset($input['permissions_json'])) {
+                    $stmtPerm = $conn->prepare("UPDATE users SET permissions_json = ? WHERE id = ?");
+                    $stmtPerm->bind_param("si", $input['permissions_json'], $newId);
+                    $stmtPerm->execute();
+                    $stmtPerm->close();
+                }
+
+                // Sync manager teams if provided
+                if (isset($input['manager_teams']) && is_array($input['manager_teams'])) {
+                    // Clear old leadership
+                    $stmtClear = $conn->prepare("UPDATE teams SET leader_id = 0 WHERE leader_id = ?");
+                    $stmtClear->execute([$newId]);
+                    $stmtClear->close();
+
+                    if (!empty($input['manager_teams'])) {
+                        foreach ($input['manager_teams'] as $teamId) {
+                            $stmtSet = $conn->prepare("UPDATE teams SET leader_id = ? WHERE id = ?");
+                            $stmtSet->bind_param("ii", $newId, $teamId);
+                            $stmtSet->execute();
+                            $stmtSet->close();
+                        }
+                    }
+                }
+
+                // Build confirm link
+                $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $basePath = preg_replace('/\/api\.php.*$/i', '', $_SERVER['REQUEST_URI'] ?? '');
+                $confirmLink = $proto . '://' . $host . $basePath . '/confirm.php?token=' . $token . '&p=' . base64_encode($password);
+
+                require_once 'mailer.php';
+                sendAdminConfirmationEmail($email, $name, $confirmLink);
+                logAdminAction($conn, $decodedUser['id'], 'ADD_ACCOUNT', ['id' => $newId, 'username' => $username, 'name' => $name, 'role' => $role, 'email' => $email, 'avatar' => $avatar]);
+
+                echo json_encode(['success' => true, 'id' => $newId]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Username hoặc Email có thể đã tồn tại']);
+            }
+        } catch (Exception $e) {
+            $msg = $e->getMessage();
+            if (strpos($msg, 'Duplicate entry') !== false || $e->getCode() === 1062) {
+                $msg = 'Username hoặc Email có thể đã tồn tại';
+            }
+            echo json_encode(['success' => false, 'message' => $msg]);
+        }
+        break;
+
+    case 'edit_account':
+        try {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int) ($input['id'] ?? 0);
+
+            $isTargetSelf = $id === (int)$decodedUser['id'];
+            $isAdmin = $decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'super_admin';
+
+            // Fetch target user's current role
+            $exRes = $conn->query("SELECT role, is_active, username FROM accounts WHERE id = " . $id);
+            $exRow = $exRes ? $exRes->fetch_assoc() : null;
+            $targetRole = $exRow ? $exRow['role'] : '';
+
+            // If target is superadmin, only superadmin can edit
+            if (($targetRole === 'superadmin' || $targetRole === 'super_admin') && $decodedUser['role'] !== 'superadmin') {
+                echo json_encode(['success' => false, 'message' => 'Chỉ Super Admin mới có quyền chỉnh sửa tài khoản Super Admin khác']);
+                break;
+            }
+
+            $isManagerOfTarget = false;
+            if ($decodedUser['role'] === 'manager') {
+                $tRes = $conn->query("SELECT team_id FROM users WHERE id = " . $id);
+                $tRow = $tRes ? $tRes->fetch_assoc() : null;
+                $targetTeamId = $tRow ? $tRow['team_id'] : null;
+                if ($targetTeamId) {
+                    $lRes = $conn->query("SELECT id FROM teams WHERE leader_id = " . (int)$decodedUser['id'] . " AND id = " . (int)$targetTeamId);
+                    if ($lRes && $lRes->num_rows > 0) {
+                        $isManagerOfTarget = true;
+                    }
+                }
+            }
+
+            if (!$isAdmin && !$isTargetSelf && !$isManagerOfTarget) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền chỉnh sửa tài khoản này']);
+                break;
+            }
+
+            $username = trim($input['username'] ?? '');
+            $password = $input['password'] ?? '';
+            $name = trim($input['name'] ?? '');
+            $role = $input['role'] ?? 'viewer';
+            if ($role === 'sale') {
+                $role = 'sales';
+            }
+
+            if (!$isAdmin) {
+                $role = $exRow ? $exRow['role'] : 'viewer';
+                $is_active = $exRow ? (int)$exRow['is_active'] : 1;
+                $username = $exRow ? $exRow['username'] : '';
+            } else {
+                $is_active = isset($input['is_active']) ? (int)$input['is_active'] : 1;
+            }
+
+            $email = trim($input['email'] ?? '');
+            $zalo_chat_id = trim($input['zalo_chat_id'] ?? '');
+            $avatar = isset($input['avatar']) ? trim($input['avatar']) : null;
+            if ($avatar === '')
+                $avatar = null;
+
+            $phone = trim($input['phone'] ?? '');
+            $dob = !empty($input['dob']) ? trim($input['dob']) : null;
+            $gender = !empty($input['gender']) ? trim($input['gender']) : null;
+            $citizen_id = !empty($input['citizen_id']) ? trim($input['citizen_id']) : null;
+            $address = !empty($input['address']) ? trim($input['address']) : null;
+            $bank_name = !empty($input['bank_name']) ? trim($input['bank_name']) : null;
+            $bank_account = !empty($input['bank_account']) ? trim($input['bank_account']) : null;
+
+            // FEATURE: Email bắt buộc cho tất cả tài khoản không phải Super Admin (id=1)
+            if ($id !== 1) {
+                if (empty($email)) {
+                    echo json_encode(['success' => false, 'message' => 'Email là bắt buộc để đăng nhập']);
+                    break;
+                }
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    echo json_encode(['success' => false, 'message' => 'Định dạng email không hợp lệ']);
+                    break;
+                }
+            }
+
+            // Đảm bảo nếu email trống (chỉ được phép đối với Super Admin id=1) thì lưu là NULL thay vì chuỗi rỗng
+            // để tránh lỗi vi phạm UNIQUE constraint trong MySQL (nhiều dòng có thể là NULL, nhưng chỉ có một dòng có thể là '')
+            $dbEmail = empty($email) ? null : $email;
+
+            if (!empty($password)) {
+                $hash = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $conn->prepare("UPDATE accounts SET username=?, password_hash=?, name=?, role=?, email=?, zalo_chat_id=?, avatar=?, dob=?, gender=?, citizen_id=?, address=?, bank_name=?, bank_account=?, phone=?, is_active=? WHERE id=?");
+                $stmt->bind_param("ssssssssssssssii", $username, $hash, $name, $role, $dbEmail, $zalo_chat_id, $avatar, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $phone, $is_active, $id);
+            } else {
+                $stmt = $conn->prepare("UPDATE accounts SET username=?, name=?, role=?, email=?, zalo_chat_id=?, avatar=?, dob=?, gender=?, citizen_id=?, address=?, bank_name=?, bank_account=?, phone=?, is_active=? WHERE id=?");
+                $stmt->bind_param("sssssssssssssii", $username, $name, $role, $dbEmail, $zalo_chat_id, $avatar, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $phone, $is_active, $id);
+            }
+
+            if ($stmt->execute()) {
+                // Sync job_title from input or address payload if available
+                $jt = $input['job_title'] ?? null;
+                if ($jt === null && !empty($address)) {
+                    $arr = json_decode($address, true);
+                    $jt = $arr['erp_profile']['job_title'] ?? null;
+                }
+                if ($jt !== null) {
+                    $stmtJ = $conn->prepare("UPDATE users SET job_title = ? WHERE id = ?");
+                    $stmtJ->bind_param("si", $jt, $id);
+                    $stmtJ->execute();
+                    $stmtJ->close();
+                }
+
+                // Save manager_behavior_mode if provided
+                if (isset($input['manager_behavior_mode'])) {
+                    $stmtBeh = $conn->prepare("UPDATE users SET manager_behavior_mode = ? WHERE id = ?");
+                    $stmtBeh->bind_param("si", $input['manager_behavior_mode'], $id);
+                    $stmtBeh->execute();
+                    $stmtBeh->close();
+                }
+
+                // Save signature_url if provided
+                if (isset($input['signature_url'])) {
+                    $sigPath = saveSignatureBase64ToFile($input['signature_url'], $id);
+                    $stmtSig = $conn->prepare("UPDATE users SET signature_url = ? WHERE id = ?");
+                    $stmtSig->bind_param("si", $sigPath, $id);
+                    $stmtSig->execute();
+                    $stmtSig->close();
+                }
+
+                // Save permissions_json if provided
+                if (isset($input['permissions_json'])) {
+                    $stmtPerm = $conn->prepare("UPDATE users SET permissions_json = ? WHERE id = ?");
+                    $stmtPerm->bind_param("si", $input['permissions_json'], $id);
+                    $stmtPerm->execute();
+                    $stmtPerm->close();
+                }
+
+                // Save extra_fields_json if provided
+                if (isset($input['extra_fields_json'])) {
+                    $extraVal = is_array($input['extra_fields_json']) ? json_encode($input['extra_fields_json']) : trim((string)$input['extra_fields_json']);
+                    if ($extraVal === '') $extraVal = null;
+                    $stmtEx = $conn->prepare("UPDATE users SET extra_fields_json = ? WHERE id = ?");
+                    $stmtEx->bind_param("si", $extraVal, $id);
+                    $stmtEx->execute();
+                    $stmtEx->close();
+                }
+
+                // Save bio if provided
+                if (isset($input['bio'])) {
+                    $bioVal = trim((string)$input['bio']);
+                    if ($bioVal === '') $bioVal = null;
+                    $stmtBio = $conn->prepare("UPDATE users SET bio = ? WHERE id = ?");
+                    $stmtBio->bind_param("si", $bioVal, $id);
+                    $stmtBio->execute();
+                    $stmtBio->close();
+                }
+
+                // Sync manager teams if provided
+                if (isset($input['manager_teams']) && is_array($input['manager_teams'])) {
+                    // Clear old leadership
+                    $stmtClear = $conn->prepare("UPDATE teams SET leader_id = 0 WHERE leader_id = ?");
+                    $stmtClear->execute([$id]);
+                    $stmtClear->close();
+
+                    if (!empty($input['manager_teams'])) {
+                        foreach ($input['manager_teams'] as $teamId) {
+                            $stmtSet = $conn->prepare("UPDATE teams SET leader_id = ? WHERE id = ?");
+                            $stmtSet->bind_param("ii", $id, $teamId);
+                            $stmtSet->execute();
+                            $stmtSet->close();
+                        }
+                    }
+                }
+
+                logAdminAction($conn, $decodedUser['id'], 'EDIT_ACCOUNT', ['id' => $id, 'username' => $username, 'name' => $name, 'role' => $role, 'email' => $email, 'avatar' => $avatar, 'phone' => $phone, 'is_active' => $is_active]);
+                echo json_encode(['success' => true]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Cập nhật thất bại, username hoặc email có thể bị trùng']);
+            }
+        } catch (Exception $e) {
+            $msg = $e->getMessage();
+            if (strpos($msg, 'Duplicate entry') !== false || $e->getCode() === 1062) {
+                $msg = 'Cập nhật thất bại, username hoặc email có thể bị trùng';
+            }
+            echo json_encode(['success' => false, 'message' => $msg]);
+        }
+        break;
+
+    case 'update_profile':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $name = trim($input['name'] ?? '');
+        $avatar = isset($input['avatar']) ? trim($input['avatar']) : null;
+        if ($avatar === '')
+            $avatar = null;
+        $userId = $decodedUser['id'];
+
+        $phone = trim($input['phone'] ?? '');
+        $dob = !empty($input['dob']) ? trim($input['dob']) : null;
+        $gender = !empty($input['gender']) ? trim($input['gender']) : null;
+        $citizen_id = !empty($input['citizen_id']) ? trim($input['citizen_id']) : null;
+        $address = !empty($input['address']) ? trim($input['address']) : null;
+        $bank_name = !empty($input['bank_name']) ? trim($input['bank_name']) : null;
+        $bank_account = !empty($input['bank_account']) ? trim($input['bank_account']) : null;
+
+        $sets = [];
+        $types = "";
+        $values = [];
+
+        $allowedFields = [
+            'name' => ['col' => 'full_name', 'type' => 's'],
+            'avatar' => ['col' => 'avatar_url', 'type' => 's'],
+            'signature_url' => ['col' => 'signature_url', 'type' => 's'],
+            'job_title' => ['col' => 'job_title', 'type' => 's'],
+            'dob' => ['col' => 'dob', 'type' => 's'],
+            'gender' => ['col' => 'gender', 'type' => 's'],
+            'citizen_id' => ['col' => 'citizen_id', 'type' => 's'],
+            'address' => ['col' => 'address', 'type' => 's'],
+            'bank_name' => ['col' => 'bank_name', 'type' => 's'],
+            'bank_account' => ['col' => 'bank_account', 'type' => 's'],
+            'phone' => ['col' => 'phone', 'type' => 's'],
+            'extra_fields_json' => ['col' => 'extra_fields_json', 'type' => 's'],
+            'bio' => ['col' => 'bio', 'type' => 's']
+        ];
+
+        foreach ($allowedFields as $key => $meta) {
+            if (array_key_exists($key, $input)) {
+                $val = $input[$key];
+                if ($key === 'name') {
+                    $val = trim((string)$val);
+                    if (empty($val)) {
+                        echo json_encode(['success' => false, 'message' => 'Tên không được để trống']);
+                        break 2;
+                    }
+                } elseif ($key === 'avatar' && trim((string)$val) === '') {
+                    $val = null;
+                } elseif ($key === 'signature_url' && !empty($val)) {
+                    $val = saveSignatureBase64ToFile($val, $userId);
+                } elseif ($key === 'extra_fields_json' && is_array($val)) {
+                    $val = json_encode($val);
+                } elseif ($key === 'address' && $val !== null && is_string($val) && strpos($val, '{') !== 0) {
+                    $curStmt = $conn->prepare("SELECT address FROM users WHERE id = ?");
+                    if ($curStmt) {
+                        $curStmt->bind_param("i", $userId);
+                        $curStmt->execute();
+                        $curRes = $curStmt->get_result();
+                        if ($curRes && $curRes->num_rows > 0) {
+                            $curAddress = $curRes->fetch_assoc()['address'] ?? '';
+                            if (!empty($curAddress)) {
+                                $parsed = json_decode($curAddress, true);
+                                if ($parsed && isset($parsed['erp_profile']) && is_array($parsed['erp_profile'])) {
+                                    $parsed['erp_profile']['address_text'] = $val;
+                                    $val = json_encode($parsed, JSON_UNESCAPED_UNICODE);
+                                }
+                            }
+                        }
+                        $curStmt->close();
+                    }
+                } elseif ($val === '') {
+                    $val = null;
+                }
+
+                $sets[] = "`" . $meta['col'] . "` = ?";
+                $types .= $meta['type'];
+                $values[] = $val;
+            }
+        }
+
+        if (empty($sets)) {
+            echo json_encode(['success' => true]);
+            break;
+        }
+
+        $types .= "i";
+        $values[] = $userId;
+
+        $sql = "UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?";
+        $upd = $conn->prepare($sql);
+        $upd->bind_param($types, ...$values);
+
+        if ($upd->execute()) {
+            logAdminAction($conn, $userId, 'UPDATE_PROFILE', $input);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi khi cập nhật hồ sơ']);
+        }
+        break;
+
+    case 'consultant-profile':
+        $userIdParam = isset($_GET['user_id']) && $_GET['user_id'] !== '' ? (int) $_GET['user_id'] : null;
+        $saleFilterId = isset($_GET['consultant_id']) && $_GET['consultant_id'] !== '' ? (int) $_GET['consultant_id'] : null;
+
+        if ($userIdParam !== null) {
+            $targetUserId = $userIdParam;
+        } else {
+            $targetId = $saleFilterId !== null ? $saleFilterId : ($currentSaleConsultantId ?? 0);
+            if (!$targetId) {
+                $targetUserId = (int)$decodedUser['id'];
+            } else {
+                $targetUserId = null;
+                $stmtUId = $conn->prepare("SELECT u.id FROM users u JOIN consultants c ON u.email = c.email WHERE c.id = ? LIMIT 1");
+                $stmtUId->bind_param("i", $targetId);
+                $stmtUId->execute();
+                $uRow = $stmtUId->get_result()->fetch_assoc();
+                $stmtUId->close();
+                if ($uRow) {
+                    $targetUserId = (int)$uRow['id'];
+                } else {
+                    $targetUserId = $targetId;
+                }
+            }
+        }
+
+        // Check permission
+        $isSelf = (int)$targetUserId === (int)$decodedUser['id'];
+        $isAdmin = $decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'super_admin';
+
+        $isManagerOfTarget = false;
+        if ($decodedUser['role'] === 'manager') {
+            $tRes = $conn->query("SELECT team_id FROM users WHERE id = " . $targetUserId);
+            $tRow = $tRes ? $tRes->fetch_assoc() : null;
+            $targetTeamId = $tRow ? $tRow['team_id'] : null;
+            if ($targetTeamId) {
+                $lRes = $conn->query("SELECT id FROM teams WHERE leader_id = " . (int)$decodedUser['id'] . " AND id = " . (int)$targetTeamId);
+                if ($lRes && $lRes->num_rows > 0) {
+                    $isManagerOfTarget = true;
+                }
+            }
+        }
+
+        if (!$isAdmin && !$isSelf && !$isManagerOfTarget) {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xem hồ sơ này']);
+            exit;
+        }
+
+        $stmtP = $conn->prepare("SELECT u.id, u.full_name AS name, u.email, u.phone, a.role, u.job_title, u.team_id, t.name AS team_name, u.status, u.leave_start, u.leave_end, u.work_start_time, u.work_end_time, u.work_schedule, u.avatar_url AS avatar, u.signature_url, u.vacation_mode, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.zalo_chat_id, u.telegram_chat_id, u.overtime_mode, u.permissions_json, u.extra_fields_json, u.manager_behavior_mode, u.use_custom_work_hours, u.bio FROM users u LEFT JOIN accounts a ON u.id = a.id LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+        $stmtP->bind_param("i", $targetUserId);
+        $stmtP->execute();
+        $consultantProfile = $stmtP->get_result()->fetch_assoc();
+        if ($consultantProfile) {
+            if (!empty($consultantProfile['work_schedule'])) {
+                $consultantProfile['work_schedule'] = json_decode($consultantProfile['work_schedule'], true);
+            }
+            // Fetch teams managed by this user
+            $stmtT = $conn->prepare("SELECT id FROM teams WHERE leader_id = ?");
+            $stmtT->bind_param("i", $targetUserId);
+            $stmtT->execute();
+            $teamRes = $stmtT->get_result();
+            $managedTeams = [];
+            while ($tRow = $teamRes->fetch_assoc()) {
+                $managedTeams[] = (int)$tRow['id'];
+            }
+            $stmtT->close();
+            $consultantProfile['manager_teams'] = $managedTeams;
+
+            // Fetch holiday shift registrations for this user
+            $holidayShifts = [];
+            $stmtHS = $conn->prepare("SELECT id, shift_date, holiday_name, approved, created_at FROM holiday_shift_registrations WHERE user_id = ? ORDER BY shift_date DESC LIMIT 100");
+            if ($stmtHS) {
+                $stmtHS->bind_param("i", $targetUserId);
+                $stmtHS->execute();
+                $resHS = $stmtHS->get_result();
+                while ($row = $resHS->fetch_assoc()) {
+                    $holidayShifts[] = [
+                        'id' => (int)$row['id'],
+                        'shift_date' => $row['shift_date'],
+                        'holiday_name' => $row['holiday_name'],
+                        'approved' => (int)$row['approved'],
+                        'created_at' => $row['created_at']
+                    ];
+                }
+                $stmtHS->close();
+            }
+            $consultantProfile['holiday_shifts'] = $holidayShifts;
+
+            // Fetch weekend shift registrations for this user
+            $weekendShifts = [];
+            $stmtWS = $conn->prepare("SELECT id, shift_date, approved, created_at FROM weekend_shift_registrations WHERE user_id = ? ORDER BY shift_date DESC LIMIT 100");
+            if ($stmtWS) {
+                $stmtWS->bind_param("i", $targetUserId);
+                $stmtWS->execute();
+                $resWS = $stmtWS->get_result();
+                while ($row = $resWS->fetch_assoc()) {
+                    $weekendShifts[] = [
+                        'id' => (int)$row['id'],
+                        'shift_date' => $row['shift_date'],
+                        'approved' => (int)$row['approved'],
+                        'created_at' => $row['created_at']
+                    ];
+                }
+                $stmtWS->close();
+            }
+            $consultantProfile['weekend_shifts'] = $weekendShifts;
+
+            // Fetch night shift registrations for this user
+            $nightShifts = [];
+            $stmtNS = $conn->prepare("SELECT id, shift_date, approved, created_at FROM night_shift_registrations WHERE user_id = ? ORDER BY shift_date DESC LIMIT 100");
+            if ($stmtNS) {
+                $stmtNS->bind_param("i", $targetUserId);
+                $stmtNS->execute();
+                $resNS = $stmtNS->get_result();
+                while ($row = $resNS->fetch_assoc()) {
+                    $nightShifts[] = [
+                        'id' => (int)$row['id'],
+                        'shift_date' => $row['shift_date'],
+                        'approved' => (int)$row['approved'],
+                        'created_at' => $row['created_at']
+                    ];
+                }
+                $stmtNS->close();
+            }
+            $consultantProfile['night_shifts'] = $nightShifts;
+        }
+        $stmtP->close();
+        echo json_encode(['success' => true, 'data' => $consultantProfile]);
+        exit;
+
+    case 'update_consultant_self_profile':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $name = trim($input['name'] ?? '');
+        $avatar = isset($input['avatar']) ? trim($input['avatar']) : null;
+        if ($avatar === '') $avatar = null;
+        $work_start_time = trim($input['work_start_time'] ?? '00:00');
+        $work_end_time = trim($input['work_end_time'] ?? '23:59');
+
+        $saleFilterId = isset($input['consultant_id']) && $input['consultant_id'] !== '' ? (int) $input['consultant_id'] : null;
+        $targetId = $saleFilterId !== null ? $saleFilterId : ($currentSaleConsultantId ?? 0);
+
+        $targetUserId = null;
+        $realConsultantId = null;
+        if ($targetId !== null && $targetId > 0) {
+            // First check if targetId corresponds to a user's id directly
+            $stmtUserCheck = $conn->prepare("SELECT id, email FROM users WHERE id = ? LIMIT 1");
+            $stmtUserCheck->bind_param("i", $targetId);
+            $stmtUserCheck->execute();
+            $userCheckRow = $stmtUserCheck->get_result()->fetch_assoc();
+            $stmtUserCheck->close();
+            if ($userCheckRow) {
+                $targetUserId = (int)$userCheckRow['id'];
+                // Since targetId was user_id, find the corresponding consultant ID
+                $stmtCId = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+                $stmtCId->bind_param("s", $userCheckRow['email']);
+                $stmtCId->execute();
+                $cRow = $stmtCId->get_result()->fetch_assoc();
+                $stmtCId->close();
+                if ($cRow) {
+                    $realConsultantId = (int)$cRow['id'];
+                } else {
+                    $realConsultantId = $targetId;
+                }
+            } else {
+                // targetId is treated as c.id (consultant_id)
+                $stmtUId = $conn->prepare("SELECT u.id FROM users u JOIN consultants c ON u.email = c.email WHERE c.id = ? LIMIT 1");
+                $stmtUId->bind_param("i", $targetId);
+                $stmtUId->execute();
+                $uRow = $stmtUId->get_result()->fetch_assoc();
+                $stmtUId->close();
+                if ($uRow) {
+                    $targetUserId = (int)$uRow['id'];
+                }
+                $realConsultantId = $targetId;
+            }
+        }
+        if (!$targetUserId) {
+            $targetUserId = (int)$decodedUser['id'];
+            // Find its consultant ID
+            $stmtCId = $conn->prepare("SELECT c.id FROM consultants c JOIN users u ON c.email = u.email WHERE u.id = ? LIMIT 1");
+            $stmtCId->bind_param("i", $targetUserId);
+            $stmtCId->execute();
+            $cRow = $stmtCId->get_result()->fetch_assoc();
+            $stmtCId->close();
+            $realConsultantId = $cRow ? (int)$cRow['id'] : null;
+        }
+
+        // Check permission
+        $isSelf = (int)$targetUserId === (int)$decodedUser['id'];
+        $isAdmin = $decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'super_admin';
+
+        $isManagerOfTarget = false;
+        if ($decodedUser['role'] === 'manager') {
+            $tRes = $conn->query("SELECT team_id FROM users WHERE id = " . $targetUserId);
+            $tRow = $tRes ? $tRes->fetch_assoc() : null;
+            $targetTeamId = $tRow ? $tRow['team_id'] : null;
+            if ($targetTeamId) {
+                $lRes = $conn->query("SELECT id FROM teams WHERE leader_id = " . (int)$decodedUser['id'] . " AND id = " . (int)$targetTeamId);
+                if ($lRes && $lRes->num_rows > 0) {
+                    $isManagerOfTarget = true;
+                }
+            }
+        }
+
+        if (!$isAdmin && !$isSelf && !$isManagerOfTarget) {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền chỉnh sửa hồ sơ này']);
+            break;
+        }
+
+        if (empty($name)) {
+            echo json_encode(['success' => false, 'message' => 'Tên không được để trống.']);
+            break;
+        }
+
+        if (empty($work_start_time) || !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $work_start_time)) {
+            echo json_encode(['success' => false, 'message' => 'Giờ bắt đầu làm việc không hợp lệ (định dạng HH:MM từ 00:00 đến 23:59)']);
+            break;
+        }
+        if (empty($work_end_time) || !preg_match('/^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/', $work_end_time)) {
+            echo json_encode(['success' => false, 'message' => 'Giờ kết thúc làm việc không hợp lệ (định dạng HH:MM từ 00:00 đến 23:59)']);
+            break;
+        }
+        $work_schedule = isset($input['work_schedule']) ? (is_array($input['work_schedule']) ? json_encode($input['work_schedule']) : $input['work_schedule']) : null;
+        if ($work_schedule !== null && !validateWorkSchedule($work_schedule)) {
+            echo json_encode(['success' => false, 'message' => 'Cấu hình lịch làm việc chi tiết không hợp lệ.']);
+            break;
+        }
+
+        $dob = !empty($input['dob']) ? $input['dob'] : null;
+        $gender = !empty($input['gender']) ? $input['gender'] : null;
+        $citizen_id = !empty($input['citizen_id']) ? $input['citizen_id'] : null;
+        $address = !empty($input['address']) ? trim($input['address']) : null;
+        if ($address !== null && is_string($address) && strpos($address, '{') !== 0) {
+            $curStmt = $conn->prepare("SELECT address FROM users WHERE id = ?");
+            if ($curStmt) {
+                $curStmt->bind_param("i", $targetUserId);
+                $curStmt->execute();
+                $curRes = $curStmt->get_result();
+                if ($curRes && $curRes->num_rows > 0) {
+                    $curAddress = $curRes->fetch_assoc()['address'] ?? '';
+                    if (!empty($curAddress)) {
+                        $parsed = json_decode($curAddress, true);
+                        if ($parsed && isset($parsed['erp_profile']) && is_array($parsed['erp_profile'])) {
+                            $parsed['erp_profile']['address_text'] = $address;
+                            $address = json_encode($parsed, JSON_UNESCAPED_UNICODE);
+                        }
+                    }
+                }
+                $curStmt->close();
+            }
+        }
+        $bank_name = !empty($input['bank_name']) ? $input['bank_name'] : null;
+        $bank_account = !empty($input['bank_account']) ? $input['bank_account'] : null;
+        $leave_start = !empty($input['leave_start']) ? $input['leave_start'] : null;
+        $leave_end = !empty($input['leave_end']) ? $input['leave_end'] : null;
+
+        // Preserve existing zalo_chat_id if not explicitly provided in edit request
+        $existingZaloId = null;
+        $stmtCurr = $conn->prepare("SELECT zalo_chat_id FROM users WHERE id = ? LIMIT 1");
+        if ($stmtCurr) {
+            $stmtCurr->bind_param("i", $targetUserId);
+            $stmtCurr->execute();
+            $currRes = $stmtCurr->get_result();
+            if ($currRes && $currRes->num_rows > 0) {
+                $existingZaloId = $currRes->fetch_assoc()['zalo_chat_id'] ?? null;
+            }
+            $stmtCurr->close();
+        }
+
+        if (array_key_exists('zalo_chat_id', $input) && $input['zalo_chat_id'] !== '') {
+            $zalo_chat_id = !empty($input['zalo_chat_id']) ? trim($input['zalo_chat_id']) : null;
+        } else {
+            $zalo_chat_id = $existingZaloId;
+        }
+        $overtime_mode = isset($input['overtime_mode']) ? (int)$input['overtime_mode'] : 0;
+        $use_custom_work_hours = isset($input['use_custom_work_hours']) ? (int)$input['use_custom_work_hours'] : 0;
+        $extra_fields_json = isset($input['extra_fields_json']) ? (is_array($input['extra_fields_json']) ? json_encode($input['extra_fields_json']) : trim($input['extra_fields_json'])) : null;
+        if ($extra_fields_json === '') $extra_fields_json = null;
+        $bio = isset($input['bio']) ? trim($input['bio']) : null;
+
+        // 1. Update users table
+        if (isset($input['signature_url'])) {
+            $sigVal = !empty($input['signature_url']) ? trim($input['signature_url']) : null;
+            if (!empty($sigVal)) {
+                $sigVal = saveSignatureBase64ToFile($sigVal, $targetUserId);
+            }
+            $stmtSig = $conn->prepare("UPDATE users SET signature_url = ? WHERE id = ?");
+            $stmtSig->bind_param("si", $sigVal, $targetUserId);
+            $stmtSig->execute();
+            $stmtSig->close();
+        }
+
+        $stmt = $conn->prepare("UPDATE users SET full_name=?, work_start_time=?, work_end_time=?, work_schedule=?, avatar_url=?, dob=?, gender=?, citizen_id=?, address=?, bank_name=?, bank_account=?, leave_start=?, leave_end=?, zalo_chat_id=?, overtime_mode=?, use_custom_work_hours=?, extra_fields_json=?, bio=? WHERE id=?");
+        $stmt->bind_param("ssssssssssssssiissi", $name, $work_start_time, $work_end_time, $work_schedule, $avatar, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $leave_start, $leave_end, $zalo_chat_id, $overtime_mode, $use_custom_work_hours, $extra_fields_json, $bio, $targetUserId);
+        $success = $stmt->execute();
+        $stmt->close();
+
+        // 2. Update consultants table (if it exists as a separate table, otherwise it's a VIEW of users)
+        $successC = true;
+        try {
+            $stmtC = $conn->prepare("UPDATE consultants SET name=?, work_start_time=?, work_end_time=?, work_schedule=?, avatar=?, dob=?, gender=?, citizen_id=?, address=?, bank_name=?, bank_account=?, leave_start=?, leave_end=?, zalo_chat_id=?, overtime_mode=?, use_custom_work_hours=?, extra_fields_json=?, bio=? WHERE id=?");
+            if ($stmtC) {
+                $stmtC->bind_param("ssssssssssssssiissi", $name, $work_start_time, $work_end_time, $work_schedule, $avatar, $dob, $gender, $citizen_id, $address, $bank_name, $bank_account, $leave_start, $leave_end, $zalo_chat_id, $overtime_mode, $use_custom_work_hours, $extra_fields_json, $bio, $realConsultantId);
+                $successC = $stmtC->execute();
+                $stmtC->close();
+            }
+        } catch (Throwable $e) {
+            // It's a view, so updating users was sufficient
+            $successC = true;
+        }
+
+        if ($success && $successC) {
+            // Auto notification for profile update
+            $updaterName = 'Hệ thống';
+            $stmtUpdater = $conn->prepare("SELECT full_name FROM users WHERE id = ?");
+            if ($stmtUpdater) {
+                $stmtUpdater->bind_param("i", $decodedUser['id']);
+                $stmtUpdater->execute();
+                $uRow = $stmtUpdater->get_result()->fetch_assoc();
+                $stmtUpdater->close();
+                if ($uRow && !empty($uRow['full_name'])) {
+                    $updaterName = $uRow['full_name'];
+                }
+            }
+            if ((int)$decodedUser['id'] !== (int)$targetUserId) {
+                $title = "Hồ sơ cá nhân đã được cập nhật";
+                $body = "$updaterName đã cập nhật thông tin hồ sơ của bạn.";
+
+                $stmtNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'mention', '/account')");
+                if ($stmtNotif) {
+                    $stmtNotif->bind_param("iss", $targetUserId, $title, $body);
+                    $stmtNotif->execute();
+                    $stmtNotif->close();
+                }
+            }
+
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi khi cập nhật cấu hình cá nhân.']);
+        }
+        break;
+
+    case 'get_my_activity_logs':
+        $userId = $decodedUser['id'];
+        
+        $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $pageSize = isset($_GET['pageSize']) ? min(100, max(5, (int)$_GET['pageSize'])) : 20;
+        $offset = ($page - 1) * $pageSize;
+
+        // Get total logs count
+        $cntStmt = $conn->prepare("SELECT COUNT(*) FROM admin_logs WHERE account_id = ?");
+        $cntStmt->bind_param("i", $userId);
+        $cntStmt->execute();
+        $total = (int)($cntStmt->get_result()->fetch_row()[0] ?? 0);
+        $cntStmt->close();
+
+        // Query logs with LIMIT and OFFSET
+        $stmt = $conn->prepare("SELECT al.*, a.name as account_name, a.email as account_email 
+                                FROM admin_logs al 
+                                LEFT JOIN accounts a ON al.account_id = a.id 
+                                WHERE al.account_id = ? 
+                                ORDER BY al.created_at DESC 
+                                LIMIT ? OFFSET ?");
+        $stmt->bind_param("iii", $userId, $pageSize, $offset);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $data = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $data[] = $row;
+            }
+        }
+        $stmt->close();
+        echo json_encode([
+            'success' => true, 
+            'data' => $data,
+            'total' => $total,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'total_pages' => ceil($total / $pageSize)
+        ]);
+        break;
+
+    case 'change_password':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $old_pass = $input['old_password'] ?? '';
+        $new_pass = $input['new_password'] ?? '';
+        $userId = $decodedUser['id'];
+
+        $stmt = $conn->prepare("SELECT password_hash FROM users WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        if ($row = $res->fetch_assoc()) {
+            if (password_verify($old_pass, $row['password_hash'])) {
+                $hash = password_hash($new_pass, PASSWORD_DEFAULT);
+                $upd = $conn->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+                $upd->bind_param("si", $hash, $userId);
+                $upd->execute();
+                logAdminAction($conn, $userId, 'CHANGE_PASSWORD', []);
+                echo json_encode(['success' => true]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Mật khẩu cũ không chính xác']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy tài khoản']);
+        }
+        break;
+
+    case 'check_delete_account':
+        if ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin') {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền thực hiện hành động này']);
+            break;
+        }
+        $id = (int) ($_GET['id'] ?? 0);
+
+        // 1. Check fallback_type and fallback_admin_id
+        $isFallback = false;
+        $stmtFb = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_type' LIMIT 1");
+        $stmtFb->execute();
+        $resFb = $stmtFb->get_result();
+        $fbType = $resFb->fetch_assoc()['setting_value'] ?? 'round';
+
+        if ($fbType === 'admin') {
+            $stmtFbAdmin = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_admin_id' LIMIT 1");
+            $stmtFbAdmin->execute();
+            $resFbAdmin = $stmtFbAdmin->get_result();
+            $fbAdminId = (int) ($resFbAdmin->fetch_assoc()['setting_value'] ?? 0);
+            if ($fbAdminId === $id) {
+                $isFallback = true;
+            }
+        }
+
+        // 2. Check ticket_notify_settings
+        $isTicket = false;
+        $stmtTick = $conn->prepare("SELECT COUNT(*) as cnt FROM ticket_notify_settings WHERE account_id = ?");
+        $stmtTick->bind_param("i", $id);
+        $stmtTick->execute();
+        $resTick = $stmtTick->get_result()->fetch_assoc();
+        $stmtTick->close();
+        if (($resTick['cnt'] ?? 0) > 0) {
+            $isTicket = true;
+        }
+
+        // 3. Fetch other admins (role = 'admin' and id != $id)
+        $otherAdmins = [];
+        $stmtOther = $conn->prepare("SELECT id, name, username, email FROM accounts WHERE (role = 'admin' OR role = 'superadmin') AND id != ?");
+        $stmtOther->bind_param("i", $id);
+        $stmtOther->execute();
+        $resOther = $stmtOther->get_result();
+        if ($resOther) {
+            while ($row = $resOther->fetch_assoc()) {
+                $otherAdmins[] = $row;
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'in_use' => ($isFallback || $isTicket),
+            'usage' => [
+                'fallback' => $isFallback,
+                'ticket' => $isTicket
+            ],
+            'other_admins' => $otherAdmins
+        ]);
+        break;
+
+    case 'delete_account':
+        if ($decodedUser['role'] !== 'admin' && $decodedUser['role'] !== 'superadmin' && $decodedUser['role'] !== 'super_admin') {
+            echo json_encode(['success' => false, 'message' => 'Bạn không có quyền thực hiện hành động này']);
+            break;
+        }
+        $id = (int) ($_GET['id'] ?? 0);
+        if ($id === 1) { // Prevent deleting default super admin
+            echo json_encode(['success' => false, 'message' => 'Không thể xóa tài khoản Super Admin']);
+            break;
+        }
+
+        $replacementId = (int) ($_GET['replacement_id'] ?? $_POST['replacement_id'] ?? 0);
+
+        // Check if in use
+        $isFallback = false;
+        $stmtFb = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_type' LIMIT 1");
+        $stmtFb->execute();
+        $resFb = $stmtFb->get_result();
+        $fbType = $resFb->fetch_assoc()['setting_value'] ?? 'round';
+
+        if ($fbType === 'admin') {
+            $stmtFbAdmin = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'fallback_admin_id' LIMIT 1");
+            $stmtFbAdmin->execute();
+            $resFbAdmin = $stmtFbAdmin->get_result();
+            $fbAdminId = (int) ($resFbAdmin->fetch_assoc()['setting_value'] ?? 0);
+            if ($fbAdminId === $id) {
+                $isFallback = true;
+            }
+        }
+
+        $isTicket = false;
+        $stmtTick = $conn->prepare("SELECT COUNT(*) as cnt FROM ticket_notify_settings WHERE account_id = ?");
+        $stmtTick->bind_param("i", $id);
+        $stmtTick->execute();
+        $resTick = $stmtTick->get_result()->fetch_assoc();
+        $stmtTick->close();
+        if (($resTick['cnt'] ?? 0) > 0) {
+            $isTicket = true;
+        }
+
+        if (($isFallback || $isTicket) && $replacementId <= 0) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Tài khoản đang nhận fallback hoặc ticket, yêu cầu chọn admin thay thế trước khi xóa.'
+            ]);
+            break;
+        }
+
+        $conn->begin_transaction();
+        try {
+            if ($replacementId > 0) {
+                // Verify replacement is admin
+                $stmtVerify = $conn->prepare("SELECT id FROM accounts WHERE id = ? AND (role = 'admin' OR role = 'superadmin') LIMIT 1");
+                $stmtVerify->bind_param("i", $replacementId);
+                $stmtVerify->execute();
+                if ($stmtVerify->get_result()->num_rows === 0) {
+                    throw new Exception("Admin thay thế không hợp lệ");
+                }
+
+                // Transfer fallback
+                if ($isFallback) {
+                    $stmtUpdFb = $conn->prepare("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'fallback_admin_id'");
+                    $stmtUpdFb->bind_param("s", $replacementId);
+                    $stmtUpdFb->execute();
+                }
+
+                // Transfer ticket notify settings
+                if ($isTicket) {
+                    $stmtDelTick = $conn->prepare("DELETE FROM ticket_notify_settings WHERE account_id = ?");
+                    $stmtDelTick->bind_param("i", $id);
+                    $stmtDelTick->execute();
+                    $stmtDelTick->close();
+
+                    $stmtInsTick = $conn->prepare("INSERT IGNORE INTO ticket_notify_settings (account_id) VALUES (?)");
+                    $stmtInsTick->bind_param("i", $replacementId);
+                    $stmtInsTick->execute();
+                    $stmtInsTick->close();
+                }
+            }
+
+            // Finally, delete the account
+            $stmtDelAcc = $conn->prepare("DELETE FROM accounts WHERE id = ?");
+            $stmtDelAcc->bind_param("i", $id);
+            $stmtDelAcc->execute();
+
+            logAdminAction($conn, $decodedUser['id'], 'DELETE_ACCOUNT', ['id' => $id]);
+            $conn->commit();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => 'Lỗi hệ thống: ' . $e->getMessage()]);
+        }
+        break;
+
+    case 'resend_confirm_email':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+
+        $stmtAcc = $conn->prepare("SELECT email, name FROM accounts WHERE id = ?");
+        $stmtAcc->bind_param("i", $id);
+        $stmtAcc->execute();
+        $res = $stmtAcc->get_result();
+        if ($res && $res->num_rows > 0) {
+            $account = $res->fetch_assoc();
+            if (empty($account['email'])) {
+                echo json_encode(['success' => false, 'message' => 'Tài khoản này chưa có email']);
+                break;
+            }
+
+            $token = bin2hex(random_bytes(32));
+            $stmt = $conn->prepare("UPDATE accounts SET confirm_token = ?, is_confirmed = 0 WHERE id = ?");
+            $stmt->bind_param("si", $token, $id);
+            if ($stmt->execute()) {
+                $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $basePath = preg_replace('/\/api\.php.*$/i', '', $_SERVER['REQUEST_URI'] ?? '');
+                $confirmLink = $proto . '://' . $host . $basePath . '/confirm.php?token=' . $token;
+
+                require_once 'mailer.php';
+                sendAdminConfirmationEmail($account['email'], $account['name'], $confirmLink);
+
+                echo json_encode(['success' => true]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Không thể tạo lại token']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy tài khoản']);
+        }
+        break;
+
+    case 'resend_zalo_verify_account':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+        $stmtAcc = $conn->prepare("SELECT email, name FROM accounts WHERE id = ?");
+        $stmtAcc->bind_param("i", $id);
+        $stmtAcc->execute();
+        $res = $stmtAcc->get_result();
+        if ($res && $res->num_rows > 0) {
+            $account = $res->fetch_assoc();
+            if (empty($account['email'])) {
+                echo json_encode(['success' => false, 'message' => 'Tài khoản này chưa có email để nhận thông báo']);
+                break;
+            }
+            require_once 'mailer.php';
+            $settingStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_link'");
+            $botLink = "https://zalo.me/1185588456243371597"; // Default
+            if ($settingStmt && $settingStmt->num_rows > 0) {
+                $row = $settingStmt->fetch_assoc();
+                if (!empty($row['setting_value']))
+                    $botLink = $row['setting_value'];
+            }
+            sendWelcomeEmailToAdminTicket($id, $account['email'], $account['name'], $botLink, true);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy tài khoản']);
+        }
+        break;
+
+    case 'resend_zalo_verify_consultant':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+        $stmtCon = $conn->prepare("SELECT email, name FROM consultants WHERE id = ?");
+        $stmtCon->bind_param("i", $id);
+        $stmtCon->execute();
+        $res = $stmtCon->get_result();
+        if ($res && $res->num_rows > 0) {
+            $consultant = $res->fetch_assoc();
+            if (empty($consultant['email'])) {
+                echo json_encode(['success' => false, 'message' => 'Tư vấn viên này chưa có email']);
+                break;
+            }
+            require_once 'mailer.php';
+            $settingStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_link'");
+            $botLink = "https://zalo.me/1185588456243371597"; // Default
+            if ($settingStmt && $settingStmt->num_rows > 0) {
+                $row = $settingStmt->fetch_assoc();
+                if (!empty($row['setting_value']))
+                    $botLink = $row['setting_value'];
+            }
+            sendWelcomeEmailToSale($id, $consultant['email'], $consultant['name'], $botLink, true);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy tư vấn viên']);
+        }
+        break;
+
+    case 'resend_telegram_verify_account':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+        $stmtAcc = $conn->prepare("SELECT email, name FROM accounts WHERE id = ?");
+        $stmtAcc->bind_param("i", $id);
+        $stmtAcc->execute();
+        $res = $stmtAcc->get_result();
+        if ($res && $res->num_rows > 0) {
+            $account = $res->fetch_assoc();
+            if (empty($account['email'])) {
+                echo json_encode(['success' => false, 'message' => 'Tài khoản này chưa có email để nhận thông báo']);
+                break;
+            }
+            require_once 'mailer.php';
+            $settingStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_bot_username'");
+            $botUsername = "Ideasvietnam_bot"; // Default
+            if ($settingStmt && $settingStmt->num_rows > 0) {
+                $row = $settingStmt->fetch_assoc();
+                if (!empty($row['setting_value']))
+                    $botUsername = $row['setting_value'];
+            }
+            sendTelegramVerificationEmail($id, $account['email'], $account['name'], $botUsername, true);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy tài khoản']);
+        }
+        break;
+
+    case 'resend_telegram_verify_consultant':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $id = (int) ($input['id'] ?? 0);
+
+        // Map consultant ID to user ID because they share the same users table ID
+        $stmtCon = $conn->prepare("SELECT id, email, name FROM consultants WHERE id = ?");
+        $stmtCon->bind_param("i", $id);
+        $stmtCon->execute();
+        $res = $stmtCon->get_result();
+        if ($res && $res->num_rows > 0) {
+            $consultant = $res->fetch_assoc();
+            if (empty($consultant['email'])) {
+                echo json_encode(['success' => false, 'message' => 'Tư vấn viên này chưa có email']);
+                break;
+            }
+            require_once 'mailer.php';
+            $settingStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'telegram_bot_username'");
+            $botUsername = "Ideasvietnam_bot"; // Default
+            if ($settingStmt && $settingStmt->num_rows > 0) {
+                $row = $settingStmt->fetch_assoc();
+                if (!empty($row['setting_value']))
+                    $botUsername = $row['setting_value'];
+            }
+            sendTelegramVerificationEmail($consultant['id'], $consultant['email'], $consultant['name'], $botUsername, true);
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy tư vấn viên']);
+        }
+        break;
+
+    // ── TICKET NOTIFICATION SETTINGS ──────────────────────────────────────────
+    case 'get_ticket_settings':
+        // Trả về danh sách account_id được chọn nhận thông báo ticket
+        $res = $conn->query("SELECT account_id FROM ticket_notify_settings");
+        $ids = [];
+        if ($res)
+            while ($r = $res->fetch_assoc())
+                $ids[] = (int) $r['account_id'];
+        echo json_encode(['success' => true, 'data' => $ids]);
+        break;
+
+    case 'save_ticket_settings':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $adminIds = array_map('intval', $input['admin_ids'] ?? []);
+
+        // Lấy danh sách admin đang nhận thông báo trước khi lưu
+        $existingRes = $conn->query("SELECT account_id FROM ticket_notify_settings");
+        $existingIds = [];
+        if ($existingRes) {
+            while ($row = $existingRes->fetch_assoc()) {
+                $existingIds[] = (int) $row['account_id'];
+            }
+        }
+
+        // Tìm các admin mới được thêm vào (chuyển từ Tắt sang Bật)
+        $newlyAddedIds = array_diff($adminIds, $existingIds);
+
+        $conn->begin_transaction();
+        try {
+            // Xóa toàn bộ cấu hình cũ rồi insert lại
+            $conn->query("DELETE FROM ticket_notify_settings");
+            if (!empty($adminIds)) {
+                $insStmt = $conn->prepare("INSERT IGNORE INTO ticket_notify_settings (account_id) VALUES (?)");
+                foreach ($adminIds as $aid) {
+                    if ($aid > 0) {
+                        $insStmt->bind_param("i", $aid);
+                        $insStmt->execute();
+                    }
+                }
+            }
+            logAdminAction($conn, $decodedUser['id'], 'SAVE_TICKET_SETTINGS', ['admin_ids' => $adminIds]);
+            $conn->commit();
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => 'Lỗi lưu cấu hình: ' . getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // Chỉ gửi thông báo Zalo và email cho admin mới được bật
+        if (!empty($newlyAddedIds)) {
+            try {
+                require_once 'mailer.php';
+                require_once 'zalo_bot.php';
+
+                $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+                $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+                $stmtLink = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_link' LIMIT 1");
+                $botLink = $stmtLink->fetch_assoc()['setting_value'] ?? 'https://zalo.me/1185588456243371597';
+
+                $newIdsStr = implode(',', $newlyAddedIds);
+                $resAdmins = $conn->query("SELECT id, email, name, zalo_chat_id FROM accounts WHERE id IN ($newIdsStr)");
+                if ($resAdmins) {
+                    while ($admin = $resAdmins->fetch_assoc()) {
+                        try {
+                            if (!empty($admin['email'])) {
+                                sendAdminAddedToTicketEmail($admin['email'], $admin['name']);
+                            }
+                        } catch (Exception $emailEx) {
+                            error_log("Failed to send email to admin " . $admin['id'] . ": " . $emailEx->getMessage());
+                        }
+
+                        try {
+                            if (!empty($botToken) && !empty($admin['zalo_chat_id'])) {
+                                $zName = $admin['name'] ?: 'Quản trị viên';
+                                $zaloMsg = "[ PHÂN QUYỀN TICKET ]\n\n"
+                                    . "Chào $zName,\n"
+                                    . "Bạn vừa được cấp quyền xử lý Báo cáo lỗi (Ticket) từ hệ thống IDEAS DATA.\n\n"
+                                    . "Từ bây giờ, hệ thống sẽ tự động gửi thông báo cho bạn mỗi khi có Ticket mới chờ duyệt.";
+                                sendZaloMessage($botToken, $admin['zalo_chat_id'], $zaloMsg, false);
+                            }
+                        } catch (Exception $zaloEx) {
+                            error_log("Failed to send Zalo message to admin " . $admin['id'] . ": " . $zaloEx->getMessage());
+                        }
+                    }
+                }
+            } catch (Exception $notifyEx) {
+                error_log("General notification error in save_ticket_settings: " . $notifyEx->getMessage());
+            }
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'force_sync':
+        $id = (int) ($_GET['id'] ?? 0);
+        if ($id) {
+            ob_start();
+            try {
+                // Mock CLI arguments for cron_sync.php
+                $argv = ['cron_sync.php', $id];
+                require __DIR__ . '/cron_sync.php';
+                $output = ob_get_clean();
+                logAdminAction($conn, $decodedUser['id'], 'FORCE_SYNC', ['connection_id' => $id]);
+                echo json_encode(['success' => true, 'output' => $output]);
+            } catch (Throwable $e) {
+                ob_end_clean();
+                echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Invalid ID']);
+        }
+        break;
+
+    case 'get_dashboard_stats':
+        try {
+            $date = $_GET['date'] ?? 'Hôm nay';
+
+            $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            $userRole = $decodedUser['role'] ?? '';
+            $isDirector = ($userRole === 'director');
+            $isManager = ($userRole === 'manager');
+
+            $isProjManager = false;
+            $projIds = [];
+            if ($isManager) {
+                $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+                if ($pRes) {
+                    while ($pRow = $pRes->fetch_assoc()) {
+                        if (!empty($pRow['manager_ids'])) {
+                            $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                            if (in_array((int)$userId, $mIds, true)) {
+                                $projIds[] = (int)$pRow['id'];
+                                $isProjManager = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $managerUserIds = [];
+            $managerFilter = "";
+            $managerFilterDl = "";
+            $managerFilterDlNoAlias = "";
+            $managerFilterLeads = "";
+            $managerFilterReports = "";
+            $consultantFilter = "";
+
+            if ($isProjManager) {
+                $campIds = [];
+                if (!empty($projIds)) {
+                    $projIdsStr = implode(',', $projIds);
+                    $cRes = $conn->query("SELECT id FROM marketing_campaigns WHERE project_id IN ($projIdsStr)");
+                    if ($cRes) {
+                        while ($cRow = $cRes->fetch_assoc()) {
+                            $campIds[] = (int)$cRow['id'];
+                        }
+                    }
+                }
+
+                $rosterUserIds = [];
+                if (!empty($projIds)) {
+                    $projIdsStr = implode(',', $projIds);
+                    $rRes = $conn->query("SELECT user_id FROM project_roster WHERE project_id IN ($projIdsStr)");
+                    if ($rRes) {
+                        while ($rRow = $rRes->fetch_assoc()) {
+                            $rosterUserIds[] = (int)$rRow['user_id'];
+                        }
+                    }
+                }
+                $rosterUserIds[] = $userId;
+                $idsList = implode(',', array_unique($rosterUserIds));
+
+                $managerFilter = " AND assigned_to IN ($idsList) ";
+                $managerFilterDl = " AND dl.assigned_to IN ($idsList) ";
+                $managerFilterDlNoAlias = " AND assigned_to IN ($idsList) ";
+                $managerFilterLeads = " AND l.assigned_to IN ($idsList) ";
+                $managerFilterReports = " AND consultant_id IN ($idsList) ";
+                $consultantFilter = " AND (email IN (SELECT email FROM users WHERE id IN ($idsList))) ";
+
+                if (!empty($campIds)) {
+                    $campIdsStr = implode(',', $campIds);
+                    $managerFilter .= " AND campaign_id IN ($campIdsStr) ";
+                    $managerFilterDl .= " AND dl.lead_id IN (SELECT id FROM leads WHERE campaign_id IN ($campIdsStr)) ";
+                    $managerFilterDlNoAlias .= " AND lead_id IN (SELECT id FROM leads WHERE campaign_id IN ($campIdsStr)) ";
+                    $managerFilterLeads .= " AND l.campaign_id IN ($campIdsStr) ";
+                } else {
+                    $managerFilter .= " AND 1=0 ";
+                    $managerFilterDl .= " AND 1=0 ";
+                    $managerFilterDlNoAlias .= " AND 1=0 ";
+                    $managerFilterLeads .= " AND 1=0 ";
+                }
+            } else if ($isManager) {
+                // Check if this manager is leading a sales team or non-sales team (e.g. Marketing, Academic, HR, Accountant)
+                $mgrTeamRes = $conn->query("SELECT id, name FROM teams WHERE leader_id = " . (int)$decodedUser['user_id']);
+                $mgrTeamIds = [];
+                $isSalesTeamLead = false;
+                if ($mgrTeamRes) {
+                    while ($tr = $mgrTeamRes->fetch_assoc()) {
+                        $mgrTeamIds[] = (int)$tr['id'];
+                        $tName = mb_strtolower($tr['name'] ?? '');
+                        if (strpos($tName, 'tư vấn') !== false || strpos($tName, 'tuyển sinh') !== false || strpos($tName, 'sale') !== false) {
+                            $isSalesTeamLead = true;
+                        }
+                    }
+                }
+
+                // If the user is from Marketing (team_id 3 or Marketing in name/title), or not a sales team leader, they oversee all lead distribution
+                $isMarketingUser = false;
+                $userTeamRes = $conn->query("SELECT u.team_id, t.name as team_name, u.job_title FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = " . (int)$decodedUser['user_id']);
+                if ($userTeamRes && $uInfo = $userTeamRes->fetch_assoc()) {
+                    $tName = mb_strtolower($uInfo['team_name'] ?? '');
+                    $jTitle = mb_strtolower($uInfo['job_title'] ?? '');
+                    if ((int)$uInfo['team_id'] === 3 || strpos($tName, 'marketing') !== false || strpos($jTitle, 'marketing') !== false) {
+                        $isMarketingUser = true;
+                    }
+                }
+
+                if ($isMarketingUser || !$isSalesTeamLead) {
+                    // Marketing / Operations Managers see ALL data distribution stats across the entire company
+                    $managerFilter = "";
+                    $managerFilterDl = "";
+                    $managerFilterDlNoAlias = "";
+                    $managerFilterLeads = "";
+                    $managerFilterReports = "";
+                    $consultantFilter = "";
+                } else {
+                    if (!empty($mgrTeamIds)) {
+                        $mgrUserRes = $conn->query("SELECT id FROM users WHERE team_id IN (" . implode(',', $mgrTeamIds) . ")");
+                        if ($mgrUserRes) {
+                            while ($ur = $mgrUserRes->fetch_assoc()) {
+                                $managerUserIds[] = (int)$ur['id'];
+                            }
+                        }
+                    }
+                    $managerUserIds[] = (int)$decodedUser['user_id'];
+                    $idsList = implode(',', $managerUserIds);
+
+                    $managerFilter = " AND assigned_to IN ($idsList) ";
+                    $managerFilterDl = " AND dl.assigned_to IN ($idsList) ";
+                    $managerFilterDlNoAlias = " AND assigned_to IN ($idsList) ";
+                    $managerFilterLeads = " AND l.assigned_to IN ($idsList) ";
+                    $managerFilterReports = " AND consultant_id IN ($idsList) ";
+                    $consultantFilter = " AND (email IN (SELECT email FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = " . (int)$decodedUser['user_id'] . ")) OR email = '" . $conn->real_escape_string($decodedUser['email']) . "')";
+                }
+            }
+            $dbVer = 0;
+            $vStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'db_version' LIMIT 1");
+            if ($vStmt && $vStmt->num_rows > 0) {
+                $dbVer = (int)$vStmt->fetch_assoc()['setting_value'];
+            }
+
+            // Define date filters - SARGable for performance
+            $dateCondition = "received_at >= CURDATE() AND received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+            $prevDateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND received_at < CURDATE()";
+
+            if ($date === 'Hôm qua') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND received_at < CURDATE()";
+                $prevDateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 2 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+            } else if ($date === 'Tuần này') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND received_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+                $prevDateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+            } else if ($date === 'Tuần trước') {
+                $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+                $prevDateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+            } else if ($date === 'Tuần trước nữa') {
+                $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+                $prevDateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 21 DAY) AND received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY)";
+            } else if ($date === '7 ngày qua') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+                $prevDateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+            } else if ($date === '30 ngày qua') {
+                $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+                $prevDateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+            } else if ($date === 'Tháng này') {
+                $dateCondition = "received_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND received_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+                $prevDateCondition = "received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+            } else if ($date === 'Tháng trước') {
+                $dateCondition = "received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+                $prevDateCondition = "received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 2 MONTH) AND received_at < DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+            } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+                $start = $conn->real_escape_string($matches[1]);
+                $end = $conn->real_escape_string($matches[2]);
+                $dateCondition = "received_at >= '$start 00:00:00' AND received_at <= '$end 23:59:59'";
+                $diff = max(1, (strtotime($end) - strtotime($start)) / 86400);
+                $prevDateCondition = "received_at >= DATE_SUB('$start', INTERVAL $diff DAY) AND received_at < '$start'";
+            }
+
+            $dateConditionDl = str_replace('received_at', 'dl.received_at', $dateCondition);
+            $prevDateConditionDl = str_replace('received_at', 'dl.received_at', $prevDateCondition);
+
+            // Query current period stats using GROUP BY for index optimization
+            $statsSql = "SELECT dl.status, COUNT(*) as cnt 
+                     FROM distribution_logs dl 
+                     INNER JOIN (
+                         SELECT lead_id, MAX(id) as max_id 
+                         FROM distribution_logs 
+                         WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias
+                         GROUP BY lead_id
+                     ) dl_max ON dl.id = dl_max.max_id
+                     WHERE $dateConditionDl $managerFilterDl 
+                     GROUP BY dl.status";
+            $statsResRaw = $conn->query($statsSql);
+            $statusCounts = [
+                'assigned' => 0,
+                'compensation' => 0,
+                'rule_6_month' => 0,
+                'pending_work_hours' => 0,
+                'error' => 0,
+                'duplicate' => 0,
+                'reminder' => 0,
+                'no_consultant' => 0,
+                'blacklisted' => 0,
+                'pending_approval' => 0,
+                'rejected' => 0,
+                'fallback' => 0,
+                'success' => 0,
+                'databank_claim' => 0,
+                'released_to_kho' => 0
+            ];
+            if ($statsResRaw) {
+                while ($row = $statsResRaw->fetch_assoc()) {
+                    $status = $row['status'];
+                    $cnt = (int) $row['cnt'];
+                    if (array_key_exists($status, $statusCounts)) {
+                        $statusCounts[$status] = $cnt;
+                    }
+                }
+            }
+
+            // Query previous period stats for % change
+            $prevStatsSql = "SELECT dl.status, COUNT(*) as cnt 
+                         FROM distribution_logs dl 
+                         INNER JOIN (
+                             SELECT lead_id, MAX(id) as max_id 
+                             FROM distribution_logs 
+                             WHERE status != 'silent' AND $prevDateCondition $managerFilterDlNoAlias
+                             GROUP BY lead_id
+                         ) dl_max ON dl.id = dl_max.max_id
+                         WHERE $prevDateConditionDl $managerFilterDl 
+                         GROUP BY dl.status";
+            $prevStatsResRaw = $conn->query($prevStatsSql);
+            $prevStatusCounts = [
+                'assigned' => 0,
+                'compensation' => 0,
+                'rule_6_month' => 0,
+                'pending_work_hours' => 0,
+                'error' => 0,
+                'duplicate' => 0,
+                'reminder' => 0,
+                'no_consultant' => 0,
+                'blacklisted' => 0,
+                'pending_approval' => 0,
+                'rejected' => 0,
+                'fallback' => 0,
+                'success' => 0,
+                'databank_claim' => 0,
+                'released_to_kho' => 0
+            ];
+            if ($prevStatsResRaw) {
+                while ($row = $prevStatsResRaw->fetch_assoc()) {
+                    $status = $row['status'];
+                    $cnt = (int) $row['cnt'];
+                    if (array_key_exists($status, $prevStatusCounts)) {
+                        $prevStatusCounts[$status] = $cnt;
+                    }
+                }
+            }
+
+            // Query active blacklist counts from admin_logs (excluding manual ones that are already in distribution_logs as status='blacklisted' to avoid double-counting)
+            $dateConditionCreated = str_replace('received_at', 'created_at', $dateCondition);
+            $prevDateConditionCreated = str_replace('received_at', 'created_at', $prevDateCondition);
+
+            $autoBlacklistCnt = 0;
+            if (!$isManager) {
+                $blacklistRes = $conn->query("SELECT COUNT(*) as cnt FROM admin_logs WHERE action = 'BLOCK_LEAD_BLACKLIST' AND log_type = 'auto' AND $dateConditionCreated");
+                if ($blacklistRes && $row = $blacklistRes->fetch_assoc()) {
+                    $autoBlacklistCnt = (int) $row['cnt'];
+                }
+            }
+
+            $prevAutoBlacklistCnt = 0;
+            if (!$isManager) {
+                $prevBlacklistRes = $conn->query("SELECT COUNT(*) as cnt FROM admin_logs WHERE action = 'BLOCK_LEAD_BLACKLIST' AND log_type = 'auto' AND $prevDateConditionCreated");
+                if ($prevBlacklistRes && $row = $prevBlacklistRes->fetch_assoc()) {
+                    $prevAutoBlacklistCnt = (int) $row['cnt'];
+                }
+            }
+
+            // Query AI Pre-screener statistics (passed vs failed)
+            $aiPassedCount = 0;
+            $aiFailedCount = 0;
+            if ($dbVer >= 140) {
+                $cond1 = str_replace('received_at', 'ai_screening_started_at', $dateCondition);
+                $cond2 = str_replace('received_at', 'created_at', $dateCondition);
+                $dateConditionAI = "(($cond1) OR (ai_screening_started_at IS NULL AND $cond2))";
+            } else {
+                $dateConditionAI = str_replace('received_at', 'created_at', $dateCondition);
+            }
+            $aiScreenerSql = "SELECT ai_screener_status, COUNT(*) as cnt FROM leads WHERE $dateConditionAI $managerFilter AND ai_screener_status IN ('passed', 'failed') GROUP BY ai_screener_status";
+            $aiScreenerRes = $conn->query($aiScreenerSql);
+            if ($aiScreenerRes) {
+                while ($row = $aiScreenerRes->fetch_assoc()) {
+                    if ($row['ai_screener_status'] === 'passed') {
+                        $aiPassedCount = (int) $row['cnt'];
+                    } else if ($row['ai_screener_status'] === 'failed') {
+                        $aiFailedCount = (int) $row['cnt'];
+                    }
+                }
+            }
+
+            // Query accepted leads count
+            $acceptedCount = 0;
+            $acceptedRes = $conn->query("SELECT COUNT(*) as cnt FROM leads WHERE $dateConditionCreated $managerFilter AND is_accepted = 1");
+            if ($acceptedRes && $row = $acceptedRes->fetch_assoc()) {
+                $acceptedCount = (int) $row['cnt'];
+            }
+
+            // ticket_count counts ALL tickets created in the date range (for Chatbot card)
+            $todayTickets = 0;
+            $ticketRes = $conn->query("SELECT COUNT(*) as cnt FROM data_reports WHERE $dateConditionCreated $managerFilterReports");
+            if ($ticketRes && $row = $ticketRes->fetch_assoc()) {
+                $todayTickets = (int) $row['cnt'];
+            }
+
+            // ticket_errors counts only APPROVED tickets in the date range created_at (for Dashboard card details)
+            $ticketErrors = 0;
+            $tktErrRes = $conn->query("SELECT COUNT(*) as cnt FROM data_reports WHERE status IN ('approved', 'approved_no_comp') AND reason != 'databank_claim' AND $dateConditionCreated $managerFilterReports");
+            if ($tktErrRes && $row = $tktErrRes->fetch_assoc()) {
+                $ticketErrors = (int) $row['cnt'];
+            }
+
+            // Previous period calculations for change percentage
+            $prevTicketErrors = 0;
+            $prevTktErrRes = $conn->query("SELECT COUNT(*) as cnt FROM data_reports WHERE status IN ('approved', 'approved_no_comp') AND reason != 'databank_claim' AND $prevDateConditionCreated $managerFilterReports");
+            if ($prevTktErrRes && $row = $prevTktErrRes->fetch_assoc()) {
+                $prevTicketErrors = (int) $row['cnt'];
+            }
+
+            // 1. Success (Distributed) Calculations
+            $raw_distributed = $statusCounts['assigned'] + $statusCounts['rule_6_month'] + $statusCounts['pending_work_hours'] + $statusCounts['fallback'] + $statusCounts['success'] + $statusCounts['compensation'] + $statusCounts['databank_claim'] + $statusCounts['released_to_kho'];
+            $distributed_today = max(0, $raw_distributed - $ticketErrors);
+
+            // Keep details consistent: distributed_assigned + distributed_compensation = distributed_today
+            $assigned_count = $statusCounts['assigned'] + $statusCounts['rule_6_month'] + $statusCounts['pending_work_hours'] + $statusCounts['fallback'] + $statusCounts['success'];
+            $compensation_count = $statusCounts['compensation'] + $statusCounts['databank_claim'];
+            $assigned_adjusted = max(0, $assigned_count - $ticketErrors);
+            $rem = max(0, $ticketErrors - $assigned_count);
+            $compensation_adjusted = max(0, $compensation_count - $rem);
+
+            // Count self-entered leads (source is ca_nhan or gioi_thieu)
+            $self_count = 0;
+            $selfRes = $conn->query("
+            SELECT COUNT(*) as cnt 
+            FROM distribution_logs dl
+            JOIN leads l ON dl.lead_id = l.id
+            WHERE dl.status IN ('assigned', 'rule_6_month', 'pending_work_hours', 'fallback', 'success')
+              AND l.source IN ('ca_nhan', 'gioi_thieu')
+              AND $dateConditionDl $managerFilterDl
+        ");
+            if ($selfRes && $row = $selfRes->fetch_assoc()) {
+                $self_count = (int)$row['cnt'];
+            }
+
+            $assigned_total = max(0, $assigned_adjusted - $self_count);
+            $compensation_total = $compensation_adjusted;
+
+            // 2. Duplicates Calculations
+            $duplicates = $statusCounts['duplicate'] + $statusCounts['reminder'];
+
+            // 3. Errors Calculations
+            $underStandard = $statusCounts['rejected'] + $statusCounts['pending_approval'] + $statusCounts['error'] + $statusCounts['no_consultant'];
+            $blacklistCnt = $statusCounts['blacklisted'] + $autoBlacklistCnt;
+            $errors = $ticketErrors + $underStandard + $blacklistCnt;
+
+            // 4. Total Calculations
+            $total_today = $distributed_today + $duplicates + $errors;
+
+            $statsRes = [
+                'total' => $total_today,
+                'distributed' => $distributed_today,
+                'duplicates' => $duplicates,
+                'errors' => $errors
+            ];
+
+            // Do the same for previous period to keep % change consistent
+            $prev_raw_distributed = $prevStatusCounts['assigned'] + $prevStatusCounts['rule_6_month'] + $prevStatusCounts['pending_work_hours'] + $prevStatusCounts['fallback'] + $prevStatusCounts['success'] + $prevStatusCounts['compensation'] + $prevStatusCounts['databank_claim'] + $prevStatusCounts['released_to_kho'];
+            $prev_distributed_today = max(0, $prev_raw_distributed - $prevTicketErrors);
+            $prev_duplicates = $prevStatusCounts['duplicate'] + $prevStatusCounts['reminder'];
+            $prev_underStandard = $prevStatusCounts['rejected'] + $prevStatusCounts['pending_approval'] + $prevStatusCounts['error'] + $prevStatusCounts['no_consultant'];
+            $prev_blacklistCnt = $prevStatusCounts['blacklisted'] + $prevAutoBlacklistCnt;
+            $prev_errors = $prevTicketErrors + $prev_underStandard + $prev_blacklistCnt;
+            $prev_total_today = $prev_distributed_today + $prev_duplicates + $prev_errors;
+
+            $prevStatsRes = [
+                'total' => $prev_total_today,
+                'distributed' => $prev_distributed_today,
+                'duplicates' => $prev_duplicates,
+                'errors' => $prev_errors
+            ];
+
+            // Also define $raw_duplicates and $raw_errors to keep totalLogsCount consistent
+            $raw_duplicates = $duplicates;
+            $raw_errors = $underStandard;
+
+            $calcChange = function ($current, $prev) {
+                $current = (int) $current;
+                $prev = (int) $prev;
+                if ($prev == 0)
+                    return $current > 0 ? '+100%' : '0%';
+                $change = (($current - $prev) / $prev) * 100;
+                return ($change > 0 ? '+' : '') . number_format($change, 1) . '%';
+            };
+
+            // NEW CALCULATIONS: Out-of-Hours Lead Ratio and Fair-Share Equity
+            // 1. Out of Hours Lead Ratio
+            $outOfHoursRes = $conn->query("SELECT COUNT(*) as cnt FROM distribution_logs WHERE (status = 'pending_work_hours' OR message LIKE '%ngoài khung giờ làm việc%' OR message LIKE '%outside working hours%') AND $dateCondition $managerFilterDlNoAlias");
+            $outOfHoursCount = ($outOfHoursRes && $row = $outOfHoursRes->fetch_assoc()) ? (int)$row['cnt'] : 0;
+
+            $totalLogsCount = (int)$statsRes['total'];
+            $outOfHoursRatioVal = $totalLogsCount > 0 ? ($outOfHoursCount / $totalLogsCount) * 100 : 0;
+            $outOfHoursRatio = number_format($outOfHoursRatioVal, 1) . '%';
+
+            $prevOutOfHoursRes = $conn->query("SELECT COUNT(*) as cnt FROM distribution_logs WHERE (status = 'pending_work_hours' OR message LIKE '%ngoài khung giờ làm việc%' OR message LIKE '%outside working hours%') AND $prevDateCondition $managerFilterDlNoAlias");
+            $prevOutOfHoursCount = ($prevOutOfHoursRes && $row = $prevOutOfHoursRes->fetch_assoc()) ? (int)$row['cnt'] : 0;
+
+            $prevTotalLogsCount = (int)$prevStatsRes['total'];
+            $prevOutOfHoursRatioVal = $prevTotalLogsCount > 0 ? ($prevOutOfHoursCount / $prevTotalLogsCount) * 100 : 0;
+
+            $outOfHoursChange = $calcChange($outOfHoursCount, $prevOutOfHoursCount);
+
+            // 2. Fair-Share Equity
+            $calcFairness = function ($conn, $dateCondition) use ($consultantFilter, $managerFilter, $managerFilterDlNoAlias) {
+                $consultants = [];
+                $sql = "SELECT id FROM consultants WHERE status = 'active' $consultantFilter";
+                $res = $conn->query($sql);
+                if ($res) {
+                    while ($row = $res->fetch_assoc()) {
+                        $cId = (int)$row['id'];
+                        $consultants[$cId] = [
+                            'id' => $cId,
+                            'receive_ratio' => 1,
+                            'assigned_count' => 0
+                        ];
+                    }
+                }
+
+                if (empty($consultants)) {
+                    return ['fairness' => 100.0, 'sd' => 0.0];
+                }
+
+                $leadCountsSql = "SELECT assigned_to, 
+                                     CASE 
+                                       WHEN status = 'pending_work_hours' AND (message LIKE '%đền bù%' OR message LIKE '%compensation%' OR message LIKE '%Bù lượt%') THEN 'compensation'
+                                       ELSE status 
+                                     END as adjusted_status, 
+                                     COUNT(*) as cnt 
+                              FROM distribution_logs 
+                              WHERE $dateCondition $managerFilterDlNoAlias
+                                AND status IN ('assigned', 'compensation', 'error', 'rule_6_month', 'pending_work_hours') 
+                              GROUP BY assigned_to, adjusted_status";
+                $countsRes = $conn->query($leadCountsSql);
+                $consultantStatusCounts = [];
+                if ($countsRes) {
+                    while ($row = $countsRes->fetch_assoc()) {
+                        $cId = (int)$row['assigned_to'];
+                        $status = $row['adjusted_status'];
+                        $cnt = (int)$row['cnt'];
+                        if (!isset($consultantStatusCounts[$cId])) {
+                            $consultantStatusCounts[$cId] = [
+                                'assigned' => 0,
+                                'compensation' => 0,
+                                'rule_6_month' => 0,
+                                'pending_work_hours' => 0,
+                                'error' => 0
+                            ];
+                        }
+                        if (array_key_exists($status, $consultantStatusCounts[$cId])) {
+                            $consultantStatusCounts[$cId][$status] = $cnt;
+                        }
+                    }
+                }
+
+                foreach ($consultants as $cId => &$c) {
+                    if (isset($consultantStatusCounts[$cId])) {
+                        $sc = $consultantStatusCounts[$cId];
+                        $c['assigned_count'] = $sc['assigned'] + $sc['compensation'] + $sc['rule_6_month'] + $sc['pending_work_hours'] + max(0, $sc['error'] - $sc['compensation']);
+                    }
+                }
+                unset($c);
+
+                $rawCounts = [];
+                $normalizedCounts = [];
+                $totalLeads = 0;
+                foreach ($consultants as $c) {
+                    $rawCounts[] = $c['assigned_count'];
+                    $ratio = max(1, $c['receive_ratio']);
+                    $normalizedCounts[] = $c['assigned_count'] * $ratio;
+                    $totalLeads += $c['assigned_count'];
+                }
+
+                $N = count($consultants);
+                $mean = 0;
+                $standardDeviation = 0;
+                $giniNormalized = 0;
+
+                if ($N > 0) {
+                    $mean = $totalLeads / $N;
+
+                    $sumSqDiff = 0;
+                    foreach ($rawCounts as $x) {
+                        $sumSqDiff += pow($x - $mean, 2);
+                    }
+                    $standardDeviation = sqrt($sumSqDiff / $N);
+
+                    $sumNorm = array_sum($normalizedCounts);
+                    if ($sumNorm > 0) {
+                        $doubleSumDiffNorm = 0;
+                        for ($i = 0; $i < $N; $i++) {
+                            for ($j = 0; $j < $N; $j++) {
+                                $doubleSumDiffNorm += abs($normalizedCounts[$i] - $normalizedCounts[$j]);
+                            }
+                        }
+                        $giniNormalized = $doubleSumDiffNorm / (2 * $N * $sumNorm);
+                    }
+                }
+
+                $fairnessIndex = (1 - $giniNormalized) * 100;
+                return [
+                    'fairness' => round($fairnessIndex, 1),
+                    'sd' => round($standardDeviation, 1)
+                ];
+            };
+
+            $currentFairShare = $calcFairness($conn, $dateCondition);
+            $prevFairShare = $calcFairness($conn, $prevDateCondition);
+
+            $fairShareEquity = $currentFairShare['fairness'] . '%';
+            $fairShareSD = $currentFairShare['sd'];
+
+            $fairShareEquityChangeVal = $currentFairShare['fairness'] - $prevFairShare['fairness'];
+            $fairShareEquityChange = ($fairShareEquityChangeVal >= 0 ? '+' : '') . number_format($fairShareEquityChangeVal, 1) . '%';
+
+            // Query hourly/daily chart data
+            $chartMode = $_GET['chart_mode'] ?? '';
+            $chartMetric = $_GET['chart_metric'] ?? 'lead';
+            $chartData = [];
+
+            if ($chartMetric === 'zalo' || $chartMetric === 'email' || $chartMetric === 'telegram') {
+                $type = $chartMetric;
+                $dateConditionSent = str_replace('received_at', 'sent_at', $dateCondition);
+                $managerFilterLeadsComm = !empty($managerFilterLeads) ? " AND (cl.lead_id IS NULL OR cl.lead_id = 0 OR 1=1 $managerFilterLeads) " : "";
+                if ($chartMode === 'heatmap') {
+                    $heatmapSql = "SELECT WEEKDAY(cl.sent_at) as wday, HOUR(cl.sent_at) as h, COUNT(*) as vol 
+                               FROM communication_logs cl 
+                               LEFT JOIN leads l ON cl.lead_id = l.id
+                               WHERE cl.type = '$type' AND cl.status = 'sent' AND $dateConditionSent $managerFilterLeadsComm
+                               GROUP BY WEEKDAY(cl.sent_at), HOUR(cl.sent_at) 
+                               ORDER BY wday ASC, h ASC";
+                    $res = $conn->query($heatmapSql);
+                    if ($res) {
+                        while ($row = $res->fetch_assoc()) {
+                            $chartData[] = [
+                                'wday' => (int) $row['wday'],
+                                'hour' => (int) $row['h'],
+                                'volume' => (int) $row['vol']
+                            ];
+                        }
+                    }
+                } else {
+                    $useHourly = ($chartMode === 'hour') || ($chartMode !== 'day' && ($date === 'Hôm nay' || $date === 'Hôm qua'));
+                    if ($useHourly) {
+                        $hourlySql = "SELECT HOUR(cl.sent_at) as h, COUNT(*) as vol 
+                                  FROM communication_logs cl 
+                                  LEFT JOIN leads l ON cl.lead_id = l.id
+                                  WHERE cl.type = '$type' AND cl.status = 'sent' AND $dateConditionSent $managerFilterLeadsComm
+                                  GROUP BY HOUR(cl.sent_at) 
+                                  ORDER BY h ASC";
+                        $res = $conn->query($hourlySql);
+                        $hourlyMap = [];
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $hourlyMap[(int) $row['h']] = (int) $row['vol'];
+                            }
+                        }
+                        for ($i = 0; $i <= 23; $i++) {
+                            $vol = $hourlyMap[$i] ?? 0;
+                            $chartData[] = ['time' => str_pad($i, 2, '0', STR_PAD_LEFT) . 'h', 'volume' => $vol];
+                        }
+                    } else {
+                        $dailySql = "SELECT DATE(cl.sent_at) as d, COUNT(*) as vol 
+                                 FROM communication_logs cl 
+                                 LEFT JOIN leads l ON cl.lead_id = l.id
+                                 WHERE cl.type = '$type' AND cl.status = 'sent' AND $dateConditionSent $managerFilterLeadsComm
+                                 GROUP BY DATE(cl.sent_at) 
+                                 ORDER BY d ASC";
+                        $res = $conn->query($dailySql);
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $chartData[] = ['time' => date('d/m', strtotime($row['d'])), 'volume' => (int) $row['vol']];
+                            }
+                        }
+                    }
+                }
+            } else if ($chartMetric === 'token') {
+                $timeCol = ($dbVer >= 140) ? "COALESCE(ai_screening_started_at, created_at)" : "created_at";
+                if ($chartMode === 'heatmap') {
+                    $heatmapSql = "SELECT WEEKDAY($timeCol) as wday, HOUR($timeCol) as h, SUM(ai_total_tokens) as vol 
+                               FROM leads 
+                               WHERE $dateConditionAI $managerFilter
+                               GROUP BY WEEKDAY($timeCol), HOUR($timeCol) 
+                               ORDER BY wday ASC, h ASC";
+                    $res = $conn->query($heatmapSql);
+                    if ($res) {
+                        while ($row = $res->fetch_assoc()) {
+                            $chartData[] = [
+                                'wday' => (int) $row['wday'],
+                                'hour' => (int) $row['h'],
+                                'volume' => (int) $row['vol']
+                            ];
+                        }
+                    }
+                } else {
+                    $useHourly = ($chartMode === 'hour') || ($chartMode !== 'day' && ($date === 'Hôm nay' || $date === 'Hôm qua'));
+                    if ($useHourly) {
+                        $hourlySql = "SELECT HOUR($timeCol) as h, SUM(ai_total_tokens) as vol 
+                                  FROM leads 
+                                  WHERE $dateConditionAI $managerFilter
+                                  GROUP BY HOUR($timeCol) 
+                                  ORDER BY h ASC";
+                        $res = $conn->query($hourlySql);
+                        $hourlyMap = [];
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $hourlyMap[(int) $row['h']] = (int) $row['vol'];
+                            }
+                        }
+                        for ($i = 0; $i <= 23; $i++) {
+                            $vol = $hourlyMap[$i] ?? 0;
+                            $chartData[] = ['time' => str_pad($i, 2, '0', STR_PAD_LEFT) . 'h', 'volume' => $vol];
+                        }
+                    } else {
+                        $dailySql = "SELECT DATE($timeCol) as d, SUM(ai_total_tokens) as vol 
+                                 FROM leads 
+                                 WHERE $dateConditionAI $managerFilter
+                                 GROUP BY DATE($timeCol) 
+                                 ORDER BY d ASC";
+                        $res = $conn->query($dailySql);
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $chartData[] = ['time' => date('d/m', strtotime($row['d'])), 'volume' => (int) $row['vol']];
+                            }
+                        }
+                    }
+                }
+            } else {
+                if ($chartMode === 'heatmap') {
+                    $heatmapSql = "SELECT WEEKDAY(dl.received_at) as wday, HOUR(dl.received_at) as h, COUNT(*) as vol 
+                               FROM distribution_logs dl 
+                               INNER JOIN (
+                                   SELECT lead_id, MAX(id) as max_id 
+                                   FROM distribution_logs 
+                                   WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias
+                                   GROUP BY lead_id
+                               ) dl_max ON dl.id = dl_max.max_id
+                               WHERE $dateConditionDl $managerFilterDl 
+                               GROUP BY WEEKDAY(dl.received_at), HOUR(dl.received_at) 
+                               ORDER BY wday ASC, h ASC";
+                    $res = $conn->query($heatmapSql);
+                    if ($res) {
+                        while ($row = $res->fetch_assoc()) {
+                            $chartData[] = [
+                                'wday' => (int) $row['wday'],
+                                'hour' => (int) $row['h'],
+                                'volume' => (int) $row['vol']
+                            ];
+                        }
+                    }
+                } else {
+                    $useHourly = ($chartMode === 'hour') || ($chartMode !== 'day' && ($date === 'Hôm nay' || $date === 'Hôm qua'));
+                    if ($useHourly) {
+                        $hourlySql = "SELECT HOUR(dl.received_at) as h, COUNT(*) as vol 
+                                  FROM distribution_logs dl 
+                                  INNER JOIN (
+                                      SELECT lead_id, MAX(id) as max_id 
+                                      FROM distribution_logs 
+                                      WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias
+                                      GROUP BY lead_id
+                                      ) dl_max ON dl.id = dl_max.max_id
+                                  WHERE $dateConditionDl $managerFilterDl 
+                                  GROUP BY HOUR(dl.received_at) 
+                                  ORDER BY h ASC";
+                        $res = $conn->query($hourlySql);
+                        $hourlyMap = [];
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $hourlyMap[(int) $row['h']] = (int) $row['vol'];
+                            }
+                        }
+                        for ($i = 0; $i <= 23; $i++) {
+                            $vol = $hourlyMap[$i] ?? 0;
+                            $chartData[] = ['time' => str_pad($i, 2, '0', STR_PAD_LEFT) . 'h', 'volume' => $vol];
+                        }
+                    } else {
+                        // For daily
+                        $dailySql = "SELECT DATE(dl.received_at) as d, COUNT(*) as vol 
+                                 FROM distribution_logs dl 
+                                 INNER JOIN (
+                                     SELECT lead_id, MAX(id) as max_id 
+                                     FROM distribution_logs 
+                                     WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias
+                                     GROUP BY lead_id
+                                 ) dl_max ON dl.id = dl_max.max_id
+                                 WHERE $dateConditionDl $managerFilterDl 
+                                 GROUP BY DATE(dl.received_at) 
+                                 ORDER BY d ASC";
+                        $res = $conn->query($dailySql);
+                        if ($res) {
+                            while ($row = $res->fetch_assoc()) {
+                                $chartData[] = ['time' => date('d/m', strtotime($row['d'])), 'volume' => (int) $row['vol']];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Query Top Consultants
+            $topConsultantsSql = "SELECT c.id, c.name, c.email, c.avatar, c.status as c_status, c.vacation_mode as c_vacation_mode, dl.status as dl_status, COUNT(dl.id) as cnt 
+                              FROM distribution_logs dl 
+                              INNER JOIN (
+                                  SELECT lead_id, MAX(id) as max_id 
+                                  FROM distribution_logs 
+                                  WHERE status != 'silent' AND lead_id IS NOT NULL AND $dateCondition $managerFilterDlNoAlias
+                                  GROUP BY lead_id
+                              ) dl_max ON dl.id = dl_max.max_id
+                              JOIN consultants c ON dl.assigned_to = c.id 
+                              WHERE $dateConditionDl $managerFilterDl AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'error', 'reminder', 'databank_claim') 
+                              GROUP BY c.id, c.name, c.email, c.avatar, c.status, c.vacation_mode, dl.status";
+            $topConsultantsRes = $conn->query($topConsultantsSql);
+            $consultantStats = [];
+            if ($topConsultantsRes) {
+                while ($row = $topConsultantsRes->fetch_assoc()) {
+                    $cId = (int) $row['id'];
+                    if (!isset($consultantStats[$cId])) {
+                        $consultantStats[$cId] = [
+                            'id' => $cId,
+                            'name' => $row['name'],
+                            'email' => $row['email'],
+                            'avatar' => $row['avatar'],
+                            'status' => $row['c_status'],
+                            'vacation_mode' => (int) $row['c_vacation_mode'],
+                            'assigned' => 0,
+                            'compensation' => 0,
+                            'rule_6_month' => 0,
+                            'pending_work_hours' => 0,
+                            'error' => 0,
+                            'reminder' => 0,
+                            'databank_claim' => 0
+                        ];
+                    }
+                    $dl_status = $row['dl_status'];
+                    if (isset($consultantStats[$cId][$dl_status])) {
+                        $consultantStats[$cId][$dl_status] = (int) $row['cnt'];
+                    }
+                }
+            }
+
+            // Query uncontacted count for all consultants
+            $uncontactedMap = [];
+            $uncontactedRes = $conn->query("
+            SELECT l.assigned_to, COUNT(*) as cnt 
+            FROM leads l
+            JOIN consultants cons ON l.assigned_to = cons.id
+            LEFT JOIN contacts c ON c.person_id = l.person_id AND c.owner_id = cons.id AND c.deleted_at IS NULL
+            WHERE l.status != 'reminder' 
+              AND l.is_accepted = 1 
+              AND l.source NOT IN ('ca_nhan', 'gioi_thieu')
+              AND c.id IS NOT NULL 
+              AND NOT EXISTS (SELECT 1 FROM activities WHERE related_type = 'contact' AND related_id = c.id)
+              AND NOT EXISTS (SELECT 1 FROM notes WHERE entity_type = 'contact' AND entity_id = c.id)
+              $managerFilterLeads
+            GROUP BY l.assigned_to
+        ");
+            if ($uncontactedRes) {
+                while ($r = $uncontactedRes->fetch_assoc()) {
+                    $uncontactedMap[(int)$r['assigned_to']] = (int)$r['cnt'];
+                }
+            }
+
+            // Query recalled (timed out) count
+            $recalledMap = [];
+            $recalledRes = $conn->query("
+            SELECT assigned_to, COUNT(*) as cnt 
+            FROM distribution_logs 
+            WHERE status = 'recalled' AND lead_id IS NOT NULL AND $dateCondition $managerFilterDlNoAlias
+            GROUP BY assigned_to
+        ");
+            if ($recalledRes) {
+                while ($r = $recalledRes->fetch_assoc()) {
+                    $recalledMap[(int)$r['assigned_to']] = (int)$r['cnt'];
+                }
+            }
+
+            // Query actually accepted counts for all consultants
+            $acceptedMap = [];
+            $dateConditionL = str_replace('received_at', 'l.created_at', $dateCondition);
+            $acceptedRes = $conn->query("
+            SELECT l.assigned_to, COUNT(*) as cnt 
+            FROM leads l
+            WHERE (l.is_accepted = 1 OR (l.assigned_to IS NOT NULL AND l.assigned_to > 0))
+              AND l.assigned_to IS NOT NULL 
+              AND $dateConditionL $managerFilterLeads
+            GROUP BY l.assigned_to
+        ");
+            if ($acceptedRes) {
+                while ($r = $acceptedRes->fetch_assoc()) {
+                    $acceptedMap[(int)$r['assigned_to']] = (int)$r['cnt'];
+                }
+            }
+
+            $topConsultantsList = [];
+            foreach ($consultantStats as $cId => $cStats) {
+                $data_count = $cStats['assigned'] + $cStats['compensation'] + $cStats['rule_6_month'] + $cStats['pending_work_hours'] + $cStats['reminder'] + $cStats['databank_claim'] + max(0, $cStats['error'] - $cStats['compensation']);
+
+                $uCount = $uncontactedMap[$cId] ?? 0;
+                $rCount = $recalledMap[$cId] ?? 0;
+                $offered = $data_count + $rCount;
+                $accCount = $data_count > 0 ? $data_count : ($acceptedMap[$cId] ?? 0);
+                $acceptedPercent = $offered > 0 ? round(($accCount / $offered) * 100, 1) : 100.0;
+                $recalledPercent = $offered > 0 ? round(($rCount / $offered) * 100, 1) : 0.0;
+
+                $topConsultantsList[] = [
+                    'id' => $cStats['id'],
+                    'name' => $cStats['name'],
+                    'email' => $cStats['email'],
+                    'avatar' => $cStats['avatar'],
+                    'status' => $cStats['status'],
+                    'vacation_mode' => $cStats['vacation_mode'],
+                    'data' => $accCount,
+                    'uncontacted_count' => $uCount,
+                    'recalled_count' => $rCount,
+                    'offered_count' => $offered,
+                    'accepted_percent' => $acceptedPercent,
+                    'recalled_percent' => $recalledPercent
+                ];
+            }
+
+            // Sort descending by data
+            usort($topConsultantsList, function ($a, $b) {
+                return $b['data'] <=> $a['data'];
+            });
+
+            $topConsultants = [];
+            $totalAssignedForTop = max(1, (int) $statsRes['distributed']);
+            $colors = ['#7c3aed', '#3b82f6', '#f59e0b', '#10b981'];
+            $i = 0;
+            foreach ($topConsultantsList as $row) {
+                $percent = round(($row['data'] / $totalAssignedForTop) * 100, 1);
+                $topConsultants[] = [
+                    'id' => $row['id'],
+                    'name' => $row['name'],
+                    'email' => $row['email'],
+                    'avatar' => $row['avatar'],
+                    'status' => $row['status'],
+                    'vacation_mode' => $row['vacation_mode'],
+                    'data' => (int) $row['data'],
+                    'percent' => $percent,
+                    'color' => $colors[$i % 4],
+                    'uncontacted_count' => $row['uncontacted_count'],
+                    'recalled_count' => $row['recalled_count'],
+                    'offered_count' => $row['offered_count'],
+                    'accepted_percent' => $row['accepted_percent'],
+                    'recalled_percent' => $row['recalled_percent']
+                ];
+                $i++;
+            }
+
+            // Query Round Ratio
+            $roundRatioSql = "SELECT dr.id, dr.round_name, dl.status, COUNT(dl.id) as cnt 
+                          FROM distribution_logs dl 
+                          JOIN distribution_rounds dr ON dl.round_id = dr.id 
+                          WHERE $dateCondition $managerFilterDl AND dl.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'error') 
+                          GROUP BY dr.id, dr.round_name, dl.status";
+            $roundRatioRes = $conn->query($roundRatioSql);
+            $roundStats = [];
+            if ($roundRatioRes) {
+                while ($row = $roundRatioRes->fetch_assoc()) {
+                    $rId = (int) $row['id'];
+                    if (!isset($roundStats[$rId])) {
+                        $roundStats[$rId] = [
+                            'round_name' => $row['round_name'],
+                            'assigned' => 0,
+                            'compensation' => 0,
+                            'rule_6_month' => 0,
+                            'pending_work_hours' => 0,
+                            'error' => 0
+                        ];
+                    }
+                    $status = $row['status'];
+                    if (isset($roundStats[$rId][$status])) {
+                        $roundStats[$rId][$status] = (int) $row['cnt'];
+                    }
+                }
+            }
+
+            $roundRatioList = [];
+            foreach ($roundStats as $rId => $rStats) {
+                $count = $rStats['assigned'] + $rStats['compensation'] + $rStats['rule_6_month'] + $rStats['pending_work_hours'] + max(0, $rStats['error'] - $rStats['compensation']);
+                $roundRatioList[] = [
+                    'round' => $rStats['round_name'],
+                    'count' => $count
+                ];
+            }
+
+            // Sort descending by count
+            usort($roundRatioList, function ($a, $b) {
+                return $b['count'] <=> $a['count'];
+            });
+
+            $roundRatio = [];
+            $totalDistributed = max(1, (int) $statsRes['distributed']);
+            $roundColors = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+            $j = 0;
+            foreach ($roundRatioList as $row) {
+                $percent = round(($row['count'] / $totalDistributed) * 100, 1);
+                $roundRatio[] = [
+                    'round' => $row['round'],
+                    'count' => (int) $row['count'],
+                    'percent' => $percent,
+                    'color' => $roundColors[$j % 5]
+                ];
+                $j++;
+            }
+
+            // Query Source Ratio (fallback to l.source if sc.sheet_name is null)
+            $sourceSql = "SELECT 
+                        CASE 
+                            WHEN sc.id IS NOT NULL THEN sc.sheet_name
+                            ELSE 'Nhập tay'
+                        END as source, COUNT(dl.id) as count 
+                      FROM distribution_logs dl 
+                      INNER JOIN (
+                          SELECT lead_id, MAX(id) as max_id 
+                          FROM distribution_logs 
+                          WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias
+                          GROUP BY lead_id
+                      ) dl_max ON dl.id = dl_max.max_id
+                      JOIN leads l ON dl.lead_id = l.id
+                      LEFT JOIN sheet_connections sc ON l.connection_id = sc.id
+                      WHERE $dateConditionDl $managerFilterDl
+                      GROUP BY 
+                        CASE 
+                            WHEN sc.id IS NOT NULL THEN sc.sheet_name
+                            ELSE 'Nhập tay'
+                        END
+                      ORDER BY count DESC";
+            $sourceResRaw = $conn->query($sourceSql);
+            $sourceStats = [];
+            if ($sourceResRaw) {
+                $colors = ['#8b5cf6', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#6366f1'];
+                $i = 0;
+                while ($row = $sourceResRaw->fetch_assoc()) {
+                    $sourceStats[] = [
+                        'name' => $row['source'] ?: 'Không xác định',
+                        'value' => (int) $row['count'],
+                        'color' => $colors[$i % count($colors)]
+                    ];
+                    $i++;
+                }
+            }
+
+            // Query true Lead Source Ratio (Optimized: No JOIN on sheet_connections needed)
+            $leadSourceSql = "SELECT COALESCE(NULLIF(TRIM(l.source), ''), 'Không xác định') as source, COUNT(dl.id) as count 
+                          FROM distribution_logs dl 
+                          INNER JOIN (
+                              SELECT lead_id, MAX(id) as max_id 
+                              FROM distribution_logs 
+                              WHERE status != 'silent' AND $dateCondition $managerFilterDlNoAlias
+                              GROUP BY lead_id
+                          ) dl_max ON dl.id = dl_max.max_id
+                          JOIN leads l ON dl.lead_id = l.id
+                          WHERE $dateConditionDl $managerFilterDl
+                          GROUP BY COALESCE(NULLIF(TRIM(l.source), ''), 'Không xác định') 
+                          ORDER BY count DESC";
+            $leadSourceResRaw = $conn->query($leadSourceSql);
+            $leadSourceStats = [];
+            if ($leadSourceResRaw) {
+                $colors = ['#8b5cf6', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#14b8a6', '#f97316'];
+                $i = 0;
+                while ($row = $leadSourceResRaw->fetch_assoc()) {
+                    $leadSourceStats[] = [
+                        'name' => $row['source'] ?: 'Không xác định',
+                        'value' => (int) $row['count'],
+                        'color' => $colors[$i % count($colors)]
+                    ];
+                    $i++;
+                }
+            }
+            if (empty($leadSourceStats)) {
+                $directSourceSql = "SELECT COALESCE(NULLIF(TRIM(source), ''), 'Không xác định') as source, COUNT(id) as count FROM leads WHERE source IS NOT NULL AND source != '' GROUP BY COALESCE(NULLIF(TRIM(source), ''), 'Không xác định') ORDER BY count DESC LIMIT 8";
+                $directRes = $conn->query($directSourceSql);
+                if ($directRes) {
+                    $colors = ['#8b5cf6', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#14b8a6', '#f97316'];
+                    $i = 0;
+                    while ($row = $directRes->fetch_assoc()) {
+                        $leadSourceStats[] = [
+                            'name' => $row['source'] ?: 'Không xác định',
+                            'value' => (int) $row['count'],
+                            'color' => $colors[$i % count($colors)]
+                        ];
+                        $i++;
+                    }
+                }
+            }
+
+
+            // Query Error Stats by Consultant (Approved tickets)
+            $dateConditionCreated = str_replace('received_at', 'dr.created_at', $dateCondition);
+            $errorSql = "SELECT c.name, COUNT(dr.id) as count 
+                     FROM data_reports dr 
+                     JOIN consultants c ON dr.consultant_id = c.id
+                     WHERE dr.status IN ('approved', 'approved_no_comp') AND $dateConditionCreated $managerFilterReports
+                     GROUP BY c.id, c.name ORDER BY count DESC";
+            $errorResRaw = $conn->query($errorSql);
+            $errorStats = [];
+            if ($errorResRaw) {
+                while ($row = $errorResRaw->fetch_assoc()) {
+                    $errorStats[] = [
+                        'name' => $row['name'],
+                        'errors' => (int) $row['count']
+                    ];
+                }
+            }
+
+            // Query if AI Pre-screener is enabled
+            $aiEnabled = 0;
+            $aiEnabledRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'ai_screener_enabled'");
+            if ($aiEnabledRes && $row = $aiEnabledRes->fetch_assoc()) {
+                $aiEnabled = (int) $row['setting_value'];
+            }
+
+            // Query communication stats (Zalo/Email/Telegram/Tokens) for dashboard modal
+            $dateConditionSent = str_replace('received_at', 'sent_at', $dateCondition);
+            $managerFilterLeadsComm = !empty($managerFilterLeads) ? " AND (cl.lead_id IS NULL OR cl.lead_id = 0 OR 1=1 $managerFilterLeads) " : "";
+
+            $totalZaloSent = 0;
+            $zaloSentRes = $conn->query("SELECT COUNT(cl.id) as cnt FROM communication_logs cl LEFT JOIN leads l ON cl.lead_id = l.id WHERE cl.type = 'zalo' AND cl.status = 'sent' AND $dateConditionSent $managerFilterLeadsComm");
+            if ($zaloSentRes && $row = $zaloSentRes->fetch_assoc()) {
+                $totalZaloSent = (int)$row['cnt'];
+            }
+            $dateConditionLeadsCreated = str_replace('received_at', 'created_at', $dateCondition);
+            $dateConditionLeadsSentAt = str_replace('received_at', 'zalo_notify_sent_at', $dateCondition);
+            $zaloLeadRes = $conn->query("SELECT COUNT(l.id) as cnt FROM leads l WHERE l.zalo_notify_status = 'sent' AND (($dateConditionLeadsSentAt) OR (l.zalo_notify_sent_at IS NULL AND $dateConditionLeadsCreated)) $managerFilterLeads");
+            if ($zaloLeadRes && $r = $zaloLeadRes->fetch_assoc()) {
+                $totalZaloSent = max($totalZaloSent, (int)$r['cnt']);
+            }
+
+            $totalEmailsSent = 0;
+            $emailsSentRes = $conn->query("SELECT COUNT(cl.id) as cnt FROM communication_logs cl LEFT JOIN leads l ON cl.lead_id = l.id WHERE cl.type = 'email' AND cl.status = 'sent' AND $dateConditionSent $managerFilterLeadsComm");
+            if ($emailsSentRes && $row = $emailsSentRes->fetch_assoc()) {
+                $totalEmailsSent = (int)$row['cnt'];
+            }
+            $dateConditionEmailSentAt = str_replace('received_at', 'email_notify_sent_at', $dateCondition);
+            $emailLeadRes = $conn->query("SELECT COUNT(l.id) as cnt FROM leads l WHERE l.email_notify_status = 'sent' AND (($dateConditionEmailSentAt) OR (l.email_notify_sent_at IS NULL AND $dateConditionLeadsCreated)) $managerFilterLeads");
+            if ($emailLeadRes && $r = $emailLeadRes->fetch_assoc()) {
+                $totalEmailsSent = max($totalEmailsSent, (int)$r['cnt']);
+            }
+
+            $totalTelegramSent = 0;
+            $telegramSentRes = $conn->query("SELECT COUNT(cl.id) as cnt FROM communication_logs cl LEFT JOIN leads l ON cl.lead_id = l.id WHERE cl.type = 'telegram' AND cl.status = 'sent' AND $dateConditionSent $managerFilterLeadsComm");
+            if ($telegramSentRes && $row = $telegramSentRes->fetch_assoc()) {
+                $totalTelegramSent = (int)$row['cnt'];
+            }
+            $dateConditionTgSentAt = str_replace('received_at', 'telegram_notify_sent_at', $dateCondition);
+            $tgLeadRes = $conn->query("SELECT COUNT(l.id) as cnt FROM leads l WHERE l.telegram_notify_status = 'sent' AND (($dateConditionTgSentAt) OR (l.telegram_notify_sent_at IS NULL AND $dateConditionLeadsCreated)) $managerFilterLeads");
+            if ($tgLeadRes && $r = $tgLeadRes->fetch_assoc()) {
+                $totalTelegramSent = max($totalTelegramSent, (int)$r['cnt']);
+            }
+
+            $totalTokensUsed = 0;
+            $totalPromptTokensUsed = 0;
+            $totalCompletionTokensUsed = 0;
+            if ($dbVer >= 140) {
+                $cond1 = str_replace('received_at', 'ai_screening_started_at', $dateCondition);
+                $cond2 = str_replace('received_at', 'created_at', $dateCondition);
+                $dateConditionAI = "(($cond1) OR (ai_screening_started_at IS NULL AND $cond2))";
+            } else {
+                $dateConditionAI = str_replace('received_at', 'created_at', $dateCondition);
+            }
+            $tokensRes = $conn->query("SELECT SUM(ai_total_tokens) as cnt, SUM(ai_prompt_tokens) as prompt_cnt, SUM(ai_completion_tokens) as completion_cnt FROM leads WHERE $dateConditionAI $managerFilter");
+            if ($tokensRes && $row = $tokensRes->fetch_assoc()) {
+                $totalTokensUsed = (int)$row['cnt'];
+                $totalPromptTokensUsed = (int)$row['prompt_cnt'];
+                $totalCompletionTokensUsed = (int)$row['completion_cnt'];
+            }
+
+            // --- BỔ SUNG BIỂU ĐỒ MARKETING (MARKETING CHARTS) ---
+            $mktCohortConversion = [];
+            $mktConversionByLeadMonth = [];
+            $mktConversionByCloseMonth = [];
+            $mktRevenueAndProjection = [];
+
+            try {
+                // 1. Cohort conversion speed (Số lead chuyển đổi trong 1 tháng, 2 tháng, 3 tháng kể từ ngày tạo)
+                $cohortSql = "
+                SELECT 
+                    DATE_FORMAT(l.created_at, '%m/%Y') as cohort_month,
+                    COUNT(l.id) as total_leads,
+                    SUM(CASE WHEN ps.is_won = 1 AND DATEDIFF(d.actual_close_date, l.created_at) <= 30 THEN 1 ELSE 0 END) as converted_1_month,
+                    SUM(CASE WHEN ps.is_won = 1 AND DATEDIFF(d.actual_close_date, l.created_at) <= 60 THEN 1 ELSE 0 END) as converted_2_months,
+                    SUM(CASE WHEN ps.is_won = 1 AND DATEDIFF(d.actual_close_date, l.created_at) <= 90 THEN 1 ELSE 0 END) as converted_3_months
+                FROM leads l
+                LEFT JOIN contacts c ON l.person_id = c.person_id AND c.deleted_at IS NULL
+                LEFT JOIN deals d ON c.id = d.contact_id AND d.deleted_at IS NULL
+                LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+                GROUP BY cohort_month
+                ORDER BY MIN(l.created_at) ASC
+            ";
+                $cohortRes = $conn->query($cohortSql);
+                if ($cohortRes) {
+                    while ($row = $cohortRes->fetch_assoc()) {
+                        $mktCohortConversion[] = [
+                            'cohort_month' => $row['cohort_month'],
+                            'total_leads' => (int)$row['total_leads'],
+                            'converted_1_month' => (int)$row['converted_1_month'],
+                            'converted_2_months' => (int)$row['converted_2_months'],
+                            'converted_3_months' => (int)$row['converted_3_months']
+                        ];
+                    }
+                }
+
+                // 2a. Grouped by lead creation month (Tỷ lệ convert theo ngày tạo lead)
+                $leadMonthSql = "
+                SELECT 
+                    DATE_FORMAT(l.created_at, '%m/%Y') as month,
+                    COUNT(l.id) as total_leads,
+                    SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) as customer_count,
+                    ROUND(SUM(CASE WHEN ps.is_won = 1 THEN 1 ELSE 0 END) / COUNT(l.id) * 100, 1) as conversion_rate
+                FROM leads l
+                LEFT JOIN contacts c ON l.person_id = c.person_id AND c.deleted_at IS NULL
+                LEFT JOIN deals d ON c.id = d.contact_id AND d.deleted_at IS NULL
+                LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+                GROUP BY month
+                ORDER BY MIN(l.created_at) ASC
+            ";
+                $leadMonthRes = $conn->query($leadMonthSql);
+                if ($leadMonthRes) {
+                    while ($row = $leadMonthRes->fetch_assoc()) {
+                        $mktConversionByLeadMonth[] = [
+                            'month' => $row['month'],
+                            'total_leads' => (int)$row['total_leads'],
+                            'customer_count' => (int)$row['customer_count'],
+                            'conversion_rate' => (float)$row['conversion_rate']
+                        ];
+                    }
+                }
+
+                // 2b. Grouped by deal closing month (Tỷ lệ convert theo ngày chốt)
+                $closeMonthSql = "
+                SELECT 
+                    dates.month,
+                    COALESCE(leads_tbl.total_leads, 0) as total_leads,
+                    COALESCE(deals_tbl.customer_count, 0) as customer_count,
+                    CASE 
+                        WHEN COALESCE(leads_tbl.total_leads, 0) > 0 
+                        THEN ROUND(COALESCE(deals_tbl.customer_count, 0) / leads_tbl.total_leads * 100, 1)
+                        ELSE 0.0 
+                    END as conversion_rate
+                FROM (
+                    SELECT DISTINCT DATE_FORMAT(created_at, '%m/%Y') as month, MIN(created_at) as min_date FROM leads GROUP BY month
+                    UNION
+                    SELECT DISTINCT DATE_FORMAT(actual_close_date, '%m/%Y') as month, MIN(actual_close_date) as min_date FROM deals WHERE actual_close_date IS NOT NULL GROUP BY month
+                ) dates
+                LEFT JOIN (
+                    SELECT DATE_FORMAT(created_at, '%m/%Y') as month, COUNT(*) as total_leads
+                    FROM leads
+                    GROUP BY month
+                ) leads_tbl ON dates.month = leads_tbl.month
+                LEFT JOIN (
+                    SELECT DATE_FORMAT(d.actual_close_date, '%m/%Y') as month, COUNT(*) as customer_count
+                    FROM deals d
+                    JOIN pipeline_stages ps ON d.stage_id = ps.id
+                    WHERE ps.is_won = 1 AND d.deleted_at IS NULL AND d.actual_close_date IS NOT NULL
+                    GROUP BY month
+                ) deals_tbl ON dates.month = deals_tbl.month
+                WHERE dates.month IS NOT NULL
+                GROUP BY dates.month
+                ORDER BY MIN(dates.min_date) ASC
+            ";
+                $closeMonthRes = $conn->query($closeMonthSql);
+                if ($closeMonthRes) {
+                    while ($row = $closeMonthRes->fetch_assoc()) {
+                        $mktConversionByCloseMonth[] = [
+                            'month' => $row['month'],
+                            'total_leads' => (int)$row['total_leads'],
+                            'customer_count' => (int)$row['customer_count'],
+                            'conversion_rate' => (float)$row['conversion_rate']
+                        ];
+                    }
+                }
+
+                // 3. Doanh thu theo tháng và doanh thu dự kiến (Realized Revenue vs Projected Revenue)
+                $revProjSql = "
+                SELECT 
+                    dates.month,
+                    COALESCE(realized_tbl.realized, 0) as realized_revenue,
+                    COALESCE(projected_tbl.projected, 0) as projected_revenue
+                FROM (
+                    SELECT DISTINCT DATE_FORMAT(paid_at, '%m/%Y') as month, MIN(paid_at) as min_date FROM invoices WHERE status = 'paid' AND paid_at IS NOT NULL GROUP BY month
+                    UNION
+                    SELECT DISTINCT DATE_FORMAT(due_date, '%m/%Y') as month, MIN(due_date) as min_date FROM invoices WHERE status IN ('pending', 'draft', 'overdue') AND due_date IS NOT NULL GROUP BY month
+                ) dates
+                LEFT JOIN (
+                    SELECT DATE_FORMAT(paid_at, '%m/%Y') as month, SUM(total) as realized
+                    FROM invoices
+                    WHERE status = 'paid' AND paid_at IS NOT NULL AND deleted_at IS NULL
+                    GROUP BY month
+                ) realized_tbl ON dates.month = realized_tbl.month
+                LEFT JOIN (
+                    SELECT DATE_FORMAT(due_date, '%m/%Y') as month, SUM(total) as projected
+                    FROM invoices
+                    WHERE status IN ('pending', 'draft', 'overdue') AND due_date IS NOT NULL AND deleted_at IS NULL
+                    GROUP BY month
+                ) projected_tbl ON dates.month = projected_tbl.month
+                WHERE dates.month IS NOT NULL
+                GROUP BY dates.month
+                ORDER BY MIN(dates.min_date) ASC
+            ";
+                $revProjRes = $conn->query($revProjSql);
+                if ($revProjRes) {
+                    while ($row = $revProjRes->fetch_assoc()) {
+                        $mktRevenueAndProjection[] = [
+                            'month' => $row['month'],
+                            'realized_revenue' => (float)$row['realized_revenue'],
+                            'projected_revenue' => (float)$row['projected_revenue']
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                error_log("Error fetching marketing stats: " . $e->getMessage());
+            }
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'db_needs_migration' => $GLOBALS['db_needs_migration'] ?? false,
+                    'total_zalo_sent' => $totalZaloSent,
+                    'total_emails_sent' => $totalEmailsSent,
+                    'total_telegram_sent' => $totalTelegramSent,
+                    'total_tokens_used' => $totalTokensUsed,
+                    'total_prompt_tokens_used' => $totalPromptTokensUsed,
+                    'total_completion_tokens_used' => $totalCompletionTokensUsed,
+                    'total_today' => (int) $statsRes['total'],
+                    'distributed_today' => (int) $statsRes['distributed'],
+                    'distributed_assigned' => (int) $assigned_total,
+                    'distributed_compensation' => (int) $compensation_total,
+                    'distributed_self' => (int) $self_count,
+                    'duplicates' => (int) $statsRes['duplicates'],
+                    'errors' => (int) $statsRes['errors'],
+                    'ticket_errors' => (int) $ticketErrors,
+                    'ticket_count' => $todayTickets,
+                    'blacklists' => (int) $blacklistCnt,
+                    'under_standard' => (int) $underStandard,
+                    'ai_passed_count' => $aiPassedCount,
+                    'ai_failed_count' => $aiFailedCount,
+                    'ai_screener_enabled' => $aiEnabled,
+                    'accepted_today' => $acceptedCount,
+                    'out_of_hours_ratio' => $outOfHoursRatio,
+                    'out_of_hours_change' => $outOfHoursChange,
+                    'pending_work_hours_count' => $outOfHoursCount,
+                    'fair_share_equity' => $fairShareEquity,
+                    'fair_share_equity_change' => $fairShareEquityChange,
+                    'fair_share_sd' => $fairShareSD,
+                    'total_change' => $calcChange($statsRes['total'], $prevStatsRes['total']),
+                    'distributed_change' => $calcChange($statsRes['distributed'], $prevStatsRes['distributed']),
+                    'duplicates_change' => $calcChange($statsRes['duplicates'], $prevStatsRes['duplicates']),
+                    'errors_change' => $calcChange($statsRes['errors'], $prevStatsRes['errors']),
+                    'chartData' => $chartData,
+                    'topConsultants' => $topConsultants,
+                    'roundRatio' => $roundRatio,
+                    'sourceStats' => $sourceStats,
+                    'leadSourceStats' => $leadSourceStats,
+                    'errorStats' => $errorStats,
+                    'mktCohortConversion' => $mktCohortConversion,
+                    'mktConversionByLeadMonth' => $mktConversionByLeadMonth,
+                    'mktConversionByCloseMonth' => $mktConversionByCloseMonth,
+                    'mktRevenueAndProjection' => $mktRevenueAndProjection
+                ]
+            ]);
+        } catch (Throwable $e) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Lỗi máy chủ: ' . $e->getMessage() . ' tại dòng ' . $e->getLine() . ' trong file ' . $e->getFile()
+            ]);
+        }
+        break;
+
+    case 'seed_marketing_demo':
+        try {
+            $userRole = $decodedUser['role'] ?? '';
+            if ($userRole !== 'admin' && $userRole !== 'superadmin' && $userRole !== 'director') {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Permission denied. Only Admins and Directors can seed data.']);
+                exit;
+            }
+            $_REQUEST['key'] = 'Ideas2026'; // Bypass secret key check in script
+            require_once __DIR__ . '/seed_marketing_data.php';
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+        break;
+
+    case 'get_fair_share_stats':
+        $date = $_GET['date'] ?? 'Tuần này';
+        $roundId = isset($_GET['round_id']) && $_GET['round_id'] !== '' ? (int) $_GET['round_id'] : 0;
+
+        // Date conditions
+        $dateCondition = "received_at >= CURDATE() AND received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        if ($date === 'Hôm nay') {
+            $dateCondition = "received_at >= CURDATE() AND received_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        } else if ($date === 'Hôm qua') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND received_at < CURDATE()";
+        } else if ($date === 'Tuần này') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND received_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === 'Tuần trước') {
+            $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY) AND received_at < DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)";
+        } else if ($date === 'Tuần trước nữa') {
+            $dateCondition = "received_at >= DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 14 DAY) AND received_at < DATE_SUB(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)";
+        } else if ($date === '7 ngày qua') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } else if ($date === '30 ngày qua') {
+            $dateCondition = "received_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+        } else if ($date === 'Tháng này') {
+            $dateCondition = "received_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND received_at < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)";
+        } else if ($date === 'Tháng trước') {
+            $dateCondition = "received_at >= DATE_SUB(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND received_at < DATE_FORMAT(CURDATE(), '%Y-%m-01')";
+        } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+            $start = $conn->real_escape_string($matches[1]);
+            $end = $conn->real_escape_string($matches[2]);
+            $dateCondition = "received_at >= '$start 00:00:00' AND received_at <= '$end 23:59:59'";
+        }
+
+        $roundCondition = "";
+        if ($roundId > 0) {
+            $roundCondition = " AND round_id = $roundId";
+        }
+
+        // Fetch consultants matching the round or all active
+        $consultants = [];
+        if ($roundId > 0) {
+            $sql = "SELECT c.id, c.name, c.avatar, COALESCE(rc.receive_ratio, 1) as receive_ratio, rc.round_id, r.round_name,
+                           COALESCE(rc.compensation_count, 0) as pending_compensation,
+                           COALESCE(rc.skip_count, 0) as skip_count,
+                           COALESCE(rc.current_turn_remaining, 0) as current_turn_remaining
+                    FROM consultants c
+                    JOIN round_consultants rc ON c.id = rc.consultant_id
+                    JOIN distribution_rounds r ON rc.round_id = r.id
+                    WHERE rc.round_id = $roundId AND c.status = 'active'
+                    ORDER BY c.name ASC";
+        } else {
+            $sql = "SELECT c.id, c.name, c.avatar, 1 as receive_ratio, 0 as round_id, 'Tất cả các Vòng' as round_name,
+                           (SELECT COALESCE(SUM(rc2.compensation_count), 0) FROM round_consultants rc2 WHERE rc2.consultant_id = c.id) as pending_compensation,
+                           0 as skip_count,
+                           0 as current_turn_remaining
+                    FROM consultants c
+                    WHERE c.status = 'active'
+                    ORDER BY c.name ASC";
+        }
+        $res = $conn->query($sql);
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $consultants[(int) $row['id']] = [
+                    'id' => (int) $row['id'],
+                    'name' => $row['name'],
+                    'avatar' => $row['avatar'],
+                    'receive_ratio' => (int) $row['receive_ratio'],
+                    'round_id' => (int) $row['round_id'],
+                    'round_name' => $row['round_name'],
+                    'assigned_count' => 0,
+                    'ticket_count' => 0,
+                    'total_ticket_count' => 0,
+                    'duplicate_count' => 0,
+                    'compensation_count' => 0,
+                    'pending_compensation' => (int) ($row['pending_compensation'] ?? 0),
+                    'skip_count' => (int) ($row['skip_count'] ?? 0),
+                    'current_turn_remaining' => (int) ($row['current_turn_remaining'] ?? 0),
+                    'sources' => []
+                ];
+            }
+        }
+
+        // Query distinct sources active in this period to build charts easily
+        $sources = [];
+        $sourcesSql = "SELECT DISTINCT COALESCE(NULLIF(TRIM(l.source), ''), 'Không xác định') as source 
+                       FROM distribution_logs dl 
+                       JOIN leads l ON dl.lead_id = l.id
+                       WHERE $dateCondition $roundCondition AND dl.status != 'silent'";
+        $sourcesRes = $conn->query($sourcesSql);
+        if ($sourcesRes) {
+            while ($row = $sourcesRes->fetch_assoc()) {
+                if ($row['source']) {
+                    $sources[] = $row['source'];
+                }
+            }
+        }
+        if (empty($sources)) {
+            $sources = ['Facebook Ads', 'Google Ads', 'TikTok Ads', 'Google Sheet'];
+        }
+
+        // Query lead assignment counts grouped by status (adjust pending compensation to be counted as compensation)
+        $leadCountsSql = "SELECT assigned_to, 
+                                 CASE 
+                                   WHEN status = 'pending_work_hours' AND (message LIKE '%đền bù%' OR message LIKE '%compensation%' OR message LIKE '%Bù lượt%') THEN 'compensation'
+                                   ELSE status 
+                                 END as adjusted_status, 
+                                 COUNT(*) as cnt 
+                          FROM distribution_logs 
+                          WHERE $dateCondition $roundCondition 
+                            AND status IN ('assigned', 'compensation', 'error', 'rule_6_month', 'pending_work_hours') 
+                          GROUP BY assigned_to, adjusted_status";
+        $countsRes = $conn->query($leadCountsSql);
+        $consultantStatusCounts = [];
+        if ($countsRes) {
+            while ($row = $countsRes->fetch_assoc()) {
+                $cId = (int) $row['assigned_to'];
+                $status = $row['adjusted_status'];
+                $cnt = (int) $row['cnt'];
+                if (!isset($consultantStatusCounts[$cId])) {
+                    $consultantStatusCounts[$cId] = [
+                        'assigned' => 0,
+                        'compensation' => 0,
+                        'rule_6_month' => 0,
+                        'pending_work_hours' => 0,
+                        'error' => 0
+                    ];
+                }
+                if (array_key_exists($status, $consultantStatusCounts[$cId])) {
+                    $consultantStatusCounts[$cId][$status] = $cnt;
+                }
+            }
+        }
+        foreach ($consultants as $cId => &$c) {
+            if (isset($consultantStatusCounts[$cId])) {
+                $sc = $consultantStatusCounts[$cId];
+                $c['assigned_count'] = $sc['assigned'] + $sc['compensation'] + $sc['rule_6_month'] + $sc['pending_work_hours'] + max(0, $sc['error'] - $sc['compensation']);
+                $c['compensation_count'] = $sc['compensation'];
+            }
+        }
+        unset($c);
+
+        // Query source breakdown per consultant grouped by status (adjust pending compensation to be counted as compensation)
+        $sourceCountsSql = "SELECT dl.assigned_to, COALESCE(NULLIF(TRIM(l.source), ''), 'Không xác định') as source, 
+                                   CASE 
+                                     WHEN dl.status = 'pending_work_hours' AND (dl.message LIKE '%đền bù%' OR dl.message LIKE '%compensation%' OR dl.message LIKE '%Bù lượt%') THEN 'compensation'
+                                     ELSE dl.status 
+                                   END as adjusted_status, 
+                                   COUNT(*) as cnt 
+                            FROM distribution_logs dl
+                            JOIN leads l ON dl.lead_id = l.id
+                            WHERE $dateCondition $roundCondition 
+                              AND dl.status IN ('assigned', 'compensation', 'error', 'rule_6_month', 'pending_work_hours')
+                            GROUP BY dl.assigned_to, COALESCE(NULLIF(TRIM(l.source), ''), 'Không xác định'), adjusted_status";
+        $srcRes = $conn->query($sourceCountsSql);
+        $consultantSourceStatusCounts = [];
+        if ($srcRes) {
+            while ($row = $srcRes->fetch_assoc()) {
+                $cId = (int) $row['assigned_to'];
+                $sourceName = $row['source'] ?: 'Không xác định';
+                $status = $row['adjusted_status'];
+                $cnt = (int) $row['cnt'];
+
+                if (!isset($consultantSourceStatusCounts[$cId])) {
+                    $consultantSourceStatusCounts[$cId] = [];
+                }
+                if (!isset($consultantSourceStatusCounts[$cId][$sourceName])) {
+                    $consultantSourceStatusCounts[$cId][$sourceName] = [
+                        'assigned' => 0,
+                        'compensation' => 0,
+                        'rule_6_month' => 0,
+                        'pending_work_hours' => 0,
+                        'error' => 0
+                    ];
+                }
+                if (array_key_exists($status, $consultantSourceStatusCounts[$cId][$sourceName])) {
+                    $consultantSourceStatusCounts[$cId][$sourceName][$status] = $cnt;
+                }
+            }
+        }
+        foreach ($consultants as $cId => &$c) {
+            if (isset($consultantSourceStatusCounts[$cId])) {
+                $sCounts = $consultantSourceStatusCounts[$cId];
+
+                // Calculate total errors and compensations for this consultant across all sources
+                $totalErrors = 0;
+                $totalCompensations = 0;
+                foreach ($sCounts as $src => $sc) {
+                    $totalErrors += $sc['error'];
+                    $totalCompensations += $sc['compensation'];
+                }
+
+                $deduction = min($totalErrors, $totalCompensations);
+
+                // Distribute deduction across sources
+                $adjustedErrors = [];
+                foreach ($sCounts as $src => $sc) {
+                    $adjustedErrors[$src] = $sc['error'];
+                }
+
+                if ($deduction > 0) {
+                    foreach ($sCounts as $src => $sc) {
+                        if ($adjustedErrors[$src] > 0) {
+                            $d = min($deduction, $adjustedErrors[$src]);
+                            $adjustedErrors[$src] -= $d;
+                            $deduction -= $d;
+                            if ($deduction <= 0)
+                                break;
+                        }
+                    }
+                }
+
+                // Now calculate the adjusted counts for each source
+                foreach ($sCounts as $src => $sc) {
+                    $c['sources'][$src] = $sc['assigned'] + $sc['compensation'] + $sc['rule_6_month'] + $sc['pending_work_hours'] + $adjustedErrors[$src];
+                }
+            }
+        }
+        unset($c);
+
+        // Query ticket error counts (data_reports approved)
+        $dateConditionCreated = str_replace('received_at', 'created_at', $dateCondition);
+        $ticketCountsSql = "SELECT consultant_id, COUNT(*) as cnt 
+                            FROM data_reports 
+                            WHERE status IN ('approved', 'approved_no_comp') AND $dateConditionCreated" . ($roundId > 0 ? " AND round_id = $roundId" : "") . "
+                            GROUP BY consultant_id";
+        $tktRes = $conn->query($ticketCountsSql);
+        if ($tktRes) {
+            while ($row = $tktRes->fetch_assoc()) {
+                $cId = (int) $row['consultant_id'];
+                if (isset($consultants[$cId])) {
+                    $consultants[$cId]['ticket_count'] = (int) $row['cnt'];
+                }
+            }
+        }
+
+        // Query total ticket counts (all data_reports)
+        $totalTicketCountsSql = "SELECT consultant_id, COUNT(*) as cnt 
+                                 FROM data_reports 
+                                 WHERE $dateConditionCreated" . ($roundId > 0 ? " AND round_id = $roundId" : "") . "
+                                 GROUP BY consultant_id";
+        $ttRes = $conn->query($totalTicketCountsSql);
+        if ($ttRes) {
+            while ($row = $ttRes->fetch_assoc()) {
+                $cId = (int) $row['consultant_id'];
+                if (isset($consultants[$cId])) {
+                    $consultants[$cId]['total_ticket_count'] = (int) $row['cnt'];
+                }
+            }
+        }
+
+        // Query duplicate counts per consultant
+        $duplicateCountsSql = "SELECT assigned_to, COUNT(*) as cnt 
+                               FROM distribution_logs 
+                               WHERE $dateCondition $roundCondition AND status = 'duplicate'
+                               GROUP BY assigned_to";
+        $dupRes = $conn->query($duplicateCountsSql);
+        if ($dupRes) {
+            while ($row = $dupRes->fetch_assoc()) {
+                $cId = (int) $row['assigned_to'];
+                if (isset($consultants[$cId])) {
+                    $consultants[$cId]['duplicate_count'] = (int) $row['cnt'];
+                }
+            }
+        }
+
+        // Perform statistical calculations
+        $rawCounts = [];
+        $normalizedCounts = [];
+        $totalLeads = 0;
+        foreach ($consultants as $c) {
+            $rawCounts[] = $c['assigned_count'];
+            $ratio = max(1, $c['receive_ratio']);
+            $normalizedCounts[] = $c['assigned_count'] * $ratio;
+            $totalLeads += $c['assigned_count'];
+        }
+
+        $N = count($consultants);
+        $mean = 0;
+        $standardDeviation = 0;
+        $giniRaw = 0;
+        $giniNormalized = 0;
+
+        if ($N > 0) {
+            // Mean
+            $mean = $totalLeads / $N;
+
+            // Raw Standard Deviation
+            $sumSqDiff = 0;
+            foreach ($rawCounts as $x) {
+                $sumSqDiff += pow($x - $mean, 2);
+            }
+            $standardDeviation = sqrt($sumSqDiff / $N);
+
+            // Raw Gini Coefficient
+            $sumRaw = array_sum($rawCounts);
+            if ($sumRaw > 0) {
+                $doubleSumDiffRaw = 0;
+                for ($i = 0; $i < $N; $i++) {
+                    for ($j = 0; $j < $N; $j++) {
+                        $doubleSumDiffRaw += abs($rawCounts[$i] - $rawCounts[$j]);
+                    }
+                }
+                $giniRaw = $doubleSumDiffRaw / (2 * $N * $sumRaw);
+            }
+
+            // Normalized Gini Coefficient (Fairness Index uses this to account for ratio settings)
+            $sumNorm = array_sum($normalizedCounts);
+            if ($sumNorm > 0) {
+                $doubleSumDiffNorm = 0;
+                for ($i = 0; $i < $N; $i++) {
+                    for ($j = 0; $j < $N; $j++) {
+                        $doubleSumDiffNorm += abs($normalizedCounts[$i] - $normalizedCounts[$j]);
+                    }
+                }
+                $giniNormalized = $doubleSumDiffNorm / (2 * $N * $sumNorm);
+            }
+        }
+
+        // Convert Gini to Fairness Index
+        $fairnessIndex = (1 - $giniNormalized) * 100;
+
+        // Filter sources to only include those that actually have a count > 0 for at least one consultant in the final counts
+        $activeSources = [];
+        foreach ($consultants as $c) {
+            if (isset($c['sources'])) {
+                foreach ($c['sources'] as $src => $val) {
+                    if ($val > 0) {
+                        $activeSources[$src] = true;
+                    }
+                }
+            }
+        }
+        $sources = array_keys($activeSources);
+
+        $lastAssignedId = 0;
+        if ($roundId > 0) {
+            $rRes = $conn->query("SELECT last_assigned_consultant_id FROM distribution_rounds WHERE id = $roundId");
+            if ($rRes && $rRow = $rRes->fetch_assoc()) {
+                $lastAssignedId = (int) $rRow['last_assigned_consultant_id'];
+            }
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'totalLeads' => $totalLeads,
+                'totalConsultants' => $N,
+                'mean' => round($mean, 2),
+                'standardDeviation' => round($standardDeviation, 2),
+                'giniRaw' => round($giniRaw, 4),
+                'giniNormalized' => round($giniNormalized, 4),
+                'fairnessIndex' => round($fairnessIndex, 1),
+                'sources' => $sources,
+                'lastAssignedId' => $lastAssignedId,
+                'consultants' => array_values($consultants)
+            ]
+        ]);
+        break;
+
+    case 'get_consultant_compensation_details':
+        $consultantId = isset($_GET['consultant_id']) ? (int) $_GET['consultant_id'] : 0;
+        if ($decodedUser['role'] === 'sale') {
+            $consultantId = $currentSaleConsultantId ?? 0;
+        }
+        $date = $_GET['date'] ?? 'Tuần này';
+        $roundId = isset($_GET['round_id']) && $_GET['round_id'] !== '' ? (int) $_GET['round_id'] : 0;
+
+        if (!$consultantId) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu ID Tư vấn viên']);
+            break;
+        }
+
+        if ($decodedUser['role'] === 'manager') {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfConsultant($conn, $currentUserId, $consultantId)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền xem chi tiết bù của tư vấn viên này']);
+                break;
+            }
+        }
+
+        // Fetch consultant info
+        $cName = '';
+        $cAvatar = '';
+        $stmtC = $conn->prepare("SELECT name, avatar FROM consultants WHERE id = ?");
+        if ($stmtC) {
+            $stmtC->bind_param("i", $consultantId);
+            $stmtC->execute();
+            $resC = $stmtC->get_result();
+            if ($rowC = $resC->fetch_assoc()) {
+                $cName = $rowC['name'];
+                $cAvatar = $rowC['avatar'];
+            }
+            $stmtC->close();
+        }
+
+        // 1. Re-use date parsing logic
+        $startDate = null;
+        $endDate = null;
+        if ($date === 'Hôm nay') {
+            $startDate = date('Y-m-d 00:00:00');
+            $endDate = date('Y-m-d 23:59:59');
+        } else if ($date === 'Hôm qua') {
+            $startDate = date('Y-m-d 00:00:00', strtotime('-1 day'));
+            $endDate = date('Y-m-d 23:59:59', strtotime('-1 day'));
+        } else if ($date === 'Tuần này') {
+            $weekday = date('N') - 1; // 0 for Monday, 6 for Sunday
+            $startDate = date('Y-m-d 00:00:00', strtotime("-$weekday days"));
+            $endDate = date('Y-m-d 23:59:59', strtotime('+' . (6 - $weekday) . ' days'));
+        } else if ($date === 'Tuần trước') {
+            $weekday = date('N') - 1;
+            $startDate = date('Y-m-d 00:00:00', strtotime("-" . ($weekday + 7) . " days"));
+            $endDate = date('Y-m-d 23:59:59', strtotime("-" . ($weekday + 1) . " days"));
+        } else if ($date === 'Tuần trước nữa') {
+            $weekday = date('N') - 1;
+            $startDate = date('Y-m-d 00:00:00', strtotime("-" . ($weekday + 14) . " days"));
+            $endDate = date('Y-m-d 23:59:59', strtotime("-" . ($weekday + 8) . " days"));
+        } else if ($date === '7 ngày qua') {
+            $startDate = date('Y-m-d 00:00:00', strtotime('-7 days'));
+            $endDate = date('Y-m-d 23:59:59');
+        } else if ($date === '30 ngày qua') {
+            $startDate = date('Y-m-d 00:00:00', strtotime('-30 days'));
+            $endDate = date('Y-m-d 23:59:59');
+        } else if ($date === 'Tháng này') {
+            $startDate = date('Y-m-01 00:00:00');
+            $endDate = date('Y-m-t 23:59:59');
+        } else if ($date === 'Tháng trước') {
+            $startDate = date('Y-m-01 00:00:00', strtotime('-1 month'));
+            $endDate = date('Y-m-t 23:59:59', strtotime('-1 month'));
+        } else if (preg_match('/^(\d{4}-\d{2}-\d{2})\s*(?:đến|đên|den|to|-)\s*(\d{4}-\d{2}-\d{2})$/ui', $date, $matches)) {
+            $startDate = $matches[1] . ' 00:00:00';
+            $endDate = $matches[2] . ' 23:59:59';
+        } else {
+            $startDate = date('Y-m-01 00:00:00'); // default fallback: tháng này
+            $endDate = date('Y-m-t 23:59:59');
+        }
+
+        // 2. Query total leads divided (total_assigned) in timeframe & round
+        $roundCondition = "";
+        if ($roundId > 0) {
+            $roundCondition = " AND round_id = $roundId";
+        }
+        // Adjust pending compensation to be counted as compensation
+        $assignedSql = "SELECT 
+                          CASE 
+                            WHEN status = 'pending_work_hours' AND (message LIKE '%đền bù%' OR message LIKE '%compensation%' OR message LIKE '%Bù lượt%') THEN 'compensation'
+                            ELSE status 
+                          END as adjusted_status, 
+                          COUNT(*) as cnt 
+                        FROM distribution_logs 
+                        WHERE assigned_to = ? 
+                          AND received_at BETWEEN ? AND ? 
+                          $roundCondition
+                          AND status IN ('assigned', 'compensation', 'error', 'rule_6_month', 'pending_work_hours', 'reminder', 'databank_claim')
+                        GROUP BY adjusted_status";
+
+        $totalAssigned = 0;
+        $totalCompensationReceived = 0;
+        $statusCounts = [
+            'assigned' => 0,
+            'compensation' => 0,
+            'rule_6_month' => 0,
+            'pending_work_hours' => 0,
+            'error' => 0,
+            'reminder' => 0,
+            'databank_claim' => 0
+        ];
+
+        $stmtA = $conn->prepare($assignedSql);
+        if ($stmtA) {
+            $stmtA->bind_param("iss", $consultantId, $startDate, $endDate);
+            $stmtA->execute();
+            $resA = $stmtA->get_result();
+            while ($row = $resA->fetch_assoc()) {
+                $statusCounts[$row['adjusted_status']] = (int) $row['cnt'];
+            }
+            $stmtA->close();
+        }
+
+        $totalAssigned = $statusCounts['assigned'] + $statusCounts['compensation'] + $statusCounts['rule_6_month'] + $statusCounts['pending_work_hours'] + $statusCounts['reminder'] + $statusCounts['databank_claim'] + max(0, $statusCounts['error'] - $statusCounts['compensation']);
+        $totalCompensationReceived = $statusCounts['compensation'];
+
+        // 3. Query Ticket Approved Compensations (Approved reports resolved in range)
+        $ticketCompCount = 0;
+        $ticketDetails = [];
+        $ticketSql = "SELECT dr.resolved_at, dr.resolved_by, dr.approval_reason, 
+                             (SELECT a.avatar FROM accounts a WHERE a.name = dr.resolved_by LIMIT 1) as resolved_by_avatar
+                      FROM data_reports dr
+                      WHERE dr.consultant_id = ? 
+                        AND dr.status IN ('approved', 'approved_no_comp') 
+                        " . ($roundId > 0 ? " AND dr.round_id = $roundId" : "") . "
+                      ORDER BY dr.resolved_at DESC";
+        $stmtT = $conn->prepare($ticketSql);
+        if ($stmtT) {
+            $stmtT->bind_param("i", $consultantId);
+            $stmtT->execute();
+            $resT = $stmtT->get_result();
+            while ($rowT = $resT->fetch_assoc()) {
+                $ticketCompCount++;
+                $ticketDetails[] = [
+                    'admin_name' => $rowT['resolved_by'] ?: 'Hệ thống',
+                    'admin_avatar' => $rowT['resolved_by_avatar'],
+                    'created_at' => $rowT['resolved_at'],
+                    'reason' => trim($rowT['approval_reason']) !== '' ? trim($rowT['approval_reason']) : 'Duyệt ticket lỗi'
+                ];
+            }
+            $stmtT->close();
+        }
+
+        // 4. Query Blacklist Compensations from admin_logs
+        $blacklistCompCount = 0;
+        $blacklistDetails = [];
+        $blacklistSql = "SELECT al.created_at, al.details, a.name as admin_name, a.avatar as admin_avatar
+                         FROM admin_logs al 
+                         LEFT JOIN accounts a ON al.account_id = a.id
+                         JOIN distribution_logs dl ON (
+                             (JSON_VALID(al.details) AND JSON_UNQUOTE(JSON_EXTRACT(al.details, '$.log_id')) = dl.id)
+                             OR (NOT JSON_VALID(al.details) AND (al.details LIKE CONCAT('%\"log_id\":', dl.id, '%') OR al.details LIKE CONCAT('%\"log_id\":\"', dl.id, '\"%')))
+                         )
+                         WHERE al.action = 'BLOCK_LEAD_BLACKLIST' 
+                           AND dl.assigned_to = ? 
+                           " . ($roundId > 0 ? " AND dl.round_id = $roundId" : "") . "
+                           AND (
+                               (JSON_VALID(al.details) AND (JSON_UNQUOTE(JSON_EXTRACT(al.details, '$.compensate_sale')) = 'true' OR JSON_UNQUOTE(JSON_EXTRACT(al.details, '$.compensate_sale')) = '1'))
+                               OR al.details LIKE '%\"compensate_sale\":true%' 
+                               OR al.details LIKE '%\"compensate_sale\":1%'
+                           )
+                         ORDER BY al.created_at DESC";
+        $stmtB = $conn->prepare($blacklistSql);
+        if ($stmtB) {
+            $stmtB->bind_param("i", $consultantId);
+            $stmtB->execute();
+            $resB = $stmtB->get_result();
+            while ($rowB = $resB->fetch_assoc()) {
+                $blacklistCompCount++;
+                $det = json_decode($rowB['details'], true);
+                $reason = isset($det['reason']) && trim($det['reason']) !== '' ? trim($det['reason']) : 'Chặn blacklist';
+                $blacklistDetails[] = [
+                    'admin_name' => $rowB['admin_name'] ?: 'Hệ thống',
+                    'admin_avatar' => $rowB['admin_avatar'] ?: '',
+                    'created_at' => $rowB['created_at'],
+                    'reason' => $reason
+                ];
+            }
+            $stmtB->close();
+        }
+
+        // 5. Query Reassignment Compensations from admin_logs (REASSIGN_LEAD where old sale compensated)
+        $reassignCompCount = 0;
+        $reassignDetails = [];
+        $reassignSql = "SELECT al.created_at, al.details, a.name as admin_name, a.avatar as admin_avatar
+                        FROM admin_logs al 
+                        LEFT JOIN accounts a ON al.account_id = a.id
+                        JOIN distribution_logs dl ON (
+                            (JSON_VALID(al.details) AND JSON_UNQUOTE(JSON_EXTRACT(al.details, '$.log_id')) = dl.id)
+                            OR (NOT JSON_VALID(al.details) AND (al.details LIKE CONCAT('%\"log_id\":', dl.id, '%') OR al.details LIKE CONCAT('%\"log_id\":\"', dl.id, '\"%')))
+                        )
+                        WHERE al.action = 'REASSIGN_LEAD' 
+                          AND dl.assigned_to = ? 
+                          " . ($roundId > 0 ? " AND dl.round_id = $roundId" : "") . "
+                          AND (
+                              (JSON_VALID(al.details) AND (JSON_UNQUOTE(JSON_EXTRACT(al.details, '$.compensate_old_sale')) = 'true' OR JSON_UNQUOTE(JSON_EXTRACT(al.details, '$.compensate_old_sale')) = '1'))
+                              OR al.details LIKE '%\"compensate_old_sale\":true%' 
+                              OR al.details LIKE '%\"compensate_old_sale\":1%'
+                          )
+                        ORDER BY al.created_at DESC";
+        $stmtR = $conn->prepare($reassignSql);
+        if ($stmtR) {
+            $stmtR->bind_param("i", $consultantId);
+            $stmtR->execute();
+            $resR = $stmtR->get_result();
+            while ($rowR = $resR->fetch_assoc()) {
+                $reassignCompCount++;
+                $det = json_decode($rowR['details'], true);
+                $reason = isset($det['reason']) && trim($det['reason']) !== '' ? trim($det['reason']) : 'Thu hồi chuyển lead';
+                $reassignDetails[] = [
+                    'admin_name' => $rowR['admin_name'] ?: 'Hệ thống',
+                    'admin_avatar' => $rowR['admin_avatar'] ?: '',
+                    'created_at' => $rowR['created_at'],
+                    'reason' => $reason
+                ];
+            }
+            $stmtR->close();
+        }
+
+        // 6. Query Active Compensations (Manual by admin with reasons and avatars)
+        $activeCompBreakdown = [];
+        $activeCompTotal = 0;
+        $activeSql = "SELECT acl.reason, acl.amount, acl.created_at, a.name as admin_name, a.avatar as admin_avatar
+                      FROM active_compensation_logs acl
+                      LEFT JOIN accounts a ON acl.admin_id = a.id
+                      WHERE acl.consultant_id = ? 
+                        " . ($roundId > 0 ? " AND acl.round_id = $roundId" : "") . "
+                      ORDER BY acl.created_at DESC";
+        $stmtAc = $conn->prepare($activeSql);
+        if ($stmtAc) {
+            $stmtAc->bind_param("i", $consultantId);
+            $stmtAc->execute();
+            $resAc = $stmtAc->get_result();
+            while ($row = $resAc->fetch_assoc()) {
+                $reason = trim($row['reason']) !== '' ? trim($row['reason']) : 'Bù chủ động';
+                $amt = (int) $row['amount'];
+                $activeCompTotal += $amt;
+                $activeCompBreakdown[] = [
+                    'reason' => $reason,
+                    'count' => $amt,
+                    'admin_name' => $row['admin_name'] ?: 'Hệ thống',
+                    'admin_avatar' => $row['admin_avatar'] ?: '',
+                    'created_at' => $row['created_at']
+                ];
+            }
+            $stmtAc->close();
+        }
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'consultant_id' => $consultantId,
+                'name' => $cName,
+                'avatar' => $cAvatar,
+                'total_assigned' => $totalAssigned,
+                'total_compensation_received' => $totalCompensationReceived,
+                'breakdown' => [
+                    'ticket' => $ticketCompCount,
+                    'ticket_details' => $ticketDetails,
+                    'blacklist' => $blacklistCompCount,
+                    'blacklist_details' => $blacklistDetails,
+                    'reassign' => $reassignCompCount,
+                    'reassign_details' => $reassignDetails,
+                    'active_total' => $activeCompTotal,
+                    'active_details' => $activeCompBreakdown
+                ]
+            ]
+        ]);
+        break;
+
+    case 'reassign_lead':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $log_id = (int) ($input['log_id'] ?? 0);
+        $new_consultant_id = (int) ($input['new_consultant_id'] ?? 0);
+        $compensate_old_sale = isset($input['compensate_old_sale']) ? (bool) $input['compensate_old_sale'] : false;
+
+        if (!$log_id || !$new_consultant_id) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu ID Log hoặc ID TVV mới']);
+            break;
+        }
+
+        // 1. Fetch lead details, old consultant details, and new consultant details
+        $stmt = $conn->prepare("
+            SELECT dl.lead_id, dl.round_id, dl.assigned_to as old_consultant_id, c_old.name as old_consultant_name, dl.status as log_status, l.name as lead_name, l.phone, l.email as lead_email, l.note, l.source, l.type, r.cc_emails, r.round_name
+            FROM distribution_logs dl
+            LEFT JOIN leads l ON dl.lead_id = l.id
+            LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+            LEFT JOIN consultants c_old ON dl.assigned_to = c_old.id
+            WHERE dl.id = ?
+        ");
+        $stmt->bind_param("i", $log_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($res->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy log phân bổ']);
+            break;
+        }
+        $log_data = $res->fetch_assoc();
+        $lead_id = $log_data['lead_id'];
+        $old_consultant_id = $log_data['old_consultant_id'] ? (int) $log_data['old_consultant_id'] : null;
+
+        $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+        $userRole = $decodedUser['role'] ?? '';
+
+        $isProjManager = false;
+        $projIds = [];
+        if ($userRole === 'manager') {
+            $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+            if ($pRes) {
+                while ($pRow = $pRes->fetch_assoc()) {
+                    if (!empty($pRow['manager_ids'])) {
+                        $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                        if (in_array((int)$userId, $mIds, true)) {
+                            $projIds[] = (int)$pRow['id'];
+                            $isProjManager = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($isProjManager) {
+            // Find project_id of the lead
+            $leadProjectId = null;
+            $stmtP = $conn->prepare("SELECT project_id FROM marketing_campaigns WHERE id = (SELECT campaign_id FROM leads WHERE id = ?)");
+            $stmtP->bind_param("i", $lead_id);
+            $stmtP->execute();
+            $leadProjectId = $stmtP->get_result()->fetch_column();
+            $stmtP->close();
+
+            if (!$leadProjectId || !in_array((int)$leadProjectId, $projIds, true)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền quản lý lead thuộc dự án khác']);
+                $stmt->close();
+                break;
+            }
+
+            // Check if new consultant is in roster for this project
+            $stmtR = $conn->prepare("SELECT 1 FROM project_roster WHERE project_id = ? AND user_id = ?");
+            $stmtR->bind_param("ii", $leadProjectId, $new_consultant_id);
+            $stmtR->execute();
+            $inRoster = $stmtR->get_result()->fetch_row();
+            $stmtR->close();
+            if (!$inRoster) {
+                echo json_encode(['success' => false, 'message' => 'Tư vấn viên mới không thuộc roster của dự án này']);
+                $stmt->close();
+                break;
+            }
+        } else if ($userRole === 'manager') {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfConsultant($conn, $currentUserId, $old_consultant_id)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền quản lý khách hàng của tư vấn viên này']);
+                $stmt->close();
+                break;
+            }
+            if (!isManagerOfConsultant($conn, $currentUserId, $new_consultant_id)) {
+                echo json_encode(['success' => false, 'message' => 'Tư vấn viên mới không thuộc nhóm của bạn']);
+                $stmt->close();
+                break;
+            }
+        }
+
+        $old_consultant_name = $log_data['old_consultant_name'] ?? '';
+        $cc_emails = $log_data['cc_emails'] ?? '';
+        $lead_phone = $log_data['phone'] ?? '';
+        $lead_email = $log_data['lead_email'] ?? '';
+        $log_status = $log_data['log_status'] ?? '';
+        $roundNameStr = $log_data['round_name'] ?? '';
+
+        // Check if this lead is duplicate (has duplicate history)
+        $isDuplicateLead = false;
+        if ($log_status === 'reminder') {
+            $isDuplicateLead = true;
+        } else if (!empty($lead_phone) || !empty($lead_email)) {
+            $dupQuery = "SELECT id FROM leads WHERE id != ? AND (";
+            $dupParams = [$lead_id];
+            $dupTypes = 'i';
+            $orParts = [];
+            if (!empty($lead_phone)) {
+                $orParts[] = "phone = ?";
+                $dupParams[] = $lead_phone;
+                $dupTypes .= 's';
+            }
+            if (!empty($lead_email)) {
+                $orParts[] = "email = ?";
+                $dupParams[] = $lead_email;
+                $dupTypes .= 's';
+            }
+            $dupQuery .= implode(" OR ", $orParts) . ") LIMIT 1";
+
+            $stmtDup = $conn->prepare($dupQuery);
+            if ($stmtDup) {
+                $stmtDup->bind_param($dupTypes, ...$dupParams);
+                $stmtDup->execute();
+                $resDup = $stmtDup->get_result();
+                if ($resDup->num_rows > 0) {
+                    $isDuplicateLead = true;
+                }
+                $stmtDup->close();
+            }
+        }
+
+        // Fetch new consultant details
+        $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+        $stmtC->bind_param("i", $new_consultant_id);
+        $stmtC->execute();
+        $resC = $stmtC->get_result();
+        if ($resC->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy Tư vấn viên']);
+            break;
+        }
+        $cons_data = $resC->fetch_assoc();
+        $new_cons_name = $cons_data['name'];
+        $new_cons_email = $cons_data['email'];
+
+        $conn->begin_transaction();
+        try {
+            // 2. Perform updates
+            $newLogStatus = $isDuplicateLead ? 'reminder' : 'assigned';
+
+            // Update distribution_logs
+            $stmtU1 = $conn->prepare("UPDATE distribution_logs SET assigned_to = ?, status = ? WHERE id = ?");
+            $stmtU1->bind_param("isi", $new_consultant_id, $newLogStatus, $log_id);
+            $stmtU1->execute();
+
+            // Update leads
+            $stmtU2 = $conn->prepare("UPDATE leads SET assigned_to = ? WHERE id = ?");
+            $stmtU2->bind_param("ii", $new_consultant_id, $lead_id);
+            $stmtU2->execute();
+
+            if ($compensate_old_sale && $old_consultant_id) {
+                // Check if the consultant is enrolled in the round
+                $chkEnroll = $conn->prepare("SELECT 1 FROM round_consultants WHERE round_id = ? AND consultant_id = ? LIMIT 1");
+                $chkEnroll->bind_param("ii", $log_data['round_id'], $old_consultant_id);
+                $chkEnroll->execute();
+                $hasEnroll = $chkEnroll->get_result()->num_rows > 0;
+                $chkEnroll->close();
+
+                if ($hasEnroll) {
+                    $updComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id = ? AND consultant_id = ?");
+                    $updComp->bind_param("ii", $log_data['round_id'], $old_consultant_id);
+                    $updComp->execute();
+                    $updComp->close();
+                } else {
+                    // If not enrolled, insert a record with compensation count = 1
+                    $insComp = $conn->prepare("INSERT INTO round_consultants (round_id, consultant_id, receive_ratio, data_per_turn, compensation_count) VALUES (?, ?, 1, 1, 1)");
+                    $insComp->bind_param("ii", $log_data['round_id'], $old_consultant_id);
+                    $insComp->execute();
+                    $insComp->close();
+                }
+
+                // Ghi log vào active_compensation_logs để thống kê đầy đủ
+                $reasonText = "Bù 1 lượt do chuyển giao Lead \"" . ($log_data['lead_name'] ?: 'Khách hàng ẩn danh') . "\" sang cho TVV " . $new_cons_name;
+                $logStmt = $conn->prepare("INSERT INTO active_compensation_logs (round_id, consultant_id, admin_id, amount, reason) VALUES (?, ?, ?, 1, ?)");
+                $adminIdInt = (int) $decodedUser['id'];
+                $logStmt->bind_param("iiis", $log_data['round_id'], $old_consultant_id, $adminIdInt, $reasonText);
+                $logStmt->execute();
+                $logStmt->close();
+            }
+
+            logAdminAction($conn, $decodedUser['id'], 'REASSIGN_LEAD', [
+                'log_id' => $log_id,
+                'lead_id' => $lead_id,
+                'lead_name' => $log_data['lead_name'],
+                'phone' => $log_data['phone'],
+                'old_consultant_id' => $old_consultant_id,
+                'old_consultant_name' => $old_consultant_name,
+                'new_consultant_id' => $new_consultant_id,
+                'new_consultant_name' => $new_cons_name,
+                'is_duplicate' => $isDuplicateLead,
+                'compensated' => $compensate_old_sale
+            ]);
+            $conn->commit();
+            // Trigger Live Two-Way Sync to Google Sheets
+            triggerTwoWaySync($conn, $lead_id);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // Đã commit giao dịch thành công. Bắt đầu gửi thông báo ngoài transaction
+        try {
+            require_once __DIR__ . '/mailer.php';
+            require_once __DIR__ . '/zalo_bot.php';
+            require_once __DIR__ . '/webhook_logic.php'; // For getLeadHistoryTimeline
+
+            // Notify old consultant of reassignment/compensation
+            if ($old_consultant_id) {
+                try {
+                    $oldConsultStmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+                    $oldConsultStmt->bind_param("i", $old_consultant_id);
+                    $oldConsultStmt->execute();
+                    $oldConsultant = $oldConsultStmt->get_result()->fetch_assoc();
+                    $oldConsultStmt->close();
+
+                    if ($oldConsultant) {
+                        $oldCName = $oldConsultant['name'];
+                        $oldCEmail = $oldConsultant['email'];
+                        $oldCZalo = $oldConsultant['zalo_chat_id'];
+                        $lName = $log_data['lead_name'] ?: 'Khách hàng ẩn danh';
+
+                        $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+                        $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+                        if (!empty($botToken) && !empty($oldCZalo)) {
+                            try {
+                                if ($compensate_old_sale) {
+                                    $zaloMsg = "🎁 [ THÔNG BÁO BÙ DATA ] 🎁\n"
+                                        . "━━━━━━━━━━━━━━━━━━━━━\n"
+                                        . "Chào $oldCName,\n\n"
+                                        . "Data \"$lName\" của bạn đã được giao lại cho TVV $new_cons_name.\n"
+                                        . "Hệ thống đã bù lại 1 lượt nhận data cho bạn tại vòng: $roundNameStr.\n\n"
+                                        . "Trân trọng,\nHệ thống Quản lý IDEAS DATA\n"
+                                        . "━━━━━━━━━━━━━━━━━━━━━";
+                                } else {
+                                    $zaloMsg = "🔄 [ THÔNG BÁO CHUYỂN GIAO DATA ] 🔄\n"
+                                        . "━━━━━━━━━━━━━━━━━━━━━\n"
+                                        . "Chào $oldCName,\n\n"
+                                        . "Data \"$lName\" của bạn đã được chuyển giao cho TVV $new_cons_name.\n\n"
+                                        . "Trân trọng,\nHệ thống Quản lý IDEAS DATA\n"
+                                        . "━━━━━━━━━━━━━━━━━━━━━";
+                                }
+                                sendZaloMessage($botToken, $oldCZalo, $zaloMsg, false);
+                            } catch (Exception $zEx) {
+                                error_log("Error sending Zalo reassign message to old sale: " . $zEx->getMessage());
+                            }
+                        }
+
+                        if (!empty($oldCEmail)) {
+                            try {
+                                if ($compensate_old_sale) {
+                                    $emailSubj = "[IDEAS DATA] Thông báo đền bù Data - $lName";
+                                    $emailBody = "<h3>Đền bù Data do chuyển giao lại</h3>
+                                                  <p>Chào $oldCName,</p>
+                                                  <p>Lead <strong>$lName</strong> của bạn đã được giao lại cho TVV <strong>$new_cons_name</strong>.</p>
+                                                  <p>Hệ thống đã tự động cộng thêm 1 lượt đền bù cho bạn trong vòng phân bổ <strong>$roundNameStr</strong>.</p>";
+                                } else {
+                                    $emailSubj = "[IDEAS DATA] Thông báo chuyển giao Data - $lName";
+                                    $emailBody = "<h3>Chuyển giao Data</h3>
+                                                  <p>Chào $oldCName,</p>
+                                                  <p>Lead <strong>$lName</strong> của bạn đã được chuyển giao cho TVV <strong>$new_cons_name</strong>.</p>";
+                                }
+                                sendEmailNotification($oldCEmail, $emailSubj, 'Thông báo chuyển giao', $emailBody, '');
+                            } catch (Exception $eEx) {
+                                error_log("Error sending email reassign message to old sale: " . $eEx->getMessage());
+                            }
+                        }
+                    }
+                } catch (Exception $oldSaleEx) {
+                    error_log("Error processing reassign notification for old sale: " . $oldSaleEx->getMessage());
+                }
+            }
+
+            // Fetch round name (fallback if roundNameStr is empty for some reason)
+            $roundId = (int) ($log_data['round_id'] ?? 0);
+            if (empty($roundNameStr) && $roundId) {
+                try {
+                    $rStmt = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ?");
+                    $rStmt->bind_param("i", $roundId);
+                    $rStmt->execute();
+                    $rRes = $rStmt->get_result();
+                    if ($rRes->num_rows > 0)
+                        $roundNameStr = $rRes->fetch_assoc()['round_name'] ?? '';
+                    $rStmt->close();
+                } catch (Exception $rEx) {
+                    error_log("Error fetching round name in reassign_lead: " . $rEx->getMessage());
+                }
+            }
+
+            if ($isDuplicateLead) {
+                try {
+                    $timeline = getLeadHistoryTimeline($conn, $lead_id, true);
+                    try {
+                        sendLeadReminderEmailToSale(
+                            $new_cons_email,
+                            $new_cons_name,
+                            $log_data['lead_name'] ?: 'Khách hàng ẩn danh',
+                            $log_data['phone'] ?: '',
+                            $log_data['note'] ?: '',
+                            $log_data['source'] ?: '',
+                            $cc_emails,
+                            $roundNameStr,
+                            $timeline,
+                            $lead_id
+                        );
+                    } catch (Exception $eEx) {
+                        error_log("Error sending duplicate reminder email to new sale: " . $eEx->getMessage());
+                    }
+
+                    try {
+                        sendLeadReminderZaloMessageToSale(
+                            $new_consultant_id,
+                            $new_cons_name,
+                            $log_data['lead_name'] ?: 'Khách hàng ẩn danh',
+                            $log_data['phone'] ?: '',
+                            $log_data['note'] ?: '',
+                            $log_data['source'] ?: '',
+                            $roundNameStr,
+                            $timeline,
+                            $lead_id,
+                            $log_data['lead_email'] ?: '',
+                            $log_data['type'] ?: ''
+                        );
+                    } catch (Exception $zEx) {
+                        error_log("Error sending duplicate reminder Zalo to new sale: " . $zEx->getMessage());
+                    }
+                } catch (Exception $dupEx) {
+                    error_log("Error processing duplicate reminders in reassign_lead: " . $dupEx->getMessage());
+                }
+            } else {
+                try {
+                    try {
+                        sendLeadAssignedEmailToSale(
+                            $new_cons_email,
+                            $new_cons_name,
+                            $log_data['lead_name'] ?: 'Khách hàng ẩn danh',
+                            $log_data['phone'] ?: '',
+                            $log_data['note'] ?: '',
+                            $log_data['source'] ?: '',
+                            $cc_emails,
+                            $roundNameStr,
+                            $lead_id,
+                            $new_consultant_id,
+                            $roundId
+                        );
+                    } catch (Exception $eEx) {
+                        error_log("Error sending assignment email to new sale: " . $eEx->getMessage());
+                    }
+
+                    try {
+                        sendLeadAssignedZaloMessageToSale(
+                            $new_consultant_id,
+                            $new_cons_name,
+                            $log_data['lead_name'] ?: 'Khách hàng ẩn danh',
+                            $log_data['phone'] ?: '',
+                            $log_data['note'] ?: '',
+                            $log_data['source'] ?: '',
+                            $roundNameStr,
+                            $lead_id,
+                            $roundId,
+                            $log_data['lead_email'] ?: '',
+                            $log_data['type'] ?: ''
+                        );
+                    } catch (Exception $zEx) {
+                        error_log("Error sending assignment Zalo to new sale: " . $zEx->getMessage());
+                    }
+                } catch (Exception $assignEx) {
+                    error_log("Error processing assignment notifications in reassign_lead: " . $assignEx->getMessage());
+                }
+            }
+        } catch (Exception $notifyOuterEx) {
+            error_log("Outer notification error in reassign_lead: " . $notifyOuterEx->getMessage());
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'update_lead_fields':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $lead_id = isset($input['lead_id']) ? (int) $input['lead_id'] : 0;
+        $name = isset($input['name']) ? trim($input['name']) : '';
+        $phone = isset($input['phone']) ? trim($input['phone']) : '';
+        $email = isset($input['email']) ? trim($input['email']) : '';
+        $source = isset($input['source']) ? trim($input['source']) : '';
+        $type = isset($input['type']) ? trim($input['type']) : '';
+        $note = isset($input['note']) ? trim($input['note']) : '';
+
+        if (!$lead_id) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu ID khách hàng']);
+            break;
+        }
+
+        if ($decodedUser['role'] === 'manager') {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfLead($conn, $currentUserId, $lead_id)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền quản lý khách hàng này']);
+                break;
+            }
+        }
+
+        if (empty($name)) {
+            echo json_encode(['success' => false, 'message' => 'Tên khách hàng không được để trống']);
+            break;
+        }
+
+        // Fetch current values for logging
+        $stmt = $conn->prepare("SELECT name, phone, email, source, type, note FROM leads WHERE id = ? LIMIT 1");
+        if (!$stmt) {
+            echo json_encode(['success' => false, 'message' => 'Lỗi kết nối CSDL']);
+            break;
+        }
+        $stmt->bind_param("i", $lead_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($res->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy khách hàng']);
+            $stmt->close();
+            break;
+        }
+        $lead = $res->fetch_assoc();
+        $stmt->close();
+
+        // Update lead fields
+        $updStmt = $conn->prepare("UPDATE leads SET name = ?, phone = ?, email = ?, source = ?, type = ?, note = ? WHERE id = ?");
+        if (!$updStmt) {
+            echo json_encode(['success' => false, 'message' => 'Lỗi cập nhật CSDL']);
+            break;
+        }
+        $updStmt->bind_param("ssssssi", $name, $phone, $email, $source, $type, $note, $lead_id);
+        if ($updStmt->execute()) {
+            // Log admin action
+            $adminAccountId = isset($decodedUser['id']) ? (int) $decodedUser['id'] : 0;
+            logAdminAction($conn, $adminAccountId, 'UPDATE_LEAD_FIELDS', [
+                'lead_id' => $lead_id,
+                'lead_name' => $lead['name'],
+                'old_name' => $lead['name'],
+                'new_name' => $name,
+                'old_phone' => $lead['phone'],
+                'new_phone' => $phone,
+                'old_email' => $lead['email'],
+                'new_email' => $email,
+                'old_source' => $lead['source'],
+                'new_source' => $source,
+                'old_type' => $lead['type'],
+                'new_type' => $type,
+                'old_note' => $lead['note'],
+                'new_note' => $note
+            ]);
+            echo json_encode(['success' => true, 'message' => 'Cập nhật thông tin khách hàng thành công']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi lưu thông tin']);
+        }
+        $updStmt->close();
+        break;
+
+    case 'send_lead_reminder':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $lead_id = isset($input['lead_id']) ? (int) $input['lead_id'] : 0;
+        $send_zalo = isset($input['send_zalo']) ? (bool) $input['send_zalo'] : false;
+        $send_email = isset($input['send_email']) ? (bool) $input['send_email'] : false;
+        $send_telegram = isset($input['send_telegram']) ? (bool) $input['send_telegram'] : false;
+
+        if (!$lead_id) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu ID khách hàng']);
+            break;
+        }
+
+        if ($decodedUser['role'] === 'manager') {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfLead($conn, $currentUserId, $lead_id)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền quản lý khách hàng này']);
+                break;
+            }
+        }
+
+        if (!$send_zalo && !$send_email && !$send_telegram) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng chọn ít nhất một kênh để gửi nhắc nhở (Zalo, Email hoặc Telegram)']);
+            break;
+        }
+
+        // Fetch lead and assignee details
+        $stmt = $conn->prepare("
+            SELECT l.id as lead_id, l.name as lead_name, l.phone, l.email as lead_email, l.note, l.source, l.type, l.assigned_to as consultant_id,
+                   c.name as consultant_name, c.email as consultant_email,
+                   dl.id as log_id, dl.round_id, r.round_name, r.cc_emails
+            FROM leads l
+            LEFT JOIN consultants c ON l.assigned_to = c.id
+            LEFT JOIN distribution_logs dl ON l.id = dl.lead_id AND dl.status = 'assigned'
+            LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+            WHERE l.id = ?
+            ORDER BY dl.id DESC LIMIT 1
+        ");
+        if (!$stmt) {
+            echo json_encode(['success' => false, 'message' => 'Lỗi kết nối CSDL']);
+            break;
+        }
+        $stmt->bind_param("i", $lead_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($res->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy thông tin khách hàng']);
+            $stmt->close();
+            break;
+        }
+        $row = $res->fetch_assoc();
+        $stmt->close();
+
+        $consultant_id = (int)$row['consultant_id'];
+        $consultant_name = $row['consultant_name'];
+        $consultant_email = $row['consultant_email'];
+
+        if (!$consultant_id) {
+            echo json_encode(['success' => false, 'message' => 'Khách hàng này hiện chưa được bàn giao cho Tư vấn viên nào']);
+            break;
+        }
+
+        require_once __DIR__ . '/webhook_logic.php';
+        require_once __DIR__ . '/zalo_bot.php';
+        require_once __DIR__ . '/mailer.php';
+        require_once __DIR__ . '/telegram_bot.php';
+
+        $timeline = getLeadHistoryTimeline($conn, $lead_id, true);
+        $roundNameStr = $row['round_name'] ?? '';
+
+        $zaloSuccess = true;
+        $emailSuccess = true;
+        $telegramSuccess = true;
+        $channelsTried = [];
+
+        if ($send_zalo) {
+            $channelsTried[] = 'Zalo';
+            try {
+                $zaloResult = sendLeadReminderZaloMessageToSale(
+                    $consultant_id,
+                    $consultant_name,
+                    $row['lead_name'] ?: 'Khách hàng ẩn danh',
+                    $row['phone'] ?: '',
+                    $row['note'] ?: '',
+                    $row['source'] ?: '',
+                    $roundNameStr,
+                    $timeline,
+                    $lead_id,
+                    $row['lead_email'] ?: '',
+                    $row['type'] ?: '',
+                    true // send synchronously to check if it succeeded
+                );
+                if (!$zaloResult) {
+                    $zaloSuccess = false;
+                }
+            } catch (Exception $zEx) {
+                error_log("Error sending manual reminder Zalo to sale: " . $zEx->getMessage());
+                $zaloSuccess = false;
+            }
+        }
+
+        if ($send_email) {
+            $channelsTried[] = 'Email';
+            if (empty($consultant_email)) {
+                $emailSuccess = false;
+            } else {
+                try {
+                    // sendLeadReminderEmailToSale pushes to queue by default
+                    sendLeadReminderEmailToSale(
+                        $consultant_email,
+                        $consultant_name,
+                        $row['lead_name'] ?: 'Khách hàng ẩn danh',
+                        $row['phone'] ?: '',
+                        $row['note'] ?: '',
+                        $row['source'] ?: '',
+                        $row['cc_emails'] ?: '',
+                        $roundNameStr,
+                        $timeline,
+                        $lead_id
+                    );
+                } catch (Exception $eEx) {
+                    error_log("Error sending manual reminder Email to sale: " . $eEx->getMessage());
+                    $emailSuccess = false;
+                }
+            }
+        }
+
+        if ($send_telegram) {
+            $channelsTried[] = 'Telegram';
+            try {
+                $telegramResult = sendLeadReminderTelegramMessageToSale(
+                    $consultant_id,
+                    $consultant_name,
+                    $row['lead_name'] ?: 'Khách hàng ẩn danh',
+                    $row['phone'] ?: '',
+                    $row['note'] ?: '',
+                    $row['source'] ?: '',
+                    $roundNameStr,
+                    $timeline,
+                    $lead_id,
+                    $row['lead_email'] ?: '',
+                    $row['type'] ?: ''
+                );
+                if (!$telegramResult) {
+                    $telegramSuccess = false;
+                }
+            } catch (Exception $tEx) {
+                error_log("Error sending manual reminder Telegram to sale: " . $tEx->getMessage());
+                $telegramSuccess = false;
+            }
+        }
+
+        // Log admin action
+        $adminAccountId = isset($decodedUser['id']) ? (int) $decodedUser['id'] : 0;
+        logAdminAction($conn, $adminAccountId, 'SEND_LEAD_REMINDER', [
+            'lead_id' => $lead_id,
+            'lead_name' => $row['lead_name'],
+            'consultant_id' => $consultant_id,
+            'consultant_name' => $consultant_name,
+            'channels' => implode(', ', $channelsTried),
+            'zalo_success' => $zaloSuccess,
+            'email_success' => $emailSuccess,
+            'telegram_success' => $telegramSuccess
+        ]);
+
+        $msgParts = [];
+        if ($send_zalo) {
+            $msgParts[] = $zaloSuccess ? 'Zalo thành công' : 'Zalo thất bại';
+        }
+        if ($send_email) {
+            $msgParts[] = $emailSuccess ? 'Email thành công' : 'Email thất bại';
+        }
+        if ($send_telegram) {
+            $msgParts[] = $telegramSuccess ? 'Telegram thành công' : 'Telegram thất bại (chưa cấu hình/lỗi)';
+        }
+
+        $allSuccess = (!$send_zalo || $zaloSuccess) && (!$send_email || $emailSuccess) && (!$send_telegram || $telegramSuccess);
+
+        if ($allSuccess) {
+            echo json_encode(['success' => true, 'message' => 'Đã gửi nhắc nhở thành công cho Tư vấn viên ' . $consultant_name]);
+        } else {
+            echo json_encode(['success' => true, 'message' => 'Kết quả gửi nhắc nhở: ' . implode(', ', $msgParts)]);
+        }
+        break;
+
+    case 'block_lead':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $log_id = (int) ($input['log_id'] ?? 0);
+        $compensate_sale = isset($input['compensate_sale']) ? (bool) $input['compensate_sale'] : false;
+        $reason = trim($input['reason'] ?? '');
+
+        if (!$log_id) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu ID Log phân bổ']);
+            break;
+        }
+
+        // Lấy thông tin admin thực hiện
+        $adminName = 'Quản trị viên';
+        $adminAccountId = 0;
+        if (isset($decodedUser['id'])) {
+            $adminAccountId = (int) $decodedUser['id'];
+            $admQuery = $conn->prepare("SELECT name FROM accounts WHERE id = ? LIMIT 1");
+            $admQuery->bind_param("i", $decodedUser['id']);
+            $admQuery->execute();
+            $admRes = $admQuery->get_result()->fetch_assoc();
+            if ($admRes && !empty($admRes['name'])) {
+                $adminName = $admRes['name'];
+            }
+            $admQuery->close();
+        }
+
+        // 1. Fetch details of lead, consultant, and round
+        $stmt = $conn->prepare("
+            SELECT dl.lead_id, dl.round_id, dl.assigned_to as old_consultant_id, c_old.name as old_consultant_name, 
+                   c_old.email as old_consultant_email, c_old.zalo_chat_id as old_consultant_zalo,
+                   l.name as lead_name, l.phone as lead_phone, l.email as lead_email, l.note as lead_note, 
+                   r.round_name, dl.status as dl_status
+            FROM distribution_logs dl
+            LEFT JOIN leads l ON dl.lead_id = l.id
+            LEFT JOIN distribution_rounds r ON dl.round_id = r.id
+            LEFT JOIN consultants c_old ON dl.assigned_to = c_old.id
+            WHERE dl.id = ?
+        ");
+        $stmt->bind_param("i", $log_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($res->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy log phân bổ']);
+            $stmt->close();
+            break;
+        }
+        $log_data = $res->fetch_assoc();
+        $stmt->close();
+
+        $lead_id = $log_data['lead_id'];
+        $round_id = $log_data['round_id'] ? (int) $log_data['round_id'] : null;
+        $old_consultant_id = $log_data['old_consultant_id'] ? (int) $log_data['old_consultant_id'] : null;
+        $old_consultant_name = $log_data['old_consultant_name'] ?? '';
+        $old_consultant_email = $log_data['old_consultant_email'] ?? '';
+        $old_consultant_zalo = $log_data['old_consultant_zalo'] ?? '';
+        $lead_phone = trim($log_data['lead_phone'] ?? '');
+        $lead_email = trim($log_data['lead_email'] ?? '');
+        $lead_name = $log_data['lead_name'] ?: 'Khách hàng ẩn danh';
+        $round_name = $log_data['round_name'] ?? 'Không rõ';
+        $dl_status = $log_data['dl_status'] ?? '';
+
+        if ($decodedUser['role'] === 'manager') {
+            $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+            if (!isManagerOfConsultant($conn, $currentUserId, $old_consultant_id)) {
+                echo json_encode(['success' => false, 'message' => 'Bạn không có quyền quản lý khách hàng của tư vấn viên này']);
+                break;
+            }
+        }
+
+        if (empty($lead_phone) && empty($lead_email)) {
+            echo json_encode(['success' => false, 'message' => 'Lead không có Số điện thoại hoặc Email để chặn']);
+            break;
+        }
+
+        $conn->begin_transaction();
+        try {
+            // Check if lead already has a Ticket (data_reports record with approved or pending status, or distribution log status is error/Ticket)
+            $ticketExists = false;
+            if ($dl_status === 'error') {
+                $ticketExists = true;
+            } else {
+                $tStmt = $conn->prepare("SELECT id FROM data_reports WHERE lead_id = ? AND status IN ('approved', 'pending') LIMIT 1");
+                if ($tStmt) {
+                    $tStmt->bind_param("i", $lead_id);
+                    $tStmt->execute();
+                    $tRes = $tStmt->get_result();
+                    if ($tRes && $tRes->num_rows > 0) {
+                        $ticketExists = true;
+                    }
+                    $tStmt->close();
+                }
+            }
+
+            if ($ticketExists) {
+                $compensate_sale = false; // Do not compensate again if lead already has a Ticket status
+            }
+
+            // 2. Add contact to global_exclusion_contacts
+            $settingsStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'global_exclusion_contacts' LIMIT 1");
+            $currentContactsStr = '';
+            if ($settingsStmt && $sRow = $settingsStmt->fetch_assoc()) {
+                $currentContactsStr = $sRow['setting_value'] ?? '';
+            }
+
+            $currentContacts = array_map('trim', explode(',', strtolower($currentContactsStr)));
+            // Remove empty values
+            $currentContacts = array_filter($currentContacts);
+
+            $newContactsAdded = [];
+            if (!empty($lead_phone)) {
+                $newContactsAdded[] = strtolower($lead_phone);
+            }
+            if (!empty($lead_email)) {
+                $newContactsAdded[] = strtolower($lead_email);
+            }
+
+            foreach ($newContactsAdded as $c) {
+                if (!in_array($c, $currentContacts)) {
+                    $currentContacts[] = $c;
+                }
+            }
+
+            $updatedContactsStr = implode(',', $currentContacts);
+
+            $updSettings = $conn->prepare("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('global_exclusion_contacts', ?)");
+            $updSettings->bind_param("s", $updatedContactsStr);
+            $updSettings->execute();
+            $updSettings->close();
+
+            // Clear db memory cache for system settings if any
+            if (isset($GLOBALS['system_settings_cache'])) {
+                unset($GLOBALS['system_settings_cache']);
+            }
+
+            // 3. Update Lead status to blacklisted and append reason to note
+            $noteSuffix = "\n[Bị chặn bởi Admin " . $adminName . " lúc " . date('Y-m-d H:i:s') . ". Lý do: " . $reason . "]";
+            if ($ticketExists) {
+                $noteSuffix .= "\n[Hệ thống: Không cộng bù do Lead đã có trạng thái Ticket]";
+            }
+            $newNote = trim(($log_data['lead_note'] ?? '') . $noteSuffix);
+            $updLead = $conn->prepare("UPDATE leads SET note = ?, status = 'blacklisted', ai_screener_status = 'failed' WHERE id = ?");
+            $updLead->bind_param("si", $newNote, $lead_id);
+            $updLead->execute();
+            $updLead->close();
+
+            // Update distribution log status to 'blacklisted'
+            $updLog = $conn->prepare("UPDATE distribution_logs SET status = 'blacklisted' WHERE id = ?");
+            $updLog->bind_param("i", $log_id);
+            $updLog->execute();
+            $updLog->close();
+
+            // 4. Increment compensation count for the consultant in that round if requested
+            if ($compensate_sale && $old_consultant_id && $round_id) {
+                $updComp = $conn->prepare("UPDATE round_consultants SET compensation_count = compensation_count + 1 WHERE round_id = ? AND consultant_id = ?");
+                $updComp->bind_param("ii", $round_id, $old_consultant_id);
+                $updComp->execute();
+                $updComp->close();
+            }
+
+            // Ghi log hành động admin chặn data (blacklist) để báo cáo ngày thống kê được
+            logAdminAction($conn, $adminAccountId, 'BLOCK_LEAD_BLACKLIST', [
+                'log_id' => $log_id,
+                'lead_id' => $lead_id,
+                'lead_name' => $lead_name,
+                'phone' => $lead_phone,
+                'email' => $lead_email,
+                'reason' => $reason,
+                'compensate_sale' => $compensate_sale,
+                'old_consultant_id' => $old_consultant_id,
+                'old_consultant_name' => $old_consultant_name,
+                'round_name' => $round_name
+            ]);
+
+            $conn->commit();
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);
+            break;
+        }
+
+        // 4. Send Notifications out of transaction
+        try {
+            require_once __DIR__ . '/mailer.php';
+            require_once __DIR__ . '/zalo_bot.php';
+
+            $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+            $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+            // Lấy danh sách ticket admins
+            $adminEmails = getTicketNotifyAdmins($conn);
+
+            // Gửi Zalo cho các Ticket Admins
+            if (!empty($botToken) && !empty($adminEmails)) {
+                $adminChatIds = [];
+                foreach ($adminEmails as $adm) {
+                    if (!empty($adm['zalo_chat_id'])) {
+                        $adminChatIds[] = $adm['zalo_chat_id'];
+                    }
+                }
+                if (!empty($adminChatIds)) {
+                    try {
+                        $zaloAdminMsg = "[ THÔNG BÁO CHẶN DATA - BLACKLIST ]\n\n"
+                            . "Admin $adminName đã chặn khách hàng: $lead_name\n"
+                            . "  • SĐT: " . (!empty($lead_phone) ? $lead_phone : "Không có") . "\n"
+                            . "  • Email: " . (!empty($lead_email) ? $lead_email : "Không có") . "\n\n"
+                            . "❖ CHI TIẾT CHẶN:\n"
+                            . "  • Lý do chặn: $reason\n"
+                            . "  • Vòng phân bổ: $round_name\n"
+                            . "  • Sale phụ trách cũ: $old_consultant_name\n"
+                            . "  • Đền bù cho Sale: " . ($compensate_sale ? "Có (Đã cộng 1 lượt bù)" : "Không");
+                        sendZaloMessageToMultiple($botToken, $adminChatIds, $zaloAdminMsg, false);
+                    } catch (Exception $zAdminEx) {
+                        error_log("Error sending block lead Zalo to admins: " . $zAdminEx->getMessage());
+                    }
+                }
+            }
+
+            // Gửi thông báo cho Sale (nếu có bù)
+            if ($compensate_sale && $old_consultant_id) {
+                // Tạo số điện thoại masked cho Sale
+                $maskedPhone = '';
+                if (!empty($lead_phone)) {
+                    $trimmed = trim($lead_phone);
+                    if (strlen($trimmed) <= 3) {
+                        $maskedPhone = substr($trimmed, 0, 2) . str_repeat('*', strlen($trimmed) - 2);
+                    } else {
+                        $maskedPhone = substr($trimmed, 0, 3) . '****' . substr($trimmed, -3);
+                    }
+                }
+
+                // Tạo email masked cho Sale
+                $maskedEmail = '';
+                if (!empty($lead_email)) {
+                    $parts = explode('@', $lead_email);
+                    if (count($parts) === 2) {
+                        $namePart = $parts[0];
+                        $domainPart = $parts[1];
+                        if (strlen($namePart) <= 3) {
+                            $maskedEmail = substr($namePart, 0, 1) . '***@' . $domainPart;
+                        } else {
+                            $maskedEmail = substr($namePart, 0, 3) . '***' . substr($namePart, -1) . '@' . $domainPart;
+                        }
+                    } else {
+                        $maskedEmail = $lead_email;
+                    }
+                }
+
+                if (!empty($botToken) && !empty($old_consultant_zalo)) {
+                    try {
+                        $zaloMsg = "[ ĐỀN BÙ DATA - BLACKLIST ]\n\n"
+                            . "Chào $old_consultant_name, Lead của bạn đã bị Admin " . $adminName . " lúc " . date('H:i:s d/m/Y') . " đưa vào Danh sách đen (Blacklist).\n\n"
+                            . "❖ CHI TIẾT KHÁCH HÀNG:\n"
+                            . "  • Tên KH: $lead_name\n"
+                            . "  • SĐT: " . (!empty($maskedPhone) ? $maskedPhone : "Không có") . "\n"
+                            . "  • Email: " . (!empty($maskedEmail) ? $maskedEmail : "Không có") . "\n\n"
+                            . "Hệ thống đã tự động cộng đền bù cho bạn 1 lượt data ở vòng \"$round_name\".";
+                        sendZaloMessage($botToken, $old_consultant_zalo, $zaloMsg, false);
+                    } catch (Exception $zEx) {
+                        error_log("Error sending block lead Zalo to sale: " . $zEx->getMessage());
+                    }
+                }
+
+                if (!empty($old_consultant_email)) {
+                    try {
+                        // Gom CC cho admin email
+                        $ccEmailsArr = [];
+                        foreach ($adminEmails as $adm) {
+                            if (!empty($adm['email']) && filter_var($adm['email'], FILTER_VALIDATE_EMAIL)) {
+                                $ccEmailsArr[] = strtolower(trim($adm['email']));
+                            }
+                        }
+                        $ccEmailsArr = array_unique($ccEmailsArr);
+                        $saleEmail = strtolower(trim($old_consultant_email));
+                        $ccEmailsArr = array_filter($ccEmailsArr, fn($e) => $e !== $saleEmail);
+                        $ccString = implode(',', $ccEmailsArr);
+
+                        $emailSubj = "[IDEAS DATA] Thông báo đền bù do chặn Lead - $lead_name";
+                        $emailBody = "<h3>Đền bù Data do chặn Blacklist</h3>
+                                      <p>Chào $old_consultant_name,</p>
+                                      <p>Khách hàng của bạn đã bị Admin <strong>$adminName</strong> đưa vào Danh sách đen (Blacklist).</p>
+                                      <p><strong>Chi tiết khách hàng:</strong></p>
+                                      <ul>
+                                        <li>Tên khách hàng: $lead_name</li>
+                                        <li>Số điện thoại: " . (!empty($maskedPhone) ? $maskedPhone : "Không có") . " (Chỉ Admin xem được số đầy đủ)</li>
+                                        <li>Email: " . (!empty($maskedEmail) ? $maskedEmail : "Không có") . "</li>
+                                      </ul>
+                                      <p><strong>Lý do:</strong> " . htmlspecialchars($reason) . "</p>
+                                      <p>Hệ thống đã tự động cộng thêm 1 lượt đền bù cho bạn trong vòng phân bổ <strong>$round_name</strong>.</p>";
+                        sendEmailNotification($old_consultant_email, $emailSubj, 'Thông báo đền bù Blacklist', $emailBody, $ccString);
+                    } catch (Exception $eEx) {
+                        error_log("Error sending block lead email to sale: " . $eEx->getMessage());
+                    }
+                }
+            } else {
+                // Nếu không bù, chỉ gửi email cho Admin để nắm thông tin
+                if (!empty($adminEmails)) {
+                    try {
+                        $adminEmailsCopy = $adminEmails;
+                        $firstAdmin = array_shift($adminEmailsCopy);
+                        $ccList = array_map(fn($a) => $a['email'], $adminEmailsCopy);
+                        $ccString = implode(',', array_filter($ccList));
+
+                        $emailSubj = "[IDEAS DATA] Thông báo Chặn Lead (Không Bù) - $lead_name";
+                        $emailBody = "<h3>Thông báo Chặn Lead - Blacklist</h3>
+                                      <p>Kính gửi Ban quản trị,</p>
+                                      <p>Admin <strong>$adminName</strong> đã chặn khách hàng và đưa vào danh sách đen (không đền bù cho Sale).</p>
+                                      <p><strong>Chi tiết khách hàng:</strong></p>
+                                      <ul>
+                                        <li>Tên khách hàng: $lead_name</li>
+                                        <li>Số điện thoại: " . (!empty($lead_phone) ? $lead_phone : "Không có") . "</li>
+                                        <li>Email: " . (!empty($lead_email) ? $lead_email : "Không có") . "</li>
+                                      </ul>
+                                      <p><strong>Lý do chặn:</strong> " . htmlspecialchars($reason) . "</p>
+                                      <p><strong>Vòng phân bổ:</strong> $round_name</p>
+                                      <p><strong>Sale phụ trách cũ:</strong> $old_consultant_name</p>";
+                        sendEmailNotification($firstAdmin['email'], $emailSubj, 'Thông báo Chặn Blacklist', $emailBody, $ccString);
+                    } catch (Exception $eEx) {
+                        error_log("Error sending block lead email to admins: " . $eEx->getMessage());
+                    }
+                }
+            }
+        } catch (Exception $notifyEx) {
+            error_log("General notification error in block_lead: " . $notifyEx->getMessage());
+        }
+
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'send_quick_zalo_message':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $consultant_id = (int) ($input['consultant_id'] ?? 0);
+        $account_id = (int) ($input['account_id'] ?? 0);
+        $message = trim($input['message'] ?? '');
+
+        if (empty($message)) {
+            echo json_encode(['success' => false, 'message' => 'Nội dung tin nhắn không được để trống']);
+            break;
+        }
+
+        $targetName = '';
+        $targetEmail = '';
+        $targetZaloChatId = '';
+        $isAccount = false;
+
+        if ($account_id > 0) {
+            $stmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM accounts WHERE id = ? LIMIT 1");
+            $stmt->bind_param("i", $account_id);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
+            if (!$user) {
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy tài khoản quản trị']);
+                break;
+            }
+            $targetName = $user['name'];
+            $targetEmail = $user['email'];
+            $targetZaloChatId = $user['zalo_chat_id'];
+            $isAccount = true;
+        } else if ($consultant_id > 0) {
+            $stmt = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ? LIMIT 1");
+            $stmt->bind_param("i", $consultant_id);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
+            if (!$user) {
+                echo json_encode(['success' => false, 'message' => 'Không tìm thấy Tư vấn viên']);
+                break;
+            }
+            $targetName = $user['name'];
+            $targetEmail = $user['email'];
+            $targetZaloChatId = $user['zalo_chat_id'];
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Thiếu thông tin người nhận']);
+            break;
+        }
+
+        $sentZalo = false;
+        $sentEmail = false;
+
+        // 1. Send Zalo
+        require_once __DIR__ . '/zalo_bot.php';
+        $stmtToken = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'zalo_bot_token' LIMIT 1");
+        $botToken = $stmtToken->fetch_assoc()['setting_value'] ?? '';
+
+        if (!empty($botToken) && !empty($targetZaloChatId)) {
+            $zaloMsg = "[ TIN NHẮN TỪ BAN QUẢN TRỊ ]\n\n"
+                . "Chào {$targetName},\n\n"
+                . $message;
+            $sentZalo = sendZaloMessage($botToken, $targetZaloChatId, $zaloMsg);
+        }
+
+        // 2. Send Email
+        if (!empty($targetEmail)) {
+            require_once __DIR__ . '/mailer.php';
+            sendQuickMessageEmailToSale($targetEmail, $targetName, $message);
+            $sentEmail = true;
+        }
+
+        if ($sentZalo && $sentEmail) {
+            echo json_encode(['success' => true, 'message' => 'Đã gửi tin nhắn thành công qua cả Zalo Bot và Email!']);
+        } else if ($sentZalo) {
+            echo json_encode(['success' => true, 'message' => 'Đã gửi tin nhắn thành công qua Zalo Bot!']);
+        } else if ($sentEmail) {
+            if (!empty($targetZaloChatId)) {
+                echo json_encode(['success' => true, 'message' => 'Đã gửi qua Email thành công, nhưng gửi qua Zalo Bot thất bại (kiểm tra lại Token Zalo Bot hoặc kết nối).']);
+            } else {
+                echo json_encode(['success' => true, 'message' => 'Đã gửi qua Email thành công (Tài khoản chưa liên kết Zalo Bot nên không thể gửi qua Zalo).']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Gửi thất bại. Người nhận chưa cấu hình Email và chưa liên kết Zalo Bot.']);
+        }
+        break;
+
+    case 'preview_routing':
+        require_once __DIR__ . '/webhook_logic.php';
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $data = $input['data'] ?? [];
+        $connectionId = isset($input['connection_id']) ? ($input['connection_id'] === 'all' || $input['connection_id'] === '' ? null : (int) $input['connection_id']) : null;
+        $connectionType = $input['connection_type'] ?? 'manual';
+
+        $phone = normalizePhone($data['phone'] ?? '');
+        $email = trim($data['email'] ?? '');
+        $name = trim($data['name'] ?? '');
+        $source = trim($data['source'] ?? '');
+        $type = trim($data['type'] ?? '');
+        $note = trim($data['note'] ?? '');
+
+        // Fetch connection settings if connectionId is provided
+        $isSilent = 0;
+        $syncSaleperson = 0;
+        if ($connectionId > 0) {
+            $cStmt = $conn->prepare("SELECT is_silent, sync_saleperson FROM sheet_connections WHERE id = ? LIMIT 1");
+            if ($cStmt) {
+                $cStmt->bind_param("i", $connectionId);
+                $cStmt->execute();
+                $cRes = $cStmt->get_result();
+                if ($cRes->num_rows > 0) {
+                    $cRow = $cRes->fetch_assoc();
+                    $isSilent = (int) $cRow['is_silent'];
+                    $syncSaleperson = (int) $cRow['sync_saleperson'];
+                }
+                $cStmt->close();
+            }
+        }
+
+        // Check CRM duplicate
+        $crmCheckResult = checkCRMInteraction($conn, $phone, $email);
+        $dupCheckMonths = (int) get_system_setting($conn, 'duplicate_check_months');
+        if ($dupCheckMonths <= 0) {
+            $dupCheckMonths = 6;
+        }
+
+        if ($isSilent === 1) {
+            if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+                $assignedTo = $crmCheckResult['assignedTo'];
+                $stmtC = $conn->prepare("SELECT name, email, avatar FROM consultants WHERE id = ?");
+                $stmtC->bind_param("i", $assignedTo);
+                $stmtC->execute();
+                $cRow = $stmtC->get_result()->fetch_assoc();
+                $stmtC->close();
+                $consultantName = $cRow ? $cRow['name'] : 'Không rõ';
+                $consultantEmail = $cRow ? $cRow['email'] : '';
+                $consultantAvatar = $cRow ? $cRow['avatar'] : null;
+
+                echo json_encode([
+                    'success' => true,
+                    'is_duplicate' => true,
+                    'is_silent' => true,
+                    'consultant' => [
+                        'consultant_id' => $assignedTo,
+                        'name' => $consultantName,
+                        'email' => $consultantEmail,
+                        'avatar' => $consultantAvatar,
+                        'round_name' => 'Đồng bộ ngầm (Silent Sync)',
+                        'reason' => 'Khách trùng khớp thuộc Sale: ' . $consultantName . '. Sẽ chỉ lưu thông tin mới và gửi nhắc nhở.'
+                    ],
+                    'trace' => [
+                        [
+                            'description' => 'Kiểm tra trùng lặp CRM (Đồng bộ ngầm)',
+                            'status' => 'matched',
+                            'reason' => "Khách hàng trùng trong CRM thuộc Sale: $consultantName. Đồng bộ ngầm không định tuyến chia số."
+                        ]
+                    ]
+                ]);
+                exit();
+            } else {
+                echo json_encode([
+                    'success' => true,
+                    'is_duplicate' => false,
+                    'is_silent' => true,
+                    'consultant' => null,
+                    'message' => 'Dòng dữ liệu mới hoàn toàn. Đồng bộ ngầm, không định tuyến chia số.',
+                    'trace' => [
+                        [
+                            'description' => 'Kiểm tra trùng lặp CRM (Đồng bộ ngầm)',
+                            'status' => 'skipped',
+                            'reason' => 'Khách hàng mới hoàn toàn hoặc không có Sale sở hữu hợp lệ. Đồng bộ ngầm không định tuyến.'
+                        ]
+                    ]
+                ]);
+                exit();
+            }
+        }
+
+        // Regular duplicate checking
+        if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+            $assignedTo = $crmCheckResult['assignedTo'];
+            $stmtC = $conn->prepare("SELECT name, email, avatar FROM consultants WHERE id = ?");
+            $stmtC->bind_param("i", $assignedTo);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+
+            if ($cRow) {
+                echo json_encode([
+                    'success' => true,
+                    'is_duplicate' => true,
+                    'consultant' => [
+                        'consultant_id' => $assignedTo,
+                        'name' => $cRow['name'],
+                        'email' => $cRow['email'],
+                        'avatar' => $cRow['avatar'] ?? null,
+                        'round_name' => 'Nhắc lại - trùng dưới ' . $dupCheckMonths . ' tháng',
+                        'reason' => 'Khách cũ đăng ký lại trong hạn định ' . $dupCheckMonths . ' tháng. Chuyển thẳng cho Sale cũ: ' . $cRow['name'] . '.'
+                    ],
+                    'trace' => [
+                        [
+                            'description' => 'Kiểm tra trùng lặp CRM',
+                            'status' => 'matched',
+                            'reason' => 'Phát hiện số điện thoại/email trùng trong hệ thống. Tương tác cuối cách đây ' . number_format($crmCheckResult['monthsSinceLastInteraction'], 1) . ' tháng (< hạn định ' . $dupCheckMonths . ' tháng). Chuyển thẳng cho Sale cũ: ' . $cRow['name'] . '.'
+                        ]
+                    ]
+                ]);
+                exit();
+            }
+        }
+
+        // Fetch all rules from routing_rules
+        $rulesRes = $conn->query("SELECT rr.*, r.round_name FROM routing_rules rr LEFT JOIN distribution_rounds r ON rr.target_round_id = r.id ORDER BY rr.priority ASC");
+        $rules = [];
+        if ($rulesRes) {
+            while ($rRow = $rulesRes->fetch_assoc()) {
+                $rules[] = $rRow;
+            }
+        }
+
+        $trace = [];
+        $assignedRoundId = null;
+        $matchedRule = null;
+        $injectedFields = [];
+
+        // Check if there was a duplicate, but the consultant is inactive or on leave, or if duplicate check threshold was exceeded
+        if ($crmCheckResult['originalAssignedTo']) {
+            $stmtC = $conn->prepare("SELECT name, status FROM consultants WHERE id = ?");
+            $stmtC->bind_param("i", $crmCheckResult['originalAssignedTo']);
+            $stmtC->execute();
+            $cRow = $stmtC->get_result()->fetch_assoc();
+            $stmtC->close();
+
+            $saleName = $cRow ? $cRow['name'] : 'Không rõ';
+            $saleStatus = $cRow ? $cRow['status'] : 'inactive';
+
+            if ($saleStatus !== 'active') {
+                $statusText = $saleStatus === 'leave' ? 'đang nghỉ phép' : 'không hoạt động';
+                $trace[] = [
+                    'rule_id' => 0,
+                    'description' => 'Kiểm tra trùng lặp CRM',
+                    'status' => 'skipped',
+                    'reason' => "Phát hiện trùng với Sale cũ: $saleName nhưng Sale này $statusText. Tiến hành quét quy tắc để chia mới."
+                ];
+            } else if ($crmCheckResult['monthsSinceLastInteraction'] >= $dupCheckMonths) {
+                $trace[] = [
+                    'rule_id' => 0,
+                    'description' => 'Kiểm tra trùng lặp CRM',
+                    'status' => 'skipped',
+                    'reason' => "Trùng khách cũ của Sale: $saleName nhưng tương tác cuối cách đây " . number_format($crmCheckResult['monthsSinceLastInteraction'], 1) . " tháng (>= hạn định " . $dupCheckMonths . " tháng). Tiến hành quét quy tắc để chia mới."
+                ];
+            }
+        } else {
+            $trace[] = [
+                'rule_id' => 0,
+                'description' => 'Kiểm tra trùng lặp CRM',
+                'status' => 'skipped',
+                'reason' => 'Không phát hiện số điện thoại hoặc email trùng lặp trong hệ thống.'
+            ];
+        }
+
+        foreach ($rules as $index => $rule) {
+            $ruleNum = $index + 1;
+            $ruleDesc = "Quy tắc #$ruleNum: " . ($rule['round_name'] ?? 'Không rõ');
+
+            // Check connection restriction
+            if (!empty($rule['connection_id'])) {
+                $ruleConnIds = array_map('trim', explode(',', (string) $rule['connection_id']));
+                $isMatched = false;
+                foreach ($ruleConnIds as $ruleConnIdStr) {
+                    $ruleConnId = (int) $ruleConnIdStr;
+                    if ($ruleConnId === -1 && $connectionType === 'sheets') {
+                        $isMatched = true;
+                        break;
+                    }
+                    if ($ruleConnId === -2 && $connectionType === 'landing_page') {
+                        $isMatched = true;
+                        break;
+                    }
+                    if ($ruleConnId === -3 && $connectionType === 'manual') {
+                        $isMatched = true;
+                        break;
+                    }
+                    if ($ruleConnId > 0 && $ruleConnId == $connectionId) {
+                        $isMatched = true;
+                        break;
+                    }
+                }
+
+                if (!$isMatched) {
+                    $trace[] = [
+                        'rule_id' => $rule['id'],
+                        'description' => $ruleDesc,
+                        'status' => 'skipped',
+                        'reason' => 'Không áp dụng cho nguồn kết nối hiện tại (' . htmlspecialchars($connectionType) . ').'
+                    ];
+                    continue;
+                }
+            }
+
+            // Check conditions
+            $isMatch = false;
+            $conditionsDetail = [];
+
+            if (!empty($rule['conditions_json'])) {
+                $parsed = json_decode($rule['conditions_json'], true);
+                if (is_array($parsed) && count($parsed) > 0) {
+                    $branches = [];
+                    if (isset($parsed[0]['col'])) {
+                        $branches = [['conditions' => $parsed]];
+                    } else if (isset($parsed[0][0]['col'])) {
+                        foreach ($parsed as $b) {
+                            $branches[] = ['conditions' => $b];
+                        }
+                    } else if (isset($parsed[0]['conditions'])) {
+                        $branches = $parsed;
+                    }
+
+                    foreach ($branches as $bIdx => $branchObj) {
+                        $conds = $branchObj['conditions'] ?? [];
+                        $branchMatch = true; // ALWAYS AND logic within a single branch
+
+                        $branchCondsDetail = [];
+                        foreach ($conds as $cond) {
+                            $resVal = evaluateSingleCondition($data, $source, $type, $cond['col'], $cond['op'], $cond['val'], $connectionId);
+                            $branchCondsDetail[] = [
+                                'col' => $cond['col'],
+                                'op' => $cond['op'],
+                                'val' => $cond['val'],
+                                'matched' => $resVal
+                            ];
+                            if (!$resVal) {
+                                $branchMatch = false;
+                            }
+                        }
+
+                        if ($branchMatch) {
+                            $isMatch = true;
+                            if (isset($branchObj['inject'])) {
+                                $injectObj = $branchObj['inject'];
+                                if (isset($injectObj['enabled']) && $injectObj['enabled'] && !empty($injectObj['fields']) && is_array($injectObj['fields'])) {
+                                    foreach ($injectObj['fields'] as $f) {
+                                        if (!empty($f['col'])) {
+                                            $injectedFields[$f['col']] = $f['val'];
+                                        }
+                                    }
+                                } else if (is_array($injectObj)) {
+                                    foreach ($injectObj as $f) {
+                                        if (is_array($f) && !empty($f['col'])) {
+                                            $injectedFields[$f['col']] = $f['val'];
+                                        }
+                                    }
+                                }
+                            }
+                            $conditionsDetail = $branchCondsDetail;
+                            break;
+                        } else if (empty($conditionsDetail)) {
+                            $conditionsDetail = $branchCondsDetail;
+                        }
+                    }
+                }
+            } else {
+                $resVal = evaluateSingleCondition($data, $source, $type, $rule['condition_column'], $rule['condition_operator'], $rule['condition_value'], $connectionId);
+                $isMatch = $resVal;
+                $conditionsDetail[] = [
+                    'col' => $rule['condition_column'],
+                    'op' => $rule['condition_operator'],
+                    'val' => $rule['condition_value'],
+                    'matched' => $resVal
+                ];
+            }
+
+            if ($isMatch) {
+                $assignedRoundId = (int) $rule['target_round_id'];
+                $matchedRule = $rule;
+                $trace[] = [
+                    'rule_id' => $rule['id'],
+                    'description' => $ruleDesc,
+                    'status' => 'matched',
+                    'reason' => 'Khớp toàn bộ điều kiện quy tắc.',
+                    'conditions' => $conditionsDetail
+                ];
+                break;
+            } else {
+                $trace[] = [
+                    'rule_id' => $rule['id'],
+                    'description' => $ruleDesc,
+                    'status' => 'failed',
+                    'reason' => 'Điều kiện kiểm tra không khớp.',
+                    'conditions' => $conditionsDetail
+                ];
+            }
+        }
+
+        // Fallback checks
+        $isFallback = false;
+        $isFallbackAdmin = false;
+        $fallbackAdminName = '';
+        if (!$assignedRoundId) {
+            $fbSettings = [];
+            $fbRes = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('fallback_type', 'fallback_round_id', 'fallback_admin_id')");
+            if ($fbRes) {
+                while ($row = $fbRes->fetch_assoc()) {
+                    $fbSettings[$row['setting_key']] = $row['setting_value'];
+                }
+            }
+            $fbType = $fbSettings['fallback_type'] ?? 'round';
+            if ($fbType === 'admin') {
+                $fbAdminId = (int) ($fbSettings['fallback_admin_id'] ?? 0);
+                if ($fbAdminId > 0) {
+                    $admStmt = $conn->prepare("SELECT name FROM accounts WHERE id = ? AND (role = 'admin' OR role = 'superadmin') LIMIT 1");
+                    $admStmt->bind_param("i", $fbAdminId);
+                    $admStmt->execute();
+                    $admRes = $admStmt->get_result();
+                    if ($admRes->num_rows > 0) {
+                        $fallbackAdminName = $admRes->fetch_assoc()['name'];
+                        $isFallbackAdmin = true;
+                    }
+                }
+            } else {
+                $fbRoundId = (int) ($fbSettings['fallback_round_id'] ?? 0);
+                if ($fbRoundId > 0) {
+                    $assignedRoundId = $fbRoundId;
+                    $isFallback = true;
+                }
+            }
+        }
+
+        $consultant = null;
+        if ($assignedRoundId) {
+            $simulated = simulateNextConsultantInRound($conn, $assignedRoundId);
+            if ($simulated) {
+                $consultant = [
+                    'consultant_id' => $simulated['id'],
+                    'name' => $simulated['name'],
+                    'email' => $simulated['email'] ?? '',
+                    'avatar' => $simulated['avatar'] ?? null,
+                    'receive_ratio' => $simulated['receive_ratio'],
+                    'data_per_turn' => $simulated['data_per_turn'],
+                    'current_turn_remaining' => $simulated['current_turn_remaining'],
+                    'skip_count' => $simulated['skip_count'] ?? 0,
+                    'compensation_count' => $simulated['compensation_count'] ?? 0,
+                    'is_compensation' => (intval($simulated['compensation_count'] ?? 0) > 0),
+                    'is_mid_turn' => (intval($simulated['current_turn_remaining'] ?? 0) > 0)
+                ];
+
+                $stmtR = $conn->prepare("SELECT round_name FROM distribution_rounds WHERE id = ?");
+                $stmtR->bind_param("i", $assignedRoundId);
+                $stmtR->execute();
+                $rRes = $stmtR->get_result();
+                if ($rRes->num_rows > 0) {
+                    $consultant['round_name'] = $rRes->fetch_assoc()['round_name'];
+                } else {
+                    $consultant['round_name'] = 'Không rõ';
+                }
+            }
+        } else if ($isFallbackAdmin) {
+            $consultant = [
+                'consultant_id' => 0,
+                'name' => $fallbackAdminName,
+                'email' => 'Admin Fallback',
+                'round_name' => 'Không có (Fallback về Admin)'
+            ];
+        }
+
+        echo json_encode([
+            'success' => true,
+            'round_id' => $assignedRoundId,
+            'consultant' => $consultant,
+            'is_fallback' => $isFallback,
+            'is_fallback_admin' => $isFallbackAdmin,
+            'injected_fields' => $injectedFields,
+            'trace' => $trace
+        ]);
+        break;
+
+    case 'batch_check_duplicates':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $leads = $input['leads'] ?? [];
+
+        $results = [];
+        foreach ($leads as $lead) {
+            $phone = normalizePhone($lead['phone'] ?? '');
+            $email = trim($lead['email'] ?? '');
+            $name = trim($lead['name'] ?? '');
+
+            $crmCheck = checkCRMInteraction($conn, $phone, $email, true);
+
+            $leadId = null;
+            $assignedName = 'Không rõ';
+            $lastInteractionDate = null;
+
+            if ($crmCheck['originalAssignedTo']) {
+                $where = [];
+                $params = [];
+                $types = '';
+                if (!empty($phone)) {
+                    $where[] = "l.phone = ?";
+                    $params[] = $phone;
+                    $types .= 's';
+                }
+                if (!empty($email)) {
+                    $where[] = "l.email = ?";
+                    $params[] = $email;
+                    $types .= 's';
+                }
+                if (!empty($where)) {
+                    $whereClause = implode(" OR ", $where);
+                    $stmt = $conn->prepare("SELECT l.id, l.last_interaction_date, c.name as consultant_name FROM leads l LEFT JOIN consultants c ON l.assigned_to = c.id WHERE $whereClause ORDER BY l.last_interaction_date DESC LIMIT 1");
+                    if ($stmt) {
+                        $stmt->bind_param($types, ...$params);
+                        $stmt->execute();
+                        $res = $stmt->get_result();
+                        if ($res->num_rows > 0) {
+                            $row = $res->fetch_assoc();
+                            $leadId = $row['id'];
+                            $assignedName = $row['consultant_name'] ?? 'Không rõ';
+                            $lastInteractionDate = $row['last_interaction_date'];
+                        }
+                        $stmt->close();
+                    }
+                }
+            }
+
+            $results[] = [
+                'name' => $name,
+                'phone' => $phone,
+                'email' => $email,
+                'is_duplicate' => $crmCheck['isDuplicate'],
+                'has_record' => !empty($crmCheck['originalAssignedTo']),
+                'assigned_to' => $crmCheck['originalAssignedTo'],
+                'consultant_name' => $assignedName,
+                'consultant_status' => $crmCheck['consultantStatus'],
+                'last_interaction_date' => $lastInteractionDate,
+                'months_since_last_interaction' => $crmCheck['monthsSinceLastInteraction']
+            ];
+        }
+
+        echo json_encode([
+            'success' => true,
+            'results' => $results
+        ]);
+        break;
+
+    case 'batch_import_leads':
+        @set_time_limit(0); // Prevent PHP execution timeout during bulk Excel imports
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $leads = $input['leads'] ?? [];
+        // Tat ca dữ liệu ánh xạ luon luon silent (khong dinh tuyen, khong bao sale)
+        $isSilent = 1;
+        $syncSaleperson = 0;
+
+        $importedCount = 0;
+        $duplicateCount = 0;
+        $newCount = 0;
+        $phone = '';
+
+        try {
+            foreach ($leads as $lead) {
+                $phone = normalizePhone($lead['phone'] ?? '');
+                $email = trim($lead['email'] ?? '');
+                $name = trim($lead['name'] ?? '');
+                $customDateRaw = trim($lead['date'] ?? '');
+                $customDate = normalizeDate($customDateRaw);
+                $salepersonVal = trim($lead['saleperson'] ?? '');
+                $source = 'Excel Import';
+                $type = 'Excel';
+                $note = 'Nhap du lieu cu';
+
+                if (empty($phone) && empty($email)) {
+                    continue;
+                }
+
+                // Acquire lock for this lead
+                $lockKey = '';
+                if (!empty($phone)) {
+                    $lockKey = 'webhook_lead_phone_' . $phone;
+                } else if (!empty($email)) {
+                    $lockKey = 'webhook_lead_email_' . md5($email);
+                } else {
+                    $lockKey = 'webhook_lead_empty_' . md5(json_encode($lead));
+                }
+
+                $lockAcquired = false;
+                $lockStmt = $conn->prepare("SELECT GET_LOCK(?, 5) as get_lock");
+                if ($lockStmt) {
+                    $lockStmt->bind_param("s", $lockKey);
+                    $lockStmt->execute();
+                    $lockRes = $lockStmt->get_result()->fetch_assoc();
+                    $lockStmt->close();
+                    if ($lockRes && $lockRes['get_lock'] == 1) {
+                        $lockAcquired = true;
+                    }
+                }
+
+                if (!$lockAcquired) {
+                    error_log("Excel Import: Skip locked lead (Phone: $phone, Email: $email)");
+                    continue;
+                }
+
+                $conn->begin_transaction();
+                try {
+                    $fileConsultantId = null;
+                    if (!empty($salepersonVal)) {
+                        $fileConsultantId = findConsultantByEmailOrName($conn, $salepersonVal);
+                    }
+
+                    $crmCheck = checkCRMInteraction($conn, $phone, $email, true);
+
+                    if ($isSilent == 1) {
+                        if ($crmCheck['isDuplicate']) {
+                            $ownerId = !empty($crmCheck['assignedTo']) ? $crmCheck['assignedTo'] : $fileConsultantId;
+                            // If current database lead has no owner (assignedTo is empty), write the owner. Otherwise, only update interaction date.
+                            $onlyUpdateDate = !empty($crmCheck['assignedTo']);
+                            $leadId = updateLead($conn, $phone, $email, $ownerId, 'Excel Import', 'Excel', 'Nhap du lieu cu', null, $customDate, $name, $onlyUpdateDate, true);
+                            $duplicateCount++;
+                            logDistribution($conn, $leadId, $ownerId, null, 'silent', 'Chi dong bo check trung, khong dinh tuyen (Trung so).', false, $customDate);
+                        } else {
+                            $ownerId = $fileConsultantId;
+                            $leadId = insertLead($conn, [], $ownerId, $phone, $email, $name, 'Excel Import', 'Excel', 'Nhap du lieu cu', null, $customDate, true);
+                            $newCount++;
+                            logDistribution($conn, $leadId, $ownerId, null, 'silent', 'Chi dong bo check trung, khong dinh tuyen (Moi).', false, $customDate);
+                        }
+                    } else {
+                        if ($crmCheck['isDuplicate']) {
+                            $assignedTo = !empty($crmCheck['assignedTo']) ? $crmCheck['assignedTo'] : $fileConsultantId;
+                            // If current database lead has no owner (assignedTo is empty), write the owner. Otherwise, only update interaction date.
+                            $onlyUpdateDate = !empty($crmCheck['assignedTo']);
+                            $leadId = updateLead($conn, $phone, $email, $assignedTo, 'Excel Import', 'Excel', 'Nhap du lieu cu', null, $customDate, $name, $onlyUpdateDate);
+                            logDistribution($conn, $leadId, $assignedTo, null, 'reminder', 'Trung so tu file Excel nhap vao.', false);
+                            $duplicateCount++;
+
+                            if ($syncSaleperson == 1 && !empty($assignedTo)) {
+                                $stmtC = $conn->prepare("SELECT name, email, status FROM consultants WHERE id = ?");
+                                $stmtC->bind_param("i", $assignedTo);
+                                $stmtC->execute();
+                                $cRow = $stmtC->get_result()->fetch_assoc();
+                                $stmtC->close();
+                                if ($cRow && ($cRow['status'] === 'active' || $cRow['status'] === 'leave')) {
+                                    require_once __DIR__ . '/mailer.php';
+                                    require_once __DIR__ . '/zalo_bot.php';
+                                    sendLeadReminderEmailToSale($cRow['email'], $cRow['name'], $name, $phone, 'Trung so tu file Excel nhap vao', 'Excel Import', '', '', [], $leadId);
+                                    sendLeadReminderZaloMessageToSale($assignedTo, $cRow['name'], $name, $phone, 'Trung so tu file Excel nhap vao', 'Excel Import', '', [], $leadId, $email, 'Excel');
+                                }
+                            }
+                        } else {
+                            $assignedToId = $fileConsultantId;
+                            $isFromRules = false;
+                            $roundId = null;
+                            if (empty($assignedToId)) {
+                                $rowData = $lead;
+                                $rowData['phone'] = $phone;
+                                $rowData['email'] = $email;
+                                $rowData['name'] = $name;
+                                $rulesResult = evaluateRules($conn, $rowData, $source, $type, null, 'sheets');
+                                if (is_array($rulesResult)) {
+                                    $roundId = $rulesResult['target_round_id'] ?? null;
+                                    $inject = $rulesResult['inject'] ?? [];
+
+                                    // Apply inject fields for Excel Import
+                                    $standardFields = ['source', 'type', 'note', 'name', 'phone', 'email'];
+                                    foreach ($inject as $k => $v) {
+                                        if (in_array($k, $standardFields)) {
+                                            if ($k === 'source')
+                                                $source = $v;
+                                            if ($k === 'type')
+                                                $type = $v;
+                                            if ($k === 'note')
+                                                $note = $v;
+                                            if ($k === 'name')
+                                                $name = $v;
+                                            if ($k === 'phone')
+                                                $phone = normalizePhone($v);
+                                            if ($k === 'email')
+                                                $email = trim($v);
+                                        } else {
+                                            $note = trim($note) === '' ? "[$k]: $v" : $note . "\n[$k]: $v";
+                                        }
+                                    }
+
+                                    if ($roundId) {
+                                        $assignResult = getNextConsultantInRound($conn, $roundId);
+                                        if ($assignResult) {
+                                            $assignedToId = $assignResult['id'];
+                                        }
+                                    }
+                                    $isFromRules = true;
+                                }
+                            }
+
+                            $leadId = insertLead($conn, [], $assignedToId, $phone, $email, $name, $source, $type, $note, null, $customDate);
+                            $newCount++;
+
+                            if ($assignedToId) {
+                                $logMsg = $isFromRules ? 'Phan chia tu dong tu file Excel.' : 'Phan chia cho Sale tu file Excel.';
+                                logDistribution($conn, $leadId, $assignedToId, $roundId, 'success', $logMsg, false);
+
+                                $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
+                                $stmtC->bind_param("i", $assignedToId);
+                                $stmtC->execute();
+                                $cRow = $stmtC->get_result()->fetch_assoc();
+                                $stmtC->close();
+                                if ($cRow) {
+                                    require_once __DIR__ . '/mailer.php';
+                                    require_once __DIR__ . '/zalo_bot.php';
+                                    sendLeadAssignedEmailToSale($cRow['email'], $cRow['name'], $name, $phone, 'Lead moi tu file Excel', $source, '', '', $leadId, $assignedToId, $roundId ?? 0);
+                                    sendLeadAssignedZaloMessageToSale($assignedToId, $cRow['name'], $name, $phone, 'Lead moi tu file Excel', $source, '', $leadId, $roundId ?? 0, $email, $type);
+                                }
+                            } else {
+                                logDistribution($conn, $leadId, null, null, 'no_consultant', 'Khong co Sale nhan tu file Excel.', false);
+                            }
+                        }
+                    }
+                    $conn->commit();
+                    $importedCount++;
+                    if (!empty($leadId)) {
+                        triggerTwoWaySync($conn, $leadId);
+                    }
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    error_log("Excel Import error on lead (Phone: $phone): " . $e->getMessage());
+                } finally {
+                    $relStmt = $conn->prepare("SELECT RELEASE_LOCK(?)");
+                    if ($relStmt) {
+                        $relStmt->bind_param("s", $lockKey);
+                        $relStmt->execute();
+                        $relRes = $relStmt->get_result();
+                        if ($relRes) $relRes->close();
+                        $relStmt->close();
+                    }
+                }
+            }
+            echo json_encode([
+                'success' => true,
+                'message' => "Da nhap thanh cong $importedCount leads ($newCount moi, $duplicateCount trung).",
+                'imported_count' => $importedCount,
+                'new_count' => $newCount,
+                'duplicate_count' => $duplicateCount
+            ]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Loi import: ' . $e->getMessage()]);
+        }
+        break;
+
+    case 'check_sheet_duplicates':
+        require_once __DIR__ . '/webhook_logic.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        $connectionId = isset($input['connection_id']) ? (int) $input['connection_id'] : 0;
+
+        if ($connectionId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID kết nối không hợp lệ.']);
+            break;
+        }
+
+        // Fetch connection info
+        $connStmt = $conn->prepare("SELECT sheet_name, spreadsheet_id FROM sheet_connections WHERE id = ? AND is_active = 1");
+        $connStmt->bind_param("i", $connectionId);
+        $connStmt->execute();
+        $connRes = $connStmt->get_result();
+        if ($connRes->num_rows === 0) {
+            $connStmt->close();
+            echo json_encode(['success' => false, 'message' => 'Không tìm thấy kết nối hoặc kết nối chưa kích hoạt.']);
+            break;
+        }
+        $connItem = $connRes->fetch_assoc();
+        $connStmt->close();
+
+        // Fetch mappings
+        $mapStmt = $conn->prepare("SELECT sheet_column, system_field, custom_label FROM field_mappings WHERE connection_id = ?");
+        $mapStmt->bind_param("i", $connectionId);
+        $mapStmt->execute();
+        $mappingsResult = $mapStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $mapStmt->close();
+
+        $mappings = [];
+        foreach ($mappingsResult as $mRow) {
+            $sysField = $mRow['system_field'];
+            if (!isset($mappings[$sysField])) {
+                $mappings[$sysField] = [];
+            }
+            $mappings[$sysField][] = [
+                'sheet_column' => $mRow['sheet_column'],
+                'custom_label' => $mRow['custom_label']
+            ];
+        }
+
+        $extractMappedValuesLocal = function ($mappingsArray, $systemField, $data) {
+            if (!isset($mappingsArray[$systemField]))
+                return '';
+            $values = [];
+            foreach ($mappingsArray[$systemField] as $mapItem) {
+                $colName = $mapItem['sheet_column'];
+                $customLabel = $mapItem['custom_label'];
+                if (isset($data[$colName]) && $data[$colName] !== '') {
+                    $label = !empty($customLabel) ? $customLabel : $colName;
+                    $values[] = $label . ': ' . $data[$colName];
+                }
+            }
+            // For unique/specific system fields, return the raw value directly of the first matched non-empty column to keep it clean and prevent corruption.
+            if (in_array($systemField, ['phone', 'email', 'name', 'source', 'type', 'assigned_to', 'saleperson'])) {
+                foreach ($mappingsArray[$systemField] as $mapItem) {
+                    $colName = $mapItem['sheet_column'];
+                    if (isset($data[$colName]) && $data[$colName] !== '') {
+                        return $data[$colName];
+                    }
+                }
+                return '';
+            }
+            return implode("\n", $values);
+        };
+
+        // Fetch CSV from Google Sheets
+        $csvUrl = "https://docs.google.com/spreadsheets/d/" . trim($connItem['spreadsheet_id']) . "/gviz/tq?tqx=out:csv";
+        if (!empty($connItem['sheet_name'])) {
+            $csvUrl .= "&sheet=" . urlencode($connItem['sheet_name']);
+        }
+
+        $ch = curl_init($csvUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        // Force IPv4 to prevent misconfigured IPv6 gateway from causing connection timeout
+        curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        $csvData = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || empty($csvData) || stripos($csvData, '<html') !== false || stripos($csvData, '<!DOCTYPE') !== false) {
+            echo json_encode(['success' => false, 'message' => "Không thể tải file từ Google Sheet. Bảng tính có thể đang ở chế độ Riêng tư (Private) hoặc không hợp lệ. Vui lòng cấu hình chia sẻ link."]);
+            break;
+        }
+
+        // Parse CSV data
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, $csvData);
+        rewind($stream);
+
+        $headers = [];
+        $rowCount = 0;
+        $leads = [];
+        $maxPreviewRows = 200;
+
+        while (($row = fgetcsv($stream)) !== FALSE) {
+            $row = array_map(function ($val) {
+                return trim($val ?? '', "\" ");
+            }, $row);
+            if ($rowCount === 0) {
+                $headers = $row;
+                $rowCount++;
+                continue;
+            }
+            $rowCount++;
+            if ($rowCount > $maxPreviewRows + 1) {
+                break;
+            }
+            if (empty(array_filter($row))) {
+                continue;
+            }
+            $rowData = [];
+            foreach ($headers as $colIdx => $colName) {
+                $rowData[$colName] = $row[$colIdx] ?? '';
+            }
+
+            $phone = normalizePhone($extractMappedValuesLocal($mappings, 'phone', $rowData));
+            $email = $extractMappedValuesLocal($mappings, 'email', $rowData);
+            $name = $extractMappedValuesLocal($mappings, 'name', $rowData);
+
+            $leads[] = [
+                'phone' => $phone,
+                'email' => $email,
+                'name' => $name
+            ];
+        }
+        fclose($stream);
+
+        // Now run duplication checks
+        $results = [];
+        foreach ($leads as $lead) {
+            $phone = normalizePhone($lead['phone'] ?? '');
+            $email = trim($lead['email'] ?? '');
+            $name = trim($lead['name'] ?? '');
+
+            $crmCheck = checkCRMInteraction($conn, $phone, $email, true);
+            $leadId = null;
+            $assignedName = 'Không rõ';
+            $lastInteractionDate = null;
+
+            if ($crmCheck['originalAssignedTo']) {
+                $where = [];
+                $params = [];
+                $types = '';
+                if (!empty($phone)) {
+                    $where[] = "l.phone = ?";
+                    $params[] = $phone;
+                    $types .= 's';
+                }
+                if (!empty($email)) {
+                    $where[] = "l.email = ?";
+                    $params[] = $email;
+                    $types .= 's';
+                }
+                if (!empty($where)) {
+                    $whereClause = implode(" OR ", $where);
+                    $stmt = $conn->prepare("SELECT l.id, l.last_interaction_date, c.name as consultant_name FROM leads l LEFT JOIN consultants c ON l.assigned_to = c.id WHERE $whereClause ORDER BY l.last_interaction_date DESC LIMIT 1");
+                    if ($stmt) {
+                        $stmt->bind_param($types, ...$params);
+                        $stmt->execute();
+                        $res = $stmt->get_result();
+                        if ($res->num_rows > 0) {
+                            $row = $res->fetch_assoc();
+                            $leadId = $row['id'];
+                            $assignedName = $row['consultant_name'] ?? 'Không rõ';
+                            $lastInteractionDate = $row['last_interaction_date'];
+                        }
+                        $stmt->close();
+                    }
+                }
+            }
+
+            $results[] = [
+                'name' => $name,
+                'phone' => $phone,
+                'email' => $email,
+                'is_duplicate' => $crmCheck['isDuplicate'],
+                'has_record' => !empty($crmCheck['originalAssignedTo']),
+                'assigned_to' => $crmCheck['originalAssignedTo'],
+                'consultant_name' => $assignedName,
+                'consultant_status' => $crmCheck['consultantStatus'],
+                'last_interaction_date' => $lastInteractionDate,
+                'months_since_last_interaction' => $crmCheck['monthsSinceLastInteraction']
+            ];
+        }
+
+        echo json_encode([
+            'success' => true,
+            'results' => $results
+        ]);
+        break;
+
+    case 'manual_insert_lead':
+        require_once __DIR__ . '/webhook_logic.php';
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $data = $input['data'] ?? [];
+        $override_round_id = $input['override_round_id'] ?? null;
+        $override_consultant_id = $input['override_consultant_id'] ?? null;
+        $compensate_skipped = filter_var($input['compensate_skipped'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $skipped_consultant_id = $input['skipped_consultant_id'] ?? null;
+        $distribution_mode = $input['distribution_mode'] ?? 'auto_round';
+
+        // Check if bulk insert
+        if (isset($data[0]) && is_array($data[0])) {
+            // Bulk insert
+            $successCount = 0;
+            $failedCount = 0;
+            $messages = [];
+            foreach ($data as $leadData) {
+                $res = processManualLead(
+                    $conn,
+                    $leadData,
+                    $override_round_id,
+                    $override_consultant_id,
+                    $compensate_skipped,
+                    $skipped_consultant_id,
+                    $distribution_mode,
+                    $decodedUser
+                );
+                if ($res['success']) {
+                    $successCount++;
+                } else {
+                    $failedCount++;
+                    $messages[] = ($leadData['phone'] ?? $leadData['email'] ?? 'Không rõ SĐT/Email') . ': ' . $res['message'];
+                }
+            }
+            echo json_encode([
+                'success' => true,
+                'message' => "Đã xử lý xong: Thành công $successCount, Thất bại $failedCount." . (empty($messages) ? '' : "\nChi tiết lỗi:\n" . implode("\n", $messages))
+            ]);
+        } else {
+            // Single insert
+            $res = processManualLead(
+                $conn,
+                $data,
+                $override_round_id,
+                $override_consultant_id,
+                $compensate_skipped,
+                $skipped_consultant_id,
+                $distribution_mode,
+                $decodedUser
+            );
+            echo json_encode($res);
+        }
+        break;
+
+    case 'delete_public_lead_claim':
+        if (!$decodedUser || !in_array($decodedUser['role'], ['admin', 'superadmin'])) {
+            respond(403, null, 'Forbidden: Bạn không có quyền thực hiện hành động này.', false);
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $personId = (int) ($input['person_id'] ?? 0);
+        $saleId = (int) ($input['sale_id'] ?? 0);
+
+        if ($personId <= 0 || $saleId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Tham số không hợp lệ']);
+            break;
+        }
+
+        $conn->begin_transaction();
+        try {
+            // Find lead_id associated with person_id
+            $stmtLead = $conn->prepare("SELECT id FROM leads WHERE person_id = ? ORDER BY id DESC LIMIT 1");
+            $stmtLead->bind_param("i", $personId);
+            $stmtLead->execute();
+            $lRow = $stmtLead->get_result()->fetch_assoc();
+            $stmtLead->close();
+            $leadId = $lRow ? (int)$lRow['id'] : 0;
+
+            // Soft-delete the contact owned by the sale for this person
+            $stmtDel = $conn->prepare("UPDATE contacts SET deleted_at = NOW() WHERE person_id = ? AND owner_id = ? AND deleted_at IS NULL");
+            $stmtDel->bind_param("ii", $personId, $saleId);
+            $stmtDel->execute();
+            $affectedRows = $stmtDel->affected_rows;
+            $stmtDel->close();
+
+            if ($affectedRows === 0) {
+                throw new Exception("Không tìm thấy lượt nhận tương ứng của Sale này.");
+            }
+
+            // Log
+            if ($leadId > 0) {
+                logDistribution($conn, $leadId, $saleId, null, 'databank_claim_removed', 'Admin xóa lượt nhận của Sale', false);
+            }
+
+            // Check remaining claims
+            $stmtCheckClaims = $conn->prepare("SELECT COUNT(*) as cnt FROM contacts WHERE person_id = ? AND deleted_at IS NULL");
+            $stmtCheckClaims->bind_param("i", $personId);
+            $stmtCheckClaims->execute();
+            $remClaims = (int)($stmtCheckClaims->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtCheckClaims->close();
+
+            // Check if any remaining claims are in deal won status
+            $hasProtectedStatus = false;
+            if ($remClaims > 0) {
+                $stmtProtected = $conn->prepare("SELECT COUNT(*) as cnt FROM contacts WHERE person_id = ? AND deleted_at IS NULL AND pipeline_status = (SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1)");
+                $stmtProtected->bind_param("i", $personId);
+                $stmtProtected->execute();
+                $hasProtectedStatus = ((int)$stmtProtected->get_result()->fetch_assoc()['cnt'] ?? 0) > 0;
+                $stmtProtected->close();
+            }
+
+            $maxParallelClaims = (int) get_system_setting($conn, 'max_parallel_sales_per_client') ?: 2;
+            if ($remClaims < $maxParallelClaims && !$hasProtectedStatus) {
+                $stmtUpPerson = $conn->prepare("UPDATE persons SET is_public = 1 WHERE id = ?");
+                $stmtUpPerson->bind_param("i", $personId);
+                $stmtUpPerson->execute();
+                $stmtUpPerson->close();
+            }
+
+            $conn->commit();
+
+
+
+            if ($leadId > 0) {
+                triggerTwoWaySync($conn, $leadId);
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Đã xóa lượt nhận của Sale thành công!']);
+        } catch (Exception $ex) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => 'Lỗi: ' . $ex->getMessage()]);
+        }
+        break;
+
+    case 'claim_public_lead':
+        if (!$decodedUser) {
+            respond(401, null, 'Unauthorized: Chưa đăng nhập', false);
+        }
+        require_once __DIR__ . '/webhook_logic.php';
+
+        $limitDay = (int) get_system_setting($conn, 'databank_limit_per_day');
+        $limitHour = (int) get_system_setting($conn, 'databank_limit_per_hour');
+        $limitMonth = (int) get_system_setting($conn, 'databank_limit_per_month');
+        if ($limitDay <= 0) $limitDay = 2;
+        if ($limitHour <= 0) $limitHour = 3;
+        if ($limitMonth <= 0) $limitMonth = 300;
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $personId = (int) ($input['person_id'] ?? 0);
+
+        if ($personId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID khách hàng không hợp lệ']);
+            break;
+        }
+
+        $saleUserId = (int) $decodedUser['id'];
+        $saleConsultantId = $saleUserId;
+
+        $conn->begin_transaction();
+        try {
+            // 1. Check if Person is indeed public
+            $stmtP = $conn->prepare("SELECT id, phone, email, full_name, is_public FROM persons WHERE id = ? FOR UPDATE");
+            $stmtP->bind_param("i", $personId);
+            $stmtP->execute();
+            $person = $stmtP->get_result()->fetch_assoc();
+            $stmtP->close();
+
+            if (!$person || (int)$person['is_public'] !== 1) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Khách hàng này hiện không có sẵn trong Kho chung.']);
+                break;
+            }
+
+            // 1b. Check Same-Reason Reject Lockout (Rule 5.13)
+            $lockoutCount = (int) get_system_setting($conn, 'lockout_reason_count_threshold') ?: 3;
+            $stmtLock = $conn->prepare("
+                SELECT reason, COUNT(*) as cnt 
+                FROM data_reports 
+                WHERE status = 'approved' AND lead_id IN (SELECT id FROM leads WHERE person_id = ?)
+                GROUP BY reason 
+                HAVING cnt >= ? 
+                LIMIT 1
+            ");
+            $stmtLock->bind_param("ii", $personId, $lockoutCount);
+            $stmtLock->execute();
+            $lockout = $stmtLock->get_result()->fetch_assoc();
+            $stmtLock->close();
+
+            if ($lockout) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Khách hàng này đã bị khóa nhận do có từ ' . $lockoutCount . ' báo cáo lỗi cùng lý do: ' . $lockout['reason']]);
+                break;
+            }
+
+            // 2. Check if Sale already has a contact for this Person
+            $stmtCheck = $conn->prepare("SELECT id FROM contacts WHERE person_id = ? AND owner_id = ? AND deleted_at IS NULL LIMIT 1");
+            $stmtCheck->bind_param("ii", $personId, $saleUserId);
+            $stmtCheck->execute();
+            $hasContact = $stmtCheck->get_result()->num_rows > 0;
+            $stmtCheck->close();
+
+            if ($hasContact) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Bạn đã sở hữu liên hệ này rồi.']);
+                break;
+            }
+
+            // 3. Check Quota - Sale's hourly claim limit
+            $stmtQ1 = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ? AND status = 'databank_claim' AND received_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+            $stmtQ1->bind_param("i", $saleConsultantId);
+            $stmtQ1->execute();
+            $claimsHour = $stmtQ1->get_result()->fetch_assoc()['cnt'] ?? 0;
+            $stmtQ1->close();
+
+            if ($claimsHour >= $limitHour) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => "Bạn đã đạt hạn mức nhận khách hàng tối đa trong 1 giờ ($limitHour khách hàng)."]);
+                break;
+            }
+
+            // 4. Check Quota - Sale's daily claim limit
+            $stmtQ2 = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ? AND status = 'databank_claim' AND received_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
+            $stmtQ2->bind_param("i", $saleConsultantId);
+            $stmtQ2->execute();
+            $claimsDay = $stmtQ2->get_result()->fetch_assoc()['cnt'] ?? 0;
+            $stmtQ2->close();
+
+            if ($claimsDay >= $limitDay) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => "Bạn đã đạt hạn mức nhận khách hàng tối đa trong ngày ($limitDay khách hàng)."]);
+                break;
+            }
+
+            // 5. Check Quota - Sale's monthly claim limit
+            $stmtQ3 = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ? AND status = 'databank_claim' AND received_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+            $stmtQ3->bind_param("i", $saleConsultantId);
+            $stmtQ3->execute();
+            $claimsMonth = $stmtQ3->get_result()->fetch_assoc()['cnt'] ?? 0;
+            $stmtQ3->close();
+
+            if ($claimsMonth >= $limitMonth) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => "Bạn đã đạt hạn mức nhận khách hàng tối đa trong tháng ($limitMonth khách hàng)."]);
+                break;
+            }
+
+            // 6. Check Person Quota - Max N active Sales can claim this Person
+            $maxParallelClaims = (int) get_system_setting($conn, 'max_parallel_sales_per_client') ?: 2;
+            $stmtQPerson = $conn->prepare("SELECT COUNT(*) as cnt FROM contacts WHERE person_id = ? AND deleted_at IS NULL");
+            $stmtQPerson->bind_param("i", $personId);
+            $stmtQPerson->execute();
+            $personClaims = (int)($stmtQPerson->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtQPerson->close();
+
+            if ($personClaims >= $maxParallelClaims) {
+                $conn->rollback();
+                echo json_encode(['success' => false, 'message' => 'Khách hàng này đã đạt giới hạn nhận tối đa (tối đa ' . $maxParallelClaims . ' Sale nhận).']);
+                break;
+            }
+
+            // 7. Create CRM Contact for the claiming Sale
+            $fullName = $person['full_name'] ?: 'Khách hàng Databank';
+
+            $stmtProj = $conn->prepare("SELECT project_id FROM contacts WHERE person_id = ? AND project_id IS NOT NULL LIMIT 1");
+            $stmtProj->bind_param("i", $personId);
+            $stmtProj->execute();
+            $projRes = $stmtProj->get_result()->fetch_assoc();
+            $projectId = $projRes ? $projRes['project_id'] : NULL;
+            $stmtProj->close();
+
+            // Fetch latest lead details to fill the contact
+            $sourceVal = 'databank';
+            $noteVal = '';
+            $typeVal = '';
+            $stmtLead = $conn->prepare("SELECT source, type, note FROM leads WHERE person_id = ? ORDER BY id DESC LIMIT 1");
+            if ($stmtLead) {
+                $stmtLead->bind_param("i", $personId);
+                $stmtLead->execute();
+                $lRow = $stmtLead->get_result()->fetch_assoc();
+                if ($lRow) {
+                    $sourceVal = !empty($lRow['source']) ? $lRow['source'] : 'databank';
+                    $noteVal = $lRow['note'] ?? '';
+                    $typeVal = $lRow['type'] ?? '';
+                }
+                $stmtLead->close();
+            }
+
+            $createdBy = $saleUserId;
+            $triggerStatus = get_system_setting($conn, 'parallel_assignment_trigger_status') ?: 'chua_xac_dinh';
+            $chuaXacDinhDuration = get_system_setting($conn, 'security_timer_' . $triggerStatus) ?: '+3 hours';
+            $shareHours = (int)get_system_setting($conn, 'uncontacted_lead_share_hours');
+            if ($shareHours > 0) {
+                $chuaXacDinhDuration = "+$shareHours hours";
+            }
+            $secExpiresTime = null;
+
+            $stmtIns = $conn->prepare("
+                INSERT INTO contacts (person_id, project_id, owner_id, created_by, full_name, email, phone, source, status, pipeline_status, security_expires_at, notes, customer_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?, ?)
+            ");
+            $stmtIns->bind_param("iiiissssssss", $personId, $projectId, $saleUserId, $createdBy, $fullName, $person['email'], $person['phone'], $sourceVal, $triggerStatus, $secExpiresTime, $noteVal, $typeVal);
+            $stmtIns->execute();
+            $newContactId = $conn->insert_id;
+            $stmtIns->close();
+
+            if ($personClaims + 1 >= $maxParallelClaims) {
+                $stmtUpPerson = $conn->prepare("UPDATE persons SET is_public = 0 WHERE id = ?");
+                $stmtUpPerson->bind_param("i", $personId);
+                $stmtUpPerson->execute();
+                $stmtUpPerson->close();
+            }
+
+
+
+            $stmtLead = $conn->prepare("SELECT id FROM leads WHERE person_id = ? ORDER BY id DESC LIMIT 1");
+            $stmtLead->bind_param("i", $personId);
+            $stmtLead->execute();
+            $lRow = $stmtLead->get_result()->fetch_assoc();
+            $stmtLead->close();
+            $leadId = $lRow ? (int)$lRow['id'] : null;
+
+            if ($leadId > 0) {
+                $stmtLeadClaim = $conn->prepare("UPDATE leads SET assigned_to = ?, last_assigned_at = NOW() WHERE id = ?");
+                $stmtLeadClaim->bind_param("ii", $saleConsultantId, $leadId);
+                $stmtLeadClaim->execute();
+                $stmtLeadClaim->close();
+            }
+
+            logDistribution($conn, $leadId, $saleConsultantId, null, 'databank_claim', 'Sale tự nhận từ Kho chung (Databank)', false);
+
+            $conn->commit();
+
+            if (!empty($leadId)) {
+                triggerTwoWaySync($conn, $leadId);
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Nhận khách hàng thành công!', 'contact_id' => $newContactId]);
+        } catch (Exception $ex) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => 'Lỗi: ' . $ex->getMessage()]);
+        }
+        break;
+
+    case 'get_public_leads':
+        if (!$decodedUser) {
+            respond(401, null, 'Unauthorized: Chưa đăng nhập', false);
+        }
+
+        $isStaffAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin' || $decodedUser['role'] === 'director');
+
+        $showDeleted = $_GET['show_deleted'] ?? 'none'; // 'none', 'only', 'all'
+
+        $deletedCond = "AND p.deleted_from_databank = 0";
+        if ($isStaffAdmin) {
+            if ($showDeleted === 'only') {
+                $deletedCond = "AND p.deleted_from_databank = 1";
+            } else if ($showDeleted === 'all') {
+                $deletedCond = "";
+            }
+        }
+
+        $blockCond = "
+            AND p.is_blocked = 0 
+            AND NOT EXISTS (
+                SELECT 1 FROM persons p2 
+                WHERE p2.is_blocked = 1 
+                  AND (p2.phone = p.phone OR (p2.email = p.email AND p.email IS NOT NULL AND p.email != ''))
+            )
+        ";
+
+        if ($isStaffAdmin) {
+            $sql = "SELECT p.id, p.full_name, p.phone, p.email, p.released_to_kho_at, p.deleted_from_databank, p.is_blocked,
+                           (SELECT project_id FROM contacts WHERE person_id = p.id ORDER BY id ASC LIMIT 1) as project_id,
+                           (SELECT name FROM projects WHERE id = (SELECT project_id FROM contacts WHERE person_id = p.id ORDER BY id ASC LIMIT 1)) as project_name,
+                           (SELECT source FROM contacts WHERE person_id = p.id ORDER BY id ASC LIMIT 1) as original_source,
+                           EXISTS (
+                               SELECT 1 FROM contacts 
+                               WHERE person_id = p.id 
+                                 AND pipeline_status = (SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1) 
+                                 AND deleted_at IS NULL
+                           ) as is_won
+                    FROM persons p
+                    WHERE p.released_to_kho_at IS NOT NULL
+                      $deletedCond
+                      $blockCond
+                    ORDER BY p.released_to_kho_at DESC";
+        } else {
+            $sql = "SELECT p.id, p.full_name, p.phone, p.email, p.released_to_kho_at,
+                           (SELECT project_id FROM contacts WHERE person_id = p.id ORDER BY id ASC LIMIT 1) as project_id,
+                           (SELECT name FROM projects WHERE id = (SELECT project_id FROM contacts WHERE person_id = p.id ORDER BY id ASC LIMIT 1)) as project_name,
+                           (SELECT source FROM contacts WHERE person_id = p.id ORDER BY id ASC LIMIT 1) as original_source
+                    FROM persons p
+                    WHERE p.is_public = 1
+                      $deletedCond
+                      $blockCond
+                    ORDER BY p.released_to_kho_at DESC";
+        }
+
+        $res = $conn->query($sql);
+        $publicLeads = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                if (!$isStaffAdmin) {
+                    $row['phone'] = maskPhone($row['phone']);
+                    $row['email'] = maskEmail($row['email']);
+                }
+                $personId = (int)$row['id'];
+                $takers = [];
+                if ($personId > 0) {
+                    $tQuery = "SELECT c.owner_id as id, cons.name, cons.avatar, c.created_at as claimed_at 
+                               FROM contacts c
+                               JOIN users u ON c.owner_id = u.id
+                               JOIN consultants cons ON u.email = cons.email
+                               WHERE c.person_id = ? AND c.deleted_at IS NULL";
+                    $tStmt = $conn->prepare($tQuery);
+                    $tStmt->bind_param("i", $personId);
+                    $tStmt->execute();
+                    $tRes = $tStmt->get_result();
+                    while ($tRow = $tRes->fetch_assoc()) {
+                        $takers[] = $tRow;
+                    }
+                    $tStmt->close();
+                }
+                $row['takers'] = $takers;
+                $publicLeads[] = $row;
+            }
+        }
+
+        // Quota calculations for non-admin roles
+        $quota = null;
+        if (!$isStaffAdmin) {
+            $saleUserId = (int) $decodedUser['id'];
+            $saleConsultantId = $saleUserId;
+            $limitDay = (int) get_system_setting($conn, 'databank_limit_per_day');
+            $limitHour = (int) get_system_setting($conn, 'databank_limit_per_hour');
+            $limitMonth = (int) get_system_setting($conn, 'databank_limit_per_month');
+            if ($limitDay <= 0) $limitDay = 3;
+            if ($limitHour <= 0) $limitHour = 3;
+            if ($limitMonth <= 0) $limitMonth = 10;
+
+            // Hour claims count
+            $stmtQ1 = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ? AND status = 'databank_claim' AND received_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+            $stmtQ1->bind_param("i", $saleConsultantId);
+            $stmtQ1->execute();
+            $claimsHour = (int)($stmtQ1->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtQ1->close();
+
+            // Day claims count
+            $stmtQ2 = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ? AND status = 'databank_claim' AND received_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
+            $stmtQ2->bind_param("i", $saleConsultantId);
+            $stmtQ2->execute();
+            $claimsDay = (int)($stmtQ2->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtQ2->close();
+
+            // Month claims count
+            $stmtQ3 = $conn->prepare("SELECT COUNT(*) as cnt FROM distribution_logs WHERE assigned_to = ? AND status = 'databank_claim' AND received_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+            $stmtQ3->bind_param("i", $saleConsultantId);
+            $stmtQ3->execute();
+            $claimsMonth = (int)($stmtQ3->get_result()->fetch_assoc()['cnt'] ?? 0);
+            $stmtQ3->close();
+
+            $quota = [
+                'claims_hour' => $claimsHour,
+                'limit_hour' => $limitHour,
+                'claims_day' => $claimsDay,
+                'limit_day' => $limitDay,
+                'claims_month' => $claimsMonth,
+                'limit_month' => $limitMonth
+            ];
+        }
+
+        echo json_encode(['success' => true, 'data' => $publicLeads, 'quota' => $quota]);
+        break;
+
+    case 'delete_public_leads':
+        if (!$decodedUser) {
+            respond(401, null, 'Unauthorized: Chưa đăng nhập', false);
+        }
+        $isStaffAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        if (!$isStaffAdmin) {
+            respond(403, null, 'Forbidden: Chỉ Admin mới có quyền xóa dữ liệu Databank', false);
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $personIds = $input['person_ids'] ?? [];
+        if (!is_array($personIds)) {
+            $personIds = [$personIds];
+        }
+        $personIds = array_map('intval', $personIds);
+        $personIds = array_filter($personIds, function ($id) {
+            return $id > 0;
+        });
+
+        if (empty($personIds)) {
+            echo json_encode(['success' => false, 'message' => 'Danh sách ID không hợp lệ']);
+            break;
+        }
+
+        $inClause = implode(',', $personIds);
+        $sql = "UPDATE persons SET deleted_from_databank = 1 WHERE id IN ($inClause)";
+        if ($conn->query($sql)) {
+            echo json_encode(['success' => true, 'message' => 'Đã ẩn dữ liệu khỏi Kho Databank thành công']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi cập nhật dữ liệu: ' . $conn->error]);
+        }
+        break;
+
+    case 'restore_public_leads':
+        if (!$decodedUser) {
+            respond(401, null, 'Unauthorized: Chưa đăng nhập', false);
+        }
+        $isStaffAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        if (!$isStaffAdmin) {
+            respond(403, null, 'Forbidden: Chỉ Admin mới có quyền khôi phục dữ liệu Databank', false);
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $personIds = $input['person_ids'] ?? [];
+        if (!is_array($personIds)) {
+            $personIds = [$personIds];
+        }
+        $personIds = array_map('intval', $personIds);
+        $personIds = array_filter($personIds, function ($id) {
+            return $id > 0;
+        });
+
+        if (empty($personIds)) {
+            echo json_encode(['success' => false, 'message' => 'Danh sách ID không hợp lệ']);
+            break;
+        }
+
+        $inClause = implode(',', $personIds);
+        $sql = "UPDATE persons SET deleted_from_databank = 0 WHERE id IN ($inClause)";
+        if ($conn->query($sql)) {
+            echo json_encode(['success' => true, 'message' => 'Đã khôi phục hiển thị dữ liệu thành công']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi khôi phục dữ liệu: ' . $conn->error]);
+        }
+        break;
+
+    case 'block_public_leads':
+        if (!$decodedUser) {
+            respond(401, null, 'Unauthorized: Chưa đăng nhập', false);
+        }
+        $isStaffAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        if (!$isStaffAdmin) {
+            respond(403, null, 'Forbidden: Chỉ Admin mới có quyền chặn dữ liệu Databank', false);
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $personIds = $input['person_ids'] ?? [];
+        if (!is_array($personIds)) {
+            $personIds = [$personIds];
+        }
+        $personIds = array_map('intval', $personIds);
+        $personIds = array_filter($personIds, function ($id) {
+            return $id > 0;
+        });
+
+        if (empty($personIds)) {
+            echo json_encode(['success' => false, 'message' => 'Danh sách ID không hợp lệ']);
+            break;
+        }
+
+        $inClause = implode(',', $personIds);
+        $sql = "UPDATE persons SET is_blocked = 1 WHERE id IN ($inClause)";
+        if ($conn->query($sql)) {
+            logAdminAction($conn, $decodedUser['id'], 'BLOCK_PUBLIC_LEADS', ['person_ids' => $personIds]);
+            echo json_encode(['success' => true, 'message' => 'Đã chặn liên hệ vĩnh viễn thành công']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi cập nhật dữ liệu: ' . $conn->error]);
+        }
+        break;
+
+    case 'unblock_public_leads':
+        if (!$decodedUser) {
+            respond(401, null, 'Unauthorized: Chưa đăng nhập', false);
+        }
+        $isStaffAdmin = ($decodedUser['role'] === 'admin' || $decodedUser['role'] === 'superadmin');
+        if (!$isStaffAdmin) {
+            respond(403, null, 'Forbidden: Chỉ Admin mới có quyền bỏ chặn dữ liệu Databank', false);
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $personIds = $input['person_ids'] ?? [];
+        if (!is_array($personIds)) {
+            $personIds = [$personIds];
+        }
+        $personIds = array_map('intval', $personIds);
+        $personIds = array_filter($personIds, function ($id) {
+            return $id > 0;
+        });
+
+        if (empty($personIds)) {
+            echo json_encode(['success' => false, 'message' => 'Danh sách ID không hợp lệ']);
+            break;
+        }
+
+        $inClause = implode(',', $personIds);
+        $sql = "UPDATE persons SET is_blocked = 0 WHERE id IN ($inClause)";
+        if ($conn->query($sql)) {
+            logAdminAction($conn, $decodedUser['id'], 'UNBLOCK_PUBLIC_LEADS', ['person_ids' => $personIds]);
+            echo json_encode(['success' => true, 'message' => 'Đã bỏ chặn liên hệ thành công']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi cập nhật dữ liệu: ' . $conn->error]);
+        }
+        break;
+
+    case 'release_to_databank':
+        $isSale = isset($decodedUser['role']) && ($decodedUser['role'] === 'sale');
+        if (!$decodedUser || (!in_array($decodedUser['role'], ['admin', 'superadmin', 'manager', 'assistant']) && !$isSale)) {
+            respond(403, null, 'Unauthorized: Quyền truy cập bị từ chối', false);
+        }
+        require_once __DIR__ . '/webhook_logic.php';
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $leadId = isset($input['lead_id']) ? (int)$input['lead_id'] : 0;
+        if ($leadId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'ID khách hàng không hợp lệ.']);
+            break;
+        }
+
+        $conn->begin_transaction();
+        try {
+            // Find person_id of this lead
+            $stmtL = $conn->prepare("SELECT person_id FROM leads WHERE id = ?");
+            $stmtL->bind_param("i", $leadId);
+            $stmtL->execute();
+            $lRow = $stmtL->get_result()->fetch_assoc();
+            $stmtL->close();
+
+            if (!$lRow) {
+                // If not found in leads, check contacts directly
+                $stmtC = $conn->prepare("SELECT person_id FROM contacts WHERE id = ?");
+                $stmtC->bind_param("i", $leadId);
+                $stmtC->execute();
+                $cRow = $stmtC->get_result()->fetch_assoc();
+                $stmtC->close();
+                $personId = $cRow ? (int)$cRow['person_id'] : 0;
+            } else {
+                $personId = (int)$lRow['person_id'];
+            }
+
+            if ($personId <= 0) {
+                throw new Exception("Không tìm thấy thông tin định danh Person tương ứng.");
+            }
+
+            // If user is sale, verify they are allowed to release
+            if ($isSale) {
+                $stmtCheck = $conn->prepare("SELECT assigned_to FROM leads WHERE id = ?");
+                $stmtCheck->bind_param("i", $leadId);
+                $stmtCheck->execute();
+                $checkRow = $stmtCheck->get_result()->fetch_assoc();
+                $stmtCheck->close();
+
+                $allowed = false;
+                if ($checkRow) {
+                    if ((int)$checkRow['assigned_to'] === (int)($currentSaleConsultantId ?? 0)) {
+                        $allowed = true;
+                    }
+                }
+
+                if (!$allowed && $personId > 0) {
+                    $stmtTaker = $conn->prepare("SELECT id FROM contacts WHERE person_id = ? AND owner_id = ? AND deleted_at IS NULL");
+                    $stmtTaker->bind_param("ii", $personId, $decodedUser['user_id']);
+                    $stmtTaker->execute();
+                    if ($stmtTaker->get_result()->num_rows > 0) {
+                        $allowed = true;
+                    }
+                    $stmtTaker->close();
+                }
+
+                if (!$allowed) {
+                    throw new Exception("Bạn không có quyền nhả khách hàng này.");
+                }
+            }
+
+            // Find real lead_id for this person to avoid foreign key failures
+            $stmtReal = $conn->prepare("SELECT id FROM leads WHERE person_id = ? ORDER BY id DESC LIMIT 1");
+            $stmtReal->bind_param("i", $personId);
+            $stmtReal->execute();
+            $realL = $stmtReal->get_result()->fetch_assoc();
+            $stmtReal->close();
+            $realLeadId = $realL ? (int)$realL['id'] : null;
+
+            // Check status of contacts for this person to prevent releasing active/deposit clients
+            $stmtStatus = $conn->prepare("SELECT pipeline_status FROM contacts WHERE person_id = ? AND deleted_at IS NULL LIMIT 1");
+            $stmtStatus->bind_param("i", $personId);
+            $stmtStatus->execute();
+            $statusRow = $stmtStatus->get_result()->fetch_assoc();
+            $stmtStatus->close();
+            $currStatus = $statusRow ? $statusRow['pipeline_status'] : '';
+            $coopSettingStmt = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'coop_eligible_statuses' LIMIT 1");
+            $coopSettingVal = $coopSettingStmt ? $coopSettingStmt->fetch_assoc()['setting_value'] : '';
+            if (!empty($coopSettingVal)) {
+                $coopStatuses = array_map('trim', explode(',', $coopSettingVal));
+            } else {
+                $coopStatuses = ['dat_coc', 'da_coc', 'dong_deal', 'thanh_cong'];
+            }
+
+            if (in_array($currStatus, $coopStatuses, true)) {
+                throw new Exception("Không thể giải phóng khách hàng đang ở trạng thái quy định (" . implode(', ', $coopStatuses) . ")!");
+            }
+
+            // Check for active cooperation slips
+            $stmtCoop = $conn->prepare("
+                  SELECT id FROM cooperation_slips 
+                  WHERE contact_id IN (SELECT id FROM contacts WHERE person_id = ? AND deleted_at IS NULL) 
+                    AND status != 'rejected' LIMIT 1
+              ");
+            $stmtCoop->bind_param("i", $personId);
+            $stmtCoop->execute();
+            $coopRow = $stmtCoop->get_result()->fetch_assoc();
+            $stmtCoop->close();
+            if ($coopRow) {
+                throw new Exception("Không thể giải phóng khách hàng đang có phiếu hợp tác hoa hồng!");
+            }
+
+            // Update person is_public = 1
+            $stmtU = $conn->prepare("UPDATE persons SET is_public = 1, released_to_kho_at = NOW(), deleted_from_databank = 0 WHERE id = ?");
+            $stmtU->bind_param("i", $personId);
+            $stmtU->execute();
+            $stmtU->close();
+
+            // Clear owner on contacts and reset status, and soft-delete them
+            $stmtDel = $conn->prepare("
+                 UPDATE contacts 
+                 SET owner_id = NULL, 
+                     pipeline_status = 'chua_xac_dinh',
+                     status = 'lead',
+                     security_expires_at = NULL,
+                     parallel_assigned = 0,
+                     deleted_at = NOW()
+                 WHERE person_id = ? AND deleted_at IS NULL
+             ");
+            $stmtDel->bind_param("i", $personId);
+            $stmtDel->execute();
+            $stmtDel->close();
+
+            // Clear assigned_to on leads
+            $stmtLeadUpdate = $conn->prepare("UPDATE leads SET assigned_to = NULL, last_assigned_at = NULL WHERE person_id = ?");
+            $stmtLeadUpdate->bind_param("i", $personId);
+            $stmtLeadUpdate->execute();
+            $stmtLeadUpdate->close();
+
+            // Log
+            logDistribution($conn, $realLeadId, null, null, 'released_to_kho', 'Admin chủ động nhả về Kho chung (Databank)', false);
+
+            $conn->commit();
+            echo json_encode(['success' => true, 'message' => 'Đã nhả khách hàng về Kho chung (Databank) thành công!']);
+        } catch (Exception $ex) {
+            $conn->rollback();
+            echo json_encode(['success' => false, 'message' => 'Lỗi: ' . $ex->getMessage()]);
+        }
+        break;
+
+    default:
+        echo json_encode(['success' => false, 'message' => 'Unknown action']);
+}
+
+// 1. Flush response to client (Non-blocking for pseudo-cron)
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+} else {
+    // Fallback for Apache/mod_php or others
+    ignore_user_abort(true);
+    ob_end_flush();
+    if (ob_get_level() > 0)
+        ob_flush();
+    flush();
+}
+
+// 2. Pseudo-cron: Kiểm tra báo cáo hàng ngày
+require_once __DIR__ . '/cron_daily_report.php';
+runDailyReportCron($conn);
+
+$conn->close();

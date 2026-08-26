@@ -1,0 +1,9014 @@
+import React, { useEffect, useState } from 'react';
+import dbSchemaJson from '../assets/db_schema.json';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useUIStore } from '../store/uiStore';
+import { withRouterFreezer } from '../components/RouterFreezer';
+import { Mail, Settings2, Save, Send, Server, Database, Activity, ChevronDown, ChevronUp, Zap, Shield, MessageCircle, RefreshCw, Settings as SettingsIcon, BarChart2, Clock, Calendar, Users, CheckCircle, Plus, Trash2, Edit2, FileSpreadsheet, Upload, Download, X, Search, UserCheck, FileText, Tag, Scale, Layers, HelpCircle, Filter, Briefcase, GripVertical, Info, ChevronRight, ArrowLeft, ChevronLeft, CheckSquare, DollarSign, LifeBuoy, Eye } from 'lucide-react';
+import { CustomSelect } from '../components/ui/CustomSelect';
+import { ToggleSwitch } from '../components/ui/ToggleSwitch';
+import { CustomModal } from '../components/ui/CustomModal';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { fetchAPI } from '../utils/api';
+import toast from 'react-hot-toast';
+import { CardSkeleton, TableSkeleton, Skeleton } from '../components/ui/Skeleton';
+import { Avatar } from '../components/ui/Avatar';
+import { AITrainingPanel } from '../components/ui/AITrainingPanel';
+
+
+const thStyle: React.CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  background: 'var(--color-bg)',
+  zIndex: 1,
+  padding: '10px 16px',
+  boxShadow: 'inset 0 -1px 0 var(--color-border)',
+  textAlign: 'left'
+};
+
+const maskPhone = (phone: string) => {
+  if (!phone) return '';
+  const trimmed = phone.trim();
+  if (trimmed.length <= 6) {
+    return trimmed.slice(0, 2) + '*'.repeat(trimmed.length - 2);
+  }
+  return trimmed.slice(0, 3) + '****' + trimmed.slice(-3);
+};
+
+const maskEmail = (email: string) => {
+  if (!email) return '';
+  const trimmed = email.trim();
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) return trimmed;
+  const name = parts[0];
+  const domain = parts[1];
+  if (name.length <= 3) {
+    return name.slice(0, 1) + '***@' + domain;
+  }
+  return name.slice(0, 2) + '***' + name.slice(-1) + '@' + domain;
+};
+
+const formatExcelDate = (val: string) => {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const num = Number(trimmed);
+    if (num > 20000 && num < 60000) {
+      const date = new Date(Math.round((num - 25569) * 86400 * 1000));
+      if (!isNaN(date.getTime())) {
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const y = date.getFullYear();
+        return `${d}/${m}/${y}`;
+      }
+    }
+  }
+  return trimmed;
+};
+
+const SLUG_TO_LABEL: Record<string, string> = {
+  chua_xac_dinh: 'Chưa xác định',
+  quan_tam: 'Quan tâm',
+  dong_y_gap: 'Đồng ý gặp',
+  da_gap: 'Đã gặp',
+  booking: 'Booking',
+  dat_coc: 'Đặt cọc',
+  dong_deal: 'Đóng deal'
+};
+
+const generateSlug = (str: string): string => {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-z0-9\s_-]/g, '')
+    .trim()
+    .replace(/[\s-]+/g, '_');
+};
+
+const DEFAULT_REPORT_REASONS = [
+  { reason: 'Sai số điện thoại / Số ảo', note: 'Data có số điện thoại sai, không đúng, thiếu số, hoặc gọi thì báo không phải tên của khách hàng.' },
+  { reason: 'Trùng của tôi', note: 'Data bị trùng, đã check CRCM mà thấy data có lần tương tác cuối cùng > {n} tháng nghĩa là giao đúng; hoặc data < {n} tháng mà giao thì báo cáo trùng; hoặc nhập data không được (tùy trường hợp sẽ xét).' },
+  { reason: 'Trùng của người khác', note: 'Data bị trùng, đã check CRCM mà thấy data có lần tương tác cuối cùng > {n} tháng nghĩa là giao đúng; hoặc data < {n} tháng mà giao thì báo cáo trùng; hoặc nhập data không được (tùy trường hợp sẽ xét).' },
+  { reason: 'Spam ảo / Junk lead', note: 'Data mà vừa giao gọi cuộc 1 đã báo hết nhu cầu rồi, không có đăng kí, cháu chắt phá, hoặc đăng kí cho vui.' },
+  { reason: 'Khác', note: 'Là data Unqualified. Mọi data như đăng kí khác chuyên ngành như Luật/NNA, data mới cấp 3, không có tiếng anh (được ghi chú từ đầu bởi thông báo của MKT), là những data được định nghĩa Unqualified như trên Misa thì cứ báo cáo và ghi lý do ở dưới. Tạm thời c vẫn sẽ bù vòng.' }
+];
+
+const SettingsInner = () => {
+  const { t } = useLanguage();
+  const { showConfirm } = useUIStore();
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [collapsedHelps, setCollapsedHelps] = useState<Record<string, boolean>>({
+    fallback: false,
+    business_limits: false,
+    time_schedule: false,
+    starvation_prevention: false,
+    duplicate_filter: false,
+    pipeline_stages: false,
+    tag_management: false,
+    legacy_mapping: false,
+    error_reasons: false,
+    auto_approve_ticket: false,
+    email_config: false,
+    zalo_bot: false,
+    telegram_bot: false,
+    automated_reports: false,
+    ai_assistant: false,
+    workflow_templates: false,
+    database_maintenance: false
+  });
+  const [showChatIdGuide, setShowChatIdGuide] = useState(false);
+
+  const renderHelpBanner = (tabKey: string, title: string, content: React.ReactNode) => {
+    const isCollapsed = collapsedHelps[tabKey] ?? true;
+    return (
+      <div style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        marginBottom: '1.5rem',
+        transition: 'all 0.3s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: isCollapsed ? '0' : '0.75rem'
+      }}>
+        <div 
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }} 
+          onClick={() => setCollapsedHelps(prev => ({ ...prev, [tabKey]: !isCollapsed }))}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <HelpCircle size={18} color="var(--color-primary)" />
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)' }}>{title}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+            {!isMobile && (isCollapsed ? t('Xem hướng dẫn cơ chế') : t('Thu gọn'))}
+            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          </div>
+        </div>
+        {!isCollapsed && (
+          <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+            {content}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Tab State & Categories definition
+  const categories = [
+    {
+      title: t('Phân phối & Nghiệp vụ'),
+      items: [
+        { value: 'business_limits', label: t('Nghiệp vụ & Hạn mức'), icon: <Clock size={15} /> },
+        { value: 'time_schedule', label: t('Thời gian & Lịch trình'), icon: <Calendar size={15} /> },
+        { value: 'approval_rules', label: t('Phân quyền Phê duyệt'), icon: <CheckSquare size={15} /> },
+        { value: 'fallback', label: t('Xử lý Fallback'), icon: <RefreshCw size={15} /> },
+        { value: 'starvation_prevention', label: t('Bù lượt thiếu'), icon: <Scale size={15} /> }
+      ]
+    },
+    {
+      title: t('Dữ liệu & Vòng đời'),
+      items: [
+        { value: 'pipeline_stages', label: t('Vòng đời & Trạng thái'), icon: <Layers size={15} /> },
+        { value: 'duplicate_filter', label: t('Nhận diện & Lọc trùng'), icon: <Search size={15} /> },
+        { value: 'blacklist', label: t('Danh sách đen & Loại trừ'), icon: <Shield size={15} /> },
+        { value: 'tag_management', label: t('Quản lý Thẻ (Tags)'), icon: <Tag size={15} /> },
+        { value: 'legacy_mapping', label: t('Ánh xạ dữ liệu cũ'), icon: <FileSpreadsheet size={15} /> },
+        { value: 'lead_scoring', label: t('Quy tắc Lead Scoring'), icon: <Scale size={15} /> }
+      ]
+    },
+    {
+      title: t('Khiếu nại & Báo lỗi'),
+      items: [
+        { value: 'error_reasons', label: t('Lý do báo lỗi & Hướng dẫn'), icon: <Shield size={15} /> },
+        { value: 'auto_approve_ticket', label: t('Tự động duyệt ticket'), icon: <CheckCircle size={15} /> }
+      ]
+    },
+    {
+      title: t('Giao tiếp & Báo cáo'),
+      items: [
+        { value: 'email_config', label: t('Cấu hình Gửi Email'), icon: <img src="/imgs/gmail-icon-free-png.webp" alt="Gmail" style={{ width: 15, height: 15 }} /> },
+        { value: 'zalo_bot', label: t('Cấu hình Zalo Bot'), icon: <img src="https://stc-zpl.zdn.vn/favicon.ico" alt="Zalo" style={{ width: 15, height: 15, borderRadius: '50%' }} /> },
+        { value: 'telegram_bot', label: t('Cấu hình Telegram Bot'), icon: <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/3840px-Telegram_logo.svg.png" alt="Telegram" style={{ width: 15, height: 15, borderRadius: '50%' }} /> },
+        { value: 'automated_reports', label: t('Báo cáo tự động'), icon: <BarChart2 size={15} /> }
+      ]
+    },
+    {
+      title: t('Tích hợp & Hệ thống'),
+      items: [
+        { value: 'ai_assistant', label: t('Trợ lý AI (Gemini)'), icon: <Zap size={15} /> },
+        { value: 'workflow_templates', label: t('Mẫu Quy trình'), icon: <FileText size={15} /> },
+        { value: 'company_info', label: t('Thông tin Công ty'), icon: <Briefcase size={15} /> },
+        { value: 'database_maintenance', label: t('Bảo trì Database'), icon: <Database size={15} /> },
+        { value: 'database_erd', label: t('Sơ đồ ERD trực quan'), icon: <Activity size={15} /> }
+      ]
+    }
+  ];
+
+  const tabOptions = categories.flatMap(cat => cat.items.map(item => ({
+    value: item.value,
+    label: item.label,
+    icon: item.icon
+  })));
+
+  const [activeTab, setActiveTab] = useState<string>(window.innerWidth <= 768 ? 'menu' : 'business_limits');
+  const [showTestEmailModal, setShowTestEmailModal] = useState(false);
+
+  // Settings Live Search State & Index
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut Ctrl+K / Cmd+K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Search Index for Quick Settings Navigation
+  const searchableSettingsItems = [
+    // Phân phối & Nghiệp vụ
+    { id: 'business_limits', tab: 'business_limits', category: t('Phân phối & Nghiệp vụ'), subtab: t('Nghiệp vụ & Hạn mức'), title: t('Số ngày tự động rớt nhiệt (Decay)'), desc: t('Tự động thu hồi lead khi không tương tác quá số ngày quy định'), keywords: ['nhiệt', 'decay', 'thu hồi', 'tương tác', 'ngày'] },
+    { id: 'sla_timeout', tab: 'business_limits', category: t('Phân phối & Nghiệp vụ'), subtab: t('Nghiệp vụ & Hạn mức'), title: t('Thời gian chờ nhận lead & SLA Phản hồi'), desc: t('Quy định số phút chờ tiếp nhận lead giờ hành chính và tăng ca'), keywords: ['sla', 'timeout', 'chờ', 'phản hồi', 'tiếp nhận', 'hành chính'] },
+    { id: 'backpressure', tab: 'business_limits', category: t('Phân phối & Nghiệp vụ'), subtab: t('Nghiệp vụ & Hạn mức'), title: t('Hạn mức chống ôm (Backpressure)'), desc: t('Giới hạn số lead Chưa XĐ tối đa trước khi chặn chia lead mới'), keywords: ['chống ôm', 'backpressure', 'hạn mức', 'chưa xác định'] },
+    { id: 'deposit_demote', tab: 'business_limits', category: t('Phân phối & Nghiệp vụ'), subtab: t('Nghiệp vụ & Hạn mức'), title: t('Quy tắc cọc & Bể cọc (Demote status)'), desc: t('Xử lý hạ cấp trạng thái khách hàng khi hủy cọc trước hoặc sau khi có doanh thu'), keywords: ['cọc', 'bể cọc', 'hủy cọc', 'tụt', 'hạ cấp'] },
+
+    // Thời gian & Lịch trình
+    { id: 'work_hours', tab: 'time_schedule', category: t('Phân phối & Nghiệp vụ'), subtab: t('Thời gian & Lịch trình'), title: t('Giờ làm việc chung & Lịch trình tuần'), desc: t('Thiết lập khung giờ hành chính làm việc mặc định cho toàn bộ Sale'), keywords: ['giờ làm việc', 'lịch trình', 'hành chính', 'thứ 2', 'thứ 7'] },
+    { id: 'night_shift', tab: 'time_schedule', category: t('Phân phối & Nghiệp vụ'), subtab: t('Thời gian & Lịch trình'), title: t('Ca trực đêm & Đăng ký trực ca đêm'), desc: t('Cấu hình giờ bắt đầu ca đêm, thời gian đăng ký và tự động duyệt'), keywords: ['trực đêm', 'ca đêm', 'tăng ca', 'đêm', 'duyệt ca đêm'] },
+    { id: 'holidays', tab: 'time_schedule', category: t('Phân phối & Nghiệp vụ'), subtab: t('Thời gian & Lịch trình'), title: t('Lịch nghỉ lễ & Đăng ký trực lễ'), desc: t('Quản lý danh sách ngày lễ, tự động duyệt trực lễ và yêu cầu chấm công'), keywords: ['nghỉ lễ', 'lịch lễ', 'trực lễ', 'tết', 'chấm công lễ'] },
+    { id: 'checkout_req', tab: 'time_schedule', category: t('Phân phối & Nghiệp vụ'), subtab: t('Thời gian & Lịch trình'), title: t('Yêu cầu Chấm công Ra ca (Cuối ca)'), desc: t('Bắt buộc chấm công ra ca khi hết giờ làm việc và nhắc nhở tan làm'), keywords: ['ra ca', 'check out', 'cuối ca', 'tan làm', 'về sớm', 'chấm công'] },
+    { id: 'auto_approve_checkin', tab: 'time_schedule', category: t('Phân phối & Nghiệp vụ'), subtab: t('Thời gian & Lịch trình'), title: t('Tự động duyệt Chấm công (Bỏ qua trễ & về sớm)'), desc: t('Bỏ qua khâu gửi lý do và quản lý phê duyệt khi đi trễ hoặc về sớm'), keywords: ['tự động duyệt', 'chấm công', 'bỏ qua duyệt', 'trễ', 'muộn', 'về sớm'] },
+    { id: 'attendance_report', tab: 'time_schedule', category: t('Phân phối & Nghiệp vụ'), subtab: t('Thời gian & Lịch trình'), title: t('Báo cáo Chấm công & Trực ca tự động gửi Sale'), desc: t('Cấu hình ngày gửi và khoảng dữ liệu gửi tổng kết chấm công qua Ma trận thông báo'), keywords: ['báo cáo', 'chấm công', 'trực ca', 'tự động gửi', 'sale', 'tháng'] },
+
+    // Bù lượt thiếu
+    { id: 'starvation', tab: 'starvation_prevention', category: t('Phân phối & Nghiệp vụ'), subtab: t('Bù lượt thiếu'), title: t('Kích hoạt Bù Lượt Thiếu (Starvation Prevention)'), desc: t('Tự động tích lũy và ưu tiên bù lượt cho Sale khi quay lại ca trực'), keywords: ['bù lượt', 'thiếu', 'starvation', 'ưu tiên', 'lượt bù'] },
+    { id: 'late_checkin_comp', tab: 'starvation_prevention', category: t('Phân phối & Nghiệp vụ'), subtab: t('Bù lượt thiếu'), title: t('Tự động đền bù khi bị thu hồi do trễ check-in'), desc: t('Cộng bù lại lượt cho Sale khi bị thu hồi lead do chưa check-in đúng giờ'), keywords: ['đền bù', 'trễ checkin', 'làm bù', 'thu hồi', 'bù lượt'] },
+    { id: 'leave_comp', tab: 'starvation_prevention', category: t('Phân phối & Nghiệp vụ'), subtab: t('Bù lượt thiếu'), title: t('Tự động đền bù khi bị thu hồi do nghỉ phép'), desc: t('Tính điểm đền bù lượt chia lead cho Sale khi xin nghỉ phép/tạm ngưng'), keywords: ['đền bù', 'nghỉ phép', 'ngưng hoạt động', 'tính điểm', 'thu hồi'] },
+
+    // Xử lý Fallback
+    { id: 'fallback_config', tab: 'fallback', category: t('Phân phối & Nghiệp vụ'), subtab: t('Xử lý Fallback'), title: t('Phân bổ mặc định khi không khớp luật (Fallback)'), desc: t('Chỉ định Vòng mặc định hoặc gán Admin xử lý khi lead không khớp phễu chia'), keywords: ['fallback', 'không khớp', 'quá tải', 'hold', 'admin', 'email cc'] },
+
+    // Vòng đời & Trạng thái
+    { id: 'pipeline_stages', tab: 'pipeline_stages', category: t('Dữ liệu & Vòng đời'), subtab: t('Vòng đời & Trạng thái'), title: t('State Machine Vòng đời & Trạng thái Khách hàng'), desc: t('Thiết lập thứ tự phễu chuyển đổi khách hàng từ Chưa XĐ đến Đóng deal'), keywords: ['state machine', 'vòng đời', 'trạng thái', 'phễu', 'bước', 'đóng deal'] },
+
+    // Nhận diện & Lọc trùng
+    { id: 'duplicate_filter', tab: 'duplicate_filter', category: t('Dữ liệu & Vòng đời'), subtab: t('Nhận diện & Lọc trùng'), title: t('Quy tắc Nhận diện & Lọc trùng Leads'), desc: t('Bảo hộ trùng sđt/email và lọc trùng hàng loạt từ file Excel'), keywords: ['lọc trùng', 'bảo hộ', 'duplicate', 'excel', 'số điện thoại', 'email'] },
+
+    // Blacklist
+    { id: 'blacklist_config', tab: 'blacklist', category: t('Dữ liệu & Vòng đời'), subtab: t('Danh sách đen & Loại trừ'), title: t('Danh sách đen (Blacklist SĐT/Email rác)'), desc: t('Chặn các số điện thoại/email spam hoặc loại trừ khỏi chiến dịch Broadcast'), keywords: ['blacklist', 'danh sách đen', 'rác', 'spam', 'broadcast', 'chặn'] },
+    { id: 'lead_scoring', tab: 'lead_scoring', category: t('Dữ liệu & Vòng đời'), subtab: t('Quy tắc Lead Scoring'), title: t('Quy tắc chấm điểm Lead Scoring'), desc: t('Cấu hình điểm số cho các tiêu chí nhân khẩu học, hành vi và suy giảm độ nhiệt'), keywords: ['scoring', 'lead score', 'điểm', 'nóng', 'lạnh', 'tiêu chí'] },
+
+    // Giao tiếp & Báo cáo
+    { id: 'email_config', tab: 'email_config', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Gửi Email'), desc: t('Cấu hình Google Apps Script hoặc Amazon SES SMTP gửi email hệ thống'), keywords: ['email', 'smtp', 'ses', 'gmail', 'appscript', 'test email'] },
+    { id: 'zalo_bot', tab: 'zalo_bot', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Zalo Bot'), desc: t('Kết nối Zalo OA / Zalo Personal Bot gửi thông báo lead & báo cáo'), keywords: ['zalo', 'bot', 'zalo oa', 'webhook', 'xác thực', 'group chat'] },
+    { id: 'telegram_bot', tab: 'telegram_bot', category: t('Giao tiếp & Báo cáo'), subtab: t('Cấu hình Telegram Bot'), desc: t('Tích hợp Telegram Bot gửi tin nhắn riêng và nhóm Admin'), keywords: ['telegram', 'bot', 'chat id', 'nhóm admin', 'webhook'] },
+    { id: 'reports_config', tab: 'automated_reports', category: t('Giao tiếp & Báo cáo'), subtab: t('Báo cáo tự động'), desc: t('Đặt lịch gửi báo cáo doanh thu & hiệu suất theo ngày/tuần/tháng'), keywords: ['báo cáo tự động', 'báo cáo ngày', 'báo cáo tuần', 'báo cáo tháng'] },
+
+    // Tích hợp & AI
+    { id: 'ai_assistant', tab: 'ai_assistant', category: t('Tích hợp & Hệ thống'), subtab: t('Trợ lý AI (Gemini)'), desc: t('Cấu hình Gemini API Key và AI Screener tự động phân loại lead'), keywords: ['ai', 'gemini', 'api key', 'screener', 'trợ lý', 'phân loại'] },
+    { id: 'workflow_templates', tab: 'workflow_templates', category: t('Tích hợp & Hệ thống'), subtab: t('Mẫu Quy trình'), desc: t('Tạo các mẫu công việc tự động giao cho Sale theo giai đoạn'), keywords: ['workflow', 'mẫu công việc', 'quy trình', 'tự động giao'] },
+    { id: 'database_maintenance', tab: 'database_maintenance', category: t('Tích hợp & Hệ thống'), subtab: t('Bảo trì Database'), desc: t('Bảo trì Database, xóa lịch sử nhập rác và tự đồng bộ cấu trúc'), keywords: ['database', 'bảo trì', 'xóa log', 'tự đồng bộ'] }
+  ];
+
+  // Filtered search items
+  const filteredSearchItems = settingsSearchQuery.trim() === ''
+    ? []
+    : searchableSettingsItems.filter(item => {
+        const query = settingsSearchQuery.toLowerCase().trim();
+        return (
+          item.title.toLowerCase().includes(query) ||
+          item.desc.toLowerCase().includes(query) ||
+          item.subtab.toLowerCase().includes(query) ||
+          item.category.toLowerCase().includes(query) ||
+          item.keywords.some(kw => kw.toLowerCase().includes(query))
+        );
+      });
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [activeTab]);
+
+  // States for Gemini API Connection
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
+
+  // Company Information States
+  const [companyName, setCompanyName] = useState('CÔNG TY CỔ PHẦN CÔNG NGHỆ IDEAS');
+  const [companyAddress, setCompanyAddress] = useState('Tòa nhà IDEAS, 123 Đường Láng, Đống Đa, Hà Nội');
+  const [companyPhone, setCompanyPhone] = useState('024 1234 5678');
+  const [companyTaxId, setCompanyTaxId] = useState('0101234567');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('');
+
+  // AI Screener Config
+  const [aiScreenerEnabled, setAiScreenerEnabled] = useState(false);
+  const [aiScreenerRules, setAiScreenerRules] = useState('');
+  const [aiScreenerRounds, setAiScreenerRounds] = useState<number[]>([]);
+  const [aiScreenerMode, setAiScreenerMode] = useState('ai');
+  const [aiScreenerManualAction, setAiScreenerManualAction] = useState('hold');
+  const [aiScreenerManualRules, setAiScreenerManualRules] = useState<any[]>([]);
+
+  // Business Configurations (Dynamic settings from markdown rules)
+  const [temperatureDecayDays, setTemperatureDecayDays] = useState<number>(5);
+  const [poThreeLevelThreshold, setPoThreeLevelThreshold] = useState<number>(5000000);
+  const [leadResponseTimeoutMinutes, setLeadResponseTimeoutMinutes] = useState<number>(2);
+  const [leadMaxRecallAttempts, setLeadMaxRecallAttempts] = useState<number>(2);
+  const [leadRecallCooldownMinutes, setLeadRecallCooldownMinutes] = useState<number>(30);
+  const [parallelAssignmentTriggerStatus, setParallelAssignmentTriggerStatus] = useState<string>('chua_xac_dinh');
+  const [isParallelTriggerModalOpen, setIsParallelTriggerModalOpen] = useState<boolean>(false);
+  const [leadResponseTimeoutOvertimeMinutes, setLeadResponseTimeoutOvertimeMinutes] = useState<number>(5);
+  const [uncontactedLeadShareHours, setUncontactedLeadShareHours] = useState<number>(3);
+  const [nightShiftStartTime, setNightShiftStartTime] = useState<string>("18:00");
+  const [nightShiftEndTime, setNightShiftEndTime] = useState<string>("06:00");
+  const [allowLateNightShiftRegistration, setAllowLateNightShiftRegistration] = useState<boolean>(false);
+  const [allowPipelineBackward, setAllowPipelineBackward] = useState<boolean>(false);
+  const [allowPipelineSkip, setAllowPipelineSkip] = useState<boolean>(false);
+  const [lateNightShiftRegistrationMinutes, setLateNightShiftRegistrationMinutes] = useState<number>(30);
+  const [advanceNightShiftRegistrationMinutes, setAdvanceNightShiftRegistrationMinutes] = useState<number>(0);
+  const [autoApproveNightShift, setAutoApproveNightShift] = useState<boolean>(true);
+  const [allowWeekendShiftRegistration, setAllowWeekendShiftRegistration] = useState<boolean>(true);
+  const [autoApproveWeekendShift, setAutoApproveWeekendShift] = useState<boolean>(true);
+  const [weekendShiftRegistrationLeadHours, setWeekendShiftRegistrationLeadHours] = useState<number>(0);
+  const [requireCheckinWeekendLead, setRequireCheckinWeekendLead] = useState<boolean>(false);
+  const [requireCheckinHolidayLead, setRequireCheckinHolidayLead] = useState<boolean>(false);
+  const [holidaySchedules, setHolidaySchedules] = useState<any[]>([]);
+  const [autoApproveHolidayShift, setAutoApproveHolidayShift] = useState<boolean>(false);
+  const [shiftHistoryRetentionDays, setShiftHistoryRetentionDays] = useState<number>(90);
+  const [allowLeadDistributionOnPendingCheckin, setAllowLeadDistributionOnPendingCheckin] = useState<boolean>(false);
+  const [globalWorkStartTime, setGlobalWorkStartTime] = useState<string>("08:00");
+  const [globalWorkEndTime, setGlobalWorkEndTime] = useState<string>("12:00");
+  const [globalWorkStartTimeAfternoon, setGlobalWorkStartTimeAfternoon] = useState<string>("13:30");
+  const [globalWorkEndTimeAfternoon, setGlobalWorkEndTimeAfternoon] = useState<string>("17:30");
+  const [globalScheduleMode, setGlobalScheduleMode] = useState<string>("daily");
+  const [globalWorkSchedule, setGlobalWorkSchedule] = useState<any>({
+    "1": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
+    "2": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
+    "3": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
+    "4": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
+    "5": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
+    "6": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
+    "7": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" }
+  });
+  const [goldenHoursStartTime, setGoldenHoursStartTime] = useState<string>("06:00");
+  const [goldenHoursEndTime, setGoldenHoursEndTime] = useState<string>("08:30");
+  const [goldenHoursMaxLeadsPerConsultant, setGoldenHoursMaxLeadsPerConsultant] = useState<number>(0);
+  const [databankLimitPerDay, setDatabankLimitPerDay] = useState<number>(2);
+  const [databankLimitPerHour, setDatabankLimitPerHour] = useState<number>(3);
+  const [databankLimitPerMonth, setDatabankLimitPerMonth] = useState<number>(300);
+  const [backpressureLimit, setBackpressureLimit] = useState<number>(5);
+  const [checkinApprovalSlaMinutes, setCheckinApprovalSlaMinutes] = useState<number>(15);
+  const [lateCheckinCompensationEnabled, setLateCheckinCompensationEnabled] = useState<number>(0);
+  const [leaveCompensationEnabled, setLeaveCompensationEnabled] = useState<number>(0);
+  const [attendanceNotificationEnabled, setAttendanceNotificationEnabled] = useState<boolean>(true);
+  const [attendanceNotificationLeadMinutes, setAttendanceNotificationLeadMinutes] = useState<number>(10);
+  const [nightDutyNotificationEnabled, setNightDutyNotificationEnabled] = useState<boolean>(true);
+  const [nightDutyNotificationLeadMinutes, setNightDutyNotificationLeadMinutes] = useState<number>(10);
+  const [broadcastExclusionRules, setBroadcastExclusionRules] = useState<string>("not_lead,opt_out,active_khtn");
+  const [coopEligibleStatuses, setCoopEligibleStatuses] = useState<string>("booking,da_gap,dat_coc");
+  const [coopDefaultFiles, setCoopDefaultFiles] = useState<string>("UNC.png,CMND.png");
+
+  const [securityTimers, setSecurityTimers] = useState<Record<string, string>>({
+    chua_xac_dinh: '+3 hours',
+    quan_tam: '+1 day',
+    thien_chi: '+3 days',
+    dong_y_gap: '+4 days',
+    da_gap: '+5 days',
+    booking: '+3 months'
+  });
+  const [databankApplicableSources, setDatabankApplicableSources] = useState<string>("R3_Fb,R3,R2,broadcast");
+  const [availableSources, setAvailableSources] = useState<string[]>([]);
+  const [standardCommissionRate, setStandardCommissionRate] = useState<number>(0.03);
+  const [lockoutReasonCountThreshold, setLockoutReasonCountThreshold] = useState<number>(3);
+  const [maxParallelSalesPerClient, setMaxParallelSalesPerClient] = useState<number>(2);
+  const [tempSuggestionCallDuration, setTempSuggestionCallDuration] = useState<number>(300);
+  const [tempSuggestionRequiredNotes, setTempSuggestionRequiredNotes] = useState<number>(2);
+  const [capiStuckAlertThresholdHours, setCapiStuckAlertThresholdHours] = useState<number>(24);
+
+  const [pipelineStatusHierarchy, setPipelineStatusHierarchy] = useState<string[]>([
+    'chua_xac_dinh', 'quan_tam', 'dong_y_gap', 'da_gap', 'booking', 'dat_coc', 'dong_deal'
+  ]);
+  const [pipelineStatusLabels, setPipelineStatusLabels] = useState<Record<string, string>>({
+    chua_xac_dinh: 'Chưa xác định',
+    quan_tam: 'Quan tâm',
+    dong_y_gap: 'Đồng ý gặp',
+    da_gap: 'Đã gặp',
+    booking: 'Booking',
+    dat_coc: 'Đặt cọc',
+    dong_deal: 'Đóng deal'
+  });
+  const [dealOpportunityStatus, setDealOpportunityStatus] = useState<string>('booking');
+  const [dealWonStatus, setDealWonStatus] = useState<string>('dong_deal');
+  const [saleAdminLeadVisibilityStage, setSaleAdminLeadVisibilityStage] = useState<string>('nop_ho_so');
+  const [accountantLeadVisibilityStage, setAccountantLeadVisibilityStage] = useState<string>('dong_le_phi_ho_so');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // States
+  const [provider, setProvider] = useState('ses');
+  const [appscriptUrl, setAppscriptUrl] = useState('');
+  const [frontendUrl, setFrontendUrl] = useState('');
+
+  const [sesHost, setSesHost] = useState('');
+  const [sesUser, setSesUser] = useState('');
+  const [sesPass, setSesPass] = useState('');
+  const [sesSenderEmail, setSesSenderEmail] = useState('');
+  const [sesSenderName, setSesSenderName] = useState('IDEAS TEAM');
+
+  const [testEmail, setTestEmail] = useState('');
+  const [testType, setTestType] = useState('system');
+  // Collapse state for Input Webhook Code
+  const [showInputScript, setShowInputScript] = useState(false);
+
+  // Zalo Bot config
+  const [zaloBotToken, setZaloBotToken] = useState('');
+  const [zaloWebhookSecret, setZaloWebhookSecret] = useState('');
+  const [zaloBotLink, setZaloBotLink] = useState('');
+  const [zaloAdminGroupChatId, setZaloAdminGroupChatId] = useState('');
+  const [zaloNotifyOnlyGroup, setZaloNotifyOnlyGroup] = useState(false);
+  const [zaloDailyReportTime, setZaloDailyReportTime] = useState('');
+
+  // Telegram Bot config
+  const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [telegramBotUsername, setTelegramBotUsername] = useState('');
+  const [telegramAdminGroupChatId, setTelegramAdminGroupChatId] = useState('');
+  const [dailyReportAdmins, setDailyReportAdmins] = useState<number[]>([]);
+
+  // Weekly report config
+  const [zaloWeeklyReportDay, setZaloWeeklyReportDay] = useState('0');
+  const [zaloWeeklyReportTime, setZaloWeeklyReportTime] = useState('08:00');
+
+  // Advanced Attendance & Report Settings
+  const [requireCheckout, setRequireCheckout] = useState(false);
+  const [autoApproveCheckin, setAutoApproveCheckin] = useState(false);
+  const [attendanceReportEnabled, setAttendanceReportEnabled] = useState(false);
+  const [attendanceReportTriggerDay, setAttendanceReportTriggerDay] = useState(1);
+  const [attendanceReportDateMode, setAttendanceReportDateMode] = useState('previous_month');
+  const [attendanceReportStartDate, setAttendanceReportStartDate] = useState('');
+  const [attendanceReportEndDate, setAttendanceReportEndDate] = useState('');
+
+  // Monthly report config
+  const [zaloMonthlyReportEnabled, setZaloMonthlyReportEnabled] = useState('0');
+  const [zaloMonthlyReportTime, setZaloMonthlyReportTime] = useState('08:00');
+
+  // Fallback round config
+  const [rounds, setRounds] = useState<any[]>([]);
+  const [fallbackRoundId, setFallbackRoundId] = useState('');
+  const [duplicateCheckMonths, setDuplicateCheckMonths] = useState(6);
+  const [reassignIfOwnerInactive, setReassignIfOwnerInactive] = useState(true);
+  const [requireLeadClaim, setRequireLeadClaim] = useState(false);
+  const [starvationPreventionEnabled, setStarvationPreventionEnabled] = useState(false);
+  const [starvationMaxLeadsPerHour, setStarvationMaxLeadsPerHour] = useState(3);
+  const [dbVersion, setDbVersion] = useState('');
+  const [dbTables, setDbTables] = useState<any[]>([]);
+  const [loadingDb, setLoadingDb] = useState(false);
+  const [dbActionRunning, setDbActionRunning] = useState(false);
+  const [dbLogs, setDbLogs] = useState<string[]>([]);
+
+  // Database ERD State & Fetching
+  const [dbSchema, setDbSchema] = useState<Record<string, any>>(dbSchemaJson.schema || {});
+  const [selectedErdTable, setSelectedErdTable] = useState<string>('');
+  const [erdSearchQuery, setErdSearchQuery] = useState<string>('');
+  const [loadingSchema, setLoadingSchema] = useState(false);
+
+  const fetchDbSchema = async () => {
+    setLoadingSchema(true);
+    setTimeout(() => {
+      setDbSchema(dbSchemaJson.schema || {});
+      toast.success('Đã làm mới dữ liệu từ file cấu trúc tĩnh');
+      setLoadingSchema(false);
+    }, 300);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'database_erd') {
+      const schemaData = dbSchemaJson.schema || {};
+      setDbSchema(schemaData);
+      if (Object.keys(schemaData).length > 0 && !selectedErdTable) {
+        setSelectedErdTable(schemaData['users'] ? 'users' : Object.keys(schemaData)[0]);
+      }
+    }
+  }, [activeTab]);
+
+  const fetchDbStats = async () => {
+    setLoadingDb(true);
+    try {
+      const res = await fetchAPI('get_db_stats');
+      if (res.success) {
+        setDbTables(res.tables || []);
+      } else {
+        toast.error(res.message || 'Không thể tải thống kê Database');
+      }
+    } catch (err: any) {
+      toast.error('Lỗi kết nối cơ sở dữ liệu');
+    }
+    setLoadingDb(false);
+  };
+
+  const runDbAction = async (actionType: 'optimize' | 'clean_orphans' | 'fix_indexes' | 'run_tests') => {
+    setDbActionRunning(true);
+    setDbLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Bắt đầu thực thi tác vụ: ${actionType === 'optimize' ? 'Tối ưu hóa bảng' : actionType === 'clean_orphans' ? 'Dọn dẹp bản ghi mồ côi' : actionType === 'fix_indexes' ? 'Khôi phục Index' : 'Chạy kịch bản kiểm thử tự động'}...`]);
+    try {
+      const res = await fetchAPI('optimize_db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action_type: actionType })
+      });
+      if (res.success) {
+        const results = res.results || [];
+        setDbLogs(prev => [
+          ...prev,
+          ...results.map((r: string) => `[${new Date().toLocaleTimeString()}] ${r}`),
+          `[${new Date().toLocaleTimeString()}] Hoàn thành tác vụ thành công!`
+        ]);
+        toast.success('Thực hiện tác vụ hoàn tất!');
+        fetchDbStats();
+      } else {
+        const errMsg = res.message || 'Lỗi khi thực hiện tác vụ';
+        setDbLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] LỖI: ${errMsg}`]);
+        toast.error(errMsg);
+      }
+    } catch (err: any) {
+      const errMsg = err.message || 'Lỗi kết nối';
+      setDbLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] LỖI KẾT NỐI: ${errMsg}`]);
+      toast.error('Lỗi kết nối API');
+    }
+    setDbActionRunning(false);
+  };
+  const [reportErrorReasons, setReportErrorReasons] = useState<{ reason: string; note: string }[]>([]);
+
+  const handleAddReasonRow = () => {
+    setReportErrorReasons(prev => [...prev, { reason: '', note: '' }]);
+  };
+
+  const handleUpdateReasonRow = (index: number, key: 'reason' | 'note', value: string) => {
+    setReportErrorReasons(prev =>
+      prev.map((item, idx) => (idx === index ? { ...item, [key]: value } : item))
+    );
+  };
+
+  const handleRemoveReasonRow = (index: number) => {
+    setReportErrorReasons(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  // Fallback direct Admin + CC config
+  const [fallbackType, setFallbackType] = useState('round');
+  const [fallbackAdminId, setFallbackAdminId] = useState('');
+  const [fallbackCcEmail, setFallbackCcEmail] = useState('');
+  const [accounts, setAccounts] = useState<any[]>([]);
+
+  // Blacklist Config
+  const [exclusionKeys, setExclusionKeys] = useState('');
+  const [exclusionContacts, setExclusionContacts] = useState('');
+  const [newKeyInput, setNewKeyInput] = useState('');
+  const [newContactInput, setNewContactInput] = useState('');
+  const [blacklistSearchQuery, setBlacklistSearchQuery] = useState('');
+  const [blacklistContactTab, setBlacklistContactTab] = useState<'phone' | 'email'>('phone');
+
+  // Real estate dynamic business config
+  const [depositCancelDemotedStatus, setDepositCancelDemotedStatus] = useState('da_gap');
+  const [depositCancelDemotedBookingStatus, setDepositCancelDemotedBookingStatus] = useState('booking');
+  const [capiEventTriggers, setCapiEventTriggers] = useState('');
+  const [capiMap, setCapiMap] = useState<Record<string, string>>({});
+
+  const capiEventOptions = [
+    { value: 'Skip', label: t('Không gửi (Skip)'), icon: <X size={14} style={{ color: 'var(--color-text-muted)' }} /> },
+    { value: 'Lead', label: t('Lead (Khách tiềm năng)'), icon: <Search size={14} style={{ color: '#3b82f6' }} /> },
+    { value: 'Schedule', label: t('Schedule (Hẹn gặp)'), icon: <Calendar size={14} style={{ color: '#10b981' }} /> },
+    { value: 'CompleteRegistration', label: 'CompleteRegistration', icon: <CheckCircle size={14} style={{ color: '#f59e0b' }} /> },
+    { value: 'SubmitApplication', label: 'SubmitApplication', icon: <FileText size={14} style={{ color: '#6366f1' }} /> },
+    { value: 'Contact', label: t('Contact (Liên hệ)'), icon: <MessageCircle size={14} style={{ color: '#ec4899' }} /> },
+    { value: 'ViewContent', label: t('ViewContent (Xem hàng)'), icon: <Eye size={14} style={{ color: '#8b5cf6' }} /> },
+    { value: 'Purchase', label: t('Purchase (Đặt cọc)'), icon: <Zap size={14} style={{ color: 'var(--color-primary)' }} /> }
+  ];
+
+  // Enterprise Approval Matrix Config
+  const [approvalMatrixConfig, setApprovalMatrixConfig] = useState<Record<string, any>>({
+    attendance: { enable_team_leader: true, designated_roles: ['manager', 'director'], notify_admin: false },
+    leave: { enable_team_leader: true, designated_roles: ['manager', 'director'], notify_admin: false },
+    shift_registration: { enable_team_leader: true, designated_roles: ['manager'], notify_admin: false },
+    cooperation: { enable_team_leader: true, designated_roles: ['director', 'assistant'], notify_admin: false },
+    expense: {
+      enable_team_leader: true,
+      money_tiers: [
+        { max_amount: 5000000, approver_type: 'team_leader' },
+        { max_amount: 20000000, approver_type: 'designated_roles', roles: ['director', 'accountant'] },
+        { max_amount: null, approver_type: 'admin' }
+      ]
+    },
+    deposit: { enable_team_leader: true, designated_roles: ['director', 'accountant'], notify_admin: true },
+    ticket: { enable_team_leader: true, designated_roles: ['manager', 'assistant'], notify_admin: false },
+    lead_transfer: { enable_team_leader: true, designated_roles: ['manager'], notify_admin: false },
+    quote_invoice: { enable_team_leader: true, designated_roles: ['director'], notify_admin: false }
+  });
+
+  // Lead Scoring Config
+  const [leadScoringRules, setLeadScoringRules] = useState<Record<string, number>>({
+    base_score: 10,
+    title_c_level: 20,
+    title_other: 5,
+    phone: 15,
+    mobile: 10,
+    both_phones: 10,
+    email: 10,
+    social_link: 10,
+    birthday: 10,
+    gender: 5,
+    customer_type: 5,
+    address: 15,
+    source_website: 15,
+    source_referral: 20,
+    project_id: 15,
+    company_id: 5,
+    industry: 5,
+    budget_range: 10,
+    revenue_high: 35,
+    revenue_medium: 20,
+    win_prob_high: 10,
+    status_qualified_customer: 15,
+    ttl1_completed: 25,
+    notes_long: 10,
+    has_tags: 10,
+    decay_no_interaction: -15
+  });
+
+  // Ticket Auto-Approve config
+  const [ticketAutoApproveEnabled, setTicketAutoApproveEnabled] = useState(false);
+  const [ticketAutoApproveKeywords, setTicketAutoApproveKeywords] = useState('');
+  const [consultants, setConsultants] = useState<any[]>([]);
+  const [connections, setConnections] = useState<any[]>([]);
+  const [ticketAutoApproveRules, setTicketAutoApproveRules] = useState<any[]>([]);
+
+  // Rule edit modal state
+  const [ruleModalOpen, setRuleModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<any>(null); // null = add, rule object = edit
+
+  // Rule form states
+  const [ruleName, setRuleName] = useState('');
+  const [ruleActive, setRuleActive] = useState(true);
+  const [ruleRounds, setRuleRounds] = useState<any[]>(['all']);
+  const [ruleSales, setRuleSales] = useState<any[]>(['all']);
+  const [ruleConnections, setRuleConnections] = useState<any[]>(['all']);
+  const [ruleKeywords, setRuleKeywords] = useState('');
+
+  // Batch Duplicate Checker States
+  const selectedSheetId = 'local';
+  const [localFile, setLocalFile] = useState<File | null>(null);
+  const [localRows, setLocalRows] = useState<any[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [phoneCol, setPhoneCol] = useState<string>('');
+  const [emailCol, setEmailCol] = useState<string>('');
+  const [nameCol, setNameCol] = useState<string>('');
+  const [dateCol, setDateCol] = useState<string>('');
+  const [salepersonCol, setSalepersonCol] = useState<string>('');
+  const [checking, setChecking] = useState(false);
+  const [importing, setImporting] = useState<boolean>(false);
+  const [checkedResults, setCheckedResults] = useState<any[]>([]);
+  const [filterType, setFilterType] = useState<'all' | 'duplicate' | 'new'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [importHistory, setImportHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+  const [totalHistoryCount, setTotalHistoryCount] = useState<number>(0);
+  const [historySearchInput, setHistorySearchInput] = useState('');
+  const [historySearch, setHistorySearch] = useState('');
+  const [selectedLogs, setSelectedLogs] = useState<number[]>([]);
+  const [confirmDeleteLogsOpen, setConfirmDeleteLogsOpen] = useState(false);
+  const [logsToDelete, setLogsToDelete] = useState<{ log_id: number; lead_id: number }[]>([]);
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false);
+
+  const fetchImportHistory = async (page: number = 1, searchVal: string = '') => {
+    setLoadingHistory(true);
+    try {
+      const query = `get_import_history&page=${page}&pageSize=50&search=${encodeURIComponent(searchVal)}`;
+      const json = await fetchAPI(query);
+      if (json.success) {
+        setImportHistory(json.data || []);
+        setTotalHistoryCount(json.total_count ?? (json.data || []).length);
+      }
+    } catch (err) {
+      console.error("Error fetching import history:", err);
+    }
+    setLoadingHistory(false);
+  };
+
+  const handleDeleteHistory = (logs: { log_id: number; lead_id: number }[]) => {
+    if (!logs || logs.length === 0) return;
+    setLogsToDelete(logs);
+    setConfirmDeleteLogsOpen(true);
+  };
+
+  const executeDeleteHistory = async () => {
+    if (logsToDelete.length === 0) return;
+    try {
+      const logIds = logsToDelete.map(item => item.log_id);
+      const leadIds = logsToDelete.map(item => item.lead_id);
+
+      const res = await fetchAPI('delete_import_history', {
+        method: 'POST',
+        body: JSON.stringify({ log_ids: logIds, lead_ids: leadIds })
+      });
+
+      if (res.success) {
+        toast.success(res.message || t("Đã xóa thành công!"));
+        setSelectedLogs([]);
+        fetchImportHistory(historyPage, historySearch);
+      } else {
+        toast.error(res.message || t("Lỗi khi xóa dữ liệu"));
+      }
+    } catch (err: any) {
+      toast.error(err.message || t("Lỗi kết nối hệ thống"));
+    }
+    setConfirmDeleteLogsOpen(false);
+    setLogsToDelete([]);
+  };
+  const [resultsPage, setResultsPage] = useState(1);
+  const [importSubTab, setImportSubTab] = useState<'list' | 'upload'>('list');
+  const [historyPage, setHistoryPage] = useState(1);
+
+  const fetchSettings = async () => {
+    try {
+      const roundsJson = await fetchAPI('get_rounds');
+      if (roundsJson.success) {
+        setRounds(roundsJson.data || []);
+      }
+
+      const accountsJson = await fetchAPI('get_accounts');
+      if (accountsJson.success) {
+        setAccounts(accountsJson.data || []);
+      }
+
+      const consultantsJson = await fetchAPI('get_consultants');
+      if (consultantsJson.success) {
+        setConsultants(consultantsJson.data || []);
+      }
+
+      const connectionsJson = await fetchAPI('get_connections');
+      if (connectionsJson.success) {
+        setConnections(connectionsJson.data || []);
+      }
+
+      try {
+        const sourcesJson = await fetchAPI('get_unique_sources');
+        if (sourcesJson.success) {
+          setAvailableSources(sourcesJson.data || []);
+        }
+      } catch (err) {
+        console.error("Error fetching unique sources:", err);
+      }
+
+      const json = await fetchAPI('get_settings');
+      if (json.success && json.data) {
+        if (json.data.pipeline_status_hierarchy) {
+          try {
+            setPipelineStatusHierarchy(JSON.parse(json.data.pipeline_status_hierarchy));
+          } catch(e) {}
+        }
+        if (json.data.pipeline_status_labels) {
+          try {
+            setPipelineStatusLabels(JSON.parse(json.data.pipeline_status_labels));
+          } catch(e) {}
+        }
+        if (json.data.deal_opportunity_status) setDealOpportunityStatus(json.data.deal_opportunity_status);
+        if (json.data.deal_won_status) setDealWonStatus(json.data.deal_won_status);
+        if (json.data.sale_admin_lead_visibility_stage) setSaleAdminLeadVisibilityStage(json.data.sale_admin_lead_visibility_stage);
+        if (json.data.accountant_lead_visibility_stage) setAccountantLeadVisibilityStage(json.data.accountant_lead_visibility_stage);
+        if (json.data.lead_scoring_rules) {
+          try {
+            setLeadScoringRules(JSON.parse(json.data.lead_scoring_rules));
+          } catch(e) {}
+        }
+        if (json.data.db_version) setDbVersion(json.data.db_version);
+        if (json.data.email_provider) {
+          setProvider(json.data.email_provider);
+          if (json.data.email_provider === 'appscript') {
+            setShowInputScript(true);
+          }
+        }
+        if (json.data.appscript_webhook_url) setAppscriptUrl(json.data.appscript_webhook_url);
+        if (json.data.frontend_url) setFrontendUrl(json.data.frontend_url);
+        if (json.data.ses_host) setSesHost(json.data.ses_host);
+        if (json.data.ses_username) setSesUser(json.data.ses_username);
+        if (json.data.ses_password) setSesPass(json.data.ses_password);
+        if (json.data.ses_sender_email) setSesSenderEmail(json.data.ses_sender_email);
+        if (json.data.ses_sender_name) setSesSenderName(json.data.ses_sender_name);
+        if (json.data.zalo_bot_token) setZaloBotToken(json.data.zalo_bot_token);
+        if (json.data.zalo_webhook_secret) setZaloWebhookSecret(json.data.zalo_webhook_secret);
+        if (json.data.zalo_bot_link) setZaloBotLink(json.data.zalo_bot_link);
+        if (json.data.zalo_admin_group_chat_id) setZaloAdminGroupChatId(json.data.zalo_admin_group_chat_id);
+        if (json.data.telegram_bot_token) setTelegramBotToken(json.data.telegram_bot_token);
+        if (json.data.telegram_bot_username) setTelegramBotUsername(json.data.telegram_bot_username);
+        if (json.data.telegram_admin_group_chat_id) setTelegramAdminGroupChatId(json.data.telegram_admin_group_chat_id);
+        if (json.data.zalo_notify_only_group !== undefined) {
+          setZaloNotifyOnlyGroup(json.data.zalo_notify_only_group === '1' || json.data.zalo_notify_only_group === 1);
+        }
+        if (json.data.zalo_daily_report_time) setZaloDailyReportTime(json.data.zalo_daily_report_time);
+        if (json.data.daily_report_admins) {
+          try {
+            const parsed = JSON.parse(json.data.daily_report_admins);
+            if (Array.isArray(parsed)) setDailyReportAdmins(parsed.map(Number));
+          } catch { /* ignore */ }
+        }
+        if (json.data.zalo_weekly_report_day) setZaloWeeklyReportDay(json.data.zalo_weekly_report_day);
+        if (json.data.zalo_weekly_report_time) setZaloWeeklyReportTime(json.data.zalo_weekly_report_time);
+        if (json.data.zalo_monthly_report_enabled) setZaloMonthlyReportEnabled(json.data.zalo_monthly_report_enabled.toString());
+        if (json.data.zalo_monthly_report_time) setZaloMonthlyReportTime(json.data.zalo_monthly_report_time);
+        if (json.data.fallback_round_id) setFallbackRoundId(json.data.fallback_round_id);
+        if (json.data.fallback_type) setFallbackType(json.data.fallback_type);
+
+        if (json.data.company_name) setCompanyName(json.data.company_name);
+        if (json.data.company_address) setCompanyAddress(json.data.company_address);
+        if (json.data.company_phone) setCompanyPhone(json.data.company_phone);
+        if (json.data.company_tax_id) setCompanyTaxId(json.data.company_tax_id);
+        if (json.data.company_logo_url) setCompanyLogoUrl(json.data.company_logo_url);
+        if (json.data.fallback_admin_id) setFallbackAdminId(json.data.fallback_admin_id);
+        if (json.data.fallback_cc_email) setFallbackCcEmail(json.data.fallback_cc_email);
+        if (json.data.global_exclusion_keys) setExclusionKeys(json.data.global_exclusion_keys);
+        if (json.data.global_exclusion_contacts) setExclusionContacts(json.data.global_exclusion_contacts);
+        if (json.data.duplicate_check_months) setDuplicateCheckMonths(Number(json.data.duplicate_check_months));
+        if (json.data.deposit_cancel_demoted_status) setDepositCancelDemotedStatus(json.data.deposit_cancel_demoted_status);
+        if (json.data.deposit_cancel_demoted_booking_status) setDepositCancelDemotedBookingStatus(json.data.deposit_cancel_demoted_booking_status);
+        if (json.data.capi_event_triggers) {
+          setCapiEventTriggers(json.data.capi_event_triggers);
+          try {
+            setCapiMap(JSON.parse(json.data.capi_event_triggers) || {});
+          } catch(e) {
+            setCapiMap({});
+          }
+        } else {
+          setCapiMap({
+            'dong_y_gap': 'Schedule',
+            'da_gap': 'Schedule',
+            'not_lead': 'Skip',
+            'dat_coc': 'Purchase'
+          });
+        }
+        setReassignIfOwnerInactive(json.data.reassign_if_owner_inactive === undefined || json.data.reassign_if_owner_inactive === '1' || json.data.reassign_if_owner_inactive === 1);
+        if (json.data.require_lead_claim !== undefined) {
+          setRequireLeadClaim(json.data.require_lead_claim === '1' || json.data.require_lead_claim === 1);
+        } else {
+          setRequireLeadClaim(false);
+        }
+        if (json.data.starvation_prevention_enabled !== undefined) {
+          setStarvationPreventionEnabled(json.data.starvation_prevention_enabled === '1' || json.data.starvation_prevention_enabled === 1);
+        }
+        if (json.data.starvation_max_leads_per_hour !== undefined) {
+          setStarvationMaxLeadsPerHour(Number(json.data.starvation_max_leads_per_hour));
+        }
+
+        // Business configurations from markdown rules
+        if (json.data.temperature_decay_days !== undefined) setTemperatureDecayDays(Number(json.data.temperature_decay_days));
+        if (json.data.po_three_level_threshold !== undefined) setPoThreeLevelThreshold(Number(json.data.po_three_level_threshold));
+        if (json.data.lead_response_timeout_minutes !== undefined) setLeadResponseTimeoutMinutes(Number(json.data.lead_response_timeout_minutes));
+        if (json.data.lead_max_recall_attempts !== undefined) setLeadMaxRecallAttempts(Number(json.data.lead_max_recall_attempts));
+        if (json.data.lead_recall_cooldown_minutes !== undefined) setLeadRecallCooldownMinutes(Number(json.data.lead_recall_cooldown_minutes));
+        if (json.data.parallel_assignment_trigger_status !== undefined) setParallelAssignmentTriggerStatus(json.data.parallel_assignment_trigger_status);
+        if (json.data.lead_response_timeout_overtime_minutes !== undefined) setLeadResponseTimeoutOvertimeMinutes(Number(json.data.lead_response_timeout_overtime_minutes));
+        if (json.data.uncontacted_lead_share_hours !== undefined) setUncontactedLeadShareHours(Number(json.data.uncontacted_lead_share_hours));
+        if (json.data.night_shift_start_time !== undefined) setNightShiftStartTime(json.data.night_shift_start_time);
+        if (json.data.night_shift_end_time !== undefined) setNightShiftEndTime(json.data.night_shift_end_time);
+        if (json.data.allow_late_night_shift_registration !== undefined) {
+          setAllowLateNightShiftRegistration(json.data.allow_late_night_shift_registration === '1' || json.data.allow_late_night_shift_registration === 1);
+        }
+        if (json.data.late_night_shift_registration_minutes !== undefined) {
+          setLateNightShiftRegistrationMinutes(Number(json.data.late_night_shift_registration_minutes));
+        }
+        if (json.data.advance_night_shift_registration_minutes !== undefined) {
+          setAdvanceNightShiftRegistrationMinutes(Number(json.data.advance_night_shift_registration_minutes));
+        }
+        if (json.data.auto_approve_night_shift !== undefined) {
+          setAutoApproveNightShift(json.data.auto_approve_night_shift === '1' || json.data.auto_approve_night_shift === 1);
+        }
+        if (json.data.allow_lead_distribution_on_pending_checkin !== undefined) {
+          setAllowLeadDistributionOnPendingCheckin(json.data.allow_lead_distribution_on_pending_checkin === '1' || json.data.allow_lead_distribution_on_pending_checkin === 1);
+        }
+        if (json.data.allow_weekend_shift_registration !== undefined) {
+          setAllowWeekendShiftRegistration(json.data.allow_weekend_shift_registration === '1' || json.data.allow_weekend_shift_registration === 1);
+        }
+        if (json.data.auto_approve_weekend_shift !== undefined) {
+          setAutoApproveWeekendShift(json.data.auto_approve_weekend_shift === '1' || json.data.auto_approve_weekend_shift === 1);
+        }
+        if (json.data.shift_history_retention_days !== undefined) {
+          setShiftHistoryRetentionDays(Number(json.data.shift_history_retention_days));
+        }
+        if (json.data.weekend_shift_registration_lead_hours !== undefined) {
+          setWeekendShiftRegistrationLeadHours(Number(json.data.weekend_shift_registration_lead_hours));
+        }
+        if (json.data.allow_pipeline_backward !== undefined) {
+          setAllowPipelineBackward(json.data.allow_pipeline_backward === '1' || json.data.allow_pipeline_backward === 1);
+        }
+        if (json.data.allow_pipeline_skip !== undefined) {
+          setAllowPipelineSkip(json.data.allow_pipeline_skip === '1' || json.data.allow_pipeline_skip === 1);
+        }
+        if (json.data.attendance_notification_enabled !== undefined) {
+          setAttendanceNotificationEnabled(json.data.attendance_notification_enabled === '1' || json.data.attendance_notification_enabled === 1 || json.data.attendance_notification_enabled === true);
+        } else {
+          setAttendanceNotificationEnabled(true);
+        }
+        if (json.data.attendance_notification_lead_minutes !== undefined) {
+          setAttendanceNotificationLeadMinutes(Number(json.data.attendance_notification_lead_minutes));
+        } else {
+          setAttendanceNotificationLeadMinutes(10);
+        }
+        if (json.data.night_duty_notification_enabled !== undefined) {
+          setNightDutyNotificationEnabled(json.data.night_duty_notification_enabled === '1' || json.data.night_duty_notification_enabled === 1 || json.data.night_duty_notification_enabled === true);
+        } else {
+          setNightDutyNotificationEnabled(true);
+        }
+        if (json.data.night_duty_notification_lead_minutes !== undefined) {
+          setNightDutyNotificationLeadMinutes(Number(json.data.night_duty_notification_lead_minutes));
+        } else {
+          setNightDutyNotificationLeadMinutes(10);
+        }
+        if (json.data.holiday_schedules !== undefined && json.data.holiday_schedules !== null) {
+          try {
+            const parsed = typeof json.data.holiday_schedules === 'string'
+              ? JSON.parse(json.data.holiday_schedules)
+              : json.data.holiday_schedules;
+            setHolidaySchedules(Array.isArray(parsed) ? parsed : []);
+          } catch (e) {
+            setHolidaySchedules([]);
+          }
+        }
+        if (json.data.auto_approve_holiday_shift !== undefined) {
+          setAutoApproveHolidayShift(json.data.auto_approve_holiday_shift === '1' || json.data.auto_approve_holiday_shift === 1);
+        }
+        if (json.data.require_checkin_weekend_lead !== undefined) {
+          setRequireCheckinWeekendLead(json.data.require_checkin_weekend_lead === '1' || json.data.require_checkin_weekend_lead === 1);
+        }
+        if (json.data.require_checkin_holiday_lead !== undefined) {
+          setRequireCheckinHolidayLead(json.data.require_checkin_holiday_lead === '1' || json.data.require_checkin_holiday_lead === 1);
+        }
+        if (json.data.require_checkout !== undefined) {
+          setRequireCheckout(json.data.require_checkout === '1' || json.data.require_checkout === 1);
+        }
+        if (json.data.auto_approve_checkin !== undefined) {
+          setAutoApproveCheckin(json.data.auto_approve_checkin === '1' || json.data.auto_approve_checkin === 1);
+        }
+        if (json.data.attendance_report_enabled !== undefined) {
+          setAttendanceReportEnabled(json.data.attendance_report_enabled === '1' || json.data.attendance_report_enabled === 1);
+        }
+        if (json.data.attendance_report_trigger_day !== undefined) {
+          setAttendanceReportTriggerDay(Number(json.data.attendance_report_trigger_day) || 1);
+        }
+        if (json.data.attendance_report_date_mode !== undefined) {
+          setAttendanceReportDateMode(json.data.attendance_report_date_mode);
+        }
+        if (json.data.attendance_report_start_date !== undefined) {
+          setAttendanceReportStartDate(json.data.attendance_report_start_date || '');
+        }
+        if (json.data.attendance_report_end_date !== undefined) {
+          setAttendanceReportEndDate(json.data.attendance_report_end_date || '');
+        }
+        if (json.data.global_work_start_time !== undefined) {
+          setGlobalWorkStartTime(json.data.global_work_start_time);
+        }
+        if (json.data.global_work_end_time !== undefined) {
+          setGlobalWorkEndTime(json.data.global_work_end_time);
+        }
+        if (json.data.global_work_schedule !== undefined && json.data.global_work_schedule !== null) {
+          try {
+            const parsed = typeof json.data.global_work_schedule === 'string' 
+              ? JSON.parse(json.data.global_work_schedule) 
+              : json.data.global_work_schedule;
+            setGlobalWorkSchedule(parsed);
+            
+            let isSimpleDaily = true;
+            for (let i = 1; i <= 7; i++) {
+              const day = parsed[String(i)] || parsed[i];
+              if (!day || !day.active || day.start !== parsed["1"].start || day.end !== parsed["1"].end || day.start_afternoon !== parsed["1"].start_afternoon || day.end_afternoon !== parsed["1"].end_afternoon) {
+                isSimpleDaily = false;
+                break;
+              }
+            }
+            setGlobalScheduleMode(isSimpleDaily ? 'daily' : 'custom');
+            if (isSimpleDaily && parsed["1"]) {
+              setGlobalWorkStartTime(parsed["1"].start || "08:00");
+              setGlobalWorkEndTime(parsed["1"].end || "12:00");
+              setGlobalWorkStartTimeAfternoon(parsed["1"].start_afternoon || "");
+              setGlobalWorkEndTimeAfternoon(parsed["1"].end_afternoon || "");
+            }
+          } catch (e) {
+            console.error("Error parsing global work schedule", e);
+          }
+        }
+        if (json.data.golden_hours_start_time !== undefined) setGoldenHoursStartTime(json.data.golden_hours_start_time);
+        if (json.data.golden_hours_end_time !== undefined) setGoldenHoursEndTime(json.data.golden_hours_end_time);
+        if (json.data.golden_hours_max_leads_per_consultant !== undefined) setGoldenHoursMaxLeadsPerConsultant(Number(json.data.golden_hours_max_leads_per_consultant));
+        if (json.data.databank_limit_per_day !== undefined) setDatabankLimitPerDay(Number(json.data.databank_limit_per_day));
+        if (json.data.databank_limit_per_hour !== undefined) setDatabankLimitPerHour(Number(json.data.databank_limit_per_hour));
+        if (json.data.databank_limit_per_month !== undefined) setDatabankLimitPerMonth(Number(json.data.databank_limit_per_month));
+        if (json.data.backpressure_limit !== undefined) setBackpressureLimit(Number(json.data.backpressure_limit));
+        if (json.data.checkin_approval_sla_minutes !== undefined) setCheckinApprovalSlaMinutes(Number(json.data.checkin_approval_sla_minutes));
+        if (json.data.late_checkin_compensation_enabled !== undefined) setLateCheckinCompensationEnabled(Number(json.data.late_checkin_compensation_enabled));
+        if (json.data.leave_compensation_enabled !== undefined) setLeaveCompensationEnabled(Number(json.data.leave_compensation_enabled));
+        if (json.data.broadcast_exclusion_rules !== undefined) setBroadcastExclusionRules(json.data.broadcast_exclusion_rules);
+        if (json.data.coop_eligible_statuses !== undefined) setCoopEligibleStatuses(json.data.coop_eligible_statuses);
+        if (json.data.coop_default_files !== undefined) setCoopDefaultFiles(json.data.coop_default_files);
+        const timers: Record<string, string> = {
+          chua_xac_dinh: '+3 hours',
+          quan_tam: '+1 day',
+          thien_chi: '+3 days',
+          dong_y_gap: '+4 days',
+          da_gap: '+5 days',
+          booking: '+3 months'
+        };
+        Object.keys(json.data).forEach(key => {
+          if (key.startsWith('security_timer_')) {
+            const statusSlug = key.replace('security_timer_', '');
+            timers[statusSlug] = json.data[key];
+          }
+        });
+        setSecurityTimers(timers);
+        if (json.data.databank_applicable_sources !== undefined) setDatabankApplicableSources(json.data.databank_applicable_sources);
+        if (json.data.pipeline_status_hierarchy) {
+          try {
+            const parsed = JSON.parse(json.data.pipeline_status_hierarchy);
+            if (Array.isArray(parsed)) setPipelineStatusHierarchy(parsed);
+          } catch { /* ignore */ }
+        }
+        if (json.data.pipeline_status_labels) {
+          try {
+            const parsed = JSON.parse(json.data.pipeline_status_labels);
+            if (parsed && typeof parsed === 'object') setPipelineStatusLabels(parsed);
+          } catch { /* ignore */ }
+        }
+        if (json.data.standard_commission_rate !== undefined) setStandardCommissionRate(Number(json.data.standard_commission_rate));
+        if (json.data.lockout_reason_count_threshold !== undefined) setLockoutReasonCountThreshold(Number(json.data.lockout_reason_count_threshold));
+        if (json.data.max_parallel_sales_per_client !== undefined) setMaxParallelSalesPerClient(Number(json.data.max_parallel_sales_per_client));
+        if (json.data.temp_suggestion_call_duration_seconds !== undefined) setTempSuggestionCallDuration(Number(json.data.temp_suggestion_call_duration_seconds));
+        if (json.data.temp_suggestion_required_notes !== undefined) setTempSuggestionRequiredNotes(Number(json.data.temp_suggestion_required_notes));
+        if (json.data.capi_stuck_alert_threshold_hours !== undefined) setCapiStuckAlertThresholdHours(Number(json.data.capi_stuck_alert_threshold_hours));
+        setTicketAutoApproveEnabled(json.data.ticket_auto_approve_enabled === '1' || json.data.ticket_auto_approve_enabled === 1);
+        setTicketAutoApproveKeywords(json.data.ticket_auto_approve_keywords || '');
+        if (json.data.report_error_reasons) {
+          try {
+            const parsed = JSON.parse(json.data.report_error_reasons);
+            if (Array.isArray(parsed)) {
+              const normalized = parsed.map((item: any) => {
+                if (typeof item === 'string') {
+                  const defaultMatch = DEFAULT_REPORT_REASONS.find(d => d.reason === item);
+                  return { reason: item, note: defaultMatch ? defaultMatch.note : '' };
+                } else if (item && typeof item === 'object') {
+                  return { reason: item.reason || '', note: item.note || '' };
+                }
+                return { reason: '', note: '' };
+              });
+              setReportErrorReasons(normalized);
+            }
+          } catch {
+            setReportErrorReasons([]);
+          }
+        } else {
+          setReportErrorReasons(DEFAULT_REPORT_REASONS);
+        }
+        if (json.data.ticket_auto_approve_rules) {
+          try {
+            const parsed = JSON.parse(json.data.ticket_auto_approve_rules);
+            if (Array.isArray(parsed)) setTicketAutoApproveRules(parsed);
+          } catch { /* ignore */ }
+        }
+        if (json.data.gemini_api_key) setGeminiApiKey(json.data.gemini_api_key);
+        if (json.data.gemini_model) setGeminiModel(json.data.gemini_model);
+        setAiScreenerEnabled(json.data.ai_screener_enabled === '1' || json.data.ai_screener_enabled === 1);
+        if (json.data.ai_screener_rules) setAiScreenerRules(json.data.ai_screener_rules);
+        if (json.data.ai_screener_rounds) {
+          setAiScreenerRounds(json.data.ai_screener_rounds.split(',').map(Number).filter((n: any) => !isNaN(n) && n > 0));
+        } else {
+          setAiScreenerRounds([]);
+        }
+        setAiScreenerMode(json.data.ai_screener_mode || 'ai');
+        setAiScreenerManualAction(json.data.ai_screener_manual_action || 'hold');
+        if (json.data.ai_screener_manual_rules) {
+          try {
+            const parsed = typeof json.data.ai_screener_manual_rules === 'string'
+              ? JSON.parse(json.data.ai_screener_manual_rules)
+              : json.data.ai_screener_manual_rules;
+            if (Array.isArray(parsed)) {
+              setAiScreenerManualRules(parsed);
+            } else {
+              setAiScreenerManualRules([]);
+            }
+          } catch {
+            setAiScreenerManualRules([]);
+          }
+        } else {
+          setAiScreenerManualRules([]);
+        }
+        if (json.data.approval_matrix_config) {
+          try {
+            const parsed = typeof json.data.approval_matrix_config === 'string'
+              ? JSON.parse(json.data.approval_matrix_config)
+              : json.data.approval_matrix_config;
+            if (parsed && typeof parsed === 'object') {
+              setApprovalMatrixConfig(prev => ({ ...prev, ...parsed }));
+            }
+          } catch (e) {
+            console.error("Error parsing approval matrix config", e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchSettings();
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      let targetTab = tabParam;
+      if (tabParam === 'processing') {
+        targetTab = window.location.hash === '#auto-approve' ? 'auto_approve_ticket' : 'fallback';
+      } else if (tabParam === 'mail') {
+        targetTab = 'email_config';
+      } else if (tabParam === 'zalo') {
+        targetTab = 'zalo_bot';
+      } else if (tabParam === 'report') {
+        targetTab = 'automated_reports';
+      } else if (tabParam === 'duplicate_check') {
+        targetTab = 'legacy_mapping';
+      } else if (tabParam === 'ai') {
+        targetTab = 'ai_assistant';
+      } else if (tabParam === 'workflow') {
+        targetTab = 'workflow_templates';
+      } else if (tabParam === 'database') {
+        targetTab = 'database_maintenance';
+      } else if (tabParam === 'tags') {
+        targetTab = 'tag_management';
+      }
+      setActiveTab(targetTab);
+      if (window.location.hash === '#auto-approve') {
+        setTimeout(() => {
+          const el = document.getElementById('auto-approve');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'legacy_mapping') {
+      fetchImportHistory(historyPage, historySearch);
+    }
+  }, [activeTab, historyPage, historySearch]);
+
+  // Workflow Templates States
+  const [workflowTemplates, setWorkflowTemplates] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [loadingWorkflow, setLoadingWorkflow] = useState(false);
+
+  const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [workflowForm, setWorkflowForm] = useState({
+    title: '',
+    description: '',
+    stage_id: '',
+    team_id: '',
+    priority: 'medium',
+    due_days_offset: 1,
+    require_approval: 0,
+    is_active: 1
+  });
+
+  const fetchWorkflowData = async () => {
+    setLoadingWorkflow(true);
+    try {
+      const [tplsRes, stagesRes, teamsRes] = await Promise.all([
+        fetchAPI('workflow-task-templates'),
+        fetchAPI('pipeline-stages'),
+        fetchAPI('teams')
+      ]);
+      if (tplsRes.success) setWorkflowTemplates(tplsRes.data);
+      if (stagesRes.success) setPipelineStages(stagesRes.data);
+      if (teamsRes && teamsRes.success) setTeams(teamsRes.data || []);
+    } catch (err) {
+      console.error("Error fetching workflow settings data:", err);
+    }
+    setLoadingWorkflow(false);
+  };
+
+  // Tag Management States
+  const [tags, setTags] = useState<any[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [editingTag, setEditingTag] = useState<any>(null);
+  const [tagForm, setTagForm] = useState({
+    name: '',
+    color: '#6366f1',
+    entity_type: 'all'
+  });
+
+  const fetchTagsData = async () => {
+    setLoadingTags(true);
+    try {
+      const res = await fetchAPI('tags');
+      if (res.success) {
+        setTags(res.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching tags data:", err);
+    }
+    setLoadingTags(false);
+  };
+
+  const handleSaveTag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tagForm.name) {
+      toast.error(t('Tên tag không được để trống'));
+      return;
+    }
+    try {
+      const isEdit = Boolean(editingTag);
+      const url = isEdit ? `tags/${editingTag.id}` : 'tags';
+      const method = isEdit ? 'PUT' : 'POST';
+      const res = await fetchAPI(url, {
+        method,
+        body: JSON.stringify(tagForm) as any
+      });
+      if (res.success) {
+        toast.success(isEdit ? t('Đã cập nhật tag') : t('Đã tạo tag mới'));
+        setShowTagModal(false);
+        fetchTagsData();
+      } else {
+        toast.error(res.message || t('Lỗi khi lưu tag'));
+      }
+    } catch (err: any) {
+      toast.error(err.message || t('Lỗi hệ thống'));
+    }
+  };
+
+  const handleDeleteTag = (id: number) => {
+    showConfirm({
+      title: t('Xóa Tag'),
+      message: t('Bạn có chắc chắn muốn xóa Tag này? Hành động này không thể hoàn tác.'),
+      confirmText: t('Xóa'),
+      cancelText: t('Hủy'),
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetchAPI(`tags/${id}`, {
+            method: 'DELETE'
+          });
+          if (res.success) {
+            toast.success(t('Đã xóa tag thành công'));
+            fetchTagsData();
+          } else {
+            toast.error(res.message || t('Lỗi khi xóa tag'));
+          }
+        } catch (err: any) {
+          toast.error(err.message || t('Lỗi hệ thống'));
+        }
+      }
+    });
+  };
+
+  const openAddTagModal = () => {
+    setEditingTag(null);
+    setTagForm({
+      name: '',
+      color: '#6366f1',
+      entity_type: 'all'
+    });
+    setShowTagModal(true);
+  };
+
+  const openEditTagModal = (tag: any) => {
+    setEditingTag(tag);
+    setTagForm({
+      name: tag.name,
+      color: tag.color || '#6366f1',
+      entity_type: tag.entity_type || 'all'
+    });
+    setShowTagModal(true);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'workflow_templates') {
+      fetchWorkflowData();
+    }
+    if (activeTab === 'database_maintenance') {
+      fetchDbStats();
+    }
+    if (activeTab === 'tag_management' || activeTab === 'blacklist') {
+      fetchTagsData();
+    }
+  }, [activeTab]);
+
+  const handleSaveWorkflowTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workflowForm.title || !workflowForm.stage_id) {
+      toast.error(t('Vui lòng điền đầy đủ tiêu đề và giai đoạn'));
+      return;
+    }
+    try {
+      const isEdit = Boolean(editingTemplate);
+      const url = isEdit ? `workflow-task-templates/${editingTemplate.id}` : 'workflow-task-templates';
+      const method = isEdit ? 'PUT' : 'POST';
+      const res = await fetchAPI(url, {
+        method,
+        body: JSON.stringify(workflowForm)
+      });
+      if (res.success) {
+        toast.success(res.message || t('Đã lưu mẫu công việc thành công'));
+        setShowWorkflowModal(false);
+        fetchWorkflowData();
+      } else {
+        toast.error(res.message || t('Lỗi khi lưu mẫu công việc'));
+      }
+    } catch (err: any) {
+      toast.error(t('Lỗi kết nối: ') + err.message);
+    }
+  };
+
+  const handleDeleteWorkflowTemplate = (id: number) => {
+    showConfirm({
+      title: t('Xóa mẫu công việc'),
+      message: t('Bạn có chắc chắn muốn xóa mẫu công việc này? Hành động này không thể hoàn tác.'),
+      confirmText: t('Xóa'),
+      cancelText: t('Hủy'),
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetchAPI(`workflow-task-templates/${id}`, {
+            method: 'DELETE'
+          });
+          if (res.success) {
+            toast.success(res.message || t('Đã xóa thành công'));
+            fetchWorkflowData();
+          } else {
+            toast.error(res.message || t('Lỗi khi xóa'));
+          }
+        } catch (err: any) {
+          toast.error(t('Lỗi kết nối: ') + err.message);
+        }
+      }
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const newHierarchy = [...pipelineStatusHierarchy];
+    const draggedItem = newHierarchy[draggedIndex];
+    newHierarchy.splice(draggedIndex, 1);
+    newHierarchy.splice(index, 0, draggedItem);
+    setPipelineStatusHierarchy(newHierarchy);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const payload: any = {
+      email_provider: provider,
+      appscript_webhook_url: appscriptUrl,
+      frontend_url: frontendUrl,
+      ses_host: sesHost,
+      ses_username: sesUser,
+      ses_password: sesPass,
+      ses_sender_email: sesSenderEmail,
+      ses_sender_name: sesSenderName,
+      zalo_bot_token: zaloBotToken,
+      zalo_webhook_secret: zaloWebhookSecret,
+      zalo_bot_link: zaloBotLink,
+      zalo_admin_group_chat_id: zaloAdminGroupChatId,
+      telegram_bot_token: telegramBotToken,
+      telegram_bot_username: telegramBotUsername,
+      telegram_admin_group_chat_id: telegramAdminGroupChatId,
+      zalo_notify_only_group: zaloNotifyOnlyGroup ? '1' : '0',
+      zalo_daily_report_time: zaloDailyReportTime,
+      daily_report_admins: dailyReportAdmins,
+      zalo_weekly_report_day: zaloWeeklyReportDay,
+      zalo_weekly_report_time: zaloWeeklyReportTime,
+      zalo_monthly_report_enabled: zaloMonthlyReportEnabled,
+      zalo_monthly_report_time: zaloMonthlyReportTime,
+      fallback_round_id: fallbackRoundId,
+      fallback_type: fallbackType,
+      fallback_admin_id: fallbackAdminId,
+      fallback_cc_email: fallbackCcEmail,
+      global_exclusion_keys: exclusionKeys,
+      global_exclusion_contacts: exclusionContacts,
+      duplicate_check_months: duplicateCheckMonths,
+      deposit_cancel_demoted_status: depositCancelDemotedStatus,
+      deposit_cancel_demoted_booking_status: depositCancelDemotedBookingStatus,
+      capi_event_triggers: JSON.stringify(capiMap),
+      reassign_if_owner_inactive: reassignIfOwnerInactive ? '1' : '0',
+      starvation_prevention_enabled: starvationPreventionEnabled ? 1 : 0,
+      starvation_max_leads_per_hour: starvationMaxLeadsPerHour,
+      ticket_auto_approve_enabled: ticketAutoApproveEnabled ? 1 : 0,
+      ticket_auto_approve_keywords: ticketAutoApproveKeywords,
+      ticket_auto_approve_rules: ticketAutoApproveRules,
+      report_error_reasons: reportErrorReasons,
+      pipeline_status_hierarchy: JSON.stringify(pipelineStatusHierarchy),
+      pipeline_status_labels: JSON.stringify(pipelineStatusLabels),
+      deal_opportunity_status: dealOpportunityStatus,
+      deal_won_status: dealWonStatus,
+      temperature_decay_days: temperatureDecayDays,
+      po_three_level_threshold: poThreeLevelThreshold,
+      lead_response_timeout_minutes: leadResponseTimeoutMinutes,
+      lead_max_recall_attempts: leadMaxRecallAttempts,
+      lead_recall_cooldown_minutes: leadRecallCooldownMinutes,
+      parallel_assignment_trigger_status: parallelAssignmentTriggerStatus,
+      lead_response_timeout_overtime_minutes: leadResponseTimeoutOvertimeMinutes,
+      uncontacted_lead_share_hours: uncontactedLeadShareHours,
+      night_shift_start_time: nightShiftStartTime,
+      night_shift_end_time: nightShiftEndTime,
+      allow_late_night_shift_registration: allowLateNightShiftRegistration ? 1 : 0,
+      late_night_shift_registration_minutes: allowLateNightShiftRegistration ? lateNightShiftRegistrationMinutes : 0,
+      advance_night_shift_registration_minutes: allowLateNightShiftRegistration ? 0 : advanceNightShiftRegistrationMinutes,
+      auto_approve_night_shift: autoApproveNightShift ? 1 : 0,
+      shift_history_retention_days: shiftHistoryRetentionDays,
+      allow_lead_distribution_on_pending_checkin: allowLeadDistributionOnPendingCheckin ? 1 : 0,
+      attendance_notification_enabled: attendanceNotificationEnabled ? 1 : 0,
+      attendance_notification_lead_minutes: attendanceNotificationLeadMinutes,
+      night_duty_notification_enabled: nightDutyNotificationEnabled ? 1 : 0,
+      night_duty_notification_lead_minutes: nightDutyNotificationLeadMinutes,
+      allow_weekend_shift_registration: allowWeekendShiftRegistration ? 1 : 0,
+      auto_approve_weekend_shift: autoApproveWeekendShift ? 1 : 0,
+      weekend_shift_registration_lead_hours: weekendShiftRegistrationLeadHours,
+      holiday_schedules: JSON.stringify(holidaySchedules),
+      auto_approve_holiday_shift: autoApproveHolidayShift ? 1 : 0,
+      require_checkin_weekend_lead: requireCheckinWeekendLead ? 1 : 0,
+      require_checkin_holiday_lead: requireCheckinHolidayLead ? 1 : 0,
+      require_checkout: requireCheckout ? 1 : 0,
+      auto_approve_checkin: autoApproveCheckin ? 1 : 0,
+      attendance_report_enabled: attendanceReportEnabled ? 1 : 0,
+      attendance_report_trigger_day: attendanceReportTriggerDay,
+      attendance_report_date_mode: attendanceReportDateMode,
+      attendance_report_start_date: attendanceReportStartDate,
+      attendance_report_end_date: attendanceReportEndDate,
+      golden_hours_start_time: goldenHoursStartTime,
+      golden_hours_end_time: goldenHoursEndTime,
+      golden_hours_max_leads_per_consultant: goldenHoursMaxLeadsPerConsultant,
+      global_work_start_time: globalWorkStartTime,
+      global_work_end_time: globalWorkEndTime,
+      global_work_schedule: JSON.stringify(globalScheduleMode === 'daily' 
+        ? {
+            "1": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon },
+            "2": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon },
+            "3": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon },
+            "4": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon },
+            "5": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon },
+            "6": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon },
+            "7": { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon }
+          }
+        : globalWorkSchedule),
+      databank_limit_per_day: databankLimitPerDay,
+      databank_limit_per_hour: databankLimitPerHour,
+      databank_limit_per_month: databankLimitPerMonth,
+      backpressure_limit: backpressureLimit,
+      checkin_approval_sla_minutes: checkinApprovalSlaMinutes,
+      late_checkin_compensation_enabled: lateCheckinCompensationEnabled,
+      leave_compensation_enabled: leaveCompensationEnabled,
+      broadcast_exclusion_rules: broadcastExclusionRules,
+      coop_eligible_statuses: coopEligibleStatuses,
+      coop_default_files: coopDefaultFiles,
+      databank_applicable_sources: databankApplicableSources,
+      allow_pipeline_backward: allowPipelineBackward ? 1 : 0,
+      allow_pipeline_skip: allowPipelineSkip ? 1 : 0,
+      standard_commission_rate: standardCommissionRate,
+      lockout_reason_count_threshold: lockoutReasonCountThreshold,
+      max_parallel_sales_per_client: maxParallelSalesPerClient,
+      temp_suggestion_call_duration_seconds: tempSuggestionCallDuration,
+      temp_suggestion_required_notes: tempSuggestionRequiredNotes,
+      capi_stuck_alert_threshold_hours: capiStuckAlertThresholdHours,
+      gemini_api_key: geminiApiKey,
+      gemini_model: geminiModel,
+      ai_screener_enabled: aiScreenerEnabled ? '1' : '0',
+      ai_screener_rules: aiScreenerRules,
+      ai_screener_rounds: aiScreenerRounds.join(','),
+      ai_screener_mode: aiScreenerMode,
+       ai_screener_manual_action: aiScreenerManualAction,
+      ai_screener_manual_rules: aiScreenerManualRules,
+      approval_matrix_config: JSON.stringify(approvalMatrixConfig),
+      lead_scoring_rules: JSON.stringify(leadScoringRules),
+      company_name: companyName,
+      company_address: companyAddress,
+      company_phone: companyPhone,
+      company_tax_id: companyTaxId,
+      company_logo_url: companyLogoUrl,
+      sale_admin_lead_visibility_stage: saleAdminLeadVisibilityStage,
+      accountant_lead_visibility_stage: accountantLeadVisibilityStage
+    };
+
+    Object.keys(securityTimers).forEach(statusSlug => {
+      payload[`security_timer_${statusSlug}`] = securityTimers[statusSlug];
+    });
+
+    try {
+      const json = await fetchAPI('save_settings', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      const tabLabels: Record<string, string> = {
+        business_limits: 'Giới hạn & Bảo mật',
+        time_schedule: 'Lịch hoạt động',
+        starvation_prevention: 'Quy tắc thu hồi data',
+        pipeline_stages: 'Cấu hình Pipeline',
+        duplicate_filter: 'Bộ lọc trùng',
+        blacklist: 'Danh sách đen',
+        tag_management: 'Quản lý thẻ (Tag)',
+        legacy_mapping: 'Mapping dữ liệu cũ',
+        commission_shares: 'Chia sẻ hoa hồng',
+        security_timers: 'Đồng hồ bảo mật',
+        capi_settings: 'Cài đặt CAPI',
+        gemini_ai: 'Cấu hình Gemini AI',
+        approval_matrix: 'Ma trận phê duyệt',
+        lead_scoring: 'Quy tắc Lead Scoring',
+        company_info: 'Thông tin Công ty'
+      };
+      const currentTabLabel = tabLabels[activeTab] || 'Cài đặt hệ thống';
+
+      if (json.success) {
+        toast.success(t('Đã lưu cấu hình "{tabName}" thành công!').replace('{tabName}', currentTabLabel));
+      } else {
+        toast.error(t('Lỗi khi lưu cấu hình "{tabName}". Vui lòng thử lại.').replace('{tabName}', currentTabLabel));
+      }
+    } catch (err: any) {
+      const tabLabels: Record<string, string> = {
+        business_limits: 'Giới hạn & Bảo mật',
+        time_schedule: 'Lịch hoạt động',
+        starvation_prevention: 'Quy tắc thu hồi data',
+        pipeline_stages: 'Cấu hình Pipeline',
+        duplicate_filter: 'Bộ lọc trùng',
+        blacklist: 'Danh sách đen',
+        tag_management: 'Quản lý thẻ (Tag)',
+        legacy_mapping: 'Mapping dữ liệu cũ',
+        commission_shares: 'Chia sẻ hoa hồng',
+        security_timers: 'Đồng hồ bảo mật',
+        capi_settings: 'Cài đặt CAPI',
+        gemini_ai: 'Cấu hình Gemini AI',
+        approval_matrix: 'Ma trận phê duyệt',
+        company_info: 'Thông tin Công ty'
+      };
+      const currentTabLabel = tabLabels[activeTab] || 'Cài đặt hệ thống';
+      toast.error(t('Không thể kết nối đến máy chủ để lưu cấu hình "{tabName}": ').replace('{tabName}', currentTabLabel) + (err.message || ''));
+    }
+    setSaving(false);
+  };
+
+
+  const handleTestEmail = async () => {
+    if (!testEmail) return toast.error(t("Vui lòng nhập Email người nhận test."));
+    setTesting(true);
+    try {
+      const json = await fetchAPI('test_email', {
+        method: 'POST',
+        body: JSON.stringify({ email: testEmail, type: testType })
+      });
+      if (json.success) toast.success(t("Gửi mail test thành công! Vui lòng kiểm tra hộp thư đến."));
+      else toast.error(t("Gửi mail thất bại. Vui lòng kiểm tra lại cấu hình SMTP/AppScript."));
+    } catch {
+      toast.error(t("Lỗi kết nối khi gửi mail test"));
+    }
+    setTesting(false);
+  };
+
+
+  const providerOptions = [
+    { value: 'appscript', label: t('Google Apps Script (Miễn phí, nên dùng nếu dưới 500 mail/ngày)') },
+    { value: 'ses', label: t('Amazon SES (Chuyên nghiệp, SMTP)') }
+  ];
+
+  const roundOptions = [
+    { value: 'all', label: t('Tất cả các vòng'), icon: <Zap size={14} style={{ color: 'var(--color-primary)' }} /> },
+    ...rounds.map(r => ({
+      value: Number(r.id),
+      label: r.round_name,
+      icon: <Clock size={14} style={{ color: 'var(--color-text-muted)' }} />,
+      disabled: Number(r.is_active) !== 1,
+      disabledType: 'round' as const
+    }))
+  ];
+
+  const saleOptions = [
+    { value: 'all', label: t('Tất cả Salepersons'), icon: <Users size={14} style={{ color: 'var(--color-primary)' }} /> },
+    ...consultants.map(c => ({
+      value: Number(c.id),
+      label: c.name + (c.status === 'leave' ? ` (${t('Nghỉ phép')})` : Number(c.vacation_mode) === 1 ? ` (${t('Tạm ngưng')})` : c.status === 'inactive' ? ` (${t('Nghỉ việc')})` : ''),
+      icon: <Users size={14} style={{ color: 'var(--color-text-muted)' }} />,
+      avatar: c.avatar,
+      disabled: c.status !== 'active' || Number(c.vacation_mode) === 1,
+      disabledType: 'sale' as const
+    }))
+  ];
+
+  const connectionOptions = [
+    { value: 'all', label: t('Tất cả các nguồn'), icon: <Database size={14} style={{ color: 'var(--color-primary)' }} /> },
+    ...connections.map(conn => ({
+      value: Number(conn.id),
+      label: conn.sheet_name,
+      icon: <Database size={14} style={{ color: 'var(--color-text-muted)' }} />
+    }))
+  ];
+
+  const broadcastExclusionOptions = [
+    // 1. Pipeline Statuses
+    ...pipelineStatusHierarchy.map(status => ({
+      value: status,
+      label: `${t('Trạng thái')}: ${t(pipelineStatusLabels[status] || status)}`,
+      icon: <Layers size={14} style={{ color: '#3b82f6' }} />
+    })),
+    ...(!pipelineStatusHierarchy.includes('not_lead') ? [{
+      value: 'not_lead',
+      label: `${t('Trạng thái')}: ${t('Không phải lead')}`,
+      icon: <Layers size={14} style={{ color: '#ef4444' }} />
+    }] : []),
+    // 2. Tags
+    ...tags.map(tag => ({
+      value: tag.name,
+      label: `${t('Thẻ')}: ${tag.name}`,
+      icon: <Tag size={14} style={{ color: tag.color || '#6366f1' }} />
+    }))
+  ];
+
+  const currentExclusionArr = broadcastExclusionRules 
+    ? broadcastExclusionRules.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
+  
+  currentExclusionArr.forEach(val => {
+    if (!broadcastExclusionOptions.some(o => o.value === val)) {
+      broadcastExclusionOptions.push({
+        value: val,
+        label: `${t('Khác')}: ${val}`,
+        icon: <Shield size={14} style={{ color: '#94a3b8' }} />
+      });
+    }
+  });
+
+  const processUploadedFile = async (file: File) => {
+    if (!file) return;
+    setLocalFile(file);
+    const XLSX = await import('xlsx');
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        if (data.length > 0) {
+          const fileHeaders = data[0].map(h => String(h || '').trim());
+          setHeaders(fileHeaders);
+
+          // Find default columns by heuristic names
+          const phoneIdx = fileHeaders.findIndex(h => /sđt|phone|điện thoại|sdt/i.test(h));
+          const emailIdx = fileHeaders.findIndex(h => /email|mail/i.test(h));
+          const nameIdx = fileHeaders.findIndex(h => /tên|name|họ tên/i.test(h));
+          const dateIdx = fileHeaders.findIndex(h => /ngày|date|time|ngày tạo|ngày đăng ký|created_at/i.test(h));
+          const salepersonIdx = fileHeaders.findIndex(h => /sale|nv|nhân viên|phụ trách|salesperson|assigned|owner/i.test(h));
+
+          if (phoneIdx !== -1) setPhoneCol(fileHeaders[phoneIdx]);
+          if (emailIdx !== -1) setEmailCol(fileHeaders[emailIdx]);
+          if (nameIdx !== -1) setNameCol(fileHeaders[nameIdx]);
+          if (dateIdx !== -1) setDateCol(fileHeaders[dateIdx]);
+          if (salepersonIdx !== -1) setSalepersonCol(fileHeaders[salepersonIdx]);
+
+          // Parse rows
+          const rows: any[] = [];
+          for (let i = 1; i < data.length; i++) {
+            const rowArr = data[i];
+            if (!rowArr || rowArr.length === 0 || rowArr.every(cell => cell === null || cell === undefined || cell === '')) continue;
+            const rowObj: Record<string, any> = {};
+            fileHeaders.forEach((h, idx) => {
+              rowObj[h] = rowArr[idx] !== undefined ? String(rowArr[idx]).trim() : '';
+            });
+            rows.push(rowObj);
+          }
+          setLocalRows(rows);
+          toast.success(t('Đã đọc thành công {count} dòng từ file.').replace('{count}', String(rows.length)));
+        } else {
+          toast.error(t("File rỗng."));
+        }
+      } catch (err: any) {
+        toast.error(t("Không thể đọc file: ") + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processUploadedFile(file);
+  };
+
+  const handleFileDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        processUploadedFile(file);
+      } else {
+        toast.error(t("Vui lòng tải lên file Excel hoặc CSV (.xlsx, .xls, .csv)"));
+      }
+    }
+  };
+
+  const handleBlacklistUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const XLSX = await import('xlsx');
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        if (data.length > 0) {
+          const foundContacts: string[] = [];
+          
+          data.forEach(row => {
+            if (!row || !Array.isArray(row)) return;
+            row.forEach(cell => {
+              if (cell === null || cell === undefined) return;
+              const val = String(cell).trim();
+              if (!val) return;
+              
+              if (val.includes('@') && /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(val)) {
+                foundContacts.push(val);
+              } else {
+                const cleanedPhone = val.replace(/[\s.()-]/g, '');
+                if (/^\+?\d{8,15}$/.test(cleanedPhone)) {
+                  foundContacts.push(cleanedPhone);
+                }
+              }
+            });
+          });
+
+          if (foundContacts.length === 0) {
+            toast.error(t("Không tìm thấy số điện thoại hoặc email hợp lệ nào trong file."));
+            return;
+          }
+
+          const currentContacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
+          const newContactsList = [...currentContacts];
+          let addedCount = 0;
+          
+          foundContacts.forEach(c => {
+            if (!newContactsList.includes(c)) {
+              newContactsList.push(c);
+              addedCount++;
+            }
+          });
+
+          setExclusionContacts(newContactsList.join(', '));
+          toast.success(t('Đã thêm thành công {count} liên hệ rác mới vào danh sách đen!').replace('{count}', String(addedCount)));
+        } else {
+          toast.error(t("File rỗng."));
+        }
+      } catch (err: any) {
+        toast.error(t("Lỗi khi đọc file: ") + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const handleRunBatchCheck = async () => {
+    setCheckedResults([]);
+    setResultsPage(1);
+
+    if (selectedSheetId === 'local') {
+      if (localRows.length === 0) {
+        toast.error(t("Vui lòng tải lên file Excel hoặc CSV!"));
+        return;
+      }
+      if (!phoneCol && !emailCol) {
+        toast.error(t("Vui lòng chọn ít nhất cột Số điện thoại hoặc Email để lọc trùng!"));
+        return;
+      }
+
+      setChecking(true);
+      try {
+        const mappedLeads = localRows.map(row => ({
+          phone: phoneCol ? String(row[phoneCol] || '').trim() : '',
+          email: emailCol ? String(row[emailCol] || '').trim() : '',
+          name: nameCol ? String(row[nameCol] || '').trim() : ''
+        }));
+
+        // Chunk requests of 200 items to prevent gate timeout
+        const chunkSize = 200;
+        let allResults: any[] = [];
+        for (let i = 0; i < mappedLeads.length; i += chunkSize) {
+          const chunk = mappedLeads.slice(i, i + chunkSize);
+          const res = await fetchAPI('batch_check_duplicates', {
+            method: 'POST',
+            body: JSON.stringify({ leads: chunk })
+          });
+          if (res.success) {
+            allResults = [...allResults, ...res.results];
+          } else {
+            throw new Error(res.message || t("Lỗi kiểm tra dữ liệu"));
+          }
+        }
+        setCheckedResults(allResults);
+        setImportSubTab('list');
+        toast.success(t('Đã hoàn tất lọc trùng {count} dòng.').replace('{count}', String(allResults.length)));
+      } catch (err: any) {
+        toast.error(t("Lỗi lọc trùng: ") + err.message);
+      }
+      setChecking(false);
+    } else {
+      setChecking(true);
+      try {
+        const res = await fetchAPI('check_sheet_duplicates', {
+          method: 'POST',
+          body: JSON.stringify({ connection_id: Number(selectedSheetId) })
+        });
+        if (res.success) {
+          setCheckedResults(res.results);
+          setImportSubTab('list');
+          toast.success(t('Đã hoàn tất lọc trùng {count} dòng từ Google Sheet.').replace('{count}', String(res.results.length)));
+        } else {
+          toast.error(res.message || t("Lỗi khi tải và kiểm tra dữ liệu Google Sheet."));
+        }
+      } catch (err: any) {
+        toast.error(t("Lỗi: ") + err.message);
+      }
+      setChecking(false);
+    }
+  };
+
+  const handleImportLeads = () => {
+    if (selectedSheetId !== 'local') {
+      toast.error(t("Tính năng nhập dữ liệu trực tiếp hiện tại chỉ áp dụng khi tải file Excel hoặc CSV từ máy tính."));
+      return;
+    }
+    if (localRows.length === 0) {
+      toast.error(t("Vui lòng tải lên file Excel hoặc CSV!"));
+      return;
+    }
+    if (!phoneCol && !emailCol) {
+      toast.error(t("Vui lòng chọn ít nhất cột Số điện thoại hoặc Email để lọc trùng và nhập liệu!"));
+      return;
+    }
+    setConfirmImportOpen(true);
+  };
+
+  const executeImportLeads = async () => {
+    setConfirmImportOpen(false);
+    setImporting(true);
+    try {
+      const mappedLeads = localRows.map(row => ({
+        phone: phoneCol ? String(row[phoneCol] || '').trim() : '',
+        email: emailCol ? String(row[emailCol] || '').trim() : '',
+        name: nameCol ? String(row[nameCol] || '').trim() : '',
+        date: dateCol ? String(row[dateCol] || '').trim() : '',
+        saleperson: salepersonCol ? String(row[salepersonCol] || '').trim() : ''
+      }));
+
+      const chunkSize = 200;
+      let totalNew = 0;
+      let totalDup = 0;
+      let totalImported = 0;
+
+      for (let i = 0; i < mappedLeads.length; i += chunkSize) {
+        const chunk = mappedLeads.slice(i, i + chunkSize);
+        const res = await fetchAPI('batch_import_leads', {
+          method: 'POST',
+          body: JSON.stringify({
+            leads: chunk,
+            is_silent: 1,
+            sync_saleperson: 0
+          })
+        });
+        if (res.success) {
+          totalNew += res.new_count || 0;
+          totalDup += res.duplicate_count || 0;
+          totalImported += res.imported_count || 0;
+        } else {
+          throw new Error(res.message || t("Lỗi nhập dữ liệu"));
+        }
+      }
+
+      toast.success(t('Nhập dữ liệu thành công! Đã xử lý {total} dòng ({newCount} lead mới, {dupCount} lead trùng).').replace('{total}', String(totalImported)).replace('{newCount}', String(totalNew)).replace('{dupCount}', String(totalDup)));
+
+      // Clear file state, results state and show the list sub-tab with refreshed history
+      setCheckedResults([]);
+      setLocalFile(null);
+      setLocalRows([]);
+      setHeaders([]);
+      setPhoneCol('');
+      setEmailCol('');
+      setNameCol('');
+      setDateCol('');
+      setSalepersonCol('');
+      setImportSubTab('list');
+      setHistorySearchInput('');
+      setHistorySearch('');
+      setHistoryPage(1);
+      await fetchImportHistory(1, '');
+    } catch (err: any) {
+      toast.error(t("Lỗi nhập dữ liệu: ") + err.message);
+    }
+    setImporting(false);
+  };
+
+  const handleExportResults = async () => {
+    if (!checkedResults || checkedResults.length === 0) return;
+    const XLSX = await import('xlsx');
+
+    // Combine original rows with checking results
+    const exportData = checkedResults.map((res, idx) => {
+      const original = selectedSheetId === 'local' ? (localRows[idx] || {}) : { [t('Họ và tên')]: res.name, [t('Số điện thoại')]: res.phone, [t('Email')]: res.email };
+      return {
+        ...original,
+        [t('Trạng thái CRM')]: res.has_record ? t('TRÙNG LẶP') : t('MỚI HOÀN TOÀN'),
+        [t('Sale cũ sở hữu')]: res.consultant_name || '',
+        [t('Trạng thái Sale cũ')]: res.consultant_status === 'active' ? t('Đang hoạt động') : (res.consultant_status === 'leave' ? t('Nghỉ phép') : t('Ngưng hoạt động')),
+        [t('Thời gian tương tác cuối')]: res.last_interaction_date || '',
+        [t('Số tháng kể từ tương tác cuối')]: res.months_since_last_interaction !== null ? Number(res.months_since_last_interaction).toFixed(1) : ''
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, t("Kết quả lọc trùng"));
+    XLSX.writeFile(workbook, `Ket_qua_loc_trung_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success(t("Đã xuất file kết quả lọc trùng thành công!"));
+  };
+
+  const parseSecurityTimer = (val: string) => {
+    const match = (val || '').match(/^\+?(\d+)\s*(\w+)/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      let unit = match[2].toLowerCase();
+      if (unit === 'day') unit = 'days';
+      if (unit === 'hour') unit = 'hours';
+      if (unit === 'month') unit = 'months';
+      if (unit === 'week') unit = 'weeks';
+      return { num, unit };
+    }
+    return { num: 1, unit: 'days' };
+  };
+
+  const renderDurationInput = (
+    label: string, 
+    value: string, 
+    onChange: (newVal: string) => void,
+    helpText: string
+  ) => {
+    const { num, unit } = parseSecurityTimer(value);
+    
+    return (
+      <div>
+        <label className="form-label">{t(label)}</label>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          border: '1px solid var(--color-border)', 
+          borderRadius: 'var(--radius-md)', 
+          background: 'var(--color-surface)',
+          overflow: 'hidden',
+          height: '38px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          transition: 'border-color 0.2s, box-shadow 0.2s'
+        }}>
+          <input
+            type="number"
+            min="1"
+            value={num}
+            onChange={e => {
+              const newNum = Math.max(1, parseInt(e.target.value, 10) || 1);
+              onChange(`+${newNum} ${unit}`);
+            }}
+            style={{ 
+              border: 'none', 
+              outline: 'none',
+              padding: '0 12px', 
+              width: '70px', 
+              textAlign: 'center',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: 'var(--color-text)',
+              background: 'transparent'
+            }}
+          />
+          <div style={{ width: '1px', height: '20px', background: 'var(--color-border)', flexShrink: 0 }} />
+          <select
+            value={unit}
+            onChange={e => {
+              const newUnit = e.target.value;
+              onChange(`+${num} ${newUnit}`);
+            }}
+            style={{ 
+              border: 'none', 
+              outline: 'none',
+              padding: '0 28px 0 12px', 
+              flex: 1,
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              background: 'transparent',
+              appearance: 'none',
+              backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'/%3e%3c/svg%3e")',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+              backgroundSize: '15px'
+            }}
+          >
+            <option value="hours">{t('Giờ (hours)')}</option>
+            <option value="days">{t('Ngày (days)')}</option>
+            <option value="weeks">{t('Tuần (weeks)')}</option>
+            <option value="months">{t('Tháng (months)')}</option>
+          </select>
+        </div>
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block' }}>
+          {t(helpText)}
+        </span>
+      </div>
+    );
+  };
+
+
+  const getTabStyle = (tab: string) => ({
+    padding: '10px 14px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    background: activeTab === tab ? 'var(--color-bg)' : 'transparent',
+    color: activeTab === tab ? 'var(--color-text)' : 'var(--color-text-muted)',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: 'none',
+    flexShrink: 0,
+    position: 'relative' as const,
+    outline: 'none',
+    boxShadow: 'none',
+    userSelect: 'none' as const,
+    width: '100%',
+    textAlign: 'left' as const,
+    paddingLeft: '14px'
+  });
+
+  const showGlobalSave = true;
+  const showTestEmailButton = true;
+ 
+  const getTabIconBg = (tab: string) => {
+    const colors: Record<string, string> = {
+      business_limits: '#3b82f6',
+      time_schedule: '#ec4899',
+      fallback: '#f59e0b',
+      starvation_prevention: '#ef4444',
+      pipeline_stages: '#8b5cf6',
+      duplicate_filter: '#10b981',
+      blacklist: '#06b6d4',
+      tag_management: '#6366f1',
+      legacy_mapping: '#14b8a6',
+      error_reasons: '#f43f5e',
+      auto_approve_ticket: '#10b981',
+      email_config: '#0ea5e9',
+      zalo_bot: '#2563eb',
+      telegram_bot: '#0088cc',
+      automated_reports: '#f97316',
+      ai_assistant: '#a855f7',
+      workflow_templates: '#64748b',
+      database_maintenance: '#475569',
+    };
+    return colors[tab] || 'var(--color-primary)';
+  };
+
+  return (
+    <div style={{ padding: isMobile ? '0.5rem 0 1rem 0' : '0.75rem 2rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'fadeIn 0.3s', minWidth: 0 }}>
+      {(!isMobile || activeTab === 'menu') && (
+        <div className="page-header settings-page-header" style={{
+          position: 'sticky',
+          top: '-1.25rem',
+          zIndex: 90,
+          backgroundColor: 'var(--color-bg)',
+          paddingTop: '0.5rem',
+          paddingBottom: '0.75rem',
+          borderBottom: '1px solid var(--color-border)',
+          marginBottom: '0.25rem',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.5rem',
+          width: '100%'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {activeTab === 'database_erd' ? (
+                <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: isMobile ? '1.15rem' : '1.5rem', margin: 0, fontWeight: 800 }}>
+                  <button 
+                    onClick={() => setActiveTab('business_limits')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', fontSize: '1rem', fontWeight: 600, padding: 0 }}
+                  >
+                    <ArrowLeft size={16} /> {t('Quay lại Cài đặt')}
+                  </button>
+                  <span style={{ color: 'var(--color-border)', margin: '0 8px' }}>|</span>
+                  <Settings2 size={isMobile ? 20 : 24} color="var(--color-primary)" /> {t('Sơ đồ ERD trực quan')}
+                </h1>
+              ) : (
+                <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: isMobile ? '1.15rem' : '1.5rem', margin: 0, fontWeight: 800 }}>
+                  <Settings2 size={isMobile ? 20 : 24} color="var(--color-primary)" /> {t('Cài đặt')}
+                </h1>
+              )}
+              {dbVersion && (
+                <span style={{
+                  fontSize: '0.725rem',
+                  fontWeight: 700,
+                  background: 'var(--color-primary-light)',
+                  color: 'var(--color-primary)',
+                  padding: '3px 8px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(163, 20, 34, 0.15)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}>
+                  v{dbVersion}
+                </span>
+              )}
+            </div>
+            {!isMobile && (
+              <p className="page-subtitle" style={{ margin: 0 }}>{t('Cấu hình Email, Webhooks và các tích hợp nâng cao.')}</p>
+            )}
+          </div>
+
+          {/* Settings Search Bar (Desktop & Mobile Header) */}
+          <div style={{ position: 'relative', minWidth: isMobile ? '100%' : '300px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '10px',
+              padding: '6px 12px',
+              gap: '8px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              transition: 'all 0.2s'
+            }}>
+              <Search size={15} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder={t("Tìm kiếm cài đặt... (Ctrl+K)")}
+                value={settingsSearchQuery}
+                onChange={e => setSettingsSearchQuery(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                style={{
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
+                  fontSize: '0.8125rem',
+                  color: 'var(--color-text)',
+                  width: '100%'
+                }}
+              />
+              {settingsSearchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSettingsSearchQuery('')}
+                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
+                >
+                  <X size={14} />
+                </button>
+              ) : (
+                <kbd style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: '4px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>⌘K</kbd>
+              )}
+            </div>
+
+            {/* Live Search Results Dropdown Modal */}
+            {isSearchFocused && settingsSearchQuery.trim() !== '' && (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                right: 0,
+                width: isMobile ? '100%' : '380px',
+                maxHeight: '380px',
+                overflowY: 'auto',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '12px',
+                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.18)',
+                zIndex: 100,
+                padding: '6px'
+              }}>
+                {filteredSearchItems.length > 0 ? (
+                  filteredSearchItems.map(item => (
+                    <div
+                      key={item.id}
+                      onMouseDown={() => {
+                        setActiveTab(item.tab);
+                        setSettingsSearchQuery('');
+                        setIsSearchFocused(false);
+                      }}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px',
+                        transition: 'background 0.15s',
+                        borderBottom: '1px solid var(--color-border-light)'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-primary-light)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                          {item.title}
+                        </span>
+                        <span style={{ fontSize: '0.675rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>
+                          {item.subtab}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', lineHeight: 1.3 }}>
+                        {item.desc}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '16px', textAlign: 'center', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+                    {t('Không tìm thấy cài đặt phù hợp với từ khóa "{query}"').replace('{query}', settingsSearchQuery)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {showTestEmailButton && (
+                <button
+                  className="btn outline"
+                  onClick={() => setShowTestEmailModal(true)}
+                  disabled={loading}
+                  style={{
+                    height: '38px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600
+                  }}
+                >
+                  <Send size={14} />
+                  <span>{t('Gửi Test Email')}</span>
+                </button>
+              )}
+              {showGlobalSave && (
+                <button className="btn primary" onClick={handleSave} disabled={saving || loading}>
+                  {saving ? <Activity size={16} className="spin" /> : <Save size={16} />}
+                  <span>{t('Lưu cấu hình')}</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+ 
+      {/* Mobile Subpage Header (HyperOS style back navigation) */}
+      {isMobile && activeTab !== 'menu' && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--color-border-light)',
+          background: 'var(--color-surface)',
+          position: 'sticky',
+          top: '-1.5rem',
+          zIndex: 99,
+          marginBottom: '1.25rem',
+          marginTop: '-1.5rem',
+          marginLeft: '-1.5rem',
+          marginRight: '-1.5rem',
+          width: 'calc(100% + 3rem)',
+          boxSizing: 'border-box',
+          borderRadius: '0 0 16px 16px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
+        }}>
+          <button 
+            onClick={() => setActiveTab('menu')}
+            className="os-header-circle-btn"
+            style={{
+              width: '36px',
+              height: '36px',
+              minWidth: '36px',
+              minHeight: '36px',
+              maxWidth: '36px',
+              maxHeight: '36px',
+              padding: 0,
+              borderRadius: '50%',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              border: '1px solid var(--color-border-light)',
+              background: 'var(--color-bg)',
+              color: 'var(--color-primary)',
+              cursor: 'pointer',
+              outline: 'none',
+              flexShrink: 0
+            }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <span style={{ 
+            fontWeight: 800, 
+            fontSize: '0.8rem', 
+            color: 'var(--color-text)', 
+            maxWidth: '180px', 
+            whiteSpace: 'nowrap', 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis',
+            textAlign: 'center',
+            flex: 1,
+            margin: '0 10px'
+          }}>
+            {tabOptions.find(t => t.value === activeTab)?.label}
+          </span>
+          <button 
+            onClick={handleSave} 
+            disabled={saving || loading}
+            className="os-header-circle-btn primary"
+            style={{
+              width: '36px',
+              height: '36px',
+              minWidth: '36px',
+              minHeight: '36px',
+              maxWidth: '36px',
+              maxHeight: '36px',
+              padding: 0,
+              borderRadius: '50%',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              background: 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
+              cursor: 'pointer',
+              outline: 'none',
+              flexShrink: 0
+            }}
+          >
+            {saving ? <Activity size={16} className="spin" /> : <Save size={16} />}
+          </button>
+        </div>
+      )}
+ 
+      {/* Mobile Category List Group (HyperOS Settings Style) */}
+      <AnimatePresence mode="wait">
+        {isMobile && activeTab === 'menu' && (
+          <motion.div 
+            key="os-menu"
+            initial={{ x: '-12%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '-12%', opacity: 0 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 240, mass: 0.8 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}
+          >
+            {categories.map((category, catIdx) => (
+              <div key={`os-cat-${catIdx}`}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', paddingLeft: '8px' }}>
+                  {category.title}
+                </div>
+                <div className="os-list-group">
+                  {category.items.map((item) => (
+                    <button 
+                      key={`os-item-${item.value}`}
+                      className="os-list-item"
+                      onClick={() => setActiveTab(item.value)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
+                        <div className="os-list-icon" style={{ backgroundColor: getTabIconBg(item.value), color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', borderRadius: '8px', marginLeft: '14px', marginRight: '14px', flexShrink: 0 }}>
+                          {React.cloneElement(item.icon as any, { size: 14, color: '#ffffff', strokeWidth: 2.5 })}
+                        </div>
+                        <div className="os-list-content">
+                          <div className="os-list-title" style={{ fontSize: '0.9375rem', fontWeight: 500, color: 'var(--color-text)' }}>{item.label}</div>
+                        </div>
+                      </div>
+                      <div className="os-list-chevron" style={{ marginRight: '8px' }}>
+                        <ChevronRight size={16} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start', marginTop: 0 }}>
+        {/* Left Sidebar (Desktop only) */}
+        <div 
+          className="hide-on-mobile no-scrollbar" 
+          style={{ 
+            width: '280px', 
+            flexShrink: 0, 
+            display: activeTab === 'database_erd' ? 'none' : 'flex', 
+            flexDirection: 'column', 
+            gap: '1.25rem',
+            position: 'sticky',
+            top: '6rem',
+            maxHeight: 'calc(100vh - 10rem)',
+            overflowY: 'auto',
+            padding: '1.5rem 1rem',
+            background: 'var(--color-surface)',
+            borderRadius: '16px',
+            border: '1px solid var(--color-border)',
+            boxShadow: 'var(--shadow-sm)'
+          }}
+        >
+          {categories.map((category, catIndex) => (
+            <div 
+              key={catIndex} 
+              style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '4px',
+                borderTop: catIndex > 0 ? '1px solid var(--color-border-light)' : 'none',
+                paddingTop: catIndex > 0 ? '0.75rem' : '0',
+                marginTop: catIndex > 0 ? '0.5rem' : '0'
+              }}
+            >
+              <h4 style={{ 
+                fontSize: '0.58rem', 
+                fontWeight: 900, 
+                color: 'var(--color-text-muted)', 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.08em', 
+                marginBottom: '0.25rem', 
+                paddingLeft: '8px' 
+              }}>
+                {category.title}
+              </h4>
+              {category.items.map((item) => (
+                <button
+                  key={item.value}
+                  onClick={() => setActiveTab(item.value)}
+                  style={getTabStyle(item.value)}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative', zIndex: 2, width: '100%', minWidth: 0 }}>
+                    <div style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      backgroundColor: getTabIconBg(item.value),
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {React.cloneElement(item.icon as any, { size: 12, color: 'white' })}
+                    </div>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.label}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Right Content Area */}
+        <AnimatePresence mode="wait">
+          {(!isMobile || activeTab !== 'menu') && (
+            <motion.div
+              key={`os-pane-${activeTab}`}
+              initial={isMobile ? { x: '100%', opacity: 0.8 } : { opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={isMobile ? { x: '100%', opacity: 0.8 } : { opacity: 0 }}
+              transition={isMobile ? { type: 'spring' as const, damping: 28, stiffness: 240, mass: 0.8 } : { type: 'spring' as const, damping: 25, stiffness: 200 }}
+              style={{ flex: 1, minWidth: 0, width: '100%' }}
+              className="subtab-enter-active"
+            >
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <CardSkeleton height={220} />
+              <CardSkeleton height={160} />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+            {/* AI Assistant Tab Content */}
+            <div style={{ display: activeTab === 'ai_assistant' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 6, borderRadius: 6 }}>
+                    <Zap size={16} />
+                  </span>
+                  {t('Cấu hình Trợ lý AI (Gemini Key)')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  {t('Cấu hình khóa kết nối Google Gemini API để Trợ lý AI Chatbot có thể đọc dữ liệu thống kê trực tiếp và trả lời một cách thông minh, linh hoạt cho người dùng bằng mô hình')} <strong>Gemini 2.5 Flash Lite</strong>.
+                </p>
+
+                {renderHelpBanner('ai_assistant', t('Giải thích cơ chế hoạt động của Trợ lý AI'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Mô hình mặc định:')}</strong> {t('Sử dụng gemini-2.5-flash hoặc gemini-2.5-flash-lite để xử lý tốc độ cao và chi phí tối ưu.')}</li>
+                    <li><strong>{t('Tác vụ:')}</strong> {t('AI sẽ tự động đọc, chấm điểm tiềm năng (Scoring), phân tích lịch sử hội thoại, và gợi ý kịch bản/nội dung email/zalo tiếp theo cho Sale.')}</li>
+                    <li><strong>{t('Bảo mật:')}</strong> {t('Khóa API của bạn được mã hóa và lưu trữ an toàn trong DB của hệ thống.')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-light)' }}>
+                    {t('Gemini API Key')}
+                  </label>
+                  <input
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={e => setGeminiApiKey(e.target.value)}
+                    placeholder={t("Nhập API Key của Google Gemini (AIzaSy...)")}
+                    autoComplete="new-password"
+                    style={{
+                      padding: '10px 12px',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      outline: 'none',
+                      background: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      width: '100%'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    {t('Khóa API này được lưu trữ an toàn ở phía máy chủ và được sử dụng làm thông tin xác thực để gửi truy vấn trực tiếp đến Google Gemini.')}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-light)' }}>
+                    {t('Mô hình AI sử dụng (AI Model)')}
+                  </label>
+                  <input
+                    type="text"
+                    value={geminiModel}
+                    onChange={e => setGeminiModel(e.target.value)}
+                    placeholder="gemini-2.5-flash"
+                    style={{
+                      padding: '10px 12px',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      outline: 'none',
+                      background: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      width: '100%'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    {t('Mặc định sử dụng')} <strong>gemini-2.5-flash</strong> {t('(hoặc bạn có thể chỉ định mô hình tương thích khác như')} <code>gemini-2.5-flash-lite</code> {t('nếu cần).')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Meta Conversion API (CAPI) Integration */}
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: '#3b5998', color: 'white', padding: 6, borderRadius: 6 }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
+                  </span>
+                  {t('Tích hợp Meta Conversion API (CAPI)')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  {t('Cấu hình ánh xạ các sự kiện Conversions API của Meta để gửi tín hiệu hành vi khách hàng về Pixel của Facebook.')}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-light)' }}>
+                    {t('Ánh xạ Trạng thái & Sự kiện Meta CAPI')}
+                  </label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
+                    {t('Chỉ định sự kiện Standard Meta CAPI tương ứng sẽ tự động kích hoạt khi khách hàng chuyển sang từng trạng thái phễu.')}
+                  </p>
+                  
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '10px', 
+                    border: '1px solid var(--color-border-light)', 
+                    borderRadius: '8px', 
+                    padding: '12px', 
+                    background: 'rgba(0, 0, 0, 0.01)',
+                    maxWidth: '600px'
+                  }}>
+                    {((Array.isArray(pipelineStatusHierarchy) && pipelineStatusHierarchy.length > 0) 
+                      ? pipelineStatusHierarchy 
+                      : ['chua_xac_dinh', 'quan_tam', 'dong_y_gap', 'da_gap', 'booking', 'dat_coc', 'dong_deal', 'not_lead']
+                    ).map(status => (
+                      <div key={status} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                          {pipelineStatusLabels[status] || status}
+                        </span>
+                        <CustomSelect
+                          options={capiEventOptions}
+                          value={capiMap[status] || 'Skip'}
+                          onChange={val => setCapiMap(prev => ({ ...prev, [status]: val }))}
+                          width="240px"
+                          placeholder={t('Chọn sự kiện...')}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '1rem', borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem' }}>
+                  <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text-light)' }}>
+                    {t('Ngưỡng thời gian phát hiện tắc nghẽn CAPI')}
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '200px' }}>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ paddingRight: '3.5rem' }}
+                      value={capiStuckAlertThresholdHours}
+                      onChange={e => setCapiStuckAlertThresholdHours(Number(e.target.value))}
+                      min={1}
+                    />
+                    <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('giờ')}</span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    {t('Thời gian tối đa nếu có sự kiện CAPI lỗi không đồng bộ thành công về Meta quá ngưỡng này, hệ thống sẽ gửi cảnh báo đỏ cho Ban quản trị (Mặc định: 24 giờ).')}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
+            {/* ===== TAB: WORKFLOW TEMPLATES ===== */}
+            <div style={{ display: activeTab === 'workflow_templates' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: isMobile ? 'column' : 'row',
+                  justifyContent: 'space-between', 
+                  alignItems: isMobile ? 'flex-start' : 'center', 
+                  gap: '12px', 
+                  marginBottom: '1rem' 
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Activity size={18} color="var(--color-primary)" />
+                      {t('Quy trình & Mẫu công việc tự động')}
+                    </h3>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                      {t('Cấu hình tự động tạo và gán công việc cho nhân viên khi Khách hàng tiềm năng chuyển sang một giai đoạn mới.')}
+                    </p>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="btn primary sm" 
+                    onClick={() => {
+                      setEditingTemplate(null);
+                      setWorkflowForm({
+                        title: '',
+                        description: '',
+                        stage_id: pipelineStages[0]?.id || '',
+                        team_id: '',
+                        priority: 'medium',
+                        due_days_offset: 1,
+                        require_approval: 0,
+                        is_active: 1
+                      });
+                      setShowWorkflowModal(true);
+                    }}
+                    style={{
+                      width: isMobile ? '100%' : 'auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <Plus size={14} /> {t('Thêm mẫu mới')}
+                  </button>
+                </div>
+
+                {renderHelpBanner('workflow_templates', t('Giải thích cơ chế Quy trình tự động'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Kích hoạt chuyển trạng thái:')}</strong> {t('Khi trạng thái (giai đoạn) của KHTN/Doanh nghiệp thay đổi khớp với giai đoạn của mẫu quy trình.')}</li>
+                    <li><strong>{t('Tự động tạo Task:')}</strong> {t('Hệ thống sẽ tạo ra checklist các công việc và tự động gán cho Sale đang phụ trách lead đó.')}</li>
+                    <li><strong>{t('Thời hạn (SLA):')}</strong> {t('Bạn có thể đặt số giờ/ngày phải hoàn thành kể từ lúc tạo, quá hạn sẽ gửi cảnh báo tới Manager.')}</li>
+                  </ul>
+                ))}
+
+                {loadingWorkflow ? (
+                  <div style={{ textAlign: 'center', padding: '2rem' }}>
+                    <RefreshCw className="spin" size={24} style={{ color: 'var(--color-primary)' }} />
+                  </div>
+                ) : workflowTemplates.length === 0 ? (
+                  <div className="card-panel" style={{ textAlign: 'center', padding: '3rem 2rem', border: '2px dashed var(--color-border-light)' }}>
+                    <Activity size={32} style={{ color: 'var(--color-border)', margin: '0 auto 1rem', opacity: 0.5 }} />
+                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                      {t('Chưa có mẫu quy trình công việc nào. Bấm nút phía trên để tạo mẫu mới!')}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="responsive-table-wrap" style={{ border: '1px solid var(--color-border)', borderRadius: '12px', background: 'var(--color-surface)' }}>
+                    <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Tiêu đề công việc')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Giai đoạn kích hoạt')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Áp dụng cho Nhóm')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Độ ưu tiên')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Hạn xử lý')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Yêu cầu duyệt')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700 }}>{t('Trạng thái')}</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{t('Thao tác')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workflowTemplates.map(tpl => (
+                          <tr key={tpl.id} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ fontWeight: 600 }}>{tpl.title}</div>
+                              {tpl.description && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{tpl.description}</div>}
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: 'rgba(16,185,129,0.08)', color: '#059669' }}>
+                                {tpl.stage_name || t('Không xác định')}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', color: 'var(--color-text-light)' }}>
+                              {tpl.team_name || <em>{t('Tất cả')}</em>}
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span className={`badge ${tpl.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.7rem' }}>
+                                {tpl.priority === 'high' ? t('Cao') : t('Trung bình')}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', fontWeight: 600 }}>
+                              {tpl.due_days_offset} {t('ngày')}
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              {tpl.require_approval ? (
+                                <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4, background: 'rgba(239,68,68,0.08)', color: 'var(--color-danger)', fontWeight: 600 }}>
+                                  {t('Cần duyệt')}
+                                </span>
+                              ) : <span>-</span>}
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: 4, background: tpl.is_active ? 'rgba(16,185,129,0.08)' : 'rgba(100,116,139,0.08)', color: tpl.is_active ? '#059669' : 'var(--color-text-muted)', fontWeight: 600 }}>
+                                {tpl.is_active ? t('Kích hoạt') : t('Tắt')}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                                <button 
+                                  type="button" 
+                                  className="btn-icon sm" 
+                                  onClick={() => {
+                                    setEditingTemplate(tpl);
+                                    setWorkflowForm({
+                                      title: tpl.title,
+                                      description: tpl.description || '',
+                                      stage_id: String(tpl.stage_id),
+                                      team_id: tpl.team_id ? String(tpl.team_id) : '',
+                                      priority: tpl.priority,
+                                      due_days_offset: tpl.due_days_offset,
+                                      require_approval: tpl.require_approval,
+                                      is_active: tpl.is_active
+                                    });
+                                    setShowWorkflowModal(true);
+                                  }}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button 
+                                  type="button" 
+                                  className="btn-icon sm text-danger" 
+                                  onClick={() => handleDeleteWorkflowTemplate(tpl.id)}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ===== TAB: TAGS MANAGEMENT ===== */}
+            <div style={{ display: activeTab === 'tag_management' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: isMobile ? 'column' : 'row',
+                  justifyContent: 'space-between', 
+                  alignItems: isMobile ? 'flex-start' : 'center', 
+                  gap: isMobile ? '12px' : '0',
+                  marginBottom: '1rem' 
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ display: 'inline-flex', background: 'rgba(163,20,34,0.1)', color: 'var(--color-primary)', padding: 8, borderRadius: 10 }}>
+                        <Tag size={20} />
+                      </span>
+                      {t('Quản lý Thẻ phân loại (Tags)')}
+                    </h3>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
+                      {t('Tạo và quản lý các nhãn phân loại màu sắc dùng chung cho Khách hàng Tiềm năng và Doanh nghiệp.')}
+                    </p>
+                  </div>
+                  <button 
+                    className="btn primary" 
+                    onClick={openAddTagModal} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      gap: 8,
+                      width: isMobile ? '100%' : 'auto' 
+                    }}
+                  >
+                    <Plus size={16} /> {t('Thêm Tag Mới')}
+                  </button>
+                </div>
+
+                {renderHelpBanner('tag_management', t('Giải thích cơ chế Phân loại bằng Thẻ (Tags)'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Nhãn màu sắc:')}</strong> {t('Giúp Sale và Admin nhận diện trực quan phân loại khách hàng (ví dụ: VIP, Tiềm năng cao, Cần gọi lại).')}</li>
+                    <li><strong>{t('Sử dụng đa mục tiêu:')}</strong> {t('Thẻ có thể được gắn đồng thời cho Khách hàng Cá nhân (Person) hoặc Doanh nghiệp (Company).')}</li>
+                    <li><strong>{t('Bộ lọc nhanh:')}</strong> {t('Nhấp vào thẻ trên bàn làm việc/danh sách để lọc nhanh tất cả các bản ghi có chung nhãn này.')}</li>
+                    <li><strong>{t('Loại trừ Broadcast:')}</strong> {t('Các thẻ phân loại được tạo tại đây có thể được sử dụng làm bộ lọc loại trừ trong mục "Danh sách đen & Loại trừ" để ngăn không gửi tin nhắn tự động hàng loạt.')}</li>
+                  </ul>
+                ))}
+
+                {loadingTags ? (
+                  <TableSkeleton rows={4} cols={5} />
+                ) : tags.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--color-text-muted)' }}>
+                    <Tag size={40} style={{ opacity: 0.3, marginBottom: '1rem' }} />
+                    <p style={{ margin: 0, fontSize: '0.875rem' }}>{t('Chưa có thẻ phân loại nào được tạo. Hãy tạo thẻ đầu tiên để bắt đầu.')}</p>
+                  </div>
+                ) : (
+                  <div className="table-wrap custom-scrollbar" style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-border-light)' }}>
+                          <th style={{ padding: '10px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>{t('Tag')}</th>
+                          <th style={{ padding: '10px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>{t('Màu sắc')}</th>
+                          <th style={{ padding: '10px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'center' }}>{t('Số lượt sử dụng')}</th>
+                          <th style={{ padding: '10px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'center', width: '100px' }}>{t('Thao tác')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tags.map((tag) => (
+                          <tr key={tag.id} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <span style={{ 
+                                background: `${tag.color}15`, 
+                                color: tag.color, 
+                                border: `1px solid ${tag.color}35`, 
+                                padding: '4px 10px', 
+                                borderRadius: '8px', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 700,
+                                display: 'inline-block'
+                              }}>
+                                {tag.name}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', verticalAlign: 'middle' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: tag.color, border: '1px solid rgba(0,0,0,0.1)' }} />
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.8125rem', color: 'var(--color-text)' }}>{tag.color}</span>
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-light)' }}>
+                              {tag.count || 0}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                                <button className="btn-icon" onClick={() => openEditTagModal(tag)} title={t('Sửa')} style={{ color: 'var(--color-text-light)' }}>
+                                  <Edit2 size={14} />
+                                </button>
+                                <button className="btn-icon text-danger" onClick={() => handleDeleteTag(tag.id)} title={t('Xóa')}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ===== TAB: COMPANY INFORMATION ===== */}
+            <div style={{ display: activeTab === 'company_info' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                    {t('Thông tin cấu hình Doanh nghiệp')}
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                    {t('Cấu hình các thông tin chính thức của công ty để tự động in lên tiêu đề phiếu lương, phiếu thưởng của nhân sự.')}
+                  </p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.5rem' }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Tên doanh nghiệp / Công ty')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={companyName}
+                      onChange={e => setCompanyName(e.target.value)}
+                      placeholder={t('Nhập tên đầy đủ (Ví dụ: CÔNG TY CỔ PHẦN CÔNG NGHỆ IDEAS)')}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Mã số thuế (Tax Code)')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={companyTaxId}
+                      onChange={e => setCompanyTaxId(e.target.value)}
+                      placeholder={t('Ví dụ: 0101234567')}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Số điện thoại liên hệ')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={companyPhone}
+                      onChange={e => setCompanyPhone(e.target.value)}
+                      placeholder={t('Ví dụ: 024 1234 5678')}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Đường dẫn Logo (URL Logo)')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={companyLogoUrl}
+                      onChange={e => setCompanyLogoUrl(e.target.value)}
+                      placeholder={t('https://example.com/logo.png')}
+                    />
+                  </div>
+                  <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2' }}>
+                    <label className="form-label" style={{ fontWeight: 600 }}>{t('Địa chỉ trụ sở chính')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={companyAddress}
+                      onChange={e => setCompanyAddress(e.target.value)}
+                      placeholder={t('Số nhà, tên đường, quận/huyện, tỉnh/thành phố...')}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem', borderTop: '1px solid var(--color-border-light)', paddingTop: '1.5rem' }}>
+                  <button 
+                    onClick={handleSave} 
+                    disabled={saving} 
+                    className="btn primary" 
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <Save size={15} />
+                    {saving ? t('Đang lưu...') : t('Lưu cấu hình công ty')}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== TAB: DATABASE MAINTENANCE ===== */}
+            <div style={{ display: activeTab === 'database_maintenance' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ display: 'inline-flex', background: 'rgba(189,29,45,0.1)', color: 'var(--color-primary)', padding: 8, borderRadius: 10 }}>
+                      <Database size={20} />
+                    </span>
+                    {t('Bảo trì & Tối ưu Cơ sở dữ liệu')}
+                  </h3>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
+                    {t('Xem thống kê lưu trữ của các bảng, dọn dẹp dung lượng phân mảnh và kiểm tra tính toàn vẹn của dữ liệu hệ thống.')}
+                  </p>
+
+                  {renderHelpBanner('database_maintenance', t('Giải thích cơ chế Bảo trì Database'), (
+                    <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <li><strong>{t('Dung lượng Overhead (Phân mảnh):')}</strong> {t('Khi dữ liệu bị xóa hoặc cập nhật thường xuyên, MySQL để lại các khoảng trống phân mảnh trên ổ đĩa. Hãy bấm "Tối ưu hóa" để thu hồi dung lượng.')}</li>
+                      <li><strong>{t('Kiểm tra tính toàn vẹn:')}</strong> {t('Kiểm tra các khóa ngoại (Foreign Keys) bị mồ côi hoặc không khớp để dọn sạch dữ liệu rác.')}</li>
+                      <li><strong>{t('Khuyến nghị:')}</strong> {t('Nên chạy bảo trì định kỳ 1 lần/tháng vào ban đêm để tránh ảnh hưởng hiệu năng hệ thống lúc đang chia số.')}</li>
+                    </ul>
+                  ))}
+                </div>
+
+                {/* 1. Quick Stats Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                  <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng số bảng')}</span>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: 'var(--color-text)' }}>{dbTables.length} {t('Bảng')}</h2>
+                  </div>
+                  <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng số dòng')}</span>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: 'var(--color-text)' }}>
+                      {dbTables.reduce((acc, t) => acc + t.rows, 0).toLocaleString()}
+                    </h2>
+                  </div>
+                  <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng dung lượng')}</span>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: 'var(--color-text)' }}>
+                      {(dbTables.reduce((acc, t) => acc + t.data_size + t.index_size, 0) / 1024 / 1024).toFixed(2)} MB
+                    </h2>
+                  </div>
+                  <div className="card-panel" style={{ padding: '1.25rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Dung lượng phân mảnh')}</span>
+                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '6px 0 0', color: dbTables.reduce((acc, t) => acc + t.overhead, 0) > 0 ? 'var(--color-primary)' : '#059669' }}>
+                      {(dbTables.reduce((acc, t) => acc + t.overhead, 0) / 1024 / 1024).toFixed(2)} MB
+                    </h2>
+                  </div>
+                </div>
+
+                {/* 2. Action Toolbar */}
+                <div className="card-panel" style={{ padding: '1.5rem', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, textTransform: 'uppercase', color: 'var(--color-text-light)' }}>{t('Bộ công cụ Bảo trì')}</h4>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={dbActionRunning || loadingDb}
+                      onClick={() => runDbAction('optimize')}
+                      style={{ background: '#BD1D2D', borderColor: '#BD1D2D' }}
+                    >
+                      {dbActionRunning ? <Activity size={16} className="spin" /> : <RefreshCw size={16} />}
+                      {t('Tối ưu hóa bảng')}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn outline"
+                      disabled={dbActionRunning || loadingDb}
+                      onClick={() => runDbAction('clean_orphans')}
+                    >
+                      <Trash2 size={16} />
+                      {t('Dọn bản ghi mồ côi')}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn outline"
+                      disabled={dbActionRunning || loadingDb}
+                      onClick={() => runDbAction('fix_indexes')}
+                    >
+                      <Shield size={16} />
+                      {t('Khôi phục Index')}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn outline"
+                      disabled={dbActionRunning || loadingDb}
+                      onClick={() => runDbAction('run_tests')}
+                      style={{ color: '#059669', borderColor: '#059669' }}
+                    >
+                      <Activity size={16} />
+                      {t('Chạy tự động test')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Log Output Console */}
+                {dbLogs.length > 0 && (
+                  <div style={{ padding: '1.25rem', background: '#0f172a', borderRadius: 12, border: '1px solid #1e293b', fontFamily: 'monospace', fontSize: '0.8125rem', color: '#38bdf8', maxHeight: '250px', overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: '#94a3b8' }}>CONSOLE OUTPUT</span>
+                      <button type="button" onClick={() => setDbLogs([])} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700 }}>[CLEAR LOGS]</button>
+                    </div>
+                    {dbLogs.map((log, idx) => (
+                      <div key={idx} style={{ marginBottom: 4, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                        {log}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 4. Table Size Breakdown */}
+                <div>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '1rem', textTransform: 'uppercase', color: 'var(--color-text-light)' }}>{t('Chi tiết dung lượng các bảng')}</h4>
+                  {loadingDb ? (
+                    <TableSkeleton rows={5} />
+                  ) : (
+                    <div className="table-responsive" style={{ border: '1px solid var(--color-border)', borderRadius: 12, overflow: 'hidden' }}>
+                      <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)' }}>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800 }}>{t('Tên bảng')}</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{t('Số dòng')}</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{t('Dung lượng Data')}</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{t('Dung lượng Index')}</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{t('Phân mảnh (Overhead)')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dbTables.map((tbl) => (
+                            <tr key={tbl.name} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                              <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--color-text)' }}>{tbl.name}</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>{tbl.rows.toLocaleString()}</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>{(tbl.data_size / 1024).toFixed(1)} KB</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right' }}>{(tbl.index_size / 1024).toFixed(1)} KB</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'right', color: tbl.overhead > 0 ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                                {tbl.overhead > 0 ? `${(tbl.overhead / 1024).toFixed(1)} KB` : '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: activeTab === 'legacy_mapping' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {renderHelpBanner('legacy_mapping', t('Giải thích cơ chế Ánh xạ & Import dữ liệu cũ'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Mục đích:')}</strong> {t('Dùng khi bạn muốn chuyển toàn bộ data cũ từ CRM/File Excel của công ty vào hệ thống mà không muốn kích hoạt chia số mới hay gửi tin nhắn SMS/Zalo spam khách hàng.')}</li>
+                    <li><strong>{t('Khớp số cũ:')}</strong> {t('Hệ thống sẽ đối chiếu Số điện thoại/Email để tìm trùng lặp, tự động map Sale cũ đang quản lý khách hàng đó.')}</li>
+                    <li><strong>{t('File mẫu:')}</strong> {t('Vui lòng tải xuống file Excel mẫu, điền đúng cột "Phone", "Email", "Sale_Owner" để hệ thống ánh xạ chuẩn xác.')}</li>
+                  </ul>
+                ))}
+
+                {checkedResults.length > 0 ? (
+                  // Screen 1: Checked Results Table
+                  (() => {
+                    const total = checkedResults.length;
+                    const dupCount = checkedResults.filter(r => r.has_record).length;
+                    const newCount = total - dupCount;
+                    const dupPercent = ((dupCount / total) * 100).toFixed(1);
+                    const newPercent = ((newCount / total) * 100).toFixed(1);
+
+                    const filtered = checkedResults.filter(res => {
+                      if (filterType === 'duplicate' && !res.has_record) return false;
+                      if (filterType === 'new' && res.has_record) return false;
+                      if (searchTerm) {
+                        const search = searchTerm.toLowerCase();
+                        return String(res.phone || '').toLowerCase().includes(search) ||
+                          String(res.email || '').toLowerCase().includes(search) ||
+                          String(res.name || '').toLowerCase().includes(search);
+                      }
+                      return true;
+                    });
+
+                    const pageSize = 50;
+                    const totalPages = Math.ceil(filtered.length / pageSize);
+                    const paginatedResults = filtered.slice((resultsPage - 1) * pageSize, resultsPage * pageSize);
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {/* Results Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
+                          <div>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                              <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}>
+                                <RefreshCw size={16} />
+                              </span>
+                              Kết quả lọc trùng
+                            </h3>
+                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                              Tổng cộng {total} dòng dữ liệu vừa được kiểm tra trùng lặp với hệ thống CRM.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setCheckedResults([]);
+                              setLocalFile(null);
+                              setLocalRows([]);
+                              setImportSubTab('list');
+                            }}
+                            className="btn outline"
+                            style={{ gap: 6, padding: '8px 16px', height: 38, fontWeight: 700, borderColor: '#ef4444', color: '#ef4444' }}
+                          >
+                            ← Quay lại Lịch sử
+                          </button>
+                        </div>
+
+                        {/* Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                          <div style={{ background: 'var(--color-bg)', padding: '1rem', borderRadius: 10, border: '1px solid var(--color-border)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{t('Tổng Data')}</div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text)', marginTop: 4 }}>{total}</div>
+                          </div>
+                          <div style={{ background: 'var(--color-danger-light)', padding: '1rem', borderRadius: 10, border: '1px solid var(--color-danger-light)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-danger)', textTransform: 'uppercase' }}>{t('Trùng CRM')}</div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-danger)', marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                              {dupCount} <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-danger)' }}>({dupPercent}%)</span>
+                            </div>
+                          </div>
+                          <div style={{ background: 'var(--color-success-light)', padding: '1rem', borderRadius: 10, border: '1px solid var(--color-success-light)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-success)', textTransform: 'uppercase' }}>{t('Mới hoàn toàn')}</div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-success)', marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                              {newCount} <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-success)' }}>({newPercent}%)</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Filters */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button type="button" className={`btn ${filterType === 'all' ? 'primary' : 'outline'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', height: 32 }} onClick={() => { setFilterType('all'); setResultsPage(1); }}>Tất cả ({total})</button>
+                            <button type="button" className={`btn ${filterType === 'duplicate' ? 'danger' : 'outline'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', height: 32, background: filterType === 'duplicate' ? 'var(--color-danger)' : '', color: filterType === 'duplicate' ? 'white' : '' }} onClick={() => { setFilterType('duplicate'); setResultsPage(1); }}>Trùng lặp ({dupCount})</button>
+                            <button type="button" className={`btn ${filterType === 'new' ? 'success' : 'outline'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', height: 32, background: filterType === 'new' ? 'var(--color-success)' : '', color: filterType === 'new' ? 'white' : '' }} onClick={() => { setFilterType('new'); setResultsPage(1); }}>Mới ({newCount})</button>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%', maxWidth: '400px', flex: '1 1 300px' }}>
+                            <input className="form-input" placeholder={t("Tìm kiếm theo Tên, SĐT, Email...")} value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setResultsPage(1); }} style={{ height: 34, fontSize: '0.825rem' }} />
+                            <button type="button" className="btn success" style={{ gap: 6, padding: '6px 14px', height: 34, flexShrink: 0, fontWeight: 700 }} onClick={handleExportResults}><Download size={14} /> {t('Xuất File')}</button>
+                          </div>
+                        </div>
+
+                        {/* Table View */}
+                        <div className="responsive-table-wrap" style={{ border: '1px solid var(--color-border)', borderRadius: '12px', overflowX: 'auto', maxHeight: '550px', overflowY: 'auto', background: 'var(--color-surface)' }}>
+                          <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--color-bg)' }}>
+                                <th style={{ ...thStyle, width: '50px' }}>{t('STT')}</th>
+                                <th style={thStyle}>{t('Khách hàng')}</th>
+                                <th style={thStyle}>{t('Liên hệ')}</th>
+                                <th style={thStyle}>{t('Sale Sở Hữu')}</th>
+                                <th style={thStyle}>{t('Tương Tác Cuối')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paginatedResults.length > 0 ? (
+                                paginatedResults.map((item, idx) => {
+                                  const globalIdx = (resultsPage - 1) * pageSize + idx + 1;
+                                  const statusBadge = item.has_record
+                                    ? <span className="badge danger" style={{ fontSize: '0.65rem', padding: '1px 5px' }}>{t('TRÙNG CRM')}</span>
+                                    : <span className="badge success" style={{ fontSize: '0.65rem', padding: '1px 5px' }}>{t('MỚI')}</span>;
+
+                                  let ownerStatusBadge = null;
+                                  if (item.consultant_status) {
+                                    const statusBg = item.consultant_status === 'active' ? 'var(--color-success-light)' : (item.consultant_status === 'leave' ? 'var(--color-warning-light)' : 'var(--color-border)');
+                                    const statusText = item.consultant_status === 'active' ? 'var(--color-success)' : (item.consultant_status === 'leave' ? 'var(--color-warning)' : 'var(--color-text-muted)');
+                                    const statusLabel = item.consultant_status === 'active' ? t('Hoạt động') : (item.consultant_status === 'leave' ? t('Nghỉ phép') : t('Nghỉ việc'));
+                                    ownerStatusBadge = <span style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: 4, background: statusBg, color: statusText, fontWeight: 700, marginLeft: 6 }}>{statusLabel}</span>;
+                                  }
+
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', transition: 'background-color 0.15s' }}>
+                                      <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{globalIdx}</td>
+                                      <td style={{ padding: '10px 16px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                          <Avatar name={item.name || t('Không có tên')} src={item.avatar_url || item.avatar || item.photo} size={32} />
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                            <span style={{ fontWeight: 600 }}>{item.name || <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Chưa cập nhật')}</em>}</span>
+                                            <div>{statusBadge}</div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '10px 16px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                          <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.phone ? maskPhone(item.phone) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{item.email ? maskEmail(item.email) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '10px 16px' }}>
+                                        {item.consultant_name ? (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Avatar src={consultants.find(c => c.name === item.consultant_name)?.avatar || consultants.find(c => c.name === item.consultant_name)?.avatar_url} name={item.consultant_name} size={24} />
+                                            <strong style={{ fontWeight: 600 }}>{item.consultant_name}</strong>
+                                            {ownerStatusBadge}
+                                          </div>
+                                        ) : <span style={{ color: 'var(--color-text-muted)' }}>-</span>}
+                                      </td>
+                                      <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>
+                                        {item.last_interaction_date ? (
+                                          <span>
+                                            {item.last_interaction_date.split(' ')[0]}
+                                            <br /><span style={{ fontSize: '0.75rem' }}>({item.months_since_last_interaction !== null ? Number(item.months_since_last_interaction).toFixed(1) : ''} tháng)</span>
+                                          </span>
+                                        ) : <span>-</span>}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              ) : <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>{t('Không tìm thấy kết quả phù hợp.')}</td></tr>}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination Footer */}
+                        {totalPages > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                            <span style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>
+                              Hiển thị {(resultsPage - 1) * pageSize + 1} - {Math.min(resultsPage * pageSize, filtered.length)} trên {filtered.length} dòng
+                            </span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn outline"
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: 28 }}
+                                disabled={resultsPage === 1}
+                                onClick={() => setResultsPage(p => p - 1)}
+                              >
+                                Trước
+                              </button>
+                              <span style={{ padding: '4px 10px', fontSize: '0.775rem', fontWeight: 600 }}>
+                                Trang {resultsPage} / {totalPages}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn outline"
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: 28 }}
+                                disabled={resultsPage === totalPages}
+                                onClick={() => setResultsPage(p => p + 1)}
+                              >
+                                Sau
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : importSubTab === 'upload' ? (
+                  // Screen 2: Upload / Mapping UI
+                  <>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
+                      <div>
+                        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                          <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}>
+                            <Upload size={16} />
+                          </span>
+                          Nhập dữ liệu mới từ File
+                        </h3>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                          Tải lên file Excel hoặc CSV chứa dữ liệu khách hàng cũ để đồng bộ và lưu vào CRM làm dữ liệu đối chiếu trùng lặp.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setImportSubTab('list');
+                          setLocalFile(null);
+                          setLocalRows([]);
+                        }}
+                        className="btn outline"
+                        style={{ gap: 6, padding: '8px 16px', height: 38, fontWeight: 700 }}
+                      >
+                        ← Quay lại danh sách
+                      </button>
+                    </div>
+
+                    {/* File Upload Zone */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', borderBottom: '1px dashed var(--color-border)', paddingBottom: '1.25rem' }}>
+                      <div style={{ width: '100%' }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>{t('Chọn file hoặc kéo thả (.xlsx, .xls, .csv)')}</label>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            onChange={handleFileUpload}
+                            style={{ display: 'none' }}
+                            id="bulk-file-upload"
+                          />
+                          {localFile ? (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 16px',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: 10,
+                              background: '#f0fdf4',
+                              borderLeft: '4px solid #10b981',
+                              width: '100%'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ background: '#d1fae5', padding: 8, borderRadius: 8, color: '#047857', display: 'flex', alignItems: 'center' }}>
+                                  <FileSpreadsheet size={18} />
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '400px' }}>
+                                    {localFile.name}
+                                  </div>
+                                  <div style={{ fontSize: '0.725rem', color: '#047857', fontWeight: 500 }}>
+                                    {(localFile.size / 1024).toFixed(1)} KB • {localRows.length} dòng dữ liệu
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLocalFile(null);
+                                  setLocalRows([]);
+                                  setHeaders([]);
+                                  setPhoneCol('');
+                                  setEmailCol('');
+                                  setNameCol('');
+                                  setDateCol('');
+                                  setSalepersonCol('');
+                                  setCheckedResults([]);
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#ef4444',
+                                  cursor: 'pointer',
+                                  padding: 6,
+                                  borderRadius: 6,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--color-danger-light)'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ) : (
+                            <label
+                              htmlFor="bulk-file-upload"
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                e.currentTarget.style.background = 'var(--color-border-light)';
+                              }}
+                              onDragLeave={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--color-border)';
+                                e.currentTarget.style.background = 'var(--color-bg)';
+                              }}
+                              onDrop={handleFileDrop}
+                              style={{
+                                width: '100%',
+                                minHeight: '110px',
+                                border: '2px dashed var(--color-border)',
+                                background: 'var(--color-bg)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                borderRadius: '10px',
+                                padding: '16px',
+                                transition: 'all 0.2s ease-in-out'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                e.currentTarget.style.background = '#f1f5f9';
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--color-border)';
+                                e.currentTarget.style.background = '#f8fafc';
+                              }}
+                            >
+                              <div style={{
+                                display: 'inline-flex',
+                                background: 'rgba(189, 29, 45, 0.1)',
+                                color: 'var(--color-primary)',
+                                padding: '8px',
+                                borderRadius: '50%'
+                              }}>
+                                <Upload size={20} />
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                  Nhấp để duyệt tệp hoặc kéo thả vào đây
+                                </span>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                                  Hỗ trợ định dạng .xlsx, .xls, .csv
+                                </p>
+                              </div>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Column Mapping */}
+                    {headers.length > 0 && (
+                      <div style={{ background: 'var(--color-bg)', padding: '1.25rem', borderRadius: 10, border: '1px solid var(--color-border)' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <SettingsIcon size={14} /> {t('Ánh xạ cột lọc trùng')}
+                        </h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.8rem' }}>{t('Cột Số Điện Thoại (Bắt buộc)')}</label>
+                            <CustomSelect
+                              options={[{ value: '', label: t('-- Chọn cột --') }, ...headers.map(h => ({ value: h, label: h }))]}
+                              value={phoneCol}
+                              onChange={val => setPhoneCol(String(val))}
+                              width="100%"
+                            />
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.8rem' }}>{t('Cột Email (Tùy chọn)')}</label>
+                            <CustomSelect
+                              options={[{ value: '', label: t('-- Chọn cột --') }, ...headers.map(h => ({ value: h, label: h }))]}
+                              value={emailCol}
+                              onChange={val => setEmailCol(String(val))}
+                              width="100%"
+                            />
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.8rem' }}>{t('Cột Họ Tên (Tùy chọn)')}</label>
+                            <CustomSelect
+                              options={[{ value: '', label: t('-- Chọn cột --') }, ...headers.map(h => ({ value: h, label: h }))]}
+                              value={nameCol}
+                              onChange={val => setNameCol(String(val))}
+                              width="100%"
+                            />
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.8rem' }}>
+                              {t('Cột Ngày (Tùy chọn)')}
+                            </label>
+                            <CustomSelect
+                              options={[{ value: '', label: t('-- Chọn cột --') }, ...headers.map(h => ({ value: h, label: h }))]}
+                              value={dateCol}
+                              onChange={val => setDateCol(String(val))}
+                              width="100%"
+                            />
+                          </div>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '0.8rem' }}>
+                              {t('Cột Sale phụ trách (Tùy chọn)')}
+                            </label>
+                            <CustomSelect
+                              options={[{ value: '', label: t('-- Chọn cột --') }, ...headers.map(h => ({ value: h, label: h }))]}
+                              value={salepersonCol}
+                              onChange={val => setSalepersonCol(String(val))}
+                              width="100%"
+                            />
+                          </div>
+                        </div>
+                        <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', margin: '8px 0 0', lineHeight: 1.4 }}>
+                          {t('* Định dạng ngày được chấp nhận:')} <strong>dd-mm-yyyy</strong> {t('(ví dụ: 20-05-2026) hoặc')} <strong>yyyy-mm-dd</strong>{t('. Hệ thống sẽ tự động đưa về định dạng chuẩn của ngày và bỏ qua phần giờ để so khớp đối chiếu hợp lý.')}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Cấu hình lưu dữ liệu vào CRM */}
+                    {headers.length > 0 && (
+                      <div style={{ background: 'var(--color-bg)', padding: '1.25rem', borderRadius: 10, border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Shield size={14} color="var(--color-primary)" /> Quy tắc nhập dữ liệu vào CRM
+                        </h4>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                          {t('Tất cả dữ liệu ánh xạ lịch sử khi nhập')} <strong>{t('luôn luôn chạy ở chế độ Đồng bộ ngầm (Silent Mode)')}</strong>{t('. Hệ thống sẽ chỉ ghi nhận lịch sử và gán cho Sale sở hữu mà không phân bổ lại cho Sale khác, đồng thời hoàn toàn không gửi bất kỳ thông báo nhắc nhở nào để tránh gây phiền hà cho đội ngũ Sale.')}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Submit Actions */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'flex-start' }}>
+                      <button
+                        type="button"
+                        onClick={handleRunBatchCheck}
+                        disabled={checking || localRows.length === 0}
+                        style={{
+                          minWidth: 160,
+                          height: 42,
+                          fontWeight: 700,
+                          borderRadius: 8,
+                          background: 'linear-gradient(135deg, #a31422 0%, #700913 100%)',
+                          color: 'white',
+                          border: 'none',
+                          cursor: checking || localRows.length === 0 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {checking ? <Activity size={16} className="spin" /> : t("Chạy lọc trùng")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleImportLeads}
+                        disabled={checking || importing || localRows.length === 0}
+                        style={{
+                          minWidth: 180,
+                          height: 42,
+                          fontWeight: 700,
+                          gap: 8,
+                          borderRadius: 8,
+                          background: checking || importing || localRows.length === 0 ? 'var(--color-border-light)' : 'linear-gradient(135deg, var(--color-primary) 0%, #2563eb 100%)',
+                          color: checking || importing || localRows.length === 0 ? 'var(--color-text-muted)' : 'white',
+                          border: 'none',
+                          cursor: checking || importing || localRows.length === 0 ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: checking || importing || localRows.length === 0 ? 'none' : '0 4px 6px -1px rgba(59, 130, 246, 0.2), 0 2px 4px -1px rgba(59, 130, 246, 0.1)',
+                          transition: 'all 0.2s ease-in-out'
+                        }}
+                      >
+                        {importing ? (
+                          <>
+                            <Activity size={16} className="spin" /> Đang nhập dữ liệu...
+                          </>
+                        ) : (
+                          <>
+                            <Database size={16} /> Bắt đầu Nhập dữ liệu
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Guidelines */}
+                    <div style={{
+                      background: 'var(--color-info-light)',
+                      color: 'var(--color-info)',
+                      fontSize: '0.75rem',
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      width: '100%',
+                      textAlign: 'left',
+                      lineHeight: 1.5,
+                      border: '1px solid var(--color-border-light)',
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'flex-start'
+                    }}>
+                      <span style={{ fontSize: '1rem' }}>💡</span>
+                      <div>
+                        <strong>{t('Cơ chế khớp trùng CRM:')}</strong> {t('Công cụ đối chiếu thời gian thực bằng cách sử dụng chung một hàm nghiệp vụ với luồng xử lý Webhook và Google Sheets. Hệ thống chỉ đánh dấu Trùng lặp đối với Sale đang')} <strong>{t('Hoạt động')}</strong>{t('. Nếu Sale sở hữu đang')} <strong>{t('Nghỉ phép')}</strong> {t('hoặc')} <strong>{t('Nghỉ việc')}</strong>{t(', hệ thống tự động đánh dấu là lead được phép chia mới cho Sale khác.')}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // Screen 3: Import History List
+                  (() => {
+                    const historyPageSize = 50;
+                    const totalHistoryPages = Math.ceil(totalHistoryCount / historyPageSize);
+                    const paginatedHistory = importHistory;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {/* History Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
+                          <div>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                              <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}>
+                                <RefreshCw size={16} />
+                              </span>
+                              Ánh xạ dữ liệu cũ (Bulk Duplicate Checker)
+                            </h3>
+                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                              Hiển thị lịch sử các lần đối chiếu và nhập dữ liệu cũ vào hệ thống CRM.
+                            </p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            {selectedLogs.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const logsToDelete = importHistory.filter(item => selectedLogs.includes(item.log_id));
+                                  handleDeleteHistory(logsToDelete);
+                                }}
+                                className="btn danger"
+                                style={{ gap: 6, padding: '8px 16px', height: 38, fontWeight: 700, display: 'flex', alignItems: 'center', background: '#dc2626', color: 'white', border: 'none', borderRadius: 8 }}
+                              >
+                                <Trash2 size={16} />
+                                Xóa đã chọn ({selectedLogs.length})
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setImportSubTab('upload');
+                              }}
+                              className="btn primary"
+                              style={{ gap: 6, padding: '8px 16px', height: 38, fontWeight: 700 }}
+                            >
+                              + Thêm mới
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Search filter bar */}
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+                            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}>
+                              <Search size={14} />
+                            </span>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder={t("Tìm kiếm theo Họ tên, Số điện thoại, Email...")}
+                              value={historySearchInput}
+                              onChange={e => setHistorySearchInput(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  setHistorySearch(historySearchInput);
+                                  setHistoryPage(1);
+                                }
+                              }}
+                              style={{ paddingLeft: '32px', height: '36px', fontSize: '0.825rem', width: '100%', boxSizing: 'border-box' }}
+                            />
+                            {historySearchInput && (
+                              <button
+                                onClick={() => {
+                                  setHistorySearchInput('');
+                                  setHistorySearch('');
+                                  setHistoryPage(1);
+                                }}
+                                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 0 }}
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn primary"
+                            onClick={() => {
+                              setHistorySearch(historySearchInput);
+                              setHistoryPage(1);
+                            }}
+                            style={{ height: '36px', padding: '0 16px', fontSize: '0.8125rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+                          >
+                            <Search size={13} />
+                            <span>{t('Tìm kiếm')}</span>
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                            Các bản ghi dữ liệu đã được nhập gần đây:
+                          </span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            Tổng cộng: {totalHistoryCount} bản ghi
+                          </span>
+                        </div>
+
+                        {/* Table View */}
+                        <div className="responsive-table-wrap" style={{ border: '1px solid var(--color-border)', borderRadius: '12px', overflowX: 'auto', maxHeight: '550px', overflowY: 'auto', background: 'var(--color-surface)' }}>
+                          <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--color-bg)' }}>
+                                <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={paginatedHistory.length > 0 && paginatedHistory.every(item => selectedLogs.includes(item.log_id))}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        const pageLogIds = paginatedHistory.map(item => item.log_id);
+                                        setSelectedLogs(prev => Array.from(new Set([...prev, ...pageLogIds])));
+                                      } else {
+                                        const pageLogIds = paginatedHistory.map(item => item.log_id);
+                                        setSelectedLogs(prev => prev.filter(id => !pageLogIds.includes(id)));
+                                      }
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                  />
+                                </th>
+                                <th style={{ ...thStyle, width: '50px' }}>{t('STT')}</th>
+                                <th style={thStyle}>{t('Khách hàng')}</th>
+                                <th style={thStyle}>{t('Liên hệ')}</th>
+                                <th style={thStyle}>{t('Sale Sở Hữu')}</th>
+                                <th style={thStyle}>{t('Tương Tác Cuối')}</th>
+                                <th style={{ ...thStyle, width: '60px', textAlign: 'center' }}>{t('Hành động')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {loadingHistory ? (
+                                Array.from({ length: 4 }).map((_, i) => (
+                                  <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                                    <td style={{ padding: '1rem 0.5rem' }}><Skeleton width="40px" height={14} /></td>
+                                    <td style={{ padding: '1rem 0.5rem' }}><Skeleton width="120px" height={14} /></td>
+                                    {!isMobile && (
+                                      <>
+                                        <td style={{ padding: '1rem 0.5rem' }}><Skeleton width="90px" height={14} /></td>
+                                        <td style={{ padding: '1rem 0.5rem' }}><Skeleton width="100px" height={14} /></td>
+                                        <td style={{ padding: '1rem 0.5rem' }}><Skeleton width="140px" height={14} /></td>
+                                      </>
+                                    )}
+                                    <td style={{ padding: '1rem 0.5rem', textAlign: 'center' }}><Skeleton width="24px" height={24} borderRadius="50%" style={{ margin: '0 auto' }} /></td>
+                                  </tr>
+                                ))
+                              ) : paginatedHistory.length > 0 ? (
+                                paginatedHistory.map((item, idx) => {
+                                  const globalIdx = (historyPage - 1) * historyPageSize + idx + 1;
+                                  let ownerStatusBadge = null;
+                                  if (item.consultant_status) {
+                                    const statusBg = item.consultant_status === 'active' ? '#e6f4ea' : (item.consultant_status === 'leave' ? '#fef3c7' : '#f1f5f9');
+                                    const statusText = item.consultant_status === 'active' ? '#137333' : (item.consultant_status === 'leave' ? '#b06000' : '#5f6368');
+                                    const statusLabel = item.consultant_status === 'active' ? t('Hoạt động') : (item.consultant_status === 'leave' ? t('Nghỉ phép') : t('Nghỉ việc'));
+                                    ownerStatusBadge = <span style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: 4, background: statusBg, color: statusText, fontWeight: 700, marginLeft: 6 }}>{statusLabel}</span>;
+                                  }
+
+                                  const isSelected = selectedLogs.includes(item.log_id);
+
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', transition: 'background-color 0.15s', backgroundColor: isSelected ? 'var(--color-bg)' : 'transparent' }}>
+                                      <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setSelectedLogs(prev => [...prev, item.log_id]);
+                                            } else {
+                                              setSelectedLogs(prev => prev.filter(id => id !== item.log_id));
+                                            }
+                                          }}
+                                          style={{ cursor: 'pointer' }}
+                                        />
+                                      </td>
+                                      <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{globalIdx}</td>
+                                      <td style={{ padding: '10px 16px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                          <Avatar name={item.name || t('Không có tên')} src={item.avatar_url || item.avatar || item.photo} size={32} />
+                                          <span style={{ fontWeight: 600 }}>{item.name || <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Chưa cập nhật')}</em>}</span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '10px 16px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                          <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{item.phone ? maskPhone(item.phone) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{item.email ? maskEmail(item.email) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '10px 16px' }}>
+                                        {item.consultant_name ? (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Avatar src={consultants.find(c => c.name === item.consultant_name)?.avatar || consultants.find(c => c.name === item.consultant_name)?.avatar_url} name={item.consultant_name} size={24} />
+                                            <strong style={{ fontWeight: 600 }}>{item.consultant_name}</strong>
+                                            {ownerStatusBadge}
+                                          </div>
+                                        ) : <span style={{ color: 'var(--color-text-muted)' }}>-</span>}
+                                      </td>
+                                      <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>
+                                        {item.last_interaction_date ? (
+                                          <span>
+                                            {item.last_interaction_date.split(' ')[0]}
+                                          </span>
+                                        ) : <span>-</span>}
+                                      </td>
+                                      <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            handleDeleteHistory([item]);
+                                          }}
+                                          style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}
+                                          title={t("Xóa bản ghi này")}
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              ) : (
+                                <tr>
+                                  <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem 2rem', color: 'var(--color-text-muted)' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ fontSize: '1.5rem' }}>📋</span>
+                                      <span>{t('Chưa có dữ liệu đối chiếu hoặc lịch sử nhập. Vui lòng bấm nút "+ Thêm mới" ở trên để bắt đầu.')}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination Footer */}
+                        {totalHistoryPages > 1 && (
+                          <div className="responsive-pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                            <span style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>
+                              Hiển thị {(historyPage - 1) * historyPageSize + 1} - {Math.min(historyPage * historyPageSize, totalHistoryCount)} trên {totalHistoryCount} dòng
+                            </span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn outline"
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: 28 }}
+                                disabled={historyPage === 1}
+                                onClick={() => setHistoryPage(p => p - 1)}
+                              >
+                                Trước
+                              </button>
+                              <span style={{ padding: '4px 10px', fontSize: '0.775rem', fontWeight: 600 }}>
+                                Trang {historyPage} / {totalHistoryPages}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn outline"
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', height: 28 }}
+                                disabled={historyPage === totalHistoryPages}
+                                onClick={() => setHistoryPage(p => p + 1)}
+                              >
+                                Sau
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            </div>
+
+            {/* Cấu hình Gửi tin & Email */}
+            {/* Cấu hình Gửi Email */}
+            <div style={{ display: activeTab === 'email_config' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
+                  <img src="/imgs/gmail-icon-free-png.webp" alt="Gmail" style={{ width: 20, height: 20 }} /> {t('Phương thức Gửi Email')}
+                </h3>
+
+                {renderHelpBanner('email_config', t('Giải thích cơ chế Gửi Email'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Google Apps Script:')}</strong> {t('Sử dụng dịch vụ Gmail của tài khoản Google liên kết để gửi email tự động. Ưu điểm: Đơn giản, miễn phí (giới hạn 500-2000 email/ngày). Yêu cầu copy & deploy đoạn mã script được cung cấp thành Web App.')}</li>
+                    <li><strong>{t('Amazon SES (SMTP):')}</strong> {t('Thích hợp cho quy mô lớn, chuyên nghiệp và có độ tin cậy giao hàng (deliverability) cao nhất. Yêu cầu nhập Host, Port, Username, Password và From Email đã được verify trên AWS.')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label className="form-label">{t('Chọn phương thức gửi')}</label>
+                  <CustomSelect
+                    options={providerOptions}
+                    value={provider}
+                    onChange={val => {
+                      const pVal = String(val);
+                      setProvider(pVal);
+                      if (pVal === 'appscript') {
+                        setShowInputScript(true);
+                      }
+                    }}
+                  />
+                </div>
+
+                {/* BUG-02 fix: Allow admin to configure the frontend URL for email report links */}
+                <div style={{ marginBottom: '1.5rem', background: 'var(--color-bg)', padding: '1rem', borderRadius: 8, border: '1px solid var(--color-border)' }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('🔗 URL Frontend (Dùng trong link Email báo cáo lỗi)')}</label>
+                  <input
+                    className="form-input"
+                    placeholder={t("Ví dụ: https://sale.Ideas.net")}
+                    value={frontendUrl}
+                    onChange={e => setFrontendUrl(e.target.value)}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>{t('Domain website, không có dấu / ở cuối. Dùng để tạo link báo cáo trong email gửi cho Sale.')}</p>
+                </div>
+
+                {provider === 'appscript' && (
+                  <div style={{ animation: 'fadeIn 0.3s', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '1.25rem' }}>
+                    <h4 style={{ fontSize: '0.9375rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Server size={18} color="#10b981" /> {t('Cấu hình Webhook Apps Script')}
+                    </h4>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label className="form-label">{t('Mã Code Apps Script Gửi Email (Copy 1 lần duy nhất)')}</label>
+                      <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+                        {t('Mã dưới đây dùng để kích hoạt tính năng')} <strong>{t('Gửi Email')}</strong> {t('qua Google. Copy mã này vào Apps Script, chọn')} <strong>Deploy as web app</strong> {t('(Quyền truy cập: Anyone), lấy URL dán vào ô bên dưới.')}
+                      </p>
+
+                      {/* Collapsible Script Block */}
+                      <div style={{ border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+                        <div
+                          style={{ padding: '0.75rem 1rem', background: 'var(--color-bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                          onClick={() => setShowInputScript(!showInputScript)}
+                        >
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{t('Xem mã Apps Script')}</span>
+                          {showInputScript ? <ChevronUp size={16} color="var(--color-text-muted)" /> : <ChevronDown size={16} color="var(--color-text-muted)" />}
+                        </div>
+
+                        {showInputScript && (
+                          <pre style={{
+                            background: '#1e293b', color: '#dadada', padding: '1rem', margin: 0,
+                            fontSize: '0.75rem', overflowX: 'auto', fontFamily: 'monospace', lineHeight: 1.5
+                          }}>
+                            {`// ==========================================
+// ĐOẠN MÃ XỬ LÝ GỬI EMAIL (DEPLOY AS WEB APP)
+// ==========================================
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (data.type === "custom") {
+      var options = {
+        to: data.email,
+        subject: data.subject,
+        htmlBody: data.htmlBody
+      };
+      if (data.cc) {
+        options.cc = data.cc;
+      }
+      MailApp.sendEmail(options);
+      return ContentService.createTextOutput(JSON.stringify({"success": true}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({"success": false}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="form-label">{t('URL Webhook của Google Apps Script (doPost)')}</label>
+                      <input
+                        className="form-input"
+                        placeholder="https://script.google.com/macros/s/AKfycbw.../exec"
+                        value={appscriptUrl}
+                        onChange={e => setAppscriptUrl(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {provider === 'ses' && (
+                  <div style={{ animation: 'fadeIn 0.3s', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '1.25rem' }}>
+                    <h4 style={{ fontSize: '0.9375rem', fontWeight: 600, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Database size={18} color="#f59e0b" /> {t('Thông số Amazon SES (SMTP)')}
+                    </h4>
+                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                      <div>
+                        <label className="form-label">SMTP Host</label>
+                        <input className="form-input" placeholder="email-smtp.us-east-1.amazonaws.com" value={sesHost} onChange={e => setSesHost(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="form-label">Port</label>
+                        <input className="form-input" value="587" disabled style={{ background: 'var(--color-bg)' }} />
+                      </div>
+                    </div>
+                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                      <div>
+                        <label className="form-label">SMTP Username</label>
+                        <input className="form-input" placeholder="AKIA..." value={sesUser} onChange={e => setSesUser(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="form-label">SMTP Password</label>
+                        <input className="form-input" type="password" placeholder="BI..." value={sesPass} onChange={e => setSesPass(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div>
+                        <label className="form-label">{t('Email Người Gửi (From Email)')}</label>
+                        <input className="form-input" placeholder="no-reply@domain.com" value={sesSenderEmail} onChange={e => setSesSenderEmail(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="form-label">{t('Tên Người Gửi (From Name)')}</label>
+                        <input className="form-input" placeholder="IDEAS TEAM" value={sesSenderName} onChange={e => setSesSenderName(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Cấu hình Zalo Bot */}
+            <div style={{ display: activeTab === 'zalo_bot' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <img src="https://stc-zpl.zdn.vn/favicon.ico" alt="Zalo" style={{ width: 24, height: 24, borderRadius: '50%' }} />
+                  {t('Cấu hình Zalo Bot (Gửi thông báo Data)')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Tính năng này cho phép hệ thống gửi trực tiếp thông báo chia số tới Zalo của Tư vấn viên.')}<br />
+                  {t('Truy cập')} <a href="https://bot.zapps.me/" target="_blank" rel="noreferrer" style={{ color: '#0068ff', fontWeight: 600 }}>{t('Zalo Bot Platform')}</a> {t('để tạo Bot và lấy Token.')}
+                </p>
+
+                {renderHelpBanner('zalo_bot', t('Giải thích cơ chế Zalo Bot'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Thông báo chia số trực tiếp:')}</strong> {t('Khi có khách hàng mới phân chia cho Sale, hệ thống lập tức đẩy tin nhắn thông báo về Zalo cá nhân của Sale đó kèm link xem chi tiết.')}</li>
+                    <li><strong>{t('Group Chat Admin:')}</strong> {t('Nơi nhận các cảnh báo bảo mật, bộ lọc trùng lặp, yêu cầu đền bù (Ticket) cần duyệt, và các báo cáo cuối ngày.')}</li>
+                    <li><strong>{t('Webhook URL:')}</strong> {t('Khai báo link Webhook trên Zalo Bot Console để nhận các tương tác phản hồi (ví dụ: Sale gửi lệnh xác nhận trực tiếp từ nút bấm Zalo).')}</li>
+                  </ul>
+                ))}
+
+                <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Bot Token (Zalo cung cấp)')}</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder={t("Ví dụ: 12345689:abc-xyz")}
+                      value={zaloBotToken}
+                      onChange={e => setZaloBotToken(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Secret Token (Webhook bảo mật)')}</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder={t("Nhập Secret Token tự chọn (Ví dụ: MY_SECRET_123)")}
+                      value={zaloWebhookSecret}
+                      onChange={e => setZaloWebhookSecret(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Link Zalo Bot (zalo.me/xxx)')}</label>
+                  <input
+                    className="form-input"
+                    placeholder={t("VD: https://zalo.me/1185588456243371597")}
+                    value={zaloBotLink}
+                    onChange={e => setZaloBotLink(e.target.value)}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    {t('Link chèn vào Email chào mừng TVV.')}
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Zalo Admin Group Chat ID')}</label>
+                  <input
+                    className="form-input"
+                    placeholder={t("Nhập Chat ID của Group Admin Zalo (ví dụ: group.123456...)")}
+                    value={zaloAdminGroupChatId}
+                    onChange={e => setZaloAdminGroupChatId(e.target.value)}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    {t('Mọi cảnh báo bộ lọc (Blacklist/Trùng), yêu cầu duyệt ticket đền bù, và báo cáo tổng kết ngày sẽ được gửi vào Group Chat này.')}
+                  </p>
+                  <div style={{
+                    marginTop: '8px',
+                    background: 'var(--color-bg-dark)',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    color: 'var(--color-text-muted)',
+                    lineHeight: '1.5',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div 
+                      onClick={() => setShowChatIdGuide(!showChatIdGuide)}
+                      style={{
+                        padding: '10px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        fontWeight: 600,
+                        color: 'var(--color-text)'
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>💡</span> {t('Hướng dẫn lấy Chat ID:')}
+                      </span>
+                      {showChatIdGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </div>
+
+                    {showChatIdGuide && (
+                      <div style={{ padding: '0 12px 12px 12px' }}>
+                        <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <li>{t('Thêm Zalo Bot này vào Group Admin của bạn.')}</li>
+                          <li>{t('Gửi tin nhắn')} <code>/info</code> {t('vào Group.')}</li>
+                          <li>{t('Bot sẽ tự động phản hồi lại mã Chat ID của Group đó (ví dụ: group.123456...). Hãy copy mã này và dán vào ô cấu hình phía trên.')}</li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '1rem' }}>
+                  <label className="form-label">{t('Link Webhook khai báo trên Zalo Bot Platform:')}</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <code style={{ flex: 1, background: 'var(--color-bg)', padding: '0.5rem', borderRadius: 6, fontSize: '0.875rem', color: 'var(--color-primary)', border: '1px solid var(--color-border)' }}>
+                      {`${import.meta.env.VITE_API_URL || window.location.origin + '/backend'}/zalo_webhook.php`}
+                    </code>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 8 }}>
+                    {t('Copy link Webhook này và Secret Token (nếu có) dán vào phần thiết lập Webhook của Zalo Bot.')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình Telegram Bot */}
+            <div style={{ display: activeTab === 'telegram_bot' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Telegram_logo.svg/3840px-Telegram_logo.svg.png" alt="Telegram" style={{ width: 24, height: 24, borderRadius: '50%' }} />
+                  {t('Cấu hình Telegram Bot (Gửi thông báo Data)')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Tính năng này cho phép hệ thống gửi trực tiếp thông báo chia số tới Telegram của Tư vấn viên.')}<br />
+                  {t('Sử dụng @BotFather trên Telegram để khởi tạo Bot mới và nhận Token API.')}
+                </p>
+
+                {renderHelpBanner('telegram_bot', t('Giải thích cơ chế Telegram Bot'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Thông báo chia số trực tiếp:')}</strong> {t('Khi có khách hàng mới phân chia cho Sale, hệ thống lập tức đẩy tin nhắn thông báo về Telegram cá nhân của Sale đó kèm link xem chi tiết.')}</li>
+                    <li><strong>{t('Group Chat Admin:')}</strong> {t('Nơi nhận các cảnh báo bảo mật, bộ lọc trùng lặp, yêu cầu đền bù (Ticket) cần duyệt, và các báo cáo cuối ngày.')}</li>
+                    <li><strong>{t('Webhook URL:')}</strong> {t('Điểm nhận tương tác từ Telegram Bot để thực thi các câu lệnh nhanh (/report, /sales, /round...).')}</li>
+                  </ul>
+                ))}
+
+                <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Bot Token (API Token)')}</label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      placeholder={t("Ví dụ: 3573724430:ECJrlT...")}
+                      value={telegramBotToken}
+                      onChange={e => setTelegramBotToken(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Bot Username (@username)')}</label>
+                    <input
+                      className="form-input"
+                      placeholder={t("Ví dụ: IdeasCRM_bot")}
+                      value={telegramBotUsername}
+                      onChange={e => setTelegramBotUsername(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t('Telegram Admin Group Chat ID')}</label>
+                  <input
+                    className="form-input"
+                    placeholder={t("Ví dụ: -100123456789")}
+                    value={telegramAdminGroupChatId}
+                    onChange={e => setTelegramAdminGroupChatId(e.target.value)}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    {t('Mọi cảnh báo bộ lọc (Blacklist/Trùng), yêu cầu duyệt ticket đền bù, và báo cáo tổng kết ngày sẽ được gửi vào Group Chat này.')}
+                  </p>
+                  <div style={{
+                    marginTop: '8px',
+                    background: 'var(--color-bg-dark)',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    color: 'var(--color-text-muted)',
+                    lineHeight: '1.5',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div 
+                      onClick={() => setShowChatIdGuide(!showChatIdGuide)}
+                      style={{
+                        padding: '10px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        fontWeight: 600,
+                        color: 'var(--color-text)'
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>💡</span> {t('Hướng dẫn lấy Chat ID:')}
+                      </span>
+                      {showChatIdGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </div>
+
+                    {showChatIdGuide && (
+                      <div style={{ padding: '0 12px 12px 12px' }}>
+                        <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <li>{t('Mời Bot của bạn vào Group Admin Telegram.')}</li>
+                          <li>{t('Gửi tin nhắn /id hoặc /chatid vào Group.')}</li>
+                          <li>{t('Bot sẽ phản hồi lại Chat ID của nhóm (thường bắt đầu bằng dấu trừ, ví dụ: -100123456789). Hãy copy điền vào ô phía trên.')}</li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '1rem', marginBottom: '1rem' }}>
+                  <label className="form-label">{t('Đăng ký Webhook URL với Telegram Server:')}</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <code style={{ flex: 1, background: 'var(--color-bg)', padding: '0.5rem', borderRadius: 6, fontSize: '0.875rem', color: 'var(--color-primary)', border: '1px solid var(--color-border)' }}>
+                      {`${import.meta.env.VITE_API_URL || window.location.origin + '/backend'}/telegram_webhook.php`}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn secondary sm"
+                    onClick={async () => {
+                      if (!telegramBotToken) {
+                        toast.error(t('Vui lòng nhập Bot Token trước khi đăng ký Webhook.'));
+                        return;
+                      }
+                      setTesting(true);
+                      try {
+                        const res = await fetchAPI('setup_telegram_webhook');
+                        if (res.success) {
+                          toast.success(t('Đăng ký Webhook Telegram thành công!'));
+                        } else {
+                          toast.error(res.message || t('Lỗi khi đăng ký Webhook.'));
+                        }
+                      } catch (err: any) {
+                        toast.error(err.message || t('Đăng ký Webhook thất bại.'));
+                      } finally {
+                        setTesting(false);
+                      }
+                    }}
+                    disabled={testing}
+                  >
+                    {testing ? t('Đang xử lý...') : t('Kích hoạt Webhook Telegram')}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== TAB: BÁO CÁO NGÀY ===== */}
+            <div style={{ display: activeTab === 'automated_reports' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {renderHelpBanner('automated_reports', t('Giải thích cơ chế Báo cáo Tự động'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Báo cáo Ngày (Zalo):')}</strong> {t('Gửi trực tiếp vào Group Chat Admin. Thống kê chi tiết số lượng data đổ về, tỉ lệ tiếp nhận, và số lượng khiếu nại đền bù của từng Sale.')}</li>
+                    <li><strong>{t('Báo cáo Tuần / Tháng (Email/Zalo):')}</strong> {t('Gửi tổng kết hiệu quả chia số cho từng cá nhân Sale và báo cáo tổng quan cho ban quản trị.')}</li>
+                    <li><strong>{t('Nguyên tắc tính thời gian:')}</strong> {t('Cửa sổ thời gian báo cáo trượt đúng 24h/7 ngày/30 ngày tính đến thời điểm cấu hình gửi, đảm bảo không bỏ sót bất kỳ lead nào.')}</li>
+                  </ul>
+                ))}
+
+                {/* Giờ gửi */}
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}><Clock size={16} /></span>
+                    {t('Lịch gửi Báo cáo Tự động')}
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '0.875rem 1rem', minWidth: 220 }}>
+                      <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.6 }}>
+                        <strong>{t('Cửa sổ thời gian:')}</strong> {t('Nếu gửi lúc')} <strong>{zaloDailyReportTime || '17:00'}</strong>, {t('hệ thống sẽ tổng kết chia số từ')} <strong>{zaloDailyReportTime || '17:00'} {t('hôm qua')}</strong> {t('đến')} <strong>{zaloDailyReportTime || '17:00'} {t('hôm nay')}</strong> — {t('không bỏ sót data đêm.')}
+                      </p>
+                    </div>
+                    <div style={{ flex: '0 0 180px', display: 'flex', flexDirection: 'column' }}>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={zaloDailyReportTime}
+                        onChange={e => setZaloDailyReportTime(e.target.value)}
+                        style={{ flex: 1, height: '100%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Báo cáo Tuần */}
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'inline-flex', background: '#BD1D2D', color: 'white', padding: 4, borderRadius: 6 }}><BarChart2 size={16} /></span>
+                    {t('Lịch gửi Báo cáo Tuần (cho Sale)')}
+                  </h3>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                    {t('Tự động gửi thống kê nhận data và tình trạng ticket đền bù của tuần qua trực tiếp cho từng Sale qua Email và Zalo.')}
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label className="form-label">{t('Ngày gửi trong tuần')}</label>
+                      <CustomSelect
+                        options={[
+                          { value: '0', label: t('Tắt báo cáo tuần') },
+                          { value: '1', label: t('Thứ 2 hàng tuần') },
+                          { value: '2', label: t('Thứ 3 hàng tuần') },
+                          { value: '3', label: t('Thứ 4 hàng tuần') },
+                          { value: '4', label: t('Thứ 5 hàng tuần') },
+                          { value: '5', label: t('Thứ 6 hàng tuần') },
+                          { value: '6', label: t('Thứ 7 hàng tuần') },
+                          { value: '7', label: t('Chủ Nhật hàng tuần') }
+                        ]}
+                        value={zaloWeeklyReportDay}
+                        onChange={val => setZaloWeeklyReportDay(val.toString())}
+                        width="100%"
+                      />
+                    </div>
+                    <div style={{ flex: '0 0 180px', display: 'flex', flexDirection: 'column' }}>
+                      <label className="form-label">{t('Giờ gửi báo cáo')}</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={zaloWeeklyReportTime}
+                        onChange={e => setZaloWeeklyReportTime(e.target.value)}
+                        style={{ flex: 1, height: '42px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Báo cáo Tháng */}
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.25rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'inline-flex', background: '#ec4899', color: 'white', padding: 4, borderRadius: 6 }}><Calendar size={16} /></span>
+                    {t('Lịch gửi Báo cáo Tháng (cho Sale)')}
+                  </h3>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                    {t('Tự động gửi thống kê nhận data và tình trạng ticket đền bù của nguyên tháng trước trực tiếp cho từng Sale qua Email và Zalo vào ngày 1 hàng tháng.')}
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label className="form-label">{t('Lịch gửi báo cáo tháng')}</label>
+                      <CustomSelect
+                        options={[
+                          { value: '0', label: t('Tắt báo cáo tháng') },
+                          { value: '1', label: t('Bật báo cáo tháng (Gửi vào ngày 1 hàng tháng)') }
+                        ]}
+                        value={zaloMonthlyReportEnabled}
+                        onChange={val => setZaloMonthlyReportEnabled(val.toString())}
+                        width="100%"
+                      />
+                    </div>
+                    {zaloMonthlyReportEnabled === '1' && (
+                      <div style={{ flex: '0 0 180px', display: 'flex', flexDirection: 'column' }}>
+                        <label className="form-label">{t('Giờ gửi báo cáo')}</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={zaloMonthlyReportTime}
+                          onChange={e => setZaloMonthlyReportTime(e.target.value)}
+                          style={{ flex: 1, height: '42px' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Chọn Admin nhận báo cáo */}
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.25rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ display: 'inline-flex', background: '#0ea5e9', color: 'white', padding: 4, borderRadius: 6 }}><Users size={16} /></span>
+                    {t('Admin nhận Báo cáo')}
+                  </h3>
+                  <div style={{ marginBottom: '1.5rem', marginTop: '1rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 500 }}>
+                      <input
+                        type="checkbox"
+                        checked={zaloNotifyOnlyGroup}
+                        onChange={e => setZaloNotifyOnlyGroup(e.target.checked)}
+                        style={{ width: 16, height: 16, accentColor: 'var(--color-primary)' }}
+                      />
+                      <span>{t('Chỉ gửi thông báo Admin qua Group Zalo (Không gửi tin nhắn riêng lẻ cho từng Admin)')}</span>
+                    </label>
+                  </div>
+
+                  <div style={{ opacity: zaloNotifyOnlyGroup ? 0.65 : 1, transition: 'all 0.2s ease-in-out' }}>
+                    <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, color: zaloNotifyOnlyGroup ? 'var(--color-text-muted)' : 'var(--color-text)', marginBottom: '0.5rem' }}>
+                      {t('Danh sách Admin nhận báo cáo riêng lẻ')}
+                      {zaloNotifyOnlyGroup && (
+                        <span style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 600, background: '#ffedd5', padding: '2px 8px', borderRadius: 4 }}>
+                          {t('Đang tạm khóa')}
+                        </span>
+                      )}
+                    </label>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                      {t('Chọn các tài khoản sẽ nhận báo cáo qua')} <strong>{t('Email')}</strong> {t('và')} <strong>{t('Zalo Bot')}</strong>. {t('Nếu không chọn, hệ thống sẽ gửi cho tất cả Admin. (Lưu ý: Nếu bật tùy chọn chỉ gửi vào Group ở trên thì cấu hình riêng lẻ này sẽ không được áp dụng).')}
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {accounts.filter(a => a.role === 'admin' || a.role === 'superadmin' || Number(a.id) === 1).map((admin: any) => {
+                        const isSelected = dailyReportAdmins.includes(Number(admin.id));
+                        return (
+                          <label
+                            key={admin.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '0.875rem',
+                              padding: '0.875rem 1rem', borderRadius: 10,
+                              cursor: zaloNotifyOnlyGroup ? 'not-allowed' : 'pointer',
+                              border: (isSelected && !zaloNotifyOnlyGroup) ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                              background: (isSelected && !zaloNotifyOnlyGroup) ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected && !zaloNotifyOnlyGroup}
+                              disabled={zaloNotifyOnlyGroup}
+                              onChange={() => {
+                                setDailyReportAdmins(prev =>
+                                  isSelected ? prev.filter(id => id !== Number(admin.id)) : [...prev, Number(admin.id)]
+                                );
+                              }}
+                              style={{ accentColor: 'var(--color-primary)', width: 16, height: 16, cursor: zaloNotifyOnlyGroup ? 'not-allowed' : 'pointer', flexShrink: 0 }}
+                            />
+                            <Avatar src={admin.avatar || admin.avatar_url} name={admin.name || admin.username} size={36} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: (isSelected && !zaloNotifyOnlyGroup) ? 'var(--color-primary)' : 'var(--color-text)' }}>
+                                {admin.name || admin.username}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                {admin.email && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Mail size={11} /> {admin.email}
+                                  </span>
+                                )}
+                                {admin.zalo_chat_id ? (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#0068ff' }}>
+                                    <img src="https://stc-zpl.zdn.vn/favicon.ico" alt="Zalo" style={{ width: 12, height: 12, borderRadius: '50%' }} /> {t('Zalo đã liên kết')}
+                                  </span>
+                                ) : (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f59e0b' }}>
+                                    <img src="https://stc-zpl.zdn.vn/favicon.ico" alt="Zalo" style={{ width: 12, height: 12, borderRadius: '50%', filter: 'grayscale(100%)' }} /> {t('Chưa liên kết Zalo')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected && !zaloNotifyOnlyGroup && (
+                              <span style={{ background: 'var(--color-primary)', color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '2px 10px', borderRadius: 20, flexShrink: 0 }}>{t('Đã chọn')}</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    {accounts.filter(a => a.role === 'admin' || a.role === 'superadmin' || Number(a.id) === 1).length === 0 && (
+                      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '1rem' }}>{t('Chưa có tài khoản Admin nào trong hệ thống.')}</p>
+                    )}
+                  </div>
+                  {dailyReportAdmins.length === 0 && (
+                    <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Activity size={14} style={{ color: '#b45309', flexShrink: 0 }} />
+                      <p style={{ fontSize: '0.8125rem', color: '#92400e', margin: 0 }}>{t('Chưa chọn Admin nào — hệ thống sẽ tự động gửi cho')} <strong>{t('tất cả tài khoản Admin')}</strong>.</p>
+                    </div>
+                  )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Fallback & Blacklist Configs (Processing Tab) */}
+            <div style={{ display: activeTab === 'fallback' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: '#ef4444', color: 'white', padding: 4, borderRadius: 6 }}>
+                    <Zap size={16} />
+                  </span>
+                  {t('Cấu hình Xử lý Fallback (Khi không khớp luật)')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Khi dữ liệu (leads) mới được đẩy vào hệ thống mà')} <strong>{t('không khớp với bất kỳ quy luật định tuyến nào')}</strong>{t(', hệ thống sẽ tự động xử lý theo một trong các tùy chọn dưới đây.')}
+                </p>
+
+                {renderHelpBanner('fallback', t('Giải thích cơ chế Xử lý Fallback'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Vì sao xảy ra Fallback:')}</strong> {t('Khi lead mới không đáp ứng bất kỳ phễu chia (Routing Rule) nào đang hoạt động.')}</li>
+                    <li><strong>{t('Phân chia khẩn cấp:')}</strong> {t('Hệ thống sẽ chỉ định trực tiếp lead này về cho một Admin hoặc gán thủ công để đảm bảo không bị trôi/mất thông tin khách hàng.')}</li>
+                    <li><strong>{t('Email CC cảnh báo:')}</strong> {t('Hệ thống sẽ gửi email báo cáo chi tiết các thông số của lead bị fallback tới các địa chỉ email quản trị để lập tức khắc phục phễu chia.')}</li>
+                  </ul>
+                ))}
+
+                {/* Selector for Fallback Type */}
+                <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      padding: '1.25rem',
+                      borderRadius: '14px',
+                      border: fallbackType === 'round' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      background: fallbackType === 'round' ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      boxShadow: fallbackType === 'round' ? 'var(--shadow-sm)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      position: 'relative'
+                    }}
+                    className="hover-lift"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '0.9375rem', color: 'var(--color-text)' }}>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: fallbackType === 'round' ? '5px solid var(--color-primary)' : '2px solid var(--color-text-muted)',
+                        background: 'var(--color-surface)',
+                        transition: 'all 0.2s',
+                        flexShrink: 0
+                      }} />
+                      <input
+                        type="radio"
+                        name="fallbackType"
+                        value="round"
+                        checked={fallbackType === 'round'}
+                        onChange={() => setFallbackType('round')}
+                        style={{ display: 'none' }}
+                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <RefreshCw size={16} style={{ color: fallbackType === 'round' ? 'var(--color-primary)' : 'var(--color-text-light)' }} />
+                        {t('Phân bổ theo Vòng mặc định')}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', paddingLeft: '28px', lineHeight: 1.4 }}>
+                      {t('Chia đều cho các sale trong Vòng được chọn theo cơ chế Round-Robin.')}
+                    </span>
+                  </label>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      padding: '1.25rem',
+                      borderRadius: '14px',
+                      border: fallbackType === 'admin' ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      background: fallbackType === 'admin' ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                      boxShadow: fallbackType === 'admin' ? 'var(--shadow-sm)' : 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      position: 'relative'
+                    }}
+                    className="hover-lift"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '0.9375rem', color: 'var(--color-text)' }}>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: fallbackType === 'admin' ? '5px solid var(--color-primary)' : '2px solid var(--color-text-muted)',
+                        background: 'var(--color-surface)',
+                        transition: 'all 0.2s',
+                        flexShrink: 0
+                      }} />
+                      <input
+                        type="radio"
+                        name="fallbackType"
+                        value="admin"
+                        checked={fallbackType === 'admin'}
+                        onChange={() => setFallbackType('admin')}
+                        style={{ display: 'none' }}
+                      />
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <UserCheck size={16} style={{ color: fallbackType === 'admin' ? 'var(--color-primary)' : 'var(--color-text-light)' }} />
+                        {t('Giao cho Admin')}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-light)', paddingLeft: '28px', lineHeight: 1.4 }}>
+                      {t('Gửi trực tiếp đến Admin được chỉ định và gửi email CC đến các địa chỉ cấu hình.')}
+                    </span>
+                  </label>
+                </div>
+
+                {fallbackType === 'round' ? (
+                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                    <label className="form-label">{t('Chọn Vòng phân bổ mặc định')}</label>
+                    <CustomSelect
+                      options={[
+                        { value: '', label: t('-- Không sử dụng (Để trống trạng thái Chưa phân bổ) --') },
+                        ...rounds.map(r => ({
+                          value: r.id.toString(),
+                          label: `${r.round_name} (${Number(r.is_active) === 1 ? t('Đang hoạt động') : t('Tạm dừng')})`,
+                          disabled: Number(r.is_active) !== 1,
+                          disabledType: 'round' as const
+                        }))
+                      ]}
+                      value={fallbackRoundId}
+                      onChange={val => setFallbackRoundId(val.toString())}
+                      width="100%"
+                    />
+                    <div style={{ marginTop: '1rem', padding: '0.85rem 1.15rem', background: 'rgba(59, 130, 246, 0.05)', border: '1px dashed rgba(59, 130, 246, 0.25)', borderRadius: '12px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '0.8125rem', color: 'var(--color-primary)' }}>
+                        <Info size={14} />
+                        {t('Cơ chế Tạm giữ & Tự động chia bù')}
+                      </span>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '6px 0 0 22px', lineHeight: 1.45 }}>
+                        {t('Khi hệ thống bị ngợp (Sales đạt giới hạn quá tải) hoặc không có ai trực ca đêm/cuối tuần, dữ liệu sẽ được tạm giữ lại (Hold) ở trạng thái "Chờ xử lý". Ngay khi bắt đầu giờ hành chính và Sales thực hiện chấm công đi làm, hệ thống sẽ tự động kích hoạt chia các lead đang chờ này theo vòng quay bình thường.')}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', animation: 'fadeIn 0.3s' }}>
+                    <div>
+                      <label className="form-label">{t('Chọn tài khoản Admin nhận data')}</label>
+                      <CustomSelect
+                        options={[
+                          { value: '', label: t('-- Chọn Admin nhận data --') },
+                          ...accounts.filter(a => a.role === 'admin' || a.role === 'superadmin' || Number(a.id) === 1).map(a => ({
+                            value: a.id.toString(),
+                            label: a.name,
+                            sublabel: a.email,
+                            avatar: a.avatar
+                          }))
+                        ]}
+                        value={fallbackAdminId}
+                        onChange={val => setFallbackAdminId(val.toString())}
+                        width="100%"
+                        showAvatars={true}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">{t('Địa chỉ Email CC khi xảy ra Fallback')}</label>
+                      <input
+                        className="form-input"
+                        placeholder={t("Ví dụ: manager@company.com, admin@company.com")}
+                        value={fallbackCcEmail}
+                        onChange={e => setFallbackCcEmail(e.target.value)}
+                      />
+                      <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                        {t('Ngăn cách nhiều email bằng dấu phẩy. Hệ thống sẽ gửi bản sao thông báo data fallback về các email này.')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Cấu hình Tham số Nghiệp vụ & Hạn mức */}
+            <div style={{ display: activeTab === 'business_limits' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: 6, borderRadius: 8 }}>
+                    <Clock size={18} />
+                  </span>
+                  {t('Cấu hình Nghiệp vụ & Hạn mức')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.75rem', lineHeight: 1.5 }}>
+                  {t('Thiết lập các mốc thời gian, trạng thái và hạn mức hoạt động của hệ thống theo quy chuẩn vận hành (không hardcode).')}
+                </p>
+
+                {renderHelpBanner('business_limits', t('Giải thích cơ chế Nghiệp vụ & Hạn mức'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <li><strong>{t('Tự động rớt nhiệt (Decay):')}</strong> {t('Sau số ngày quy định, nếu Sale không cập nhật bất kỳ tương tác/ghi chú chất lượng nào trên Lead, trạng thái sẽ chuyển thành "Rớt nhiệt" và lead tự động bị thu hồi về Databank.')}</li>
+                    <li><strong>{t('Thời gian chờ nhận lead & Đền bù SLA:')}</strong> {t('Thời hạn tính bằng phút để Sale click "Tiếp nhận" khi nhận được thông báo chia số mới, quá giờ sẽ tự động chuyển cho Sale tiếp theo. Nếu cấu hình đền bù khi trễ check-in hoặc nghỉ phép được bật, Sale bị thu hồi sẽ được cộng đền bù lượt chia số khác vào ví cá nhân để nhận số khác khi online trở lại.')}</li>
+                    <li><strong>{t('Hạn mức chống ôm (Backpressure):')}</strong> {t('Nếu Sale đang giữ số lượng lead Chưa Xác Định vượt quá hạn mức này, hệ thống sẽ tạm dừng chia lead mới cho Sale đó cho tới khi họ xử lý xong.')}</li>
+                    <li><strong>{t('Ca trực đêm & Khung giờ vàng:')}</strong> {t('Trong ca trực đêm, lead mới sẽ đổ vào hàng chờ đặc biệt hoặc được xử lý bởi Roster trực đêm riêng biệt. Khung giờ vàng là thời gian cao điểm, thuật toán chia số sẽ tăng tần suất quét và rút ngắn SLA phản hồi của Sale.')}</li>
+                    <li><strong>{t('Hạn mức Databank:')}</strong> {t('Giới hạn số lượng khách hàng tối đa một nhân viên được chủ động rút từ Kho Data chung về ví cá nhân (theo giờ, ngày, tháng) nhằm ngăn chặn việc gom giữ tài nguyên trái phép.')}</li>
+                    <li><strong>{t('Quy tắc cọc & Bể cọc (Rule 1 & 2):')}</strong> {t('Nếu khách hàng hủy đặt cọc trước khi phát sinh bất kỳ doanh thu thực tế nào cho công ty, trạng thái của KHTN/Person sẽ bị hạ về mức trước đó (ví dụ: Booking hoặc Đã Gặp), đồng hồ bảo mật được kích hoạt chạy lại bình thường và Person này có thể tự động được giải phóng ra lại Kho data chung (Databank) nếu hết hạn. Nếu đã phát sinh doanh thu thực thu (đã đóng đợt 1), Person đó bắt buộc phải được giữ nguyên trạng thái Đặt Cọc để bảo toàn lịch sử giao dịch.')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  {/* Nhóm 1: Các Tham Số Phân Phối & SLA (Chia làm 4 nhóm nhỏ gọn gàng) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
+                    
+                    {/* Sub-group 1: Phân phối & Rớt nhiệt */}
+                    <div style={{ background: 'var(--color-surface)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
+                        <Zap size={16} style={{ color: 'var(--color-primary)' }} />
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>{t('Quy tắc Rớt nhiệt & Phân phối')}</h4>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {/* Nhóm A: Quy Tắc Nhiệt Độ (Decay & Gợi ý) */}
+                        <div style={{
+                          background: 'var(--color-bg-light)',
+                          padding: '1.25rem',
+                          borderRadius: '10px',
+                          border: '1px solid var(--color-border-light)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '1rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px dashed var(--color-border-light)', paddingBottom: '8px', marginBottom: '4px' }}>
+                            <Activity size={14} style={{ color: 'var(--color-primary)' }} />
+                            <h5 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                              {t('Quy Tắc Nhiệt Độ (Decay & Gợi ý)')}
+                            </h5>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 600 }}>{t('Số ngày tự động rớt nhiệt (Decay)')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ paddingRight: '3.5rem' }}
+                                  value={temperatureDecayDays}
+                                  onChange={e => setTemperatureDecayDays(Number(e.target.value))}
+                                  min={1}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ngày')}</span>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                                {t('Mặc định: 5 ngày không tương tác chất lượng.')}
+                              </span>
+                            </div>
+
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 600 }}>{t('Thời lượng cuộc gọi gợi ý Ấm (nối đồng)')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ paddingRight: '3.5rem' }}
+                                  value={tempSuggestionCallDuration}
+                                  onChange={e => setTempSuggestionCallDuration(Number(e.target.value))}
+                                  min={1}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('giây')}</span>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                                {t('Thời lượng cuộc gọi tối thiểu (nối đồng) để đề xuất khách hàng là Ấm (Mặc định: 300 giây).')}
+                              </span>
+                            </div>
+
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 600 }}>{t('Số tương tác tối thiểu gợi ý Ấm')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ paddingRight: '3.5rem' }}
+                                  value={tempSuggestionRequiredNotes}
+                                  onChange={e => setTempSuggestionRequiredNotes(Number(e.target.value))}
+                                  min={1}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('lượt')}</span>
+                              </div>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                                {t('Số lượt tương tác ghi chú tối thiểu trước đó để đề xuất khách hàng là Ấm (Mặc định: 2 lượt).')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                                              </div>
+                    </div>
+
+                    {/* Sub-group 2: SLA & Tiếp nhận */}
+                    <div style={{ background: 'var(--color-surface)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
+                        <Clock size={16} style={{ color: 'var(--color-primary)' }} />
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>{t('SLA, Thu Hồi & Chia Song Song')}</h4>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        
+                        {/* Cụm 1: Thời gian chờ nhận Lead (SLA) */}
+                        <div style={{
+                          background: 'var(--color-bg-light)',
+                          padding: '1rem 1.25rem',
+                          borderRadius: '10px',
+                          border: '1px solid var(--color-border-light)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px dashed var(--color-border-light)', paddingBottom: '6px' }}>
+                            <Clock size={14} style={{ color: 'var(--color-primary)' }} />
+                            <h5 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                              {t('Thời gian chờ nhận Lead (SLA)')}
+                            </h5>
+                          </div>
+                          
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.75rem' }}>{t('Giờ hành chính (HC)')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ paddingRight: '3.5rem', height: '34px', fontSize: '0.8125rem' }}
+                                  value={leadResponseTimeoutMinutes}
+                                  onChange={e => setLeadResponseTimeoutMinutes(Number(e.target.value))}
+                                  min={1}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('phút')}</span>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.75rem' }}>{t('Giờ tăng ca/đêm (TC)')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ paddingRight: '3.5rem', height: '34px', fontSize: '0.8125rem' }}
+                                  value={leadResponseTimeoutOvertimeMinutes}
+                                  onChange={e => setLeadResponseTimeoutOvertimeMinutes(Number(e.target.value))}
+                                  min={1}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('phút')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Cụm 2: Quy Tắc Thu Hồi & Thử Lại */}
+                        <div style={{
+                          background: 'var(--color-bg-light)',
+                          padding: '1rem 1.25rem',
+                          borderRadius: '10px',
+                          border: '1px solid var(--color-border-light)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px dashed var(--color-border-light)', paddingBottom: '6px' }}>
+                            <RefreshCw size={14} style={{ color: 'var(--color-primary)' }} />
+                            <h5 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                              {t('Quy Tắc Thu Hồi & Thử Lại')}
+                            </h5>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.75rem' }}>{t('Số lần thử lại tối đa/lead')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ paddingRight: '3.5rem', height: '34px', fontSize: '0.8125rem' }}
+                                  value={leadMaxRecallAttempts}
+                                  onChange={e => setLeadMaxRecallAttempts(Number(e.target.value))}
+                                  min={0}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('lần')}</span>
+                              </div>
+                              <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.3 }}>
+                                {t('Giới hạn thử lại của 1 Sale trên cùng lead trước khi hoãn.')}
+                              </span>
+                            </div>
+
+                            <div style={{ opacity: leadMaxRecallAttempts < 2 ? 0.62 : 1, transition: 'opacity 0.15s ease-in-out' }}>
+                              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.75rem', color: leadMaxRecallAttempts < 2 ? 'var(--color-text-muted)' : 'var(--color-text)' }}>{t('Thời gian giãn cách thử lại')}</label>
+                              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ 
+                                    paddingRight: '3.5rem', 
+                                    height: '34px', 
+                                    fontSize: '0.8125rem',
+                                    cursor: leadMaxRecallAttempts < 2 ? 'not-allowed' : 'text',
+                                    backgroundColor: leadMaxRecallAttempts < 2 ? 'var(--color-bg-light, #f8fafc)' : 'white'
+                                  }}
+                                  value={leadRecallCooldownMinutes}
+                                  onChange={e => setLeadRecallCooldownMinutes(Number(e.target.value))}
+                                  min={0}
+                                  disabled={leadMaxRecallAttempts < 2}
+                                  title={leadMaxRecallAttempts < 2 ? t('Chỉ khả dụng khi số lần thử lại tối đa từ 2 trở lên') : ''}
+                                />
+                                <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('phút')}</span>
+                              </div>
+                              <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.3 }}>
+                                {leadMaxRecallAttempts < 2 
+                                  ? t('Không cần giãn cách do số lần thử lại tối đa nhỏ hơn 2.')
+                                  : t('Thời gian tối thiểu chờ trước khi chia lại cho cùng Sale.')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+
+
+                      </div>
+                    </div>
+
+
+
+
+                  </div>
+
+                  
+                  {/* Kho Databank đã được lược bỏ */}
+                  {/* Nhóm 5: Quy tắc cọc & Bể cọc */}
+                  <div style={{ background: 'var(--color-bg-secondary)', padding: '1.25rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', marginTop: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
+                      <RefreshCw size={15} style={{ color: 'var(--color-primary)' }} />
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Quy tắc cọc & Bể cọc')}</h4>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                      <div>
+                        <label className="form-label">{t('Trạng thái hạ cấp khi bể cọc (Chưa doanh thu)')}</label>
+                        <CustomSelect
+                          options={pipelineStatusHierarchy.map(status => ({
+                            value: status,
+                            label: pipelineStatusLabels[status] || status
+                          }))}
+                          value={depositCancelDemotedStatus}
+                          onChange={val => setDepositCancelDemotedStatus(val as string)}
+                          width="100%"
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                          {t('Trạng thái đích mặc định của khách hàng khi hủy đơn đặt hàng trước khi phát sinh doanh thu (ví dụ: Đã Gặp).')}
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="form-label">{t('Trạng thái hạ cấp nếu từng có Đặt chỗ (Booking)')}</label>
+                        <CustomSelect
+                          options={pipelineStatusHierarchy.map(status => ({
+                            value: status,
+                            label: pipelineStatusLabels[status] || status
+                          }))}
+                          value={depositCancelDemotedBookingStatus}
+                          onChange={val => setDepositCancelDemotedBookingStatus(val as string)}
+                          width="100%"
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                          {t('Trạng thái đích nếu khách hàng từng có lịch sử đặt chỗ/booking (ví dụ: Booking).')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cụm 4: Hạn mức Phê duyệt PO */}
+                  <div style={{ background: 'var(--color-surface)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
+                      <DollarSign size={16} style={{ color: 'var(--color-primary)' }} />
+                      <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>{t('Hạn mức Phê duyệt Đơn nhập hàng (PO)')}</h4>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem' }}>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 600 }}>{t('Số tiền tối thiểu bắt buộc duyệt 3 cấp')}</label>
+                        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            style={{ paddingRight: '3.5rem' }}
+                            value={poThreeLevelThreshold}
+                            onChange={e => setPoThreeLevelThreshold(Number(e.target.value))}
+                            min={0}
+                          />
+                          <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('VND')}</span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                          {t('Các đơn nhập hàng (PO) có tổng tiền từ mức này trở lên bắt buộc phải đi qua quy trình phê duyệt đủ 3 cấp. Mặc định: 5.000.000 đ.')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+            {/* ===== TAB: TIME & SCHEDULE CONFIGURATION ===== */}
+            <div style={{ display: activeTab === 'time_schedule' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: 6, borderRadius: 8 }}>
+                    <Calendar size={18} />
+                  </span>
+                  {t('Cấu hình Thời gian & Lịch trình')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.75rem', lineHeight: 1.5 }}>
+                  {t('Thiết lập giờ làm việc, lịch trình chung của hệ thống, ca trực đêm, ngày nghỉ lễ và các tham số chấm công/đền bù.')}
+                </p>
+
+                {renderHelpBanner('time_schedule', t('Giải thích cơ chế Thời gian & Lịch trình'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <li><strong>{t('Giờ làm việc chung:')}</strong> {t('Thời gian làm việc và trực nhận data mặc định cho toàn bộ nhân sự (Sale) nếu không có lịch làm việc riêng.')}</li>
+                    <li><strong>{t('Ca trực đêm & Khung giờ vàng:')}</strong> {t('Đăng ký nhận lead ca đêm (tự động reset hàng ngày) và khung giờ cao điểm có tần suất phân phối đặc biệt.')}</li>
+                    <li><strong>{t('Trực cuối tuần & Ngày lễ:')}</strong> {t('Cho phép đăng ký và cơ chế tự động duyệt trực vào thứ bảy, chủ nhật hoặc các ngày lễ lớn.')}</li>
+                    <li><strong>{t('Chấm công & Đền bù SLA:')}</strong> {t('Quy định SLA duyệt đi muộn và đền bù số lượt nhận lead bị mất khi nhân sự check-in trễ hoặc nghỉ phép.')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+{/* Nhóm 2: Ca trực & Khung giờ vàng */}
+                  <div style={{ background: 'var(--color-bg-secondary)', padding: '1.25rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Clock size={15} style={{ color: 'var(--color-primary)' }} />
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Ca trực đêm & Khung giờ vàng')}</h4>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                      <div>
+                        <label className="form-label">{t('Bắt đầu ca đêm (Trực đêm)')}</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={nightShiftStartTime}
+                          onChange={e => setNightShiftStartTime(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label">{t('Kết thúc ca đêm (Reset roster)')}</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={nightShiftEndTime}
+                          onChange={e => setNightShiftEndTime(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '1.25rem' }}>
+                      <div>
+                        <label className="form-label">{t('Bắt đầu giờ vàng')}</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={goldenHoursStartTime}
+                          onChange={e => setGoldenHoursStartTime(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label">{t('Kết thúc giờ vàng')}</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={goldenHoursEndTime}
+                          onChange={e => setGoldenHoursEndTime(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="form-label">{t('Hạn mức lead Giờ vàng (mỗi Sale)')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="form-input"
+                          placeholder={t('0 = Không giới hạn')}
+                          value={goldenHoursMaxLeadsPerConsultant}
+                          onChange={e => setGoldenHoursMaxLeadsPerConsultant(Math.max(0, parseInt(e.target.value) || 0))}
+                        />
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                          {t('Số lead tối đa 1 Sale nhận trong suốt giờ vàng (0 = không giới hạn).')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Cho phép đăng ký trễ ca trực đêm')}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                          {t('Nếu bật, hệ thống cho phép nhân viên đăng ký trực ca đêm sau giờ bắt đầu ca tối đa N phút. Nếu tắt, chỉ cho phép đăng ký trước giờ bắt đầu ca.')}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                        <ToggleSwitch
+                          checked={allowLateNightShiftRegistration}
+                          onChange={setAllowLateNightShiftRegistration}
+                        />
+                      </div>
+                    </div>
+
+                    {allowLateNightShiftRegistration && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                        <div>
+                          <label className="form-label">{t('Thời gian trễ tối đa cho phép (phút)')}</label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="form-input"
+                            value={lateNightShiftRegistrationMinutes}
+                            onChange={e => setLateNightShiftRegistrationMinutes(Math.max(1, Number(e.target.value)))}
+                          />
+                        </div>
+                        <div />
+                      </div>
+                    )}
+
+                    <div style={{ 
+                      borderTop: '1px solid var(--color-border-light)', 
+                      paddingTop: '1rem', 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr', 
+                      gap: '1.25rem',
+                      opacity: allowLateNightShiftRegistration ? 0.5 : 1,
+                      pointerEvents: allowLateNightShiftRegistration ? 'none' : 'auto'
+                    }}>
+                      <div>
+                        <label className="form-label">{t('Yêu cầu đăng ký trước ca trực (phút)')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="form-input"
+                          disabled={allowLateNightShiftRegistration}
+                          value={allowLateNightShiftRegistration ? 0 : advanceNightShiftRegistrationMinutes}
+                          onChange={e => setAdvanceNightShiftRegistrationMinutes(Math.max(0, Number(e.target.value)))}
+                        />
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                          {allowLateNightShiftRegistration 
+                            ? t('Đã bị vô hiệu hoá do đang bật tính năng cho phép đăng ký trễ ca.')
+                            : t('Mặc định là 0 (đến đúng giờ bắt đầu ca). Nếu đặt ví dụ 30, nhân viên phải đăng ký trước ca 30 phút.')
+                          }
+                        </div>
+                      </div>
+                      <div />
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Tự động duyệt đăng ký trực đêm')}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                          {t('Nếu bật, nhân viên đăng ký trực ca đêm sẽ được phê duyệt ngay lập tức. Nếu tắt, đăng ký cần Admin hoặc Director duyệt mới hoạt động.')}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                        <ToggleSwitch
+                          checked={autoApproveNightShift}
+                          onChange={setAutoApproveNightShift}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem' }}>
+                      <label className="form-label" style={{ fontWeight: 700 }}>{t('Thời gian lưu trữ lịch sử ca trực (Đêm, Cuối tuần, Ngày lễ)')}</label>
+                      <CustomSelect
+                        options={[
+                          { value: '90', label: t('90 ngày (3 tháng - Mặc định)') },
+                          { value: '180', label: t('180 ngày (6 tháng)') },
+                          { value: '365', label: t('365 ngày (1 năm)') },
+                          { value: '0', label: t('Vĩnh viễn (Lưu trữ mãi mãi, không bao giờ xóa)') }
+                        ]}
+                        value={shiftHistoryRetentionDays.toString()}
+                        onChange={val => setShiftHistoryRetentionDays(Number(val))}
+                        width="100%"
+                      />
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                        {t('Quy định thời hạn hệ thống lưu giữ lịch sử phân công ca trực trên Lịch Chấm công. Chọn "Vĩnh viễn" nếu muốn giữ lại toàn bộ lịch sử không giới hạn.')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nhóm: Giờ làm việc & Lịch trình chung */}
+                  <div style={{ background: 'var(--color-bg-secondary)', padding: '1.25rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Clock size={15} style={{ color: 'var(--color-primary)' }} />
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Giờ làm việc & Lịch trình chung')}</h4>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                      {t('Cấu hình giờ làm việc tiêu chuẩn áp dụng chung cho toàn hệ thống. Nhân viên (Sale) sẽ không tự chỉnh sửa lịch này trong trang cá nhân.')}
+                    </div>
+
+                    {/* Segmented Control for Schedule Mode */}
+                    <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-bg)', padding: '4px', borderRadius: '12px', width: 'fit-content' }}>
+                      <button
+                        type="button"
+                        onClick={() => setGlobalScheduleMode('daily')}
+                        style={{
+                          padding: '6px 16px', borderRadius: '8px', fontWeight: 600, fontSize: '0.75rem',
+                          background: globalScheduleMode === 'daily' ? 'var(--color-surface)' : 'transparent',
+                          color: globalScheduleMode === 'daily' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                          boxShadow: globalScheduleMode === 'daily' ? 'var(--shadow-sm)' : 'none',
+                          transition: 'all 0.2s', border: 'none', cursor: 'pointer'
+                        }}
+                      >{t('Cố định hàng ngày')}</button>
+                      <button
+                        type="button"
+                        onClick={() => setGlobalScheduleMode('custom')}
+                        style={{
+                          padding: '6px 16px', borderRadius: '8px', fontWeight: 600, fontSize: '0.75rem',
+                          background: globalScheduleMode === 'custom' ? 'var(--color-surface)' : 'transparent',
+                          color: globalScheduleMode === 'custom' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                          boxShadow: globalScheduleMode === 'custom' ? 'var(--shadow-sm)' : 'none',
+                          transition: 'all 0.2s', border: 'none', cursor: 'pointer'
+                        }}
+                      >{t('Tùy chỉnh (Thứ 2 - CN)')}</button>
+                    </div>
+
+                    {globalScheduleMode === 'daily' ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: '1.25rem' }}>
+                        <div>
+                          <label className="form-label">{t('Bắt đầu làm việc (Sáng)')}</label>
+                          <input
+                            type="time"
+                            className="form-input"
+                            value={globalWorkStartTime}
+                            onChange={e => setGlobalWorkStartTime(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">{t('Kết thúc làm việc (Sáng)')}</label>
+                          <input
+                            type="time"
+                            className="form-input"
+                            value={globalWorkEndTime}
+                            onChange={e => setGlobalWorkEndTime(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">{t('Bắt đầu làm việc (Chiều)')}</label>
+                          <input
+                            type="time"
+                            className="form-input"
+                            value={globalWorkStartTimeAfternoon}
+                            onChange={e => setGlobalWorkStartTimeAfternoon(e.target.value)}
+                            placeholder="--:--"
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label">{t('Kết thúc làm việc (Chiều)')}</label>
+                          <input
+                            type="time"
+                            className="form-input"
+                            value={globalWorkEndTimeAfternoon}
+                            onChange={e => setGlobalWorkEndTimeAfternoon(e.target.value)}
+                            placeholder="--:--"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {Object.entries({
+                          "1": "Thứ 2",
+                          "2": "Thứ 3",
+                          "3": "Thứ 4",
+                          "4": "Thứ 5",
+                          "5": "Thứ 6",
+                          "6": "Thứ 7",
+                          "7": "Chủ Nhật"
+                        }).map(([dayKey, dayLabel]) => {
+                          const config = globalWorkSchedule[dayKey] || { active: true, start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon };
+                          const isActive = config.active;
+
+                          return (
+                            <div
+                              key={dayKey}
+                              style={{
+                                display: 'flex', 
+                                flexDirection: isMobile ? 'column' : 'row',
+                                justifyContent: 'space-between', 
+                                alignItems: isMobile ? 'stretch' : 'center',
+                                gap: isMobile ? '8px' : '10px',
+                                padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--color-border-light)',
+                                background: isActive ? 'var(--color-surface)' : 'var(--color-bg)',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: isMobile ? '100%' : 'auto' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', margin: 0, userSelect: 'none', whiteSpace: 'nowrap' }}>
+                                  <input
+                                    type="checkbox"
+                                    style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px', cursor: 'pointer' }}
+                                    checked={isActive}
+                                    onChange={(e) => {
+                                      const val = e.target.checked;
+                                      setGlobalWorkSchedule((prev: any) => ({
+                                        ...prev,
+                                        [dayKey]: { ...(prev[dayKey] || { start: globalWorkStartTime, end: globalWorkEndTime, start_afternoon: globalWorkStartTimeAfternoon, end_afternoon: globalWorkEndTimeAfternoon }), active: val }
+                                      }));
+                                    }}
+                                  />
+                                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                    {t(dayLabel)}
+                                  </span>
+                                </label>
+                                {isMobile && !isActive && (
+                                  <span style={{
+                                    padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700,
+                                    background: 'var(--color-danger-light)',
+                                    color: 'var(--color-danger)'
+                                  }}>
+                                    {t('Nghỉ')}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '10px', 
+                                justifyContent: isMobile ? 'flex-start' : 'flex-end',
+                                width: isMobile ? '100%' : 'auto'
+                              }}>
+                                {isActive ? (
+                                  <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: isMobile ? '8px' : '14px',
+                                    width: isMobile ? '100%' : 'auto',
+                                    flexDirection: isMobile ? 'column' : 'row',
+                                    justifyContent: isMobile ? 'stretch' : 'flex-end'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-start' }}>
+                                      <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Sáng:')}</span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <input
+                                          type="time"
+                                          className="form-input"
+                                          style={{ width: '92px', height: '34px', fontSize: '0.8rem', padding: '0 6px', textAlign: 'center', borderRadius: '6px' }}
+                                          value={config.start || "08:00"}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setGlobalWorkSchedule((prev: any) => ({
+                                              ...prev,
+                                              [dayKey]: { ...(prev[dayKey] || {}), active: true, start: val }
+                                            }));
+                                          }}
+                                        />
+                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>-</span>
+                                        <input
+                                          type="time"
+                                          className="form-input"
+                                          style={{ width: '92px', height: '34px', fontSize: '0.8rem', padding: '0 6px', textAlign: 'center', borderRadius: '6px' }}
+                                          value={config.end || "12:00"}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setGlobalWorkSchedule((prev: any) => ({
+                                              ...prev,
+                                              [dayKey]: { ...(prev[dayKey] || {}), active: true, end: val }
+                                            }));
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-start' }}>
+                                      <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Chiều:')}</span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <input
+                                          type="time"
+                                          className="form-input"
+                                          style={{ width: '92px', height: '34px', fontSize: '0.8rem', padding: '0 6px', textAlign: 'center', borderRadius: '6px' }}
+                                          value={config.start_afternoon || ""}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setGlobalWorkSchedule((prev: any) => ({
+                                              ...prev,
+                                              [dayKey]: { ...(prev[dayKey] || {}), active: true, start_afternoon: val }
+                                            }));
+                                          }}
+                                          placeholder="--:--"
+                                        />
+                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>-</span>
+                                        <input
+                                          type="time"
+                                          className="form-input"
+                                          style={{ width: '92px', height: '34px', fontSize: '0.8rem', padding: '0 6px', textAlign: 'center', borderRadius: '6px' }}
+                                          value={config.end_afternoon || ""}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setGlobalWorkSchedule((prev: any) => ({
+                                              ...prev,
+                                              [dayKey]: { ...(prev[dayKey] || {}), active: true, end_afternoon: val }
+                                            }));
+                                          }}
+                                          placeholder="--:--"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  !isMobile && (
+                                    <span style={{
+                                      padding: '2px 8px', borderRadius: '6px', fontSize: '0.725rem', fontWeight: 700,
+                                      background: 'var(--color-danger-light)',
+                                      color: 'var(--color-danger)'
+                                    }}>
+                                      {t('Nghỉ')}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Cho phép đăng ký trực cuối tuần')}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                            {t('Nếu bật, hệ thống hiển thị nút đăng ký trực cuối tuần cho nhân viên (Thứ Bảy, Chủ Nhật hoặc ngày nghỉ).')}
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                          <ToggleSwitch
+                            checked={allowWeekendShiftRegistration}
+                            onChange={setAllowWeekendShiftRegistration}
+                          />
+                        </div>
+                      </div>
+
+                      {allowWeekendShiftRegistration && (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem', borderTop: '1px dotted var(--color-border-light)', paddingTop: '0.75rem' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Tự động duyệt trực cuối tuần')}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                                {t('Nếu tắt, đăng ký trực cuối tuần của Sale sẽ ở trạng thái chờ duyệt bởi quản trị viên.')}
+                              </div>
+                            </div>
+                            <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                              <ToggleSwitch
+                                checked={autoApproveWeekendShift}
+                                onChange={setAutoApproveWeekendShift}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem', borderTop: '1px dotted var(--color-border-light)', paddingTop: '0.75rem' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Bắt buộc chấm công cuối tuần để nhận data')}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                                {t('Nếu bật, vào các ngày cuối tuần (Thứ Bảy, Chủ Nhật), nhân viên phải bấm chấm công thì mới được hệ thống phân phối lead/data. Lượt chấm công ngày cuối tuần sẽ được duyệt tự động ngay lập tức (không cần quản trị viên duyệt).')}
+                              </div>
+                            </div>
+                            <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                              <ToggleSwitch
+                                checked={requireCheckinWeekendLead}
+                                onChange={setRequireCheckinWeekendLead}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', borderTop: '1px dotted var(--color-border-light)', paddingTop: '0.75rem' }}>
+                            <div>
+                              <label className="form-label">{t('Yêu cầu đăng ký trước ngày trực (tiếng)')}</label>
+                              <input
+                                type="number"
+                                min="0"
+                                className="form-input"
+                                value={weekendShiftRegistrationLeadHours}
+                                onChange={e => setWeekendShiftRegistrationLeadHours(Math.max(0, Number(e.target.value)))}
+                              />
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                                {t('Mặc định 0 tiếng (có thể đăng ký bất cứ lúc nào trước ngày trực).')}
+                              </div>
+                            </div>
+                            <div />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quy tắc Chấm công, SLA & Báo cáo */}
+                  <div style={{ background: 'var(--color-bg-secondary)', padding: '1.25rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Clock size={15} style={{ color: 'var(--color-primary)' }} />
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Quy tắc Chấm công, SLA & Báo cáo')}</h4>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      {/* Cột Trái: Phân phối Lead & Tự động duyệt */}
+                      <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1.25rem', height: '100%' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Zap size={15} style={{ color: 'var(--color-primary)' }} />
+                          {t('Phân phối Lead & Tự động duyệt')}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1rem' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {t('Cho phép nhận data ngay khi chấm công')}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                              {t('Cho phép nhân viên đi trễ (trạng thái chờ duyệt) được nhận lead ngay trong lúc chờ sếp duyệt.')}
+                            </div>
+                          </div>
+                          <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                            <ToggleSwitch
+                              checked={allowLeadDistributionOnPendingCheckin}
+                              onChange={setAllowLeadDistributionOnPendingCheckin}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tự động duyệt Chấm công (Bỏ qua duyệt đi trễ / về sớm) */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {t('Tự động duyệt Chấm công (Bỏ qua xét duyệt đi trễ & về sớm)')}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                              {t('Nếu bật, khi chấm công trễ hoặc về sớm, hệ thống sẽ chấp nhận tự động ngay lập tức mà không cần nhân viên gửi lý do hay chờ quản lý phê duyệt.')}
+                            </div>
+                          </div>
+                          <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                            <ToggleSwitch
+                              checked={autoApproveCheckin}
+                              onChange={setAutoApproveCheckin}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Cột Phải: Cấu hình Chấm công, SLA & Báo cáo */}
+                      <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1.25rem', height: '100%' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Clock size={15} style={{ color: 'var(--color-primary)' }} />
+                          {t('Cấu hình Chấm công, SLA & Báo cáo')}
+                        </div>
+
+                        {/* Yêu cầu Chấm công Ra ca (Cuối ca) */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1rem' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {t('Yêu cầu Chấm công Ra ca (Cuối ca)')}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                              {t('Bắt buộc nhân viên thực hiện chấm công Ra ca khi kết thúc giờ làm việc. Nhắc nhở sẽ tự động gửi vào đúng giờ tan làm.')}
+                            </div>
+                          </div>
+                          <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                            <ToggleSwitch
+                              checked={requireCheckout}
+                              onChange={setRequireCheckout}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1rem' }}>
+                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{t('SLA Duyệt đi trễ (Chấm công)')}</label>
+                          <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                            <input
+                              type="number"
+                              className="form-input"
+                              style={{ paddingRight: '3.5rem' }}
+                              value={checkinApprovalSlaMinutes}
+                              onChange={e => setCheckinApprovalSlaMinutes(Number(e.target.value))}
+                              min={1}
+                            />
+                            <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('phút')}</span>
+                          </div>
+                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                            {t('Thời gian chờ duyệt xin nhận lead trễ trước khi gửi cảnh báo leo thang.')}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1rem' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {t('Thông báo trước giờ chấm công')}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                              {t('Bật nhắc nhở Sale điểm danh qua ứng dụng, Zalo, Telegram & Email.')}
+                            </div>
+                            {attendanceNotificationEnabled && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text)', fontWeight: 600 }}>{t('Báo trước:')}</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ width: '70px', height: '28px', padding: '2px 8px', fontSize: '0.75rem', borderRadius: '6px', textAlign: 'center' }}
+                                  value={attendanceNotificationLeadMinutes}
+                                  onChange={e => setAttendanceNotificationLeadMinutes(Math.max(1, Number(e.target.value)))}
+                                  min={1}
+                                />
+                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{t('phút')}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                            <ToggleSwitch
+                              checked={attendanceNotificationEnabled}
+                              onChange={setAttendanceNotificationEnabled}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '1rem' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {t('Thông báo nhắc lịch trực đêm')}
+                            </div>
+                            <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                              {t('Gửi nhắc nhở qua App/Zalo/Telegram/Email cho Sale có lịch trực đêm.')}
+                            </div>
+                            {nightDutyNotificationEnabled && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text)', fontWeight: 600 }}>{t('Báo trước:')}</span>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ width: '70px', height: '26px', padding: '2px 8px', fontSize: '0.75rem', borderRadius: '6px', textAlign: 'center' }}
+                                  value={nightDutyNotificationLeadMinutes}
+                                  onChange={e => setNightDutyNotificationLeadMinutes(Math.max(1, Number(e.target.value)))}
+                                  min={1}
+                                />
+                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{t('phút')}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                            <ToggleSwitch
+                              checked={nightDutyNotificationEnabled}
+                              onChange={setNightDutyNotificationEnabled}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Báo cáo Chấm công & Trực ca tự động gửi Sale */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                {t('Báo cáo Chấm công & Trực ca tự động gửi Sale')}
+                              </div>
+                              <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                                {t('Tự động tổng kết và gửi báo cáo chi tiết về số ngày làm việc, đi trễ, ca trực đêm & trực cuối tuần cho từng nhân viên Sale qua Ma trận thông báo.')}
+                              </div>
+                            </div>
+                            <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                              <ToggleSwitch
+                                checked={attendanceReportEnabled}
+                                onChange={setAttendanceReportEnabled}
+                              />
+                            </div>
+                          </div>
+
+                          {attendanceReportEnabled && (
+                            <div style={{
+                              background: 'var(--color-bg-light)',
+                              padding: '1.25rem',
+                              borderRadius: '12px',
+                              border: '1px solid var(--color-border-light)',
+                              marginTop: '0.75rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '1.25rem',
+                              animation: 'fadeIn 0.2s'
+                            }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem' }}>
+                                <div>
+                                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '6px' }}>
+                                    {t('Ngày gửi tự động hàng tháng')}
+                                  </label>
+                                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={31}
+                                      className="form-input"
+                                      style={{ paddingRight: '6.5rem' }}
+                                      value={attendanceReportTriggerDay}
+                                      onChange={e => setAttendanceReportTriggerDay(Math.min(31, Math.max(1, Number(e.target.value))))}
+                                    />
+                                    <span style={{ position: 'absolute', right: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                                      {t('hàng tháng')}
+                                    </span>
+                                  </div>
+                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                                    {t('Ví dụ: Đặt là 1 để tự động tổng kết báo cáo chấm công vào ngày 1 của tháng mới.')}
+                                  </span>
+                                </div>
+
+                                <div>
+                                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '6px' }}>
+                                    {t('Khoảng dữ liệu báo cáo')}
+                                  </label>
+                                  <CustomSelect
+                                    options={[
+                                      { value: 'previous_month', label: t('Tháng trước (Mặc định)') },
+                                      { value: 'last_30_days', label: t('30 ngày gần nhất') },
+                                      { value: 'custom', label: t('Khoảng ngày tùy chỉnh') }
+                                    ]}
+                                    value={attendanceReportDateMode}
+                                    onChange={val => setAttendanceReportDateMode(val.toString())}
+                                    width="100%"
+                                  />
+                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                                    {t('Chọn khoảng thời gian lấy số liệu ngày công, đi trễ và trực ca để tổng kết.')}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {attendanceReportDateMode === 'custom' && (
+                                <div style={{ borderTop: '1px dashed var(--color-border-light)', paddingTop: '1rem', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem' }}>
+                                  <div>
+                                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '6px' }}>{t('Từ ngày')}</label>
+                                    <input
+                                      type="date"
+                                      className="form-input"
+                                      value={attendanceReportStartDate}
+                                      onChange={e => setAttendanceReportStartDate(e.target.value)}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '6px' }}>{t('Đến ngày')}</label>
+                                    <input
+                                      type="date"
+                                      className="form-input"
+                                      value={attendanceReportEndDate}
+                                      onChange={e => setAttendanceReportEndDate(e.target.value)}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nhóm: Lịch nghỉ lễ & Đăng ký trực lễ */}
+                  <div style={{ background: 'var(--color-bg-secondary)', padding: '1.25rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Lịch nghỉ lễ & Đăng ký trực lễ')}</h4>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                      {t('Thiết lập các đợt nghỉ lễ. Trong thời gian nghỉ lễ, Sale chỉ nhận được lead nếu đăng ký trực lễ và được phê duyệt.')}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Tự động duyệt đăng ký trực ngày lễ')}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                          {t('Nếu tắt (mặc định), đăng ký trực lễ bắt buộc phải được Admin/Director phê duyệt thủ công.')}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                        <ToggleSwitch
+                          checked={autoApproveHolidayShift}
+                          onChange={setAutoApproveHolidayShift}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem', borderTop: '1px dotted var(--color-border-light)', paddingTop: '0.75rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Bắt buộc chấm công ngày lễ để nhận data')}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                          {t('Nếu bật, vào các ngày nghỉ lễ, nhân viên phải bấm chấm công thì mới được hệ thống phân phối lead/data. Lượt chấm công ngày lễ sẽ được duyệt tự động ngay lập tức (không cần quản trị viên duyệt).')}
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                        <ToggleSwitch
+                          checked={requireCheckinHolidayLead}
+                          onChange={setRequireCheckinHolidayLead}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Holiday list and add form */}
+                    <div style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <h5 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>{t('Danh sách ngày nghỉ lễ')}</h5>
+                      
+                      {holidaySchedules.length === 0 ? (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                          {t('Chưa có lịch nghỉ lễ nào được thiết lập.')}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {holidaySchedules.map((holiday, index) => (
+                            <div 
+                              key={holiday.id || index}
+                              style={{ 
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                                padding: '8px 12px', borderRadius: '8px', background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border-light)'
+                              }}
+                            >
+                              <div>
+                                <span style={{ fontWeight: 700, fontSize: '0.8rem', marginRight: '8px', color: 'var(--color-primary)' }}>
+                                  {holiday.name}
+                                </span>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                  ({holiday.start} → {holiday.end})
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHolidaySchedules(prev => prev.filter((_, idx) => idx !== index));
+                                }}
+                                style={{ 
+                                  background: 'transparent', border: 'none', color: 'var(--color-danger)', 
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  padding: '4px', borderRadius: '4px'
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Mini Add Holiday Form */}
+                      <div style={{ 
+                        display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end',
+                        padding: '12px', borderRadius: '8px', background: 'var(--color-bg)',
+                        border: '1px dashed var(--color-border)'
+                      }}>
+                        <div style={{ flex: 2, minWidth: '150px' }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem' }}>{t('Tên dịp lễ')}</label>
+                           <input
+                             type="text"
+                             id="new-holiday-name"
+                             placeholder={t('Ví dụ: Nghỉ Tết Âm Lịch')}
+                             className="form-input"
+                             style={{ height: '34px', fontSize: '0.75rem' }}
+                           />
+                        </div>
+                        <div style={{ flex: 1, minWidth: '110px' }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem' }}>{t('Từ ngày')}</label>
+                           <input
+                             type="date"
+                             id="new-holiday-start"
+                             className="form-input"
+                             style={{ height: '34px', fontSize: '0.75rem' }}
+                           />
+                        </div>
+                        <div style={{ flex: 1, minWidth: '110px' }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem' }}>{t('Đến ngày')}</label>
+                           <input
+                             type="date"
+                             id="new-holiday-end"
+                             className="form-input"
+                             style={{ height: '34px', fontSize: '0.75rem' }}
+                           />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nameEl = document.getElementById('new-holiday-name') as HTMLInputElement;
+                            const startEl = document.getElementById('new-holiday-start') as HTMLInputElement;
+                            const endEl = document.getElementById('new-holiday-end') as HTMLInputElement;
+                            if (!nameEl || !startEl || !endEl) return;
+                            
+                            const name = nameEl.value.trim();
+                            const start = startEl.value;
+                            const end = endEl.value;
+                            
+                            if (!name || !start || !end) {
+                              toast.error(t("Vui lòng điền đầy đủ tên, ngày bắt đầu và kết thúc."));
+                              return;
+                            }
+                            if (start > end) {
+                              toast.error(t("Ngày bắt đầu không được lớn hơn ngày kết thúc."));
+                              return;
+                            }
+                            
+                            const newHoliday = {
+                              id: Date.now(),
+                              name,
+                              start,
+                              end
+                            };
+                            
+                            setHolidaySchedules(prev => [...prev, newHoliday]);
+                            nameEl.value = '';
+                            startEl.value = '';
+                            endEl.value = '';
+                            toast.success(t("Đã thêm ngày nghỉ lễ mới!"));
+                          }}
+                          style={{ 
+                            background: 'var(--color-primary)', color: 'white', border: 'none', 
+                            padding: '0 16px', height: '34px', borderRadius: '6px', fontWeight: 600,
+                            fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+                          }}
+                        >
+                          <Plus size={14} /> {t('Thêm')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== SUB-TAB: PHÂN QUYỀN PHÊ DUYỆT (APPROVAL MATRIX & SPECIFIC APPROVERS) ===== */}
+            <div style={{ display: activeTab === 'approval_rules' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: 0 }}>
+                <div>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <CheckSquare size={20} color="var(--color-primary)" />
+                    {t('Cấu hình Quy định Phê duyệt & Người duyệt Ưu tiên')}
+                  </h3>
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                    {t('Chỉ định cụ thể cá nhân (Admin, Quản lý, Nhân sự cụ thể) hoặc Vai trò được ưu tiên phê duyệt cho 9 quy trình nghiệp vụ. Hệ thống tự động đẩy thông báo Zalo/Email cho đúng người có thẩm quyền.')}
+                  </p>
+                </div>
+
+                {renderHelpBanner('approval_rules', t('Giải thích cơ chế Phân quyền Phê duyệt ERP'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Chỉ định cá nhân cụ thể:')}</strong> {t('Hỗ trợ tìm kiếm và chọn đích danh từng tài khoản Admin/Manager/Kế toán phê duyệt mà không bị bó hẹp theo vai trò chung.')}</li>
+                    <li><strong>{t('Hạn mức chi phí linh hoạt:')}</strong> {t('Cho phép tùy chỉnh không giới hạn các mức số tiền chi phí (VD: < 5tr, 5tr-20tr, > 20tr) và gán người duyệt riêng cho mỗi mức.')}</li>
+                    <li><strong>{t('Truy vết Audit Trail:')}</strong> {t('Mọi hành vi phê duyệt/từ chối đều được lưu vết chi tiết người thực hiện và ngày giờ.')}</li>
+                  </ul>
+                ))}
+
+                {/* 9 Approval Categories Grid */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {(() => {
+                    // Build option list of specific accounts (Manager level & above) + roles
+                    const approverOptions: any[] = [];
+
+                    // Rich Role Badges Mapping
+                    const roleBadges: Record<string, { bg: string; text: string }> = {
+                      role_manager: { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', text: 'QL' },
+                      role_director: { bg: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', text: 'GĐ' },
+                      role_assistant: { bg: 'linear-gradient(135deg, #10b981, #047857)', text: 'TL' },
+                      role_accountant: { bg: 'linear-gradient(135deg, #f59e0b, #b45309)', text: 'KT' },
+                      role_superadmin: { bg: 'linear-gradient(135deg, #ef4444, #b91c1c)', text: 'AD' }
+                    };
+
+                    // 1. Roles section first with rich gradient role badges matching selected avatars
+                    approverOptions.push(
+                      {
+                        value: 'role_manager',
+                        label: t('Tất cả Quản lý (Manager)'),
+                        icon: <div style={{ width: 26, height: 26, borderRadius: '50%', background: roleBadges.role_manager.bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.7rem' }}>QL</div>
+                      },
+                      {
+                        value: 'role_director',
+                        label: t('Tất cả Giám đốc (Director)'),
+                        icon: <div style={{ width: 26, height: 26, borderRadius: '50%', background: roleBadges.role_director.bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.7rem' }}>GĐ</div>
+                      },
+                      {
+                        value: 'role_assistant',
+                        label: t('Tất cả Trợ lý (Assistant)'),
+                        icon: <div style={{ width: 26, height: 26, borderRadius: '50%', background: roleBadges.role_assistant.bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.7rem' }}>TL</div>
+                      },
+                      {
+                        value: 'role_accountant',
+                        label: t('Tất cả Kế toán (Accountant)'),
+                        icon: <div style={{ width: 26, height: 26, borderRadius: '50%', background: roleBadges.role_accountant.bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.7rem' }}>KT</div>
+                      },
+                      {
+                        value: 'role_superadmin',
+                        label: t('Tất cả Super Admin'),
+                        icon: <div style={{ width: 26, height: 26, borderRadius: '50%', background: roleBadges.role_superadmin.bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.7rem' }}>AD</div>
+                      }
+                    );
+
+                    // 2. Specific users/accounts - ONLY MANAGER LEVEL AND ABOVE (Filter out regular Sale staff)
+                    if (Array.isArray(accounts) && accounts.length > 0) {
+                      const qualifiedAccounts = accounts.filter((acc: any) => {
+                        const r = (acc.role || '').toLowerCase().trim();
+                        // Exclude non-manager / standard sale staff
+                        return r !== 'sale' && r !== 'employee' && r !== 'staff';
+                      });
+
+                      qualifiedAccounts.forEach((acc: any) => {
+                        const nameStr = acc.name || acc.username || `Tài khoản #${acc.id}`;
+                        const roleStr = acc.role ? ` [${acc.role.toUpperCase()}]` : '';
+                        const avatarUrl = acc.avatar || acc.avatar_url || undefined;
+                        approverOptions.push({
+                          value: `user_${acc.id}`,
+                          label: `${nameStr}${roleStr}`,
+                          avatar: avatarUrl
+                        });
+                      });
+                    }
+
+                    const categories = [
+                      { key: 'attendance', title: t('1. Chấm công, Đi trễ & Làm bổ sung'), desc: t('Duyệt lý do đi trễ, làm bù và cập nhật bổ sung chấm công'), icon: <Clock size={16} /> },
+                      { key: 'leave', title: t('2. Xin nghỉ phép cá nhân'), desc: t('Duyệt đơn xin nghỉ phép, tạm ngưng hoạt động của Sale'), icon: <Calendar size={16} /> },
+                      { key: 'shift_registration', title: t('3. Đăng ký Ca trực (Đêm, Cuối tuần & Lễ)'), desc: t('Phê duyệt ca trực nhận data ngày nghỉ, đêm và dịp lễ/Tết'), icon: <Zap size={16} /> },
+                      { key: 'cooperation', title: t('4. Hợp đồng Đối tác & Chia hoa hồng'), desc: t('Duyệt tỷ lệ phần trăm phân chia doanh thu/chiết khấu đối tác'), icon: <Users size={16} /> },
+                      { key: 'expense', title: t('5. Đề xuất Chi phí & Thu chi'), desc: t('Duyệt đề xuất chi phí hoạt động, mua sắm phân tầng theo số tiền tùy chỉnh'), icon: <DollarSign size={16} />, isExpense: true },
+                      { key: 'deposit', title: t('6. Duyệt Đơn đặt hàng & Giao dịch'), desc: t('Xác nhận thông tin đơn đặt hàng, đổi sản phẩm và thanh toán'), icon: <FileText size={16} /> },
+                      { key: 'ticket', title: t('7. Ticket Bù data & Yêu cầu Hỗ trợ'), desc: t('Duyệt ticket khiếu nại data lỗi và cấp bù lượt nhận lead'), icon: <LifeBuoy size={16} /> },
+                      { key: 'lead_transfer', title: t('8. Yêu cầu Nhả Data / Chuyển chủ lead'), desc: t('Duyệt nhả khách hàng về Kho chung hoặc điều chuyển chủ sở hữu'), icon: <RefreshCw size={16} /> },
+                      { key: 'quote_invoice', title: t('9. Báo giá & Hóa đơn giá trị lớn'), desc: t('Duyệt tạo báo giá đặc biệt hoặc hóa đơn điều chỉnh'), icon: <FileSpreadsheet size={16} /> }
+                    ];
+
+                    return categories.map((category) => {
+                      const cfg = approvalMatrixConfig[category.key] || { enable_team_leader: false, designated_roles: ['manager'], notify_admin: false };
+                      const selectedApprovers = cfg.designated_approvers || (cfg.designated_roles ? cfg.designated_roles.map((r: string) => r.startsWith('user_') || r.startsWith('role_') ? r : `role_${r}`) : ['role_manager']);
+
+                      return (
+                        <div
+                          key={category.key}
+                          style={{
+                            background: 'var(--color-bg-light)',
+                            padding: '1.25rem',
+                            borderRadius: '12px',
+                            border: '1px solid var(--color-border-light)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+                            <div>
+                              <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: 'var(--color-primary)', display: 'flex' }}>{category.icon}</span>
+                                {category.title}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                {category.desc}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.35fr 1fr', gap: '1.25rem', borderTop: '1px dashed var(--color-border-light)', paddingTop: '1rem' }}>
+                            {/* Toggle 1: Enable Team Leader */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', background: 'var(--color-surface)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border-light)' }}>
+                              <div>
+                                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                  {t('Ưu tiên Trưởng nhóm/Team Leader duyệt')}
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                  {t('Nếu nhân viên thuộc Team, Trưởng nhóm sẽ nhận thông báo & tự động có quyền duyệt')}
+                                </div>
+                              </div>
+                              <ToggleSwitch
+                                checked={Boolean(cfg.enable_team_leader)}
+                                onChange={(val) => {
+                                  setApprovalMatrixConfig(prev => ({
+                                    ...prev,
+                                    [category.key]: { ...(prev[category.key] || {}), enable_team_leader: val }
+                                  }));
+                                }}
+                              />
+                            </div>
+
+                            {/* Specific Approvers Selector with Avatars OUTSIDE + "+ Thêm" button */}
+                            <div style={{ background: 'var(--color-surface)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                {t('Cấp duyệt Backup')}
+                              </label>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minHeight: '34px', paddingTop: '2px' }}>
+                                {/* Render selected avatars OUTSIDE without X badge */}
+                                {approverOptions.filter(o => selectedApprovers.includes(String(o.value))).map(opt => (
+                                  <div
+                                    key={String(opt.value)}
+                                    title={`${t(opt.label)} (${t('Click để xóa')})`}
+                                    onClick={() => {
+                                      const newVal = selectedApprovers.filter(v => String(v) !== String(opt.value));
+                                      setApprovalMatrixConfig(prev => ({
+                                        ...prev,
+                                        [category.key]: {
+                                          ...(prev[category.key] || {}),
+                                          designated_approvers: newVal,
+                                          designated_roles: newVal.filter(v => v.startsWith('role_')).map(v => v.replace('role_', '')),
+                                          designated_user_ids: newVal.filter(v => v.startsWith('user_')).map(v => v.replace('user_', ''))
+                                        }
+                                      }));
+                                    }}
+                                    style={{
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      transition: 'transform 0.15s, opacity 0.15s'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1.0)'}
+                                  >
+                                    {opt.avatar ? (
+                                      <Avatar src={opt.avatar} name={t(opt.label)} size={32} />
+                                    ) : roleBadges[opt.value] ? (
+                                      <div style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '50%',
+                                        background: roleBadges[opt.value].bg,
+                                        color: '#ffffff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontWeight: 800,
+                                        fontSize: '0.725rem',
+                                        letterSpacing: '-0.5px',
+                                        boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
+                                        border: '1.5px solid var(--color-surface, #ffffff)'
+                                      }}>
+                                        {roleBadges[opt.value].text}
+                                      </div>
+                                    ) : (
+                                      <Avatar name={t(opt.label)} size={32} />
+                                    )}
+                                  </div>
+                                ))}
+
+                                {/* + Thêm button trigger */}
+                                <CustomSelect
+                                  options={approverOptions.filter(o => !selectedApprovers.includes(String(o.value)))}
+                                  value=""
+                                  onChange={(addVal: string) => {
+                                    if (addVal) {
+                                      const newVal = [...selectedApprovers, String(addVal)];
+                                      setApprovalMatrixConfig(prev => ({
+                                        ...prev,
+                                        [category.key]: {
+                                          ...(prev[category.key] || {}),
+                                          designated_approvers: newVal,
+                                          designated_roles: newVal.filter(v => v.startsWith('role_')).map(v => v.replace('role_', '')),
+                                          designated_user_ids: newVal.filter(v => v.startsWith('user_')).map(v => v.replace('user_', ''))
+                                        }
+                                      }));
+                                    }
+                                  }}
+                                  placeholder={t('+ Thêm')}
+                                  searchable={true}
+                                  showAvatars={true}
+                                  width="100px"
+                                  size="sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Dynamic Non-hardcoded Money Tiers for Expenses */}
+                          {category.isExpense && (
+                            <div style={{ background: 'var(--color-surface)', padding: '14px', borderRadius: '10px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                <div>
+                                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <DollarSign size={16} />
+                                    {t('Cấu hình Hạn mức Số tiền & Người duyệt Chi phí (Tùy chỉnh linh hoạt)')}
+                                  </div>
+                                  <div style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                    {t('Quy định số tiền tối đa cho từng mức chi phí và chọn người/vai trò duyệt riêng cho mỗi mức.')}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentTiers = cfg.money_tiers || [];
+                                    const newTier = {
+                                      id: Date.now(),
+                                      max_amount: 5000000,
+                                      approvers: ['team_leader']
+                                    };
+                                    setApprovalMatrixConfig(prev => ({
+                                      ...prev,
+                                      expense: {
+                                        ...(prev.expense || {}),
+                                        money_tiers: [...currentTiers, newTier]
+                                      }
+                                    }));
+                                  }}
+                                  style={{
+                                    background: 'var(--color-primary-light)',
+                                    color: 'var(--color-primary)',
+                                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                                    padding: '6px 14px',
+                                    borderRadius: '8px',
+                                    fontWeight: 700,
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                  }}
+                                >
+                                  <Plus size={14} /> {t('Thêm Hạn mức')}
+                                </button>
+                              </div>
+
+                              {/* Dynamic Tiers List */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {(cfg.money_tiers || [
+                                  { id: 1, max_amount: 5000000, approvers: ['team_leader'] },
+                                  { id: 2, max_amount: 20000000, approvers: ['role_director', 'role_accountant'] },
+                                  { id: 3, max_amount: null, approvers: ['role_superadmin'] }
+                                ]).map((tier: any, tIdx: number) => (
+                                  <div
+                                    key={tier.id || tIdx}
+                                    style={{
+                                      background: 'var(--color-bg)',
+                                      padding: '10px 14px',
+                                      borderRadius: '8px',
+                                      border: '1px solid var(--color-border)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '12px',
+                                      flexWrap: isMobile ? 'wrap' : 'nowrap'
+                                    }}
+                                  >
+                                    <div style={{ minWidth: '130px', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                      {tier.max_amount === null || tier.max_amount === undefined || tier.max_amount === '' ? (
+                                        <span style={{ color: 'var(--color-danger)' }}>Vượt mọi ngưỡng:</span>
+                                      ) : (
+                                        <span>Số tiền ≤ (VNĐ):</span>
+                                      )}
+                                    </div>
+                                    <input
+                                      type="number"
+                                      placeholder={t('Để trống nếu không giới hạn')}
+                                      value={tier.max_amount ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value === '' ? null : Number(e.target.value);
+                                        const currentTiers = cfg.money_tiers || [
+                                          { id: 1, max_amount: 5000000, approvers: ['team_leader'] },
+                                          { id: 2, max_amount: 20000000, approvers: ['role_director', 'role_accountant'] },
+                                          { id: 3, max_amount: null, approvers: ['role_superadmin'] }
+                                        ];
+                                        const updatedTiers = [...currentTiers];
+                                        updatedTiers[tIdx] = { ...updatedTiers[tIdx], max_amount: val };
+                                        setApprovalMatrixConfig(prev => ({
+                                          ...prev,
+                                          expense: { ...(prev.expense || {}), money_tiers: updatedTiers }
+                                        }));
+                                      }}
+                                      style={{
+                                        width: '180px',
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--color-border)',
+                                        fontSize: '0.8125rem',
+                                        fontWeight: 700,
+                                        background: 'var(--color-surface)',
+                                        color: 'var(--color-text)'
+                                      }}
+                                    />
+                                    <div style={{ flex: 1, minWidth: '220px' }}>
+                                      <CustomSelect
+                                        multiple={true}
+                                        searchable={true}
+                                        options={[
+                                          { value: 'team_leader', label: '👑 Trưởng nhóm trực tiếp (Team Leader)' },
+                                          ...approverOptions
+                                        ]}
+                                        value={tier.approvers || (tier.approver_type === 'team_leader' ? ['team_leader'] : (tier.roles ? tier.roles.map((r: string) => `role_${r}`) : ['role_superadmin']))}
+                                        onChange={(val: string[]) => {
+                                          const currentTiers = cfg.money_tiers || [
+                                            { id: 1, max_amount: 5000000, approvers: ['team_leader'] },
+                                            { id: 2, max_amount: 20000000, approvers: ['role_director', 'role_accountant'] },
+                                            { id: 3, max_amount: null, approvers: ['role_superadmin'] }
+                                          ];
+                                          const updatedTiers = [...currentTiers];
+                                          updatedTiers[tIdx] = {
+                                            ...updatedTiers[tIdx],
+                                            approvers: val,
+                                            roles: val.filter(v => v.startsWith('role_')).map(v => v.replace('role_', '')),
+                                            user_ids: val.filter(v => v.startsWith('user_')).map(v => v.replace('user_', '')),
+                                            approver_type: val.includes('team_leader') ? 'team_leader' : 'designated'
+                                          };
+                                          setApprovalMatrixConfig(prev => ({
+                                            ...prev,
+                                            expense: { ...(prev.expense || {}), money_tiers: updatedTiers }
+                                          }));
+                                        }}
+                                        placeholder={t('Chọn người/vai trò duyệt hạn mức này...')}
+                                        width="100%"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const currentTiers = cfg.money_tiers || [
+                                          { id: 1, max_amount: 5000000, approvers: ['team_leader'] },
+                                          { id: 2, max_amount: 20000000, approvers: ['role_director', 'role_accountant'] },
+                                          { id: 3, max_amount: null, approvers: ['role_superadmin'] }
+                                        ];
+                                        const updatedTiers = currentTiers.filter((_: any, idx: number) => idx !== tIdx);
+                                        setApprovalMatrixConfig(prev => ({
+                                          ...prev,
+                                          expense: { ...(prev.expense || {}), money_tiers: updatedTiers }
+                                        }));
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        color: 'var(--color-danger)',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '6px',
+                                        borderRadius: '6px',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                      }}
+                                      title={t('Xóa hạn mức')}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+
+
+            {/* Cấu hình Tự Động Duyệt Ticket */}
+            <div style={{ display: activeTab === 'auto_approve_ticket' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div id="auto-approve" className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: '#10b981', color: 'white', padding: 4, borderRadius: 6 }}>
+                    <CheckCircle size={16} />
+                  </span>
+                  {t('Cấu hình Tự Động Duyệt Ticket')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Tự động phê duyệt và cộng lượt đền bù khi lý do báo lỗi của Sale chứa các từ khóa định sẵn. Đồng thời gửi thông báo Zalo/Email tự động.')}
+                </p>
+
+                {renderHelpBanner('auto_approve_ticket', t('Giải thích cơ chế Tự động duyệt ticket'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Quét từ khóa:')}</strong> {t('Khi Sale gửi khiếu nại (báo lỗi data), hệ thống sẽ quét qua nội dung mô tả lý do của Sale dựa trên danh sách từ khóa đã thiết lập.')}</li>
+                    <li><strong>{t('Duyệt & Đền bù tự động:')}</strong> {t('Nếu khớp từ khóa, ticket sẽ lập tức được duyệt tự động, hệ thống cộng trả lại 1 lượt nhận lead cho Sale và cập nhật trạng thái lead thành "Bị lỗi/Bỏ qua" ngay lập tức.')}</li>
+                    <li><strong>{t('Tiết kiệm thời gian:')}</strong> {t('Giúp Admin giảm bớt 80% tác vụ duyệt thủ công đối với các lỗi rõ ràng (ví dụ: Thuê bao, Sai số).')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.9rem' }}>{t('Kích hoạt Tự động duyệt')}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                        {t('Cho phép hệ thống quét từ khóa và tự động duyệt khi Sale gửi ticket báo lỗi')}
+                      </div>
+                    </div>
+                    <div
+                      onClick={() => setTicketAutoApproveEnabled(!ticketAutoApproveEnabled)}
+                      style={{
+                        width: 40, height: 22, borderRadius: 11,
+                        background: ticketAutoApproveEnabled ? 'var(--color-success)' : 'var(--color-border)',
+                        position: 'relative', transition: 'background 0.2s', cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{
+                        position: 'absolute', top: 3, width: 16, height: 16, borderRadius: '50%',
+                        background: 'var(--color-surface)', boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        left: ticketAutoApproveEnabled ? 21 : 3, transition: 'left 0.2s'
+                      }} />
+                    </div>
+                  </div>
+
+                  {ticketAutoApproveEnabled && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.95rem' }}>
+                          {t('Danh sách luật duyệt tự động')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingRule(null);
+                            setRuleName('');
+                            setRuleActive(true);
+                            setRuleRounds(['all']);
+                            setRuleSales(['all']);
+                            setRuleConnections(['all']);
+                            setRuleKeywords('');
+                            setRuleModalOpen(true);
+                          }}
+                          className="btn btn-primary"
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: '0.85rem' }}
+                        >
+                          <Plus size={16} /> {t('Thêm Luật Mới')}
+                        </button>
+                      </div>
+
+                      {ticketAutoApproveRules.length === 0 ? (
+                        <div style={{
+                          textAlign: 'center', padding: '2rem', border: '2px dashed var(--color-border)',
+                          borderRadius: 'var(--radius-lg)', color: 'var(--color-text-muted)', fontSize: '0.875rem'
+                        }}>
+                          {t('Chưa có luật tự động duyệt nào. Nhấp "Thêm Luật Mới" để bắt đầu thiết lập.')}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {ticketAutoApproveRules.map((rule) => {
+                            // Gather human-friendly names
+                            const targetRounds = rule.rounds.includes('all')
+                              ? t('Tất cả vòng')
+                              : rounds.filter(r => rule.rounds.map(String).includes(String(r.id))).map(r => r.round_name).join(', ') || t('Không xác định');
+
+                            const targetSales = rule.sales.includes('all')
+                              ? t('Tất cả Salepersons')
+                              : consultants.filter(c => rule.sales.map(String).includes(String(c.id))).map(c => c.name).join(', ') || t('Không xác định');
+
+                            const targetConns = (rule.connections || []).includes('all') || !rule.connections
+                              ? t('Tất cả nguồn')
+                              : connections.filter(conn => (rule.connections || []).map(String).includes(String(conn.id))).map(conn => conn.sheet_name).join(', ') || t('Không xác định');
+
+                            const kwList = Array.isArray(rule.keywords) ? rule.keywords : (rule.keywords || '').split(',').map((k: string) => k.trim()).filter(Boolean);
+
+                            return (
+                              <div
+                                key={rule.id}
+                                style={{
+                                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)',
+                                  background: rule.active ? 'var(--color-surface)' : 'rgba(0,0,0,0.02)',
+                                  padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                                  position: 'relative', transition: 'all 0.2s',
+                                  opacity: rule.active ? 1 : 0.65
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <div>
+                                    <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      {rule.name}
+                                      {!rule.active && (
+                                        <span style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 4 }}>
+                                          {t('Tắt')}
+                                        </span>
+                                      )}
+                                    </h4>
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    {/* Quick toggle */}
+                                    <div
+                                      onClick={() => {
+                                        setTicketAutoApproveRules(prev => prev.map(r => r.id === rule.id ? { ...r, active: !r.active } : r));
+                                      }}
+                                      style={{
+                                        width: 32, height: 18, borderRadius: 9,
+                                        background: rule.active ? 'var(--color-success)' : 'var(--color-border)',
+                                        position: 'relative', transition: 'background 0.2s', cursor: 'pointer',
+                                        alignSelf: 'center', marginRight: '0.5rem'
+                                      }}
+                                    >
+                                      <div style={{
+                                        position: 'absolute', top: 2, width: 14, height: 14, borderRadius: '50%',
+                                        background: 'var(--color-surface)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                                        left: rule.active ? 16 : 2, transition: 'left 0.2s'
+                                      }} />
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRule(rule);
+                                        setRuleName(rule.name);
+                                        setRuleActive(rule.active);
+                                        setRuleRounds(rule.rounds);
+                                        setRuleSales(rule.sales);
+                                        setRuleConnections(rule.connections || ['all']);
+                                        setRuleKeywords(Array.isArray(rule.keywords) ? rule.keywords.join(', ') : rule.keywords);
+                                        setRuleModalOpen(true);
+                                      }}
+                                      style={{ padding: 4, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                      className="btn-icon-hover"
+                                      title={t("Chỉnh sửa")}
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        showConfirm({
+                                          title: t('Xóa luật tự động duyệt ticket'),
+                                          message: t('Bạn có chắc chắn muốn xóa luật "{name}"?').replace('{name}', rule.name),
+                                          confirmText: t('Xóa'),
+                                          cancelText: t('Hủy'),
+                                          isDanger: true,
+                                          onConfirm: () => {
+                                            setTicketAutoApproveRules(prev => prev.filter(r => r.id !== rule.id));
+                                          }
+                                        });
+                                      }}
+                                      style={{ padding: 4, color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                      className="btn-icon-hover"
+                                      title={t("Xóa")}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Details/Tags */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem' }}>
+                                  <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>{t('Vòng:')}</span>
+                                    <span style={{ fontWeight: 600 }}>{targetRounds}</span>
+                                  </div>
+                                  <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>{t('Sales:')}</span>
+                                    <span style={{ fontWeight: 600 }}>{targetSales}</span>
+                                  </div>
+                                  <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>{t('Nguồn:')}</span>
+                                    <span style={{ fontWeight: 600 }}>{targetConns}</span>
+                                  </div>
+                                </div>
+
+                                {/* Keywords list */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', marginTop: 2 }}>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginRight: 4 }}>{t('Từ khóa')} ({kwList.length}):</span>
+                                  {kwList.map((kw: string, i: number) => (
+                                    <span
+                                      key={i}
+                                      style={{
+                                        fontSize: '0.7rem', padding: '2px 6px', background: 'rgba(16,185,129,0.1)',
+                                        color: 'var(--color-success)', borderRadius: 4, fontWeight: 600
+                                      }}
+                                    >
+                                      {kw}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình Nhận diện & Lọc Trùng Lặp */}
+            <div style={{ display: activeTab === 'duplicate_filter' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}>
+                    <RefreshCw size={16} />
+                  </span>
+                  {t('Cấu hình Nhận diện & Lọc Trùng Lặp')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Nếu khách hàng đăng ký lại trong khoảng thời gian này, hệ thống sẽ bỏ qua quy trình phân chia mới và tự động định tuyến về Sale cũ phụ trách để chăm sóc tiếp.')}
+                </p>
+
+                {renderHelpBanner('duplicate_filter', t('Giải thích cơ chế Nhận diện & Lọc Trùng Lặp'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <li><strong>{t('Thời hạn nhận diện trùng lặp:')}</strong> {t('Mặc định là 6 tháng. Khi phát hiện khách đăng ký trùng số điện thoại/email trong khoảng thời gian này, lead tự động định tuyến về Sale cũ phụ trách để chăm sóc tiếp.')}</li>
+                    <li><strong>{t('Giao lại khi Sale cũ không hoạt động:')}</strong> {t('Nếu Sale cũ phụ trách đã nghỉ việc, bị khóa tài khoản hoặc đang xin nghỉ phép/off ca trực, hệ thống sẽ tự động coi đây là lead mới và chuyển tiếp chia vòng (Round-Robin) cho Sale khác đang hoạt động để tránh trôi khách hàng.')}</li>
+                    <li><strong>{t('Dữ liệu ánh xạ lịch sử:')}</strong> {t('Đồng bộ ngầm và bảo mật thông tin liên hệ, đồng thời ghi lại nhật ký phân chia cũ để phục vụ kiểm toán.')}</li>
+                  </ul>
+                ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div>
+                    <label className="form-label">{t('Thời hạn nhận diện trùng lặp (Tháng)')}</label>
+                    <div style={{ position: 'relative', width: 200 }}>
+                      <input
+                        type="number"
+                        min={1}
+                        className="form-input"
+                        value={duplicateCheckMonths}
+                        onChange={e => setDuplicateCheckMonths(Math.max(1, Number(e.target.value)))}
+                        style={{ paddingRight: 60 }}
+                      />
+                      <span style={{ position: 'absolute', right: 12, top: 10, color: 'var(--color-text-muted)', fontSize: '0.875rem', fontWeight: 600 }}>{t('Tháng')}</span>
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 6 }}>
+                      {t('Mặc định là 6 tháng. Đặt 12 tháng nếu muốn giữ khách cũ cho Sale trong vòng 1 năm.')}
+                    </p>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1.25rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Giao lại khi Sale cũ không còn hoạt động (Mặc định BẬT)')}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                        {t('Nếu bật: Khi phát hiện trùng số nhưng Sale cũ phụ trách số đó đã ngừng hoạt động / nghỉ việc / nghỉ phép, lead sẽ được coi là mới và tự động chia lại cho Sale mới đang hoạt động. Nếu tắt: Giữ nguyên Sale cũ phụ trách, cập nhật tương tác mới và không phân bổ lại. (Lưu ý: Với dữ liệu ánh xạ/import lịch sử, lead luôn được giữ nguyên Sale phụ trách cũ và đồng bộ ngầm để tránh spam thông báo).')}
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                      <ToggleSwitch
+                        checked={reassignIfOwnerInactive}
+                        onChange={setReassignIfOwnerInactive}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình Báo Cáo Lỗi & Rule Hướng Dẫn */}
+            <div style={{ display: activeTab === 'error_reasons' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: '#ef4444', color: 'white', padding: 4, borderRadius: 6 }}>
+                    <Shield size={16} />
+                  </span>
+                  {t('Cấu hình Báo Cáo Lỗi & Rule Hướng Dẫn')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Cấu hình các tùy chọn lý do báo lỗi và ghi chú quy tắc báo lỗi cụ thể cho từng lý do. Ghi chú quy tắc này sẽ hiển thị trực tiếp cho người dùng ở trang báo lỗi để hướng dẫn họ.')}
+                </p>
+
+                {renderHelpBanner('error_reasons', t('Giải thích cơ chế Lý do báo lỗi & Hướng dẫn'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Lý do báo lỗi:')}</strong> {t('Danh sách các lỗi hợp lệ Sale được chọn khi gửi yêu cầu khiếu nại đền bù (ví dụ: Thuê bao, Sai số, Phá phách).')}</li>
+                    <li><strong>{t('Rule Hướng dẫn:')}</strong> {t('Văn bản hướng dẫn hiển thị trực tiếp cho Sale tương ứng với từng lý do để họ biết cách ứng xử (ví dụ: "Vui lòng gọi lại ít nhất 3 lần vào các khung giờ khác nhau").')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {reportErrorReasons.map((item, index) => (
+                      <div
+                        key={index}
+                        className="mobile-stack"
+                        style={{
+                          display: 'flex',
+                          gap: '1rem',
+                          alignItems: 'start',
+                          padding: '1rem',
+                          background: 'var(--color-bg)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: '12px',
+                          transition: 'all 0.2s ease',
+                          position: 'relative'
+                        }}
+                      >
+                        {/* Reason Column */}
+                        <div className="mobile-w-full" style={{ width: '260px', flexShrink: 0 }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {t('Lý do báo lỗi')}
+                          </div>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={item.reason}
+                            onChange={e => handleUpdateReasonRow(index, 'reason', e.target.value)}
+                            placeholder={t("Ví dụ: Sai số điện thoại / Số ảo...")}
+                            style={{ height: '42px', padding: '8px 12px', fontSize: '0.875rem', borderRadius: '8px' }}
+                          />
+                        </div>
+
+                        {/* Guide Note Column */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {t('Quy tắc / Ghi chú hướng dẫn báo lỗi')}
+                          </div>
+                          <textarea
+                            rows={2}
+                            className="form-input"
+                            value={item.note}
+                            onChange={e => handleUpdateReasonRow(index, 'note', e.target.value)}
+                            placeholder={t("Nhập các điều kiện để được duyệt báo lỗi (ví dụ: data tương tác cuối > {n} tháng...)")}
+                            style={{
+                              fontFamily: 'inherit',
+                              resize: 'vertical',
+                              minHeight: '64px',
+                              height: '64px',
+                              padding: '8px 12px',
+                              fontSize: '0.875rem',
+                              lineHeight: 1.5,
+                              borderRadius: '8px'
+                            }}
+                          />
+                        </div>
+
+                        {/* Action: Delete Column */}
+                        <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: 'center', paddingTop: '1.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn-danger-light"
+                            onClick={() => handleRemoveReasonRow(index)}
+                            style={{
+                              height: '42px',
+                              width: '42px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: '#ef4444',
+                              cursor: 'pointer'
+                            }}
+                            title={t('Xóa lý do này')}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {reportErrorReasons.length > 0 && (
+                    <div style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--color-text-muted)',
+                      background: 'var(--color-bg)',
+                      padding: '0.625rem 0.875rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      marginTop: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{t('Mẹo:')}</span>
+                      <span>
+                        {t('Sử dụng cụm')} <code>{'{n}'}</code> {t('để tự động thay thế bằng số tháng đã thiết lập ở tab "Ánh xạ dữ liệu cũ" (hiện tại là')} {duplicateCheckMonths} {t('tháng).')}
+                      </span>
+                    </div>
+                  )}
+
+                  {reportErrorReasons.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', border: '1px dashed var(--color-border)', borderRadius: 10, color: 'var(--color-text-muted)' }}>
+                      {t('Chưa có lý do báo lỗi nào. Nhấn nút bên dưới để thêm mới.')}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleAddReasonRow}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      width: 'fit-content',
+                      alignSelf: 'flex-start',
+                      padding: '0.5rem 1rem'
+                    }}
+                  >
+                    <Plus size={16} /> {t('Thêm lý do báo lỗi')}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình Bù Lượt Thiếu */}
+            <div style={{ display: activeTab === 'starvation_prevention' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}>
+                    <Activity size={16} />
+                  </span>
+                  {t('Cấu hình Bù Lượt Thiếu (Fairness Starvation Prevention)')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Khi Sale nghỉ phép hoặc ngoài giờ làm việc, hệ thống sẽ bỏ qua lượt của họ. Khi họ quay lại ca trực, cơ chế này sẽ ưu tiên bù lượt cho họ (giới hạn theo giờ để tránh dồn dập).')}
+                </p>
+
+                {renderHelpBanner('starvation_prevention', t('Giải thích cơ chế Bù lượt thiếu (Starvation Prevention)'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Mục đích:')}</strong> {t('Đảm bảo sự công bằng (Fairness) cho Sale khi họ tạm thời rời ca trực (nghỉ phép, ngoài giờ).')}</li>
+                    <li><strong>{t('Cách hoạt động:')}</strong> {t('Khi họ online trở lại, hệ thống sẽ ưu tiên bù lượt chia lead thiếu cho họ trước khi chia cho các Sale khác.')}</li>
+                    <li><strong>{t('Hạn mức bù mỗi giờ:')}</strong> {t('Giới hạn số data bù tối đa trong 1 giờ để tránh tình trạng dồn dập lead cùng lúc gây quá tải cho Sale.')}</li>
+                  </ul>
+                ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t('Kích hoạt Bù Lượt Thiếu')}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                        {t('Tự động tích lũy và ưu tiên bù lượt cho Sale khi quay lại ca trực (mặc định TẮT)')}
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                      <ToggleSwitch
+                        checked={starvationPreventionEnabled}
+                        onChange={setStarvationPreventionEnabled}
+                      />
+                    </div>
+                  </div>
+
+                  {starvationPreventionEnabled && (
+                    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1.25rem', animation: 'fadeIn 0.3s', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      <div>
+                        <label className="form-label">{t('Số lượt bù tối đa mỗi giờ (Để tránh dồn dập)')}</label>
+                        <div style={{ position: 'relative', width: 200 }}>
+                          <input
+                            type="number"
+                            min={1}
+                            className="form-input"
+                            value={starvationMaxLeadsPerHour}
+                            onChange={e => setStarvationMaxLeadsPerHour(Math.max(1, Number(e.target.value)))}
+                            style={{ paddingRight: 90 }}
+                          />
+                          <span style={{ position: 'absolute', right: 12, top: 10, color: 'var(--color-text-muted)', fontSize: '0.875rem', fontWeight: 600 }}>{t('Lead/giờ')}</span>
+                        </div>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 6 }}>
+                          {t('Giới hạn tối đa số lượng leads bù cho mỗi Sale trong vòng 1 giờ để tránh dồn dập quá tải')}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem', borderTop: '1px dotted var(--color-border-light)', paddingTop: '1rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            {t('Tự động đền bù khi bị thu hồi do trễ check-in')}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                            {t('Nếu bật, Sales bị thu hồi lead do chưa check-in đúng giờ sẽ được tự động cộng bù lại lượt khi làm bù.')}
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                          <ToggleSwitch
+                            checked={lateCheckinCompensationEnabled === 1}
+                            onChange={val => setLateCheckinCompensationEnabled(val ? 1 : 0)}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1.5rem', borderTop: '1px dotted var(--color-border-light)', paddingTop: '1rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            {t('Tự động đền bù khi bị thu hồi do nghỉ phép')}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                            {t('Nếu bật, Sales xin nghỉ phép/ngưng hoạt động bị thu hồi lead sẽ được hệ thống tính điểm đền bù.')}
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, marginTop: '2px' }}>
+                          <ToggleSwitch
+                            checked={leaveCompensationEnabled === 1}
+                            onChange={val => setLeaveCompensationEnabled(val ? 1 : 0)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Cấu hình Vòng đời & Trạng thái Khách hàng */}
+            <div style={{ display: activeTab === 'pipeline_stages' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '2rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: 6, borderRadius: 8 }}>
+                    <Activity size={18} />
+                  </span>
+                  {t('Cấu hình Vòng đời & Trạng thái Khách hàng')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.75rem', lineHeight: 1.5 }}>
+                  {t('Thiết lập thứ tự các bước chuyển trạng thái (State Machine) của khách hàng. Hãy nhập tên hiển thị tiếng Việt, hệ thống sẽ tự động tạo mã tương ứng. Các bước trùng lặp mã sẽ bị báo đỏ cảnh báo.')}
+                </p>
+
+                {renderHelpBanner('pipeline_stages', t('Giải thích cơ chế Vòng đời & Trạng thái khách hàng'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('State Machine (Thứ tự trạng thái):')}</strong> {t('Quy định luồng chuyển dịch khách hàng từ lúc mới vào cho đến lúc chốt giao dịch. Trạng thái sau luôn có mức độ ưu tiên cao hơn trạng thái trước.')}</li>
+                    <li><strong>{t('Cho phép hợp tác:')}</strong> {t('Kích hoạt trạng thái có thể chạy đồng thời/hợp tác chia sẻ thông tin giữa nhiều phòng ban.')}</li>
+                  </ul>
+                ))}
+
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {(() => {
+                    const slugCounts: Record<string, number> = {};
+                    pipelineStatusHierarchy.forEach(slug => {
+                      slugCounts[slug] = (slugCounts[slug] || 0) + 1;
+                    });
+
+                    return pipelineStatusHierarchy.map((status, index) => {
+                      const label = pipelineStatusLabels[status] || SLUG_TO_LABEL[status] || status;
+                      const isDuplicate = slugCounts[status] > 1;
+
+                      return (
+                        <div
+                          key={index}
+                          draggable={true}
+                          onDragStart={(e) => {
+                            if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'SELECT' || (e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('.form-input')) {
+                              e.preventDefault();
+                              return;
+                            }
+                            handleDragStart(e, index);
+                          }}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragEnd={handleDragEnd}
+                          style={{
+                            border: `1px solid ${isDuplicate ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                            borderRadius: '12px',
+                            padding: isMobile ? '12px 14px' : '12px 16px',
+                            display: 'flex',
+                            flexDirection: isMobile ? 'column' : 'row',
+                            alignItems: isMobile ? 'stretch' : 'center',
+                            justifyContent: 'space-between',
+                            gap: isMobile ? '10px' : '0',
+                            background: isDuplicate ? 'var(--color-danger-light)' : (draggedIndex === index ? 'var(--color-bg-secondary)' : 'var(--color-surface)'),
+                            opacity: draggedIndex === index ? 0.5 : 1,
+                            transition: 'all 0.2s',
+                            cursor: 'grab'
+                          }}
+                        >
+                          {isMobile ? (
+                            <>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', cursor: 'grab' }}>
+                                    <GripVertical size={16} />
+                                  </div>
+                                  <span style={{ fontWeight: 800, color: isDuplicate ? 'var(--color-danger)' : 'var(--color-primary)', fontSize: '0.85rem' }}>
+                                    #{index + 1}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPipelineStatusHierarchy(prev => prev.filter((_, i) => i !== index));
+                                    setPipelineStatusLabels(prev => {
+                                      const next = { ...prev };
+                                      delete next[status];
+                                      return next;
+                                    });
+                                  }}
+                                  className="btn outline"
+                                  style={{ padding: '4px 8px', fontSize: '0.725rem', height: '28px', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)', display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                  <Trash2 size={12} /> {t('Xóa')}
+                                </button>
+                              </div>
+
+                              <div style={{ width: '100%' }}>
+                                <input
+                                  type="text"
+                                  value={label}
+                                  placeholder={t('Tên trạng thái (tiếng Việt)...')}
+                                  onChange={e => {
+                                    const newLabel = e.target.value;
+                                    const newSlug = generateSlug(newLabel);
+                                    
+                                    const newHierarchy = [...pipelineStatusHierarchy];
+                                    newHierarchy[index] = newSlug;
+                                    setPipelineStatusHierarchy(newHierarchy);
+
+                                    setPipelineStatusLabels(prev => {
+                                      const next = { ...prev };
+                                      delete next[status];
+                                      next[newSlug] = newLabel;
+                                      return next;
+                                    });
+                                  }}
+                                  className="form-input"
+                                  style={{
+                                    margin: 0,
+                                    padding: '6px 12px',
+                                    fontSize: '0.875rem',
+                                    borderColor: isDuplicate ? 'var(--color-danger)' : undefined,
+                                    boxShadow: isDuplicate ? '0 0 0 1px var(--color-danger-light)' : undefined,
+                                    width: '100%'
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ width: '100%' }}>
+                                <span style={{
+                                  fontSize: '0.725rem',
+                                  fontFamily: 'monospace',
+                                  background: isDuplicate ? 'var(--color-danger-light)' : 'var(--color-bg)',
+                                  color: isDuplicate ? 'var(--color-danger)' : 'var(--color-text-muted)',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  border: `1px solid ${isDuplicate ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                                  fontWeight: 600,
+                                  display: 'inline-block',
+                                  maxWidth: '100%',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {isDuplicate ? `${t('Mã trùng:')} ${status}` : `key: ${status}`}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px', width: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <ToggleSwitch
+                                    checked={coopEligibleStatuses.split(',').map((s: string) => s.trim()).filter(Boolean).includes(status)}
+                                    onChange={checked => {
+                                      if (checked) {
+                                        setCoopEligibleStatuses(status);
+                                      } else {
+                                        setCoopEligibleStatuses('');
+                                      }
+                                    }}
+                                  />
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, userSelect: 'none' }}>
+                                    {t('Cho phép hợp tác')}
+                                  </span>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: 0 }}>
+                                <div style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', marginRight: '-4px', cursor: 'grab' }}>
+                                  <GripVertical size={16} />
+                                </div>
+
+                                <span style={{ fontWeight: 800, color: isDuplicate ? 'var(--color-danger)' : 'var(--color-primary)', width: '30px', flexShrink: 0 }}>
+                                  #{index + 1}
+                                </span>
+                                
+                                <div style={{ flex: 1, minWidth: '150px', maxWidth: '300px' }}>
+                                  <input
+                                    type="text"
+                                    value={label}
+                                    placeholder={t('Tên trạng thái (tiếng Việt)...')}
+                                    onChange={e => {
+                                      const newLabel = e.target.value;
+                                      const newSlug = generateSlug(newLabel);
+                                      
+                                      const newHierarchy = [...pipelineStatusHierarchy];
+                                      newHierarchy[index] = newSlug;
+                                      setPipelineStatusHierarchy(newHierarchy);
+
+                                      setPipelineStatusLabels(prev => {
+                                        const next = { ...prev };
+                                        delete next[status];
+                                        next[newSlug] = newLabel;
+                                        return next;
+                                      });
+                                    }}
+                                    className="form-input"
+                                    style={{
+                                      margin: 0,
+                                      padding: '6px 12px',
+                                      fontSize: '0.875rem',
+                                      borderColor: isDuplicate ? 'var(--color-danger)' : undefined,
+                                      boxShadow: isDuplicate ? '0 0 0 1px var(--color-danger-light)' : undefined,
+                                      width: '100%'
+                                    }}
+                                  />
+                                </div>
+
+                                <div style={{ width: '180px', flexShrink: 0 }}>
+                                  <span style={{
+                                    fontSize: '0.75rem',
+                                    fontFamily: 'monospace',
+                                    background: isDuplicate ? 'var(--color-danger-light)' : 'var(--color-bg)',
+                                    color: isDuplicate ? 'var(--color-danger)' : 'var(--color-text-muted)',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    border: `1px solid ${isDuplicate ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                                    fontWeight: 600,
+                                    display: 'inline-block',
+                                    maxWidth: '100%',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {isDuplicate ? `${t('Mã trùng:')} ${status}` : `key: ${status}`}
+                                  </span>
+                                </div>
+                                
+                                <div style={{ width: '160px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <ToggleSwitch
+                                    checked={coopEligibleStatuses.split(',').map((s: string) => s.trim()).filter(Boolean).includes(status)}
+                                    onChange={checked => {
+                                      if (checked) {
+                                        setCoopEligibleStatuses(status);
+                                      } else {
+                                        setCoopEligibleStatuses('');
+                                      }
+                                    }}
+                                  />
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, userSelect: 'none' }}>
+                                    {t('Cho phép hợp tác')}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '6px', marginLeft: '12px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPipelineStatusHierarchy(prev => prev.filter((_, i) => i !== index));
+                                    setPipelineStatusLabels(prev => {
+                                      const next = { ...prev };
+                                      delete next[status];
+                                      return next;
+                                    });
+                                  }}
+                                  className="btn outline"
+                                  style={{ padding: '6px 10px', fontSize: '0.75rem', height: '32px', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newLabel = 'Trạng thái mới';
+                      let suffix = 1;
+                      let newSlug = 'trang_thai_moi';
+                      while (pipelineStatusHierarchy.includes(newSlug)) {
+                        newSlug = `trang_thai_moi_${suffix}`;
+                        suffix++;
+                      }
+                      setPipelineStatusHierarchy(prev => [...prev, newSlug]);
+                      setPipelineStatusLabels(prev => ({ ...prev, [newSlug]: newLabel }));
+                    }}
+                    className="btn outline"
+                    style={{ alignSelf: 'flex-start', marginTop: '4px', fontSize: '0.8125rem', height: '34px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Plus size={14} /> {t('Thêm bước trạng thái mới')}
+                  </button>
+
+                  {/* Định nghĩa cơ hội và chốt deal */}
+                  <div style={{ 
+                    marginTop: '2rem', 
+                    paddingTop: '1.5rem', 
+                    borderTop: '1px solid var(--color-border)', 
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '1.5rem'
+                  }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                        <Briefcase size={16} style={{ color: 'var(--color-primary)' }} />
+                        {t('Trạng thái đại diện cho Cơ hội bán hàng')}
+                      </label>
+                      <CustomSelect
+                        options={pipelineStatusHierarchy.map(status => ({
+                          value: status,
+                          label: pipelineStatusLabels[status] || status
+                        }))}
+                        value={dealOpportunityStatus}
+                        onChange={val => setDealOpportunityStatus(val as string)}
+                        direction="up"
+                        width="100%"
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
+                        {t('Các trạng thái từ mốc này trở đi trong vòng đời sẽ được tính là Cơ hội bán hàng trong các thống kê.')}
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                        <CheckCircle size={16} style={{ color: '#10b981' }} />
+                        {t('Trạng thái đại diện cho Chốt deal thành công')}
+                      </label>
+                      <CustomSelect
+                        options={pipelineStatusHierarchy.map(status => ({
+                          value: status,
+                          label: pipelineStatusLabels[status] || status
+                        }))}
+                        value={dealWonStatus}
+                        onChange={val => setDealWonStatus(val as string)}
+                        direction="up"
+                        width="100%"
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
+                        {t('Trạng thái này đánh dấu giao dịch đã thành công (Chốt deal).')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Cấu hình hiển thị Tiềm năng của Sale Admin & Kế toán */}
+                  <div style={{ 
+                    marginTop: '2rem', 
+                    paddingTop: '1.5rem', 
+                    borderTop: '1px solid var(--color-border)', 
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '1.5rem'
+                  }}>
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                        <UserCheck size={16} style={{ color: 'var(--color-warning)' }} />
+                        {t('Mốc hiển thị Tiềm năng của Sale Admin')}
+                      </label>
+                      <CustomSelect
+                        options={pipelineStatusHierarchy.map(status => ({
+                          value: status,
+                          label: pipelineStatusLabels[status] || status
+                        }))}
+                        value={saleAdminLeadVisibilityStage}
+                        onChange={val => setSaleAdminLeadVisibilityStage(val as string)}
+                        direction="up"
+                        width="100%"
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
+                        {t('Cấp độ Sale Admin sẽ nhìn thấy danh sách Tiềm năng từ mốc này trở đi trong vòng đời.')}
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                        <UserCheck size={16} style={{ color: '#8b5cf6' }} />
+                        {t('Mốc hiển thị Tiềm năng của Kế toán')}
+                      </label>
+                      <CustomSelect
+                        options={pipelineStatusHierarchy.map(status => ({
+                          value: status,
+                          label: pipelineStatusLabels[status] || status
+                        }))}
+                        value={accountantLeadVisibilityStage}
+                        onChange={val => setAccountantLeadVisibilityStage(val as string)}
+                        direction="up"
+                        width="100%"
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '4px' }}>
+                        {t('Cấp độ Kế toán sẽ nhìn thấy danh sách Tiềm năng từ mốc này trở đi trong vòng đời.')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Cấu hình tài liệu hợp tác tích hợp */}
+                  <div style={{ 
+                    marginTop: '2rem', 
+                    paddingTop: '1.5rem', 
+                    borderTop: '1px solid var(--color-border)', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '0.75rem' 
+                  }}>
+                    <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <FileText size={16} style={{ color: 'var(--color-primary)' }} />
+                      {t('Danh mục tài liệu yêu cầu khi hợp tác')}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={coopDefaultFiles}
+                      onChange={e => setCoopDefaultFiles(e.target.value)}
+                      placeholder={t("Ví dụ: UNC, CMND, GPKD")}
+                    />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                      {t('Tên các loại tài liệu cần thiết để phê duyệt phiếu hợp tác (phân cách bằng dấu phẩy).')}
+                    </span>
+                  </div>
+
+                  {/* Cấu hình Cho phép lùi pipeline & Cho phép nhảy giai đoạn */}
+                  <div style={{
+                    background: 'var(--color-bg-secondary)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '12px',
+                    padding: '1.25rem',
+                    marginTop: '2rem',
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: '1.5rem',
+                    alignItems: 'stretch'
+                  }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                      <div>
+                        <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)', margin: '0 0 4px 0' }}>
+                          {t('Cho phép lùi pipeline')}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                          {t('Cho phép di chuyển thẻ khách hàng về các trạng thái trước đó trên Pipeline.')}
+                        </p>
+                      </div>
+                      <div style={{ flexShrink: 0 }}>
+                        <ToggleSwitch
+                          checked={allowPipelineBackward}
+                          onChange={setAllowPipelineBackward}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{
+                      width: isMobile ? '100%' : '1px',
+                      height: isMobile ? '1px' : '36px',
+                      background: 'var(--color-border)',
+                      alignSelf: 'center'
+                    }} />
+
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                      <div>
+                        <h4 style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)', margin: '0 0 4px 0' }}>
+                          {t('Cho phép nhảy giai đoạn')}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                          {t('Cho phép nhảy cóc qua các giai đoạn trung gian nhưng vẫn phải tuân thủ điều kiện bắt buộc.')}
+                        </p>
+                      </div>
+                      <div style={{ flexShrink: 0 }}>
+                        <ToggleSwitch
+                          checked={allowPipelineSkip}
+                          onChange={setAllowPipelineSkip}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== TAB: LEAD SCORING ===== */}
+            <div style={{ display: activeTab === 'lead_scoring' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 320px', gap: '1.5rem', alignItems: 'start' }}>
+                
+                {/* Left Column: Form Configuration */}
+                <div className="card" style={{ padding: '1.5rem', marginTop: 0, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ display: 'inline-flex', background: 'var(--color-primary)', color: 'white', padding: 4, borderRadius: 6 }}>
+                        <Scale size={16} />
+                      </span>
+                      {t('Hệ thống quy tắc chấm điểm Lead Scoring')}
+                    </h3>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
+                      {t('Tùy chỉnh cấu hình trọng số điểm (cộng/trừ) cho các tiêu chí thông tin hồ sơ và hành vi tương tác để phân loại độ nóng/ấm/lạnh của Khách hàng tiềm năng.')}
+                    </p>
+                  </div>
+
+                  {/* Category 1: Base Score & Inactivity Decay */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                    <div style={{
+                      background: 'var(--color-bg-secondary)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      padding: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '1rem'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: 'var(--color-text)' }}>{t('Điểm khởi tạo (Base Score)')}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{t('Gán mặc định cho mỗi liên hệ mới')}</div>
+                      </div>
+                      <input
+                        type="number"
+                        className="form-input"
+                        style={{ width: '80px', textAlign: 'right', fontWeight: 700, fontSize: '0.875rem' }}
+                        value={leadScoringRules.base_score ?? 0}
+                        onChange={e => setLeadScoringRules(prev => ({ ...prev, base_score: Number(e.target.value) }))}
+                      />
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(239, 68, 68, 0.04)',
+                      border: '1px solid rgba(239, 68, 68, 0.15)',
+                      borderRadius: '12px',
+                      padding: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '1rem'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#dc2626' }}>{t('Điểm rớt nhiệt (Decay)')}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{t('Trừ khi không tương tác quá 5 ngày')}</div>
+                      </div>
+                      <input
+                        type="number"
+                        className="form-input"
+                        style={{ width: '80px', textAlign: 'right', fontWeight: 700, color: '#dc2626', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'transparent' }}
+                        value={leadScoringRules.decay_no_interaction ?? 0}
+                        onChange={e => setLeadScoringRules(prev => ({ ...prev, decay_no_interaction: Number(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Category 2: Demographics */}
+                  <div>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid var(--color-border-light)', paddingBottom: '6px', marginBottom: '1rem', letterSpacing: '0.05em' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
+                      {t('Thông tin hồ sơ (Demographics)')}
+                    </h4>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '0.75rem' }}>
+                      {[
+                        { key: 'title_c_level', label: 'Chức danh C-Level', desc: 'Giám đốc, CEO, Founder, Chủ tịch...' },
+                        { key: 'title_other', label: 'Có thông tin chức vụ', desc: 'Có khai báo chức danh khác' },
+                        { key: 'phone', label: 'Số điện thoại chính', desc: 'Có số điện thoại chính' },
+                        { key: 'mobile', label: 'Số điện thoại phụ', desc: 'Có số điện thoại phụ (mobile)' },
+                        { key: 'both_phones', label: 'Có cả 2 số liên hệ', desc: 'Cung cấp cả số chính và phụ' },
+                        { key: 'email', label: 'Cung cấp Email', desc: 'Có điền trường Email liên hệ' },
+                        { key: 'customer_type', label: 'Xác định loại khách hàng', desc: 'Phân loại Cá nhân/Doanh nghiệp' },
+                        { key: 'gender', label: 'Có thông tin giới tính', desc: 'Xác định giới tính khách hàng' },
+                        { key: 'social_link', label: 'Liên kết Zalo / Facebook', desc: 'Có liên kết tài khoản MXH' },
+                        { key: 'birthday', label: 'Có thông tin ngày sinh', desc: 'Có ghi nhận ngày sinh nhật' },
+                        { key: 'address', label: 'Có thông tin địa chỉ', desc: 'Khai báo chi tiết địa chỉ nơi ở' },
+                        { key: 'industry', label: 'Xác định ngành nghề', desc: 'Có khai báo ngành nghề kinh doanh' }
+                      ].map(item => (
+                        <div key={item.key} style={{
+                          background: 'var(--color-bg-secondary)',
+                          border: '1px solid var(--color-border-light)',
+                          borderRadius: '8px',
+                          padding: '0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '0.75rem'
+                        }}
+                        className="score-rule-item-card"
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(item.label)}</div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t(item.desc)}>{t(item.desc)}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>+</span>
+                            <input
+                              type="number"
+                              className="form-input"
+                              style={{ width: '55px', height: '28px', padding: '0 6px', textAlign: 'right', fontSize: '0.75rem', fontWeight: 700 }}
+                              value={leadScoringRules[item.key] ?? 0}
+                              onChange={e => setLeadScoringRules(prev => ({ ...prev, [item.key]: Number(e.target.value) }))}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Category 3: Behavioral */}
+                  <div>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid var(--color-border-light)', paddingBottom: '6px', marginBottom: '1rem', letterSpacing: '0.05em' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
+                      {t('Hành vi & Tương tác (Behavioral)')}
+                    </h4>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '0.75rem' }}>
+                      {[
+                        { key: 'source_website', label: 'Nguồn khách từ Website', desc: 'Lead đổ từ Website Inbound' },
+                        { key: 'source_referral', label: 'Nguồn được Giới thiệu', desc: 'Khách hàng có người giới thiệu' },
+                        { key: 'project_id', label: 'Liên kết dự án quan tâm', desc: 'Chọn dự án BĐS cụ thể' },
+                        { key: 'company_id', label: 'Liên kết công ty đối tác', desc: 'Có liên kết với một Công ty' },
+                        { key: 'budget_range', label: 'Xác định phân khúc ngân sách', desc: 'Có khai báo tầm tài chính' },
+                        { key: 'revenue_high', label: 'Kỳ vọng doanh thu lớn (>500M)', desc: 'Giá trị deal dự kiến trên 500Tr' },
+                        { key: 'revenue_medium', label: 'Kỳ vọng doanh thu (>100M)', desc: 'Giá trị deal từ 100Tr - 500Tr' },
+                        { key: 'win_prob_high', label: 'Xác suất chốt deals (>70%)', desc: 'Xác suất chốt deal trên 70%' },
+                        { key: 'status_qualified_customer', label: 'Trạng thái chất lượng', desc: 'Trạng thái Qualified/Customer' },
+                        { key: 'ttl1_completed', label: 'Hoàn thành xác minh TTL1', desc: 'Đạt điều kiện gặp gỡ trực tiếp' },
+                        { key: 'notes_long', label: 'Ghi chú chi tiết nhu cầu', desc: 'Ghi chú dài trên 10 ký tự' },
+                        { key: 'has_tags', label: 'Đã gắn thẻ phân loại (Tags)', desc: 'Đã gắn ít nhất 1 thẻ tag' }
+                      ].map(item => (
+                        <div key={item.key} style={{
+                          background: 'var(--color-bg-secondary)',
+                          border: '1px solid var(--color-border-light)',
+                          borderRadius: '8px',
+                          padding: '0.75rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '0.75rem'
+                        }}
+                        className="score-rule-item-card"
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(item.label)}</div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t(item.desc)}>{t(item.desc)}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>+</span>
+                            <input
+                              type="number"
+                              className="form-input"
+                              style={{ width: '55px', height: '28px', padding: '0 6px', textAlign: 'right', fontSize: '0.75rem', fontWeight: 700 }}
+                              value={leadScoringRules[item.key] ?? 0}
+                              onChange={e => setLeadScoringRules(prev => ({ ...prev, [item.key]: Number(e.target.value) }))}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Dynamic Scorecard Preview */}
+                <div style={{ position: 'sticky', top: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  
+                  {/* Gauge Summary Card */}
+                  <div className="card" style={{ padding: '1.25rem', marginTop: 0, background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid var(--color-border)' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                      {t('Tổng điểm tích lũy')}
+                    </h4>
+                    
+                    {(() => {
+                      const totalPositive = Object.entries(leadScoringRules).reduce((sum, [k, v]) => {
+                        if (k === 'decay_no_interaction') return sum;
+                        return sum + (Number(v) || 0);
+                      }, 0);
+                      
+                      const demoPositive = [
+                        'title_c_level', 'title_other', 'phone', 'mobile', 'both_phones', 'email', 
+                        'customer_type', 'gender', 'social_link', 'birthday', 'address', 'industry'
+                      ].reduce((sum, key) => sum + (Number(leadScoringRules[key]) || 0), 0);
+
+                      const behaviorPositive = [
+                        'source_website', 'source_referral', 'project_id', 'company_id', 'budget_range', 
+                        'revenue_high', 'revenue_medium', 'win_prob_high', 'status_qualified_customer', 
+                        'ttl1_completed', 'notes_long', 'has_tags'
+                      ].reduce((sum, key) => sum + (Number(leadScoringRules[key]) || 0), 0);
+                      
+                      const baseScore = Number(leadScoringRules.base_score) || 0;
+                      
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Điểm tối đa có thể đạt:')}</span>
+                            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                              {totalPositive} <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>pts</span>
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
+                              <span>{t('Điểm khởi đầu')}</span>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{baseScore} pts</span>
+                            </div>
+                            <div style={{ height: '4px', background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', background: 'var(--color-text-light)', width: `${totalPositive ? (baseScore / totalPositive) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
+                              <span>{t('Hồ sơ (Demographics)')}</span>
+                              <span style={{ fontWeight: 600, color: '#2563eb' }}>{demoPositive} pts</span>
+                            </div>
+                            <div style={{ height: '4px', background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', background: '#2563eb', width: `${totalPositive ? (demoPositive / totalPositive) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
+                              <span>{t('Hành vi (Behavioral)')}</span>
+                              <span style={{ fontWeight: 600, color: '#059669' }}>{behaviorPositive} pts</span>
+                            </div>
+                            <div style={{ height: '4px', background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', background: '#059669', width: `${totalPositive ? (behaviorPositive / totalPositive) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Heat Ranges Card */}
+                  <div className="card" style={{ padding: '1.25rem', marginTop: 0, background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', gap: '0.875rem', border: '1px solid var(--color-border)' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                      {t('Xếp hạng độ nhiệt')}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.08)' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} />
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>{t('Rất Nóng:')}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, marginLeft: 'auto', color: '#ef4444' }}>80 - 100 pts</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.08)' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }} />
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('Tiềm Năng:')}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, marginLeft: 'auto', color: '#f59e0b' }}>50 - 79 pts</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.08)' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }} />
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#3b82f6' }}>{t('Lạnh:')}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, marginLeft: 'auto', color: '#3b82f6' }}>0 - 49 pts</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            {/* ===== TAB: BLACKLIST & EXCLUSION ===== */}
+            <div style={{ display: activeTab === 'blacklist' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div className="card" style={{ padding: '1.5rem', marginTop: 0 }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', background: '#374151', color: 'white', padding: 4, borderRadius: 6 }}>
+                    <Shield size={16} />
+                  </span>
+                  {t('Danh sách đen & Loại trừ Data')}
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  {t('Data chứa các thông tin này sẽ bị chặn đứng ngay lập tức và')} <strong>{t('KHÔNG')}</strong> {t('được giao cho bất kỳ vòng nào (Kể cả vòng Fallback).')}
+                </p>
+
+                {renderHelpBanner('blacklist', t('Giải thích cơ chế Hoạt động của Danh sách đen & Loại trừ'), (
+                  <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <li><strong>{t('Chặn tự động:')}</strong> {t('Dữ liệu mới đổ về khớp SĐT/Email hoặc Từ khóa sẽ bị đưa thẳng vào danh sách spam/blacklist và không giao cho bất kỳ ai.')}</li>
+                    <li><strong>{t('Từ khóa loại trừ:')}</strong> {t('Bộ lọc từ khóa giúp loại bỏ các lead thử nghiệm, lead ảo hoặc lead rác (ví dụ: test, rac, spam).')}</li>
+                  </ul>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {/* Part 1: Exclusion Keys */}
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{t('Từ khóa loại trừ (Keys)')}</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                        {t('Ngăn cách bằng dấu phẩy hoặc nhấn Enter khi nhập')}
+                      </span>
+                    </label>
+                    
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={t("Nhập từ khóa cần chặn (VD: spam, test, rac...)")}
+                        value={newKeyInput}
+                        onChange={e => setNewKeyInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const keys = exclusionKeys ? exclusionKeys.split(',').map(k => k.trim()).filter(Boolean) : [];
+                            const val = newKeyInput.trim();
+                            if (val && !keys.includes(val)) {
+                              setExclusionKeys([...keys, val].join(', '));
+                              setNewKeyInput('');
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn primary"
+                        style={{ padding: '0 16px', background: 'var(--color-primary)' }}
+                        onClick={() => {
+                          const keys = exclusionKeys ? exclusionKeys.split(',').map(k => k.trim()).filter(Boolean) : [];
+                          const val = newKeyInput.trim();
+                          if (val && !keys.includes(val)) {
+                            setExclusionKeys([...keys, val].join(', '));
+                            setNewKeyInput('');
+                          }
+                        }}
+                      >
+                        {t('Thêm')}
+                      </button>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      padding: '8px',
+                      background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border-light)',
+                      borderRadius: '8px',
+                      minHeight: '45px',
+                    }}>
+                      {(() => {
+                        const keys = exclusionKeys ? exclusionKeys.split(',').map(k => k.trim()).filter(Boolean) : [];
+                        if (keys.length === 0) {
+                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '4px' }}>{t('Chưa có từ khóa loại trừ nào.')}</span>;
+                        }
+                        return keys.map((key, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: 'var(--color-danger-light)',
+                              color: 'var(--color-danger)',
+                              border: '1px solid var(--color-danger-light)',
+                              padding: '2px 8px',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600
+                            }}
+                          >
+                            {key}
+                            <X
+                              size={12}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                setExclusionKeys(keys.filter((_, i) => i !== idx).join(', '));
+                              }}
+                            />
+                          </span>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Part 2: Exclusion Contacts */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                        {t('Số điện thoại / Email loại trừ')}
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="file"
+                          id="blacklist-file-upload"
+                          accept=".xlsx, .xls, .csv"
+                          style={{ display: 'none' }}
+                          onChange={handleBlacklistUpload}
+                        />
+                        <label
+                          htmlFor="blacklist-file-upload"
+                          className="btn outline"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            fontWeight: 600
+                          }}
+                        >
+                          <Upload size={14} /> {t('Nhập từ Excel/CSV')}
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={t("Nhập SĐT hoặc Email (VD: 0909123456 hoặc spam@gmail.com)")}
+                        value={newContactInput}
+                        onChange={e => setNewContactInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const contacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
+                            const val = newContactInput.trim();
+                            if (val && !contacts.includes(val)) {
+                              setExclusionContacts([...contacts, val].join(', '));
+                              if (val.includes('@')) {
+                                setBlacklistContactTab('email');
+                              } else {
+                                setBlacklistContactTab('phone');
+                              }
+                              setNewContactInput('');
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn primary"
+                        style={{ padding: '0 16px', background: 'var(--color-primary)' }}
+                        onClick={() => {
+                          const contacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
+                          const val = newContactInput.trim();
+                          if (val && !contacts.includes(val)) {
+                            setExclusionContacts([...contacts, val].join(', '));
+                            if (val.includes('@')) {
+                              setBlacklistContactTab('email');
+                            } else {
+                              setBlacklistContactTab('phone');
+                            }
+                            setNewContactInput('');
+                          }
+                        }}
+                      >
+                        {t('Thêm')}
+                      </button>
+                    </div>
+
+                    {/* Search & Stats bar */}
+                    {(() => {
+                      const contacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
+                      if (contacts.length === 0) return null;
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', gap: '10px' }}>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder={t("Tìm nhanh SĐT/Email trong danh sách đen...")}
+                              value={blacklistSearchQuery}
+                              onChange={e => setBlacklistSearchQuery(e.target.value)}
+                              style={{ paddingLeft: '12px', height: '32px', fontSize: '0.8125rem' }}
+                            />
+                          </div>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                            {t('Tổng số: {count} liên hệ').replace('{count}', String(contacts.length))}
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Sub-tabs selectors for SĐT / Email */}
+                    {(() => {
+                      const contacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
+                      if (contacts.length === 0) return null;
+                      const phones = contacts.filter(c => !c.includes('@'));
+                      const emails = contacts.filter(c => c.includes('@'));
+                      return (
+                        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--color-border-light)', marginBottom: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setBlacklistContactTab('phone')}
+                            style={{
+                              padding: '8px 16px',
+                              fontSize: '0.8125rem',
+                              fontWeight: 700,
+                              background: 'none',
+                              border: 'none',
+                              borderBottom: blacklistContactTab === 'phone' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                              color: blacklistContactTab === 'phone' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              outline: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            {t('Số điện thoại')}
+                            <span style={{
+                              fontSize: '0.7rem',
+                              background: blacklistContactTab === 'phone' ? 'rgba(163, 20, 34, 0.1)' : 'var(--color-bg)',
+                              color: blacklistContactTab === 'phone' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              padding: '2px 8px',
+                              borderRadius: '20px',
+                              transition: 'all 0.2s'
+                            }}>
+                              {phones.length}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBlacklistContactTab('email')}
+                            style={{
+                              padding: '8px 16px',
+                              fontSize: '0.8125rem',
+                              fontWeight: 700,
+                              background: 'none',
+                              border: 'none',
+                              borderBottom: blacklistContactTab === 'email' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                              color: blacklistContactTab === 'email' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              outline: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            {t('Email')}
+                            <span style={{
+                              fontSize: '0.7rem',
+                              background: blacklistContactTab === 'email' ? 'rgba(163, 20, 34, 0.1)' : 'var(--color-bg)',
+                              color: blacklistContactTab === 'email' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              padding: '2px 8px',
+                              borderRadius: '20px',
+                              transition: 'all 0.2s'
+                            }}>
+                              {emails.length}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      padding: '12px',
+                      background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border-light)',
+                      borderRadius: '8px',
+                      maxHeight: '180px',
+                      overflowY: 'auto'
+                    }}>
+                      {(() => {
+                        const contacts = exclusionContacts ? exclusionContacts.split(',').map(c => c.trim()).filter(Boolean) : [];
+                        if (contacts.length === 0) {
+                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{t('Chưa có liên hệ loại trừ nào.')}</span>;
+                        }
+                        
+                        const phones = contacts.filter(c => !c.includes('@'));
+                        const emails = contacts.filter(c => c.includes('@'));
+                        const activeList = blacklistContactTab === 'phone' ? phones : emails;
+
+                        const filtered = activeList.filter(c =>
+                          c.toLowerCase().includes(blacklistSearchQuery.toLowerCase())
+                        );
+
+                        if (filtered.length === 0) {
+                          return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                            {blacklistSearchQuery ? t('Không tìm thấy liên hệ khớp với tìm kiếm.') : (blacklistContactTab === 'phone' ? t('Chưa có số điện thoại nào trong danh sách.') : t('Chưa có email nào trong danh sách.'))}
+                          </span>;
+                        }
+
+                        const maxDisplay = 100;
+                        const displayed = filtered.slice(0, maxDisplay);
+
+                        return (
+                          <>
+                            {displayed.map((c, idx) => (
+                              <span
+                                key={idx}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: 'var(--color-bg)',
+                                  color: 'var(--color-text-light)',
+                                  border: '1px solid var(--color-border)',
+                                  padding: '2px 8px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {c}
+                                <X
+                                  size={12}
+                                  style={{ cursor: 'pointer', color: '#64748b' }}
+                                  onClick={() => {
+                                    const actualIdx = contacts.indexOf(c);
+                                    if (actualIdx !== -1) {
+                                      setExclusionContacts(contacts.filter((_, i) => i !== actualIdx).join(', '));
+                                    }
+                                  }}
+                                />
+                              </span>
+                            ))}
+                            {filtered.length > maxDisplay && (
+                              <div style={{
+                                width: '100%',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                marginTop: '6px',
+                                fontSize: '0.75rem',
+                                color: 'var(--color-text-muted)',
+                                fontStyle: 'italic',
+                                padding: '4px 0'
+                              }}>
+                                {t('... và {count} liên hệ khác. Sử dụng ô tìm kiếm để lọc thêm.').replace('{count}', String(filtered.length - maxDisplay))}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== TAB: DATABASE ERD DIAGRAM ===== */}
+            <div style={{ display: activeTab === 'database_erd' ? 'block' : 'none' }} className="subtab-enter-active">
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap: '1.5rem', marginTop: 0 }}>
+                {/* Left side: Search & Table list */}
+                <div className="card" style={{ padding: '1.25rem', height: isMobile ? 'auto' : 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 8px', color: 'var(--color-text)' }}>{t('Danh sách Bảng')}</h4>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={t("Tìm kiếm bảng...")}
+                        value={erdSearchQuery}
+                        onChange={e => setErdSearchQuery(e.target.value)}
+                        style={{ height: '36px', paddingLeft: '12px', paddingRight: '32px', fontSize: '0.8125rem' }}
+                      />
+                      <Search size={14} style={{ position: 'absolute', right: '10px', top: '11px', color: 'var(--color-text-muted)' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto', flex: 1 }}>
+                    {loadingSchema ? (
+                      Array.from({ length: 8 }).map((_, i) => (
+                        <Skeleton key={i} height={36} style={{ marginBottom: '6px' }} />
+                      ))
+                    ) : (
+                      Object.keys(dbSchema)
+                        .filter(tName => tName.toLowerCase().includes(erdSearchQuery.toLowerCase()))
+                        .map(tableName => {
+                          const isSelected = selectedErdTable === tableName;
+                          const stats = dbTables.find(tbl => tbl.name.toLowerCase() === tableName.toLowerCase());
+                          const rowCount = stats && stats.rows > 0 ? stats.rows : null;
+                          return (
+                            <div
+                              key={tableName}
+                              onClick={() => setSelectedErdTable(tableName)}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                background: isSelected ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
+                                border: isSelected ? '1px solid rgba(189, 29, 45, 0.3)' : '1px solid transparent',
+                                transition: 'all 0.2s',
+                                userSelect: 'none'
+                              }}
+                              className="table-item-hover"
+                            >
+                              <span style={{
+                                fontSize: '0.8125rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                color: isSelected ? 'var(--color-primary)' : 'var(--color-text)'
+                              }}>
+                                {tableName}
+                              </span>
+                              {rowCount !== null && (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {rowCount.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+                </div>
+
+                {/* Right side: ERD visualization and columns */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {loadingSchema ? (
+                    <div className="card" style={{ padding: '2rem' }}>
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} height={20} style={{ marginBottom: '12px' }} />
+                      ))}
+                    </div>
+                  ) : !selectedErdTable || !dbSchema[selectedErdTable] ? (
+                    <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                      <Database size={40} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                      <p>{t('Vui lòng chọn một bảng để xem cấu trúc và mối liên hệ')}</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Section 1: Interactive Local Relation Map */}
+                      <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ display: 'inline-flex', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', padding: 6, borderRadius: 8 }}>
+                                <Activity size={16} />
+                              </span>
+                              {t('Bản đồ Mối quan hệ liên kết')} ({selectedErdTable})
+                            </h3>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                              {t('Nhấp chuột vào bất kỳ bảng liên quan nào để chuyển hướng xem cấu trúc bảng đó.')}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn outline"
+                            onClick={fetchDbSchema}
+                            disabled={loadingSchema}
+                            style={{ padding: '6px 12px', fontSize: '0.75rem', height: '32px' }}
+                          >
+                            {t('Tải lại')}
+                          </button>
+                        </div>
+
+                        {/* SVG relationship canvas */}
+                        {(() => {
+                          // Simple heuristic relationship solver
+                          const getRelationships = (currentTable) => {
+                            const parents = [];
+                            const children = [];
+
+                            if (!dbSchema || !dbSchema[currentTable]) return { parents, children };
+
+                            dbSchema[currentTable].forEach((col) => {
+                              const colName = col.field.toLowerCase();
+                              if (colName === 'tenant_id' && dbSchema['tenants']) {
+                                parents.push({ table: 'tenants', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'doc_id' && dbSchema['ai_training_docs']) {
+                                parents.push({ table: 'ai_training_docs', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'project_id' && dbSchema['projects']) {
+                                parents.push({ table: 'projects', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'company_id' && dbSchema['companies']) {
+                                parents.push({ table: 'companies', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'contact_id' && dbSchema['contacts']) {
+                                parents.push({ table: 'contacts', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'deal_id' && dbSchema['deals']) {
+                                parents.push({ table: 'deals', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'quote_id' && dbSchema['quotes']) {
+                                parents.push({ table: 'quotes', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'invoice_id' && dbSchema['invoices']) {
+                                parents.push({ table: 'invoices', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'team_id' && dbSchema['teams']) {
+                                parents.push({ table: 'teams', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'round_id' && dbSchema['distribution_rounds']) {
+                                parents.push({ table: 'distribution_rounds', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'consultant_id' && dbSchema['consultants']) {
+                                parents.push({ table: 'consultants', fromCol: col.field, toCol: 'id' });
+                              } else if (colName === 'parent_id') {
+                                parents.push({ table: currentTable, fromCol: col.field, toCol: 'id' });
+                              } else if (['user_id', 'created_by', 'owner_id', 'approver_id'].includes(colName) && dbSchema['users']) {
+                                parents.push({ table: 'users', fromCol: col.field, toCol: 'id' });
+                              }
+                            });
+
+                            Object.keys(dbSchema).forEach((otherTable) => {
+                              if (otherTable === currentTable) return;
+                              dbSchema[otherTable].forEach((col) => {
+                                const colName = col.field.toLowerCase();
+                                if (colName === 'tenant_id') return;
+
+                                let matches = false;
+                                let toCol = 'id';
+                                if (currentTable === 'users' && ['user_id', 'created_by', 'owner_id', 'approver_id'].includes(colName)) {
+                                  matches = true;
+                                } else if (currentTable === 'ai_training_docs' && colName === 'doc_id') {
+                                  matches = true;
+                                } else if (currentTable === 'projects' && colName === 'project_id') {
+                                  matches = true;
+                                } else if (currentTable === 'companies' && colName === 'company_id') {
+                                  matches = true;
+                                } else if (currentTable === 'contacts' && colName === 'contact_id') {
+                                  matches = true;
+                                } else if (currentTable === 'deals' && colName === 'deal_id') {
+                                  matches = true;
+                                } else if (currentTable === 'quotes' && colName === 'quote_id') {
+                                  matches = true;
+                                } else if (currentTable === 'invoices' && colName === 'invoice_id') {
+                                  matches = true;
+                                } else if (currentTable === 'teams' && colName === 'team_id') {
+                                  matches = true;
+                                } else if (currentTable === 'distribution_rounds' && colName === 'round_id') {
+                                  matches = true;
+                                } else if (currentTable === 'consultants' && colName === 'consultant_id') {
+                                  matches = true;
+                                }
+
+                                if (matches) {
+                                  children.push({ table: otherTable, fromCol: col.field, toCol });
+                                }
+                              });
+                            });
+
+                            return { parents, children };
+                          };
+
+                          const { parents, children } = getRelationships(selectedErdTable);
+                          const svgWidth = 850;
+                          const svgHeight = Math.max(260, Math.max(parents.length, children.length) * 60 + 40);
+                          
+                          const cardH = 46;
+                          const getCardW = (tableName) => Math.max(160, tableName.length * 8.5);
+                          
+                          const centerCardW = getCardW(selectedErdTable);
+                          const centerNode = { x: (svgWidth - centerCardW) / 2, y: (svgHeight - cardH) / 2 };
+                          
+                          const parentsCoords = parents.map((p, idx) => {
+                            const totalH = parents.length * 60;
+                            const startY = (svgHeight - totalH) / 2 + 10;
+                            return {
+                              table: p.table,
+                              fromCol: p.fromCol,
+                              toCol: p.toCol,
+                              x: 30,
+                              y: startY + idx * 60,
+                              cardW: getCardW(p.table)
+                            };
+                          });
+
+                          const childrenCoords = children.map((c, idx) => {
+                            const totalH = children.length * 60;
+                            const startY = (svgHeight - totalH) / 2 + 10;
+                            const nodeCardW = getCardW(c.table);
+                            return {
+                              table: c.table,
+                              fromCol: c.fromCol,
+                              toCol: c.toCol,
+                              x: svgWidth - nodeCardW - 30,
+                              y: startY + idx * 60,
+                              cardW: nodeCardW
+                            };
+                          });
+
+                          return (
+                            <div style={{ overflowX: 'auto', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '1rem' }}>
+                              <svg width="100%" height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ minWidth: '700px', display: 'block', margin: '0 auto' }}>
+                                <defs>
+                                  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-text-muted)" />
+                                  </marker>
+                                </defs>
+
+                                {/* Draw parent connectors (left to center) */}
+                                {parentsCoords.map((p, idx) => {
+                                  const startX = p.x + p.cardW;
+                                  const startY = p.y + cardH / 2;
+                                  const endX = centerNode.x;
+                                  const endY = centerNode.y + cardH / 2 + (idx - (parents.length - 1) / 2) * 5;
+                                  return (
+                                    <g key={`p-conn-${idx}`}>
+                                      <path
+                                        d={`M ${startX} ${startY} C ${(startX + endX) / 2} ${startY}, ${(startX + endX) / 2} ${endY}, ${endX} ${endY}`}
+                                        fill="none"
+                                        stroke="var(--color-border)"
+                                        strokeWidth="1.5"
+                                        markerEnd="url(#arrow)"
+                                      />
+                                      <text x={(startX + endX) / 2} y={(startY + endY) / 2 - 4} fontSize="9px" fill="var(--color-text-muted)" textAnchor="middle">
+                                        {p.fromCol} → {p.toCol}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Draw child connectors (right to center) */}
+                                {childrenCoords.map((c, idx) => {
+                                  const startX = c.x;
+                                  const startY = c.y + cardH / 2;
+                                  const endX = centerNode.x + centerCardW;
+                                  const endY = centerNode.y + cardH / 2 + (idx - (children.length - 1) / 2) * 5;
+                                  return (
+                                    <g key={`c-conn-${idx}`}>
+                                      <path
+                                        d={`M ${startX} ${startY} C ${(startX + endX) / 2} ${startY}, ${(startX + endX) / 2} ${endY}, ${endX} ${endY}`}
+                                        fill="none"
+                                        stroke="var(--color-border)"
+                                        strokeWidth="1.5"
+                                        markerEnd="url(#arrow)"
+                                      />
+                                      <text x={(startX + endX) / 2} y={(startY + endY) / 2 - 4} fontSize="9px" fill="var(--color-text-muted)" textAnchor="middle">
+                                        {c.fromCol} → {c.toCol}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Render parent nodes */}
+                                {parentsCoords.map((p, idx) => (
+                                  <g key={`parent-node-${idx}`} style={{ cursor: 'pointer' }} onClick={() => setSelectedErdTable(p.table)}>
+                                    <rect x={p.x} y={p.y} width={p.cardW} height={cardH} rx="8" fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth="1.5" />
+                                    <text x={p.x + p.cardW/2} y={p.y + cardH/2 + 4} fontSize="11px" fontWeight="600" fill="var(--color-text)" textAnchor="middle">
+                                      {p.table}
+                                    </text>
+                                    <circle cx={p.x} cy={p.y + cardH/2} r="3" fill="var(--color-primary)" />
+                                  </g>
+                                ))}
+
+                                {/* Render central node */}
+                                <g>
+                                  <rect
+                                    x={centerNode.x}
+                                    y={centerNode.y}
+                                    width={centerCardW}
+                                    height={cardH}
+                                    rx="10"
+                                    fill="var(--color-surface)"
+                                    stroke="var(--color-primary)"
+                                    strokeWidth="2"
+                                    style={{ filter: 'drop-shadow(0px 0px 8px rgba(189,29,45,0.15))' }}
+                                  />
+                                  <text x={centerNode.x + centerCardW/2} y={centerNode.y + cardH/2 + 4} fontSize="12px" fontWeight="800" fill="var(--color-primary)" textAnchor="middle">
+                                    {selectedErdTable}
+                                  </text>
+                                  <circle cx={centerNode.x} cy={centerNode.y + cardH/2} r="4" fill="var(--color-primary)" />
+                                  <circle cx={centerNode.x + centerCardW} cy={centerNode.y + cardH/2} r="4" fill="var(--color-primary)" />
+                                </g>
+
+                                {/* Render child nodes */}
+                                {childrenCoords.map((c, idx) => (
+                                  <g key={`child-node-${idx}`} style={{ cursor: 'pointer' }} onClick={() => setSelectedErdTable(c.table)}>
+                                    <rect x={c.x} y={c.y} width={c.cardW} height={cardH} rx="8" fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth="1.5" />
+                                    <text x={c.x + c.cardW/2} y={c.y + cardH/2 + 4} fontSize="11px" fontWeight="600" fill="var(--color-text)" textAnchor="middle">
+                                      {c.table}
+                                    </text>
+                                    <circle cx={c.x + c.cardW} cy={c.y + cardH/2} r="3" fill="var(--color-primary)" />
+                                  </g>
+                                ))}
+                              </svg>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Section 2: Detailed Column definitions */}
+                      <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {t('Định nghĩa chi tiết Cấu trúc bảng')}
+                        </h4>
+                        <div style={{ overflowX: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)' }}>
+                                <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'left' }}>{t('Trường (Field)')}</th>
+                                <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'left' }}>{t('Kiểu dữ liệu (Type)')}</th>
+                                <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'center' }}>{t('Rỗng (Null)')}</th>
+                                <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'center' }}>{t('Khóa (Key)')}</th>
+                                <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'left' }}>{t('Mặc định (Default)')}</th>
+                                <th style={{ padding: '10px 16px', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'left' }}>{t('Mở rộng (Extra)')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dbSchema[selectedErdTable].map((col, idx) => {
+                                const isKey = !!col.key;
+                                return (
+                                  <tr key={idx} style={{ borderBottom: idx < dbSchema[selectedErdTable].length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'var(--color-bg-light-alpha)' }}>
+                                    <td style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--color-text)' }}>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        {col.field}
+                                        {col.key === 'PRI' && <span style={{ fontSize: '0.65rem', background: 'rgba(217,119,6,0.1)', color: '#D97706', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>PK</span>}
+                                        {col.key === 'MUL' && <span style={{ fontSize: '0.65rem', background: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>FK</span>}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '10px 16px', fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>{col.type}</td>
+                                    <td style={{ padding: '10px 16px', textAlign: 'center', color: col.null === 'YES' ? '#10B981' : 'var(--color-text-muted)' }}>{col.null}</td>
+                                    <td style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 700, color: 'var(--color-primary)' }}>{col.key}</td>
+                                    <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{col.default === null ? 'NULL' : col.default}</td>
+                                    <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{col.extra}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+      {/* Custom Modal for Test Email */}
+      <CustomModal
+        isOpen={showTestEmailModal}
+        onClose={() => setShowTestEmailModal(false)}
+        title={t("Gửi Test Email")}
+        width="450px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
+            {t('Gửi một email thử nghiệm để đảm bảo hệ thống đã kết nối thành công với AppScript hoặc Amazon SES.')}
+          </p>
+
+          <div>
+            <label className="form-label" style={{ fontWeight: 600 }}>{t('Chọn loại test')}</label>
+            <CustomSelect
+              options={[
+                { value: 'system', label: t('Test Hệ Thống (SMTP / AppScript)') },
+                { value: 'assignment', label: t('Test Template Giao Data') },
+                { value: 'zalo_sale', label: t('Test Welcome & Zalo (Sale)') },
+                { value: 'zalo_admin', label: t('Test Welcome & Zalo (Admin)') },
+                { value: 'ticket_admin', label: t('Test Thông báo Ticket (Admin)') },
+                { value: 'ticket_sale_success', label: t('Test Duyệt Ticket thành công (Sale)') },
+                { value: 'ticket_sale_fail', label: t('Test Từ chối Ticket (Sale)') },
+                { value: 'admin_confirm', label: t('Test Xác nhận Email (Admin)') },
+                { value: 'daily_report', label: t('Test Báo Cáo Tổng Kết Ngày') }
+              ]}
+              value={testType}
+              onChange={val => setTestType(val.toString())}
+              width="100%"
+            />
+          </div>
+
+          <div>
+            <label className="form-label" style={{ fontWeight: 600 }}>{t('Email nhận test')}</label>
+            <input
+              className="form-input"
+              placeholder={t("Nhập email nhận test...")}
+              value={testEmail}
+              onChange={e => setTestEmail(e.target.value)}
+              style={{ height: '40px' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem' }}>
+            <button
+              className="btn outline"
+              onClick={() => setShowTestEmailModal(false)}
+              disabled={testing}
+              style={{ height: '38px' }}
+            >
+              {t("Đóng")}
+            </button>
+            <button
+              className="btn primary"
+              onClick={async () => {
+                await handleTestEmail();
+              }}
+              disabled={testing}
+              style={{ height: '38px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {testing ? <Activity size={14} className="spin" /> : <Send size={14} />}
+              {testing ? t("Đang gửi...") : t("Gửi Email Test")}
+            </button>
+          </div>
+        </div>
+      </CustomModal>
+
+      {/* Custom Modal for Workflow Template */}
+      <CustomModal
+        isOpen={showWorkflowModal}
+        onClose={() => setShowWorkflowModal(false)}
+        title={editingTemplate ? t("Chỉnh sửa Mẫu Công Việc") : t("Thêm Mẫu Công Việc Mới")}
+        width="600px"
+      >
+        {showWorkflowModal && (
+          <form onSubmit={handleSaveWorkflowTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.25rem 0' }}>
+            <div>
+              <label className="form-label" style={{ fontWeight: 600 }}>{t('Tiêu đề công việc')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+              <input
+                type="text"
+                className="form-input"
+                required
+                placeholder={t("Ví dụ: Gọi điện khảo sát nhu cầu")}
+                value={workflowForm.title}
+                onChange={e => setWorkflowForm({ ...workflowForm, title: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="form-label" style={{ fontWeight: 600 }}>{t('Mô tả / Hướng dẫn chi tiết')}</label>
+              <textarea
+                className="form-input"
+                rows={3}
+                placeholder={t("Hướng dẫn cho nhân viên khi thực hiện công việc này...")}
+                value={workflowForm.description}
+                onChange={e => setWorkflowForm({ ...workflowForm, description: e.target.value })}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>{t('Giai đoạn kích hoạt')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                <select
+                  className="form-input"
+                  required
+                  value={workflowForm.stage_id}
+                  onChange={e => setWorkflowForm({ ...workflowForm, stage_id: e.target.value })}
+                >
+                  <option value="">-- {t('Chọn giai đoạn')} --</option>
+                  {pipelineStages.map(st => (
+                    <option key={st.id} value={st.id}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>{t('Áp dụng cho Phòng ban')}</label>
+                <select
+                  className="form-input"
+                  value={workflowForm.team_id}
+                  onChange={e => setWorkflowForm({ ...workflowForm, team_id: e.target.value })}
+                >
+                  <option value="">{t('Tất cả phòng ban')}</option>
+                  {teams.map(tm => (
+                    <option key={tm.id} value={tm.id}>{tm.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>{t('Độ ưu tiên')}</label>
+                <select
+                  className="form-input"
+                  value={workflowForm.priority}
+                  onChange={e => setWorkflowForm({ ...workflowForm, priority: e.target.value })}
+                >
+                  <option value="low">{t('Thấp')}</option>
+                  <option value="medium">{t('Trung bình')}</option>
+                  <option value="high">{t('Cao')}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>{t('Hạn hoàn thành (Số ngày)')}</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min={1}
+                  required
+                  value={workflowForm.due_days_offset}
+                  onChange={e => setWorkflowForm({ ...workflowForm, due_days_offset: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--color-bg-light)', padding: '12px', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t('Yêu cầu phê duyệt')}</span>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>{t('Yêu cầu quản lý phê duyệt sau khi hoàn thành.')}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={workflowForm.require_approval === 1}
+                  onChange={e => setWorkflowForm({ ...workflowForm, require_approval: e.target.checked ? 1 : 0 })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+              </div>
+
+              <hr style={{ border: 0, borderTop: '1px solid var(--color-border-light)', margin: '8px 0' }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{t('Trạng thái kích hoạt')}</span>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>{t('Bật/Tắt mẫu quy trình công việc này.')}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={workflowForm.is_active === 1}
+                  onChange={e => setWorkflowForm({ ...workflowForm, is_active: e.target.checked ? 1 : 0 })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button type="button" className="btn outline" onClick={() => setShowWorkflowModal(false)}>{t('Hủy')}</button>
+              <button type="submit" className="btn primary">{t('Lưu lại')}</button>
+            </div>
+          </form>
+        )}
+      </CustomModal>
+
+      {/* Custom Modal for Auto-Approve Rule */}
+      <CustomModal
+        isOpen={ruleModalOpen}
+        onClose={() => setRuleModalOpen(false)}
+        title={editingRule ? t("Chỉnh sửa Luật Tự Động Duyệt") : t("Thêm Luật Tự Động Duyệt Mới")}
+        width="650px"
+      >
+        {ruleModalOpen && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.25rem 0' }}>
+          {/* Name */}
+          <div>
+            <label className="form-label" style={{ fontWeight: 600 }}>{t('Tên luật duyệt tự động')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder={t("Ví dụ: Lỗi số điện thoại — Vòng A")}
+              value={ruleName}
+              onChange={e => setRuleName(e.target.value)}
+            />
+          </div>
+
+          {/* Scope: Rounds */}
+          <div>
+            <CustomSelect
+              label={t("Áp dụng cho Vòng phân bổ")}
+              options={roundOptions}
+              value={ruleRounds}
+              onChange={setRuleRounds}
+              multiple={true}
+              searchable={true}
+              placeholder={t("Chọn vòng phân bổ...")}
+            />
+          </div>
+
+          {/* Scope: Sales */}
+          <div>
+            <CustomSelect
+              label={t("Áp dụng cho Tư vấn viên (Sales)")}
+              options={saleOptions}
+              value={ruleSales}
+              onChange={setRuleSales}
+              multiple={true}
+              searchable={true}
+              showAvatars={true}
+              placeholder={t("Chọn tư vấn viên...")}
+            />
+          </div>
+
+          {/* Scope: Sources (Sheet Connections) */}
+          <div>
+            <CustomSelect
+              label={t("Áp dụng cho Nguồn dữ liệu (Sources)")}
+              options={connectionOptions}
+              value={ruleConnections}
+              onChange={setRuleConnections}
+              multiple={true}
+              searchable={true}
+              placeholder={t("Chọn nguồn dữ liệu...")}
+            />
+          </div>
+
+          {/* Keywords / Reasons */}
+          <div>
+            <label className="form-label" style={{ fontWeight: 600 }}>{t('Từ khóa / Lý do lỗi kích hoạt (Cách nhau bằng dấu phẩy)')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+            <textarea
+              className="form-input"
+              placeholder={t("Ví dụ: sai số, thuê bao, nhầm số, không liên lạc được")}
+              value={ruleKeywords}
+              onChange={e => setRuleKeywords(e.target.value)}
+              style={{ minHeight: 80, resize: 'vertical' }}
+            />
+            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: 4, display: 'block' }}>
+              {t('Khi lý do báo lỗi của Sale chứa bất kỳ từ khóa nào trong danh sách trên, ticket sẽ được duyệt tự động.')}
+            </span>
+          </div>
+
+          {/* Active status */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px', background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)', marginTop: '0.25rem'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-text)' }}>{t('Trạng thái hoạt động')}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('Kích hoạt hoặc tạm ngưng áp dụng luật này')}</span>
+            </div>
+            <div
+              onClick={() => setRuleActive(!ruleActive)}
+              style={{
+                width: 44, height: 24, borderRadius: 12,
+                background: ruleActive ? 'var(--color-success)' : 'var(--color-border)',
+                position: 'relative', transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'pointer',
+                boxShadow: ruleActive ? '0 0 8px rgba(16, 185, 129, 0.2)' : 'none'
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 3, width: 18, height: 18, borderRadius: '50%',
+                background: 'var(--color-surface)', left: ruleActive ? 23 : 3, transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+              }} />
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn outline"
+              onClick={() => setRuleModalOpen(false)}
+            >
+              {t('Hủy')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                if (!ruleName.trim()) {
+                  toast.error(t("Vui lòng nhập tên luật!"));
+                  return;
+                }
+                if (!ruleKeywords.trim()) {
+                  toast.error(t("Vui lòng nhập từ khóa duyệt!"));
+                  return;
+                }
+                if (ruleRounds.length === 0) {
+                  toast.error(t("Vui lòng chọn ít nhất một vòng áp dụng!"));
+                  return;
+                }
+                if (ruleSales.length === 0) {
+                  toast.error(t("Vui lòng chọn ít nhất một Sale áp dụng!"));
+                  return;
+                }
+                if (ruleConnections.length === 0) {
+                  toast.error(t("Vui lòng chọn ít nhất một nguồn áp dụng!"));
+                  return;
+                }
+
+                const keywordsArray = ruleKeywords.split(',')
+                  .map(k => k.trim())
+                  .filter(k => k.length > 0);
+
+                const newRule = {
+                  id: editingRule ? editingRule.id : Date.now(),
+                  name: ruleName.trim(),
+                  active: ruleActive,
+                  rounds: ruleRounds,
+                  sales: ruleSales,
+                  connections: ruleConnections,
+                  keywords: keywordsArray
+                };
+
+                if (editingRule) {
+                  setTicketAutoApproveRules(prev => prev.map(r => r.id === editingRule.id ? newRule : r));
+                  toast.success(t("Đã cập nhật luật thành công!"));
+                } else {
+                  setTicketAutoApproveRules(prev => [...prev, newRule]);
+                  toast.success(t("Đã thêm luật mới thành công!"));
+                }
+                setRuleModalOpen(false);
+              }}
+            >
+              {t('Xác nhận')}
+            </button>
+          </div>
+        </div>
+        )}
+      </CustomModal>
+
+      {/* Custom Modal for Tag Creation/Editing */}
+      <CustomModal
+        isOpen={showTagModal}
+        onClose={() => setShowTagModal(false)}
+        title={editingTag ? t("Chỉnh sửa Tag") : t("Thêm Tag Mới")}
+        width="500px"
+      >
+        {showTagModal && (
+          <form onSubmit={handleSaveTag} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.25rem 0' }}>
+            <div>
+              <label className="form-label" style={{ fontWeight: 600 }}>{t('Tên Tag')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+              <input
+                type="text"
+                className="form-input"
+                required
+                placeholder={t("Ví dụ: VIP, Tiềm năng cao...")}
+                value={tagForm.name}
+                onChange={e => setTagForm({ ...tagForm, name: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="form-label" style={{ fontWeight: 600 }}>{t('Màu sắc đại diện')}</label>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <input
+                  type="color"
+                  value={tagForm.color}
+                  onChange={e => setTagForm({ ...tagForm, color: e.target.value })}
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    padding: 0,
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    background: 'none',
+                    overflow: 'hidden'
+                  }}
+                />
+                <input
+                  type="text"
+                  className="form-input"
+                  value={tagForm.color}
+                  onChange={e => setTagForm({ ...tagForm, color: e.target.value })}
+                  placeholder="#6366f1"
+                  style={{ fontFamily: 'monospace', flex: 1 }}
+                />
+              </div>
+            </div>
+
+
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button type="button" className="btn outline" onClick={() => setShowTagModal(false)}>{t('Hủy')}</button>
+              <button type="submit" className="btn primary">{t('Lưu lại')}</button>
+            </div>
+          </form>
+        )}
+      </CustomModal>
+
+      <ConfirmModal
+        isOpen={confirmDeleteLogsOpen}
+        onClose={() => setConfirmDeleteLogsOpen(false)}
+        onConfirm={executeDeleteHistory}
+        title={t("Xác nhận xóa bản ghi")}
+        message={logsToDelete.length === 1
+          ? t("Bạn có chắc chắn muốn xóa bản ghi nhập này không? Thao tác này cũng sẽ xóa Lead tương ứng khỏi CRM.")
+          : t("Bạn có chắc chắn muốn xóa {count} bản ghi nhập đã chọn? Thao tác này cũng sẽ xóa các Lead tương ứng khỏi CRM.").replace('{count}', String(logsToDelete.length))}
+        confirmText={t("Xóa bản ghi")}
+        cancelText={t("Hủy")}
+      />
+
+      <ConfirmModal
+        isOpen={confirmImportOpen}
+        onClose={() => setConfirmImportOpen(false)}
+        onConfirm={executeImportLeads}
+        title={t("Xác nhận nhập dữ liệu")}
+        message={t("Bạn có chắc chắn muốn nhập {count} dòng dữ liệu từ file vào hệ thống không?").replace('{count}', String(localRows.length))}
+        confirmText={t("Bắt đầu nhập")}
+        cancelText={t("Hủy")}
+        confirmType="primary"
+        width="750px"
+      >
+        {localRows.length > 0 && (
+          <div style={{ marginTop: '1rem', border: '1px solid var(--color-border)', borderRadius: '12px', overflow: 'hidden', background: 'var(--color-surface)' }}>
+            <div style={{ background: 'var(--color-bg)', padding: '10px 16px', fontSize: '0.8rem', fontWeight: 700, borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+              {t('Xem trước 5 dòng dữ liệu đầu tiên:')}
+            </div>
+            <div className="responsive-table-wrap" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Khách hàng')}</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Liên hệ')}</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Ngày')}</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Sale phụ trách')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {localRows.slice(0, 5).map((row, idx) => {
+                    const phone = phoneCol ? String(row[phoneCol] || '').trim() : '';
+                    const email = emailCol ? String(row[emailCol] || '').trim() : '';
+                    const name = nameCol ? String(row[nameCol] || '').trim() : '';
+                    const date = dateCol ? String(row[dateCol] || '').trim() : '';
+                    const salepersonVal = salepersonCol ? String(row[salepersonCol] || '').trim() : '';
+
+                    // Match with consultants list on frontend
+                    const matchedSale = consultants.find(c => 
+                      (c.name && c.name.toLowerCase() === salepersonVal.toLowerCase()) || 
+                      (c.email && c.email.toLowerCase() === salepersonVal.toLowerCase()) ||
+                      (c.email && c.email.toLowerCase().split('@')[0] === salepersonVal.toLowerCase()) ||
+                      (c.username && c.username.toLowerCase() === salepersonVal.toLowerCase())
+                    );
+
+                    const saleDisplayName = matchedSale ? matchedSale.name : salepersonVal;
+                    const saleSubText = matchedSale ? matchedSale.email : (salepersonVal.includes('@') ? salepersonVal : '');
+
+                    return (
+                      <tr key={idx} style={{ borderBottom: idx < Math.min(localRows.length, 5) - 1 ? '1px solid var(--color-border-light)' : 'none' }}>
+                        <td style={{ padding: '10px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <Avatar name={name || t('Không có tên')} src={phone ? (consultants.find(c => c.phone === phone)?.avatar || consultants.find(c => c.phone === phone)?.avatar_url) : undefined} size={32} />
+                            <span style={{ fontWeight: 600 }}>{name || <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Chưa cập nhật')}</em>}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{phone ? maskPhone(phone) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                            <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{email ? maskEmail(email) : <em style={{ color: '#cbd5e1', fontWeight: 400 }}>{t('Trống')}</em>}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>
+                          {date ? formatExcelDate(date) : <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>-</span>}
+                        </td>
+                        <td style={{ padding: '10px 16px' }}>
+                          {saleDisplayName ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <Avatar src={matchedSale?.avatar || matchedSale?.avatar_url} name={saleDisplayName} size={24} />
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <strong style={{ fontWeight: 600 }}>{saleDisplayName}</strong>
+                                {saleSubText && <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>{saleSubText}</span>}
+                              </div>
+                            </div>
+                          ) : <span style={{ color: 'var(--color-text-muted)' }}>-</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </ConfirmModal>
+
+      <CustomModal
+        isOpen={isParallelTriggerModalOpen}
+        onClose={() => setIsParallelTriggerModalOpen(false)}
+        title={t("Chọn Trạng Thái Kích Hoạt Chia Song Song")}
+        width="450px"
+      >
+        {isParallelTriggerModalOpen && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.25rem 0' }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4, margin: 0 }}>
+              {t('Chọn trạng thái trong phễu tích hợp để khi lead nằm tại trạng thái này quá thời gian quy định sẽ tự động kích hoạt gán song song cho Sale thứ hai.')}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+              {pipelineStatusHierarchy.map(slug => {
+                const isActive = parallelAssignmentTriggerStatus === slug;
+                const label = pipelineStatusLabels[slug] || slug;
+                return (
+                  <div
+                    key={slug}
+                    onClick={() => {
+                      setParallelAssignmentTriggerStatus(slug);
+                      setIsParallelTriggerModalOpen(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      borderRadius: '10px',
+                      border: isActive ? '1px solid var(--color-primary, #BD1D2D)' : '1px solid var(--color-border)',
+                      backgroundColor: isActive ? 'rgba(189, 29, 45, 0.05)' : 'var(--color-surface, #f8fafc)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease-in-out'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.borderColor = 'var(--color-primary-light, #fca5a5)';
+                        e.currentTarget.style.backgroundColor = 'rgba(189, 29, 45, 0.01)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.borderColor = 'var(--color-border)';
+                        e.currentTarget.style.backgroundColor = 'var(--color-surface, #f8fafc)';
+                      }
+                    }}
+                  >
+                    <span style={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 500, color: isActive ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text)' }}>
+                      {label}
+                    </span>
+                    {isActive ? (
+                      <CheckCircle size={18} style={{ color: 'var(--color-primary, #BD1D2D)' }} />
+                    ) : (
+                      <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: '2px solid var(--color-border)' }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button
+                className="btn outline"
+                onClick={() => setIsParallelTriggerModalOpen(false)}
+                style={{ borderRadius: '8px', padding: '6px 16px', fontSize: '0.8125rem' }}
+              >
+                {t('Đóng')}
+              </button>
+            </div>
+          </div>
+        )}
+      </CustomModal>
+
+    </div>
+  );
+};
+
+export const Settings = withRouterFreezer(SettingsInner, '/settings');

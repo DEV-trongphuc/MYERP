@@ -1,0 +1,611 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera } from 'lucide-react';
+import { useUIStore } from '../../store/uiStore';
+import { CustomSelect } from './CustomSelect';
+import { MentionInput } from './MentionInput';
+import api from '../../api/axios';
+import { compressToWebP } from '../../utils/imageCompress';
+
+interface ActivityModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  entityType?: 'contact' | 'company' | 'deal';
+  entityId?: number;
+  onSuccess?: () => void;
+  userId?: number;
+  activity?: any; // If passed, we are in edit mode
+  onSwitchToTask?: () => void;
+}
+
+const TYPES = [
+  { id: 'call', label: 'Cuộc gọi', icon: <Phone size={16} />, color: 'var(--color-primary)' },
+  { id: 'zalo_connect', label: 'Zalo', icon: <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain' }} alt="Zalo" />, color: '#0084FF' },
+  { id: 'email', label: 'Email', icon: <Mail size={16} />, color: '#10b981' },
+  { id: 'meeting', label: 'Gặp gỡ', icon: <Users size={16} />, color: '#f59e0b' }
+];
+
+const DEFAULT_SUBJECTS: Record<string, string> = {
+  call: 'Cuộc gọi',
+  zalo_connect: 'Nhắn tin Zalo',
+  email: 'Gửi email',
+  meeting: 'Gặp gỡ khách hàng',
+  note: 'Ghi chú'
+};
+
+const PLACEHOLDERS: Record<string, string> = {
+  call: 'Nhập ghi chú cuộc gọi...',
+  zalo_connect: 'Ví dụ: Nhắn tin Zalo tư vấn dự án...',
+  email: 'Ví dụ: Gửi email báo giá căn hộ...',
+  meeting: 'Ví dụ: Gặp trực tiếp tại sa bàn...',
+  note: 'Ví dụ: Ghi chú yêu cầu tài chính của khách...'
+};
+
+export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, entityType, entityId, onSuccess, userId, activity, onSwitchToTask }) => {
+  const { addToast } = useUIStore();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [formData, setFormData] = useState({
+    type: 'call',
+    subject: '',
+    body: '',
+    due_date: '',
+    priority: 'medium',
+    status: 'planned',
+    auto_trigger: false,
+    
+    // Call-specific properties
+    call_direction: 'outbound' as 'outbound' | 'inbound',
+    call_outcome: 'reached' as 'reached' | 'no_answer' | 'voicemail' | 'busy' | 'wrong_number',
+    call_duration: 5
+  });
+  const [proofImageFile, setProofImageFile] = useState<File | null>(null);
+  const [proofImagePreview, setProofImagePreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const defaultDate = activity?.due_date ? new Date(activity.due_date) : new Date();
+      // Adjust timezone offset to get local YYYY-MM-DDTHH:mm
+      const tzOffset = defaultDate.getTimezoneOffset() * 60000;
+      const localISOTime = new Date(defaultDate.getTime() - tzOffset).toISOString().slice(0, 16);
+
+      setFormData({
+        type: activity?.type || 'call',
+        subject: activity?.subject || DEFAULT_SUBJECTS[activity?.type || 'call'] || '',
+        body: activity?.body || '',
+        due_date: localISOTime,
+        priority: activity?.priority || 'medium',
+        status: activity?.status || (activity?.type === 'call' ? 'done' : 'planned'),
+        auto_trigger: false,
+        call_direction: 'outbound',
+        call_outcome: 'reached',
+        call_duration: 5
+      });
+      setProofImageFile(null);
+      setProofImagePreview(null);
+    }
+  }, [isOpen, activity]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    let subject = formData.subject;
+    let body = formData.body;
+    let status = formData.status;
+
+    if (formData.type === 'call') {
+      const directionLabel = formData.call_direction === 'outbound' ? 'đi' : 'đến';
+      const outcomeLabel = formData.call_outcome === 'reached' ? 'Đã kết nối' :
+                           formData.call_outcome === 'no_answer' || formData.call_outcome === 'busy' ? 'Không kết nối được' :
+                           formData.call_outcome === 'voicemail' ? 'Hộp thư thoại' : 'Sai số';
+      subject = `Cuộc gọi ${directionLabel}: ${outcomeLabel}`;
+      status = 'done';
+
+      if (formData.call_outcome === 'reached') {
+        body = `[Thời lượng: ${formData.call_duration} phút]\n${body}`;
+      }
+    } else {
+      if (!subject.trim()) { addToast('Vui lòng nhập tiêu đề hoạt động', 'error'); return; }
+    }
+
+    if (formData.type === 'meeting' && status === 'done' && !proofImageFile) {
+      addToast('Vui lòng tải lên ảnh minh chứng để hoàn thành gặp gỡ', 'error');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      let uploadedUrl = '';
+      if (formData.type === 'meeting' && status === 'done' && proofImageFile) {
+        let fileToUpload = proofImageFile;
+        if (proofImageFile.type.startsWith('image/')) {
+          fileToUpload = await compressToWebP(proofImageFile);
+        }
+        const fd = new FormData();
+        fd.append('file', fileToUpload);
+        const uploadRes = await api.post('/upload', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        uploadedUrl = uploadRes.data.data?.url ?? '';
+        if (!uploadedUrl) throw new Error('Không thể tải ảnh minh chứng lên');
+      }
+
+      const formattedDate = formData.due_date ? formData.due_date.replace('T', ' ') : null;
+      let activityId = activity?.id;
+
+      if (activity?.id) {
+        await api.put(`/activities/${activity.id}`, {
+          ...formData,
+          due_date: formattedDate,
+          subject,
+          body,
+          status
+        });
+        addToast('Đã cập nhật hoạt động thành công', 'success');
+      } else {
+        const createRes = await api.post('/activities', {
+          ...formData,
+          due_date: formattedDate,
+          subject,
+          body,
+          status,
+          related_type: entityType,
+          related_id: entityId,
+          user_id: userId
+        });
+        activityId = createRes.data.data?.id || createRes.data.data;
+        if (formData.auto_trigger) {
+          addToast('Đã kích hoạt tự động hóa Workflow', 'success');
+        }
+        addToast('Đã thêm hoạt động mới', 'success');
+      }
+
+      if (uploadedUrl && activityId) {
+        await api.post(`/activities/${activityId}/comments`, {
+          content: 'Ảnh minh chứng hoàn thành gặp gỡ: ' + (body || ''),
+          attachments: [uploadedUrl],
+          parent_id: null
+        });
+      }
+
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      addToast(err.message || (activity?.id ? 'Lỗi khi cập nhật hoạt động' : 'Lỗi khi thêm hoạt động'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div 
+        className="overlay-backdrop" 
+        style={{ 
+          zIndex: 1000050, 
+          display: 'flex', 
+          alignItems: isMobile ? 'flex-end' : 'center', 
+          justifyContent: 'center' 
+        }} 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        onClick={onClose}
+      >
+        <motion.div 
+          className="modal-sheet" 
+          style={{ 
+            width: '100%', 
+            maxWidth: isMobile ? '100%' : 640, 
+            padding: 0,
+            borderTopLeftRadius: '24px',
+            borderTopRightRadius: '24px',
+            borderBottomLeftRadius: isMobile ? '0' : '24px',
+            borderBottomRightRadius: isMobile ? '0' : '24px',
+            maxHeight: isMobile ? '85vh' : '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-xl)',
+            willChange: 'transform',
+            transform: 'translate3d(0, 0, 0)',
+            WebkitBackfaceVisibility: 'hidden',
+            backfaceVisibility: 'hidden'
+          }}
+          initial={isMobile ? { y: '100%' } : { opacity: 0, y: 20, scale: 0.96 }} 
+          animate={isMobile ? { y: 0 } : { opacity: 1, y: 0, scale: 1 }} 
+          exit={isMobile ? { y: '100%' } : { opacity: 0, y: 20, scale: 0.96 }}
+          transition={isMobile ? { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.35 } : { type: 'spring', damping: 30, stiffness: 350, mass: 0.8 }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div 
+            className="modal-header"
+            style={{
+              padding: isMobile ? '12px 16px' : '16px 24px',
+              borderBottom: '1px solid var(--color-border-light)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: 800 }}>
+              {activity?.id ? 'Cập nhật hoạt động' : 'Thêm hoạt động mới'}
+            </h3>
+            <button className="btn-icon-bare" onClick={onClose} style={{ padding: '4px', cursor: 'pointer' }}>
+              <X size={isMobile ? 18 : 20} />
+            </button>
+          </div>
+          
+          <form 
+            onSubmit={handleSubmit} 
+            className="modal-body no-scrollbar"
+            style={{
+              overflowY: 'auto',
+              padding: isMobile ? '16px' : '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isMobile ? '12px' : '18px'
+            }}
+          >
+            {/* Type selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isMobile ? '6px' : '10px' }}>
+              {TYPES.map(t => (
+                <button 
+                  key={t.id} type="button"
+                  onClick={() => {
+                    const currentDefault = DEFAULT_SUBJECTS[formData.type];
+                    const nextDefault = DEFAULT_SUBJECTS[t.id] || '';
+                    const newSubject = (!formData.subject || formData.subject === currentDefault) ? nextDefault : formData.subject;
+                    setFormData({ 
+                      ...formData, 
+                      type: t.id, 
+                      subject: newSubject,
+                      status: (t.id === 'call' || t.id === 'zalo_connect') ? 'done' : 'planned' 
+                    });
+                  }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                    padding: isMobile ? '8px 0' : '12px 0', borderRadius: '12px', cursor: 'pointer',
+                    background: formData.type === t.id ? `${t.color}15` : 'var(--color-bg-alt)',
+                    border: formData.type === t.id ? `1.5px solid ${t.color}` : '1px solid var(--color-border)',
+                    color: formData.type === t.id ? t.color : 'var(--color-text-muted)',
+                    fontWeight: formData.type === t.id ? 700 : 500, transition: 'all 0.2s',
+                    boxShadow: formData.type === t.id ? `0 4px 12px ${t.color}12` : 'none',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{ transform: formData.type === t.id ? 'scale(1.08)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {t.icon}
+                  </div>
+                  <span style={{ fontSize: isMobile ? '0.7rem' : '0.8125rem' }}>{t.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Ghi chú chi tiết */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <AlignLeft size={13} /> Ghi chú chi tiết
+              </label>
+              <MentionInput 
+                className="form-input" 
+                rows={isMobile ? 4 : 6} 
+                placeholder="Nhập nội dung chi tiết của hoạt động (Dán ảnh trực tiếp Ctrl+V)..."
+                value={formData.body}
+                onChange={e => setFormData({ ...formData, body: e.target.value })}
+                onImagePaste={(file: File) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+                    return;
+                  }
+                  const previewUrl = URL.createObjectURL(file);
+                  setProofImageFile(file);
+                  setProofImagePreview(previewUrl);
+                  addToast('Đã dán ảnh minh chứng từ clipboard!', 'success');
+                }}
+                onFilePaste={(file: File) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+                    return;
+                  }
+                  const previewUrl = URL.createObjectURL(file);
+                  setProofImageFile(file);
+                  setProofImagePreview(previewUrl);
+                  addToast('Đã dán tệp từ clipboard!', 'success');
+                }}
+                style={{ resize: 'none' }}
+              />
+            </div>
+
+            {formData.type === 'call' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '10px' : '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+                  {/* Loại cuộc gọi */}
+                  <div>
+                    <label className="form-label">Loại cuộc gọi</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, call_direction: 'outbound' })}
+                        className={`btn sm ${formData.call_direction === 'outbound' ? 'primary' : 'outline'}`}
+                        style={{ flex: 1, height: isMobile ? 32 : 36, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <PhoneOutgoing size={13} /> Gọi đi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, call_direction: 'inbound' })}
+                        className={`btn sm ${formData.call_direction === 'inbound' ? 'primary' : 'outline'}`}
+                        style={{ flex: 1, height: isMobile ? 32 : 36, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <PhoneIncoming size={13} /> Gọi đến
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Thời gian thực hiện */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={13} /> Thời gian thực hiện
+                    </label>
+                    <input 
+                      type="datetime-local" 
+                      className="form-input" 
+                      value={formData.due_date}
+                      onChange={e => setFormData({ ...formData, due_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* Kết quả cuộc gọi */}
+                <div>
+                  <label className="form-label">Kết quả cuộc gọi</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))', gap: '6px' }}>
+                    {[
+                      { value: 'reached', label: 'Đã kết nối', color: '#10b981' },
+                      { value: 'no_answer', label: 'Không kết nối được', color: '#f59e0b' },
+                      { value: 'voicemail', label: 'Hộp thư thoại', color: '#BD1D2D' },
+                      { value: 'wrong_number', label: 'Sai số', color: '#6b7280' }
+                    ].map(out => (
+                      <button
+                        key={out.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, call_outcome: out.value as any })}
+                        className="btn sm"
+                        style={{
+                          height: isMobile ? 32 : 36,
+                          border: `1px solid ${formData.call_outcome === out.value ? out.color : 'var(--color-border)'}`,
+                          background: formData.call_outcome === out.value ? `${out.color}15` : 'var(--color-surface)',
+                          color: formData.call_outcome === out.value ? out.color : 'var(--color-text)',
+                          fontWeight: formData.call_outcome === out.value ? 700 : 500,
+                          cursor: 'pointer',
+                          fontSize: isMobile ? '0.72rem' : '0.8rem',
+                          padding: '0 4px'
+                        }}
+                      >
+                        {out.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Thời lượng - Only show if Đã kết nối (reached) */}
+                {formData.call_outcome === 'reached' && (
+                  <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ margin: 0 }}>Thời lượng: <strong style={{ color: 'var(--color-primary)' }}>{formData.call_duration} phút</strong></label>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {[3, 5, 10, 15, 20].map(mins => (
+                          <button
+                            key={mins}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, call_duration: mins })}
+                            className="btn sm outline"
+                            style={{ padding: '2px 6px', fontSize: '0.7rem', height: 22, cursor: 'pointer' }}
+                          >
+                            {mins}p
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="120"
+                      value={formData.call_duration}
+                      onChange={e => setFormData({ ...formData, call_duration: Number(e.target.value) })}
+                      style={{ width: '100%', accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
+                      <span>1 phút</span>
+                      <span>30 phút</span>
+                      <span>60 phút</span>
+                      <span>120 phút</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Tiêu đề hoạt động <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                  <input 
+                    className="form-input" 
+                    placeholder={PLACEHOLDERS[formData.type] || 'Nhập tiêu đề hoạt động...'} 
+                    value={formData.subject}
+                    onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                    autoFocus
+                    style={{ fontSize: isMobile ? '0.85rem' : '0.95rem', padding: '0.5rem 0.75rem' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: (isMobile || formData.type === 'zalo_connect') ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? '10px' : '16px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={13} /> Thời gian thực hiện
+                    </label>
+                    <input 
+                      type="datetime-local" 
+                      className="form-input" 
+                      value={formData.due_date}
+                      onChange={e => setFormData({ ...formData, due_date: e.target.value })}
+                    />
+                  </div>
+                  {formData.type !== 'zalo_connect' && (
+                    <>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Mức độ ưu tiên</label>
+                        <CustomSelect 
+                          options={[
+                            { value: 'low', label: 'Thấp' },
+                            { value: 'medium', label: 'Bình thường' },
+                            { value: 'high', label: 'Quan trọng' }
+                          ]}
+                          value={formData.priority}
+                          onChange={val => setFormData({ ...formData, priority: val as string })}
+                        />
+                      </div>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Trạng thái</label>
+                        <div style={{ 
+                          display: 'flex', 
+                          background: 'rgba(100, 116, 139, 0.08)', 
+                          borderRadius: '30px', 
+                          padding: '3px', 
+                          border: '1px solid var(--color-border-light)',
+                          height: 38,
+                          alignItems: 'center'
+                        }}>
+                          <button 
+                            type="button" 
+                            style={{ 
+                              flex: 1, 
+                              height: '100%',
+                              border: 'none', 
+                              borderRadius: '30px', 
+                              padding: '4px 6px', 
+                              fontSize: '0.75rem', 
+                              fontWeight: formData.status === 'planned' ? 700 : 500, 
+                              cursor: 'pointer', 
+                              transition: 'all 0.2s',
+                              background: formData.status === 'planned' ? 'var(--color-surface)' : 'transparent',
+                              color: formData.status === 'planned' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              boxShadow: formData.status === 'planned' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                              outline: 'none',
+                              whiteSpace: 'nowrap'
+                            }} 
+                            onClick={() => setFormData({...formData, status: 'planned'})}
+                          >
+                            Kế hoạch
+                          </button>
+                          <button 
+                            type="button" 
+                            style={{ 
+                              flex: 1, 
+                              height: '100%',
+                              border: 'none', 
+                              borderRadius: '30px', 
+                              padding: '4px 6px', 
+                              fontSize: '0.75rem', 
+                              fontWeight: formData.status === 'done' ? 700 : 500, 
+                              cursor: 'pointer', 
+                              transition: 'all 0.2s',
+                              background: formData.status === 'done' ? 'var(--color-success)' : 'transparent',
+                              color: formData.status === 'done' ? 'white' : 'var(--color-text-muted)',
+                              boxShadow: formData.status === 'done' ? '0 2px 6px rgba(16, 185, 129, 0.2)' : 'none',
+                              outline: 'none',
+                              whiteSpace: 'nowrap'
+                            }} 
+                            onClick={() => setFormData({...formData, status: 'done'})}
+                          >
+                            Đã xong
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
+            {formData.type === 'meeting' && formData.status === 'done' && (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text)', fontWeight: 600 }}>
+                  <Camera size={13} style={{ color: '#10b981' }} /> Ảnh minh chứng gặp gỡ <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {proofImagePreview ? (
+                    <div style={{ position: 'relative', width: '100%', height: '150px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                      <img src={proofImagePreview} alt="Proof preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setProofImageFile(null);
+                          setProofImagePreview(null);
+                        }}
+                        style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100px', border: '2px dashed var(--color-border)', borderRadius: '10px', cursor: 'pointer', background: 'var(--color-bg)', transition: 'border-color 0.2s', padding: '0.5rem' }} className="hover-lift">
+                      <Camera size={24} style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'center' }}>Tải ảnh minh chứng gặp gỡ lên</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) {
+                            addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+                            return;
+                          }
+                          const previewUrl = URL.createObjectURL(file);
+                          setProofImageFile(file);
+                          setProofImagePreview(previewUrl);
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
+          </form>
+
+          <div 
+            className="modal-footer"
+            style={{
+              padding: isMobile ? '12px 16px' : '16px 24px',
+              borderTop: '1px solid var(--color-border-light)',
+              background: 'var(--color-surface)',
+              display: 'flex',
+              gap: '10px',
+              flexShrink: 0
+            }}
+          >
+            <button type="button" className="btn outline lg" style={{ flex: 1 }} onClick={onClose} disabled={loading}>Hủy bỏ</button>
+            <button type="button" className="btn primary lg" style={{ flex: 1 }} onClick={handleSubmit} disabled={loading}>
+              {loading ? 'Đang lưu...' : 'Lưu hoạt động'}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
