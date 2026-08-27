@@ -18,8 +18,10 @@ export const LoginPage: React.FC = () => {
     setLoading(true); setError('');
     try {
       const { data } = await api.post('/auth/login', form);
+      const userRole = data.data.user?.role || '';
+      const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
       setAuth(data.data.user, data.data.access_token, data.data.refresh_token);
-      navigate('/');
+      navigate(targetPath);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại');
     } finally {

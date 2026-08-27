@@ -56,8 +56,10 @@ export const Login = () => {
         if (typeof (window as any).showSplashScreen === 'function') {
           (window as any).showSplashScreen('Đang đăng nhập...');
         }
+        const userRole = json.user?.role || '';
+        const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
         login(json.token, json.user, json.refresh_token);
-        navigate('/');
+        navigate(targetPath);
       } else {
         setError(t(json.message) || t('Đăng nhập Google thất bại'));
       }
@@ -161,8 +163,10 @@ export const Login = () => {
           if (typeof (window as any).showSplashScreen === 'function') {
             (window as any).showSplashScreen('Đang tải dữ liệu...');
           }
+          const userRole = res.data.user?.role || '';
+          const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
           login(res.data.access_token, res.data.user, res.data.refresh_token);
-          navigate('/');
+          navigate(targetPath);
         }
       } else {
         setError(t(res.message) || t('Email hoặc mật khẩu không chính xác'));
@@ -192,9 +196,11 @@ export const Login = () => {
         if (typeof (window as any).showSplashScreen === 'function') {
           (window as any).showSplashScreen('Đang tải dữ liệu...');
         }
+        const userRole = res.data.user?.role || '';
+        const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
         login(res.data.access_token, res.data.user, res.data.refresh_token);
         setShow2FAModal(false);
-        navigate('/');
+        navigate(targetPath);
       } else {
         toast.error(res.message || 'Mã xác thực không chính xác');
       }

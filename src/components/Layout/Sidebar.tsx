@@ -25,7 +25,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
     title: 'TỔNG QUAN',
     items: [
-      { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true },
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, hideForRoles: ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
       { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
       { name: 'Lịch trình', href: '/calendar', icon: Calendar, hideForRoles: ['hr'] },
       { name: 'Bảng tin nội bộ', href: '/feed', icon: Globe },
@@ -189,7 +189,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   academic: [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
@@ -199,7 +199,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   hoc_vu: [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
@@ -209,7 +209,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   tro_giang: [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
@@ -218,7 +218,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   teacher: [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
@@ -226,7 +226,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   giang_vien: [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
@@ -241,7 +241,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   viewer: [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },

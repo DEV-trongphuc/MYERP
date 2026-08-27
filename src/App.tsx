@@ -178,6 +178,9 @@ const AppTabs = () => {
   const renderPageComponent = (path: string) => {
     switch (path) {
       case '/':
+        if (['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '')) {
+          return <Navigate to="/workspace" replace />;
+        }
         return ((user?.role as any) === 'sale' || (user?.role as any) === 'sales')
           ? <SalePortal embedMode={true} activeTabProp="dashboard" key="dashboard" />
           : <Dashboard key="dashboard" />;
