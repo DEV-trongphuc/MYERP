@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 235;
+$targetVersion = 236;
 $currentVersion = 186;
 
 // Query current DB version
@@ -1883,8 +1883,150 @@ try {
         $logMsg("Nâng cấp lên phiên bản 235 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 236) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 236: Migrate tách tệp đính kèm và dọn dẹp link nội dung Ticket...", "info");
+        try {
+            // 1. Migrate tickets.description
+            $res = $conn->query("SELECT id, description, attachments FROM tickets WHERE description LIKE '%uploads/%' OR description LIKE '%![%' OR description LIKE '%](%'");
+            if ($res && $res->num_rows > 0) {
+                while ($row = $res->fetch_assoc()) {
+                    $id = (int)$row['id'];
+                    $desc = $row['description'] ?? '';
+                    $existingAtt = !empty($row['attachments']) ? json_decode($row['attachments'], true) : [];
+                    if (!is_array($existingAtt)) $existingAtt = [];
+                    
+                    $foundFiles = [];
+                    
+                    // Regex for ![label](url)
+                    if (preg_match_all('/!\[(.*?)\]\(([^)]+)\)/i', $desc, $m)) {
+                        for ($i = 0; $i < count($m[0]); $i++) {
+                            $label = trim($m[1][$i]) ?: 'Ảnh đính kèm';
+                            $url = trim($m[2][$i]);
+                            $foundFiles[] = ['name' => $label, 'label' => $label, 'url' => $url];
+                        }
+                    }
+                    // Regex for [label](url)
+                    if (preg_match_all('/(?<!!)\[(.*?)\]\(([^)]+)\)/i', $desc, $m)) {
+                        for ($i = 0; $i < count($m[0]); $i++) {
+                            $label = trim($m[1][$i]) ?: 'Tệp đính kèm';
+                            $url = trim($m[2][$i]);
+                            $foundFiles[] = ['name' => $label, 'label' => $label, 'url' => $url];
+                        }
+                    }
+                    // Regex for raw upload URLs
+                    if (preg_match_all('/(?:https?:\/\/[^\s<"\'\)]+)?\/?uploads\/[^\s<"\'\)]+/i', $desc, $m)) {
+                        for ($i = 0; $i < count($m[0]); $i++) {
+                            $url = trim($m[0][$i]);
+                            $alreadyIn = false;
+                            foreach ($foundFiles as $ff) {
+                                if ($ff['url'] === $url) { $alreadyIn = true; break; }
+                            }
+                            if (!$alreadyIn) {
+                                $foundFiles[] = ['name' => basename($url) ?: 'Tệp đính kèm', 'label' => basename($url) ?: 'Tệp đính kèm', 'url' => $url];
+                            }
+                        }
+                    }
+                    
+                    // Merge found files into existing attachments
+                    foreach ($foundFiles as $ff) {
+                        $exists = false;
+                        foreach ($existingAtt as $ea) {
+                            $eaUrl = is_array($ea) ? ($ea['url'] ?? '') : (is_string($ea) ? $ea : '');
+                            if ($eaUrl === $ff['url']) {
+                                $exists = true;
+                                break;
+                            }
+                        }
+                        if (!$exists) {
+                            $existingAtt[] = $ff;
+                        }
+                    }
+                    
+                    // Clean description text
+                    $cleanDesc = preg_replace('/!\[.*?\]\([^)]+\)/i', '', $desc);
+                    $cleanDesc = preg_replace('/\[.*?\]\([^)]+\)/i', '', $cleanDesc);
+                    $cleanDesc = preg_replace('/(?:https?:\/\/[^\s<"\'\)]+)?\/?uploads\/[^\s<"\'\)]+/i', '', $cleanDesc);
+                    $cleanDesc = trim($cleanDesc);
+                    
+                    $stmtUp = $conn->prepare("UPDATE tickets SET description = ?, attachments = ? WHERE id = ?");
+                    $attJson = !empty($existingAtt) ? json_encode($existingAtt, JSON_UNESCAPED_UNICODE) : null;
+                    $stmtUp->bind_param("ssi", $cleanDesc, $attJson, $id);
+                    $stmtUp->execute();
+                    $stmtUp->close();
+                }
+                $logMsg("Đã hoàn tất dọn dẹp và migrate tệp đính kèm cho bảng tickets.", "success");
+            }
+            
+            // 2. Migrate ticket_comments.body
+            $resC = $conn->query("SELECT id, body, attachments FROM ticket_comments WHERE body LIKE '%uploads/%' OR body LIKE '%![%' OR body LIKE '%](%'");
+            if ($resC && $resC->num_rows > 0) {
+                while ($row = $resC->fetch_assoc()) {
+                    $id = (int)$row['id'];
+                    $body = $row['body'] ?? '';
+                    $existingAtt = !empty($row['attachments']) ? json_decode($row['attachments'], true) : [];
+                    if (!is_array($existingAtt)) $existingAtt = [];
+                    
+                    $foundFiles = [];
+                    if (preg_match_all('/!\[(.*?)\]\(([^)]+)\)/i', $body, $m)) {
+                        for ($i = 0; $i < count($m[0]); $i++) {
+                            $label = trim($m[1][$i]) ?: 'Ảnh đính kèm';
+                            $url = trim($m[2][$i]);
+                            $foundFiles[] = ['name' => $label, 'label' => $label, 'url' => $url];
+                        }
+                    }
+                    if (preg_match_all('/(?<!!)\[(.*?)\]\(([^)]+)\)/i', $body, $m)) {
+                        for ($i = 0; $i < count($m[0]); $i++) {
+                            $label = trim($m[1][$i]) ?: 'Tệp đính kèm';
+                            $url = trim($m[2][$i]);
+                            $foundFiles[] = ['name' => $label, 'label' => $label, 'url' => $url];
+                        }
+                    }
+                    if (preg_match_all('/(?:https?:\/\/[^\s<"\'\)]+)?\/?uploads\/[^\s<"\'\)]+/i', $body, $m)) {
+                        for ($i = 0; $i < count($m[0]); $i++) {
+                            $url = trim($m[0][$i]);
+                            $alreadyIn = false;
+                            foreach ($foundFiles as $ff) {
+                                if ($ff['url'] === $url) { $alreadyIn = true; break; }
+                            }
+                            if (!$alreadyIn) {
+                                $foundFiles[] = ['name' => basename($url) ?: 'Tệp đính kèm', 'label' => basename($url) ?: 'Tệp đính kèm', 'url' => $url];
+                            }
+                        }
+                    }
+                    foreach ($foundFiles as $ff) {
+                        $exists = false;
+                        foreach ($existingAtt as $ea) {
+                            $eaUrl = is_array($ea) ? ($ea['url'] ?? '') : (is_string($ea) ? $ea : '');
+                            if ($eaUrl === $ff['url']) {
+                                $exists = true;
+                                break;
+                            }
+                        }
+                        if (!$exists) {
+                            $existingAtt[] = $ff;
+                        }
+                    }
+                    $cleanBody = preg_replace('/!\[.*?\]\([^)]+\)/i', '', $body);
+                    $cleanBody = preg_replace('/\[.*?\]\([^)]+\)/i', '', $cleanBody);
+                    $cleanBody = preg_replace('/(?:https?:\/\/[^\s<"\'\)]+)?\/?uploads\/[^\s<"\'\)]+/i', '', $cleanBody);
+                    $cleanBody = trim($cleanBody);
+                    
+                    $stmtUp = $conn->prepare("UPDATE ticket_comments SET body = ?, attachments = ? WHERE id = ?");
+                    $attJson = !empty($existingAtt) ? json_encode($existingAtt, JSON_UNESCAPED_UNICODE) : null;
+                    $stmtUp->bind_param("ssi", $cleanBody, $attJson, $id);
+                    $stmtUp->execute();
+                    $stmtUp->close();
+                }
+                $logMsg("Đã hoàn tất dọn dẹp và migrate tệp đính kèm cho bảng ticket_comments.", "success");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 236: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 236 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '235') ON DUPLICATE KEY UPDATE setting_value = '235'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '236') ON DUPLICATE KEY UPDATE setting_value = '236'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

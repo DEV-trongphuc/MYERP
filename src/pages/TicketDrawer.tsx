@@ -264,10 +264,42 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     }
   };
 
+  const normalizeMediaUrl = (url: string) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+      return trimmed;
+    }
+    return '/' + trimmed;
+  };
+
   const parseAttachments = (data: any) => {
-    const images: { label: string; url: string }[] = [];
+    const images: { label: string; url: string; size?: number; type?: string }[] = [];
     const files: { label: string; url: string; size?: number; type?: string }[] = [];
     if (!data) return { images, files };
+
+    const addMediaItem = (rawUrl: string, rawLabel?: string, size?: number, type?: string) => {
+      if (!rawUrl) return;
+      const url = normalizeMediaUrl(rawUrl);
+      const label = rawLabel || url.split('/').pop() || 'Tệp đính kèm';
+      const isImg = /\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i.test(url) 
+        || (type && String(type).startsWith('image/'))
+        || url.includes('/uploads/img_') 
+        || (url.includes('/uploads/tenant_') && /\.(jpeg|jpg|png|gif|webp|svg)/i.test(url));
+
+      if (isImg) {
+        if (!images.some(i => i.url === url)) {
+          images.push({ label, url, size, type });
+        }
+      } else {
+        if (!files.some(f => f.url === url)) {
+          files.push({ label, url, size, type });
+        }
+      }
+    };
 
     let rawAtt = data.attachments;
     if (typeof rawAtt === 'string') {
@@ -280,47 +312,26 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     if (Array.isArray(rawAtt)) {
       rawAtt.forEach((item: any) => {
         const url = item.url || (typeof item === 'string' ? item : '');
-        const label = item.name || item.label || 'Tệp đính kèm';
-        if (!url) return;
-        const isImg = /\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i.test(url) || (item.type && String(item.type).startsWith('image/'));
-        if (isImg) {
-          if (!images.some(i => i.url === url)) images.push({ label, url });
-        } else {
-          if (!files.some(f => f.url === url)) files.push({ label, url, size: item.size, type: item.type });
-        }
+        const label = item.name || item.label;
+        addMediaItem(url, label, item.size, item.type);
       });
     }
 
     const text = (data.description || data.body || '') + '';
-    const mdImgRegex = /!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g;
+    const mdImgRegex = /!\[(.*?)\]\(([^)]+)\)/g;
     let m;
     while ((m = mdImgRegex.exec(text)) !== null) {
-      if (!images.some(i => i.url === m![2])) {
-        images.push({ label: m[1] || 'Ảnh đính kèm', url: m[2] });
-      }
+      addMediaItem(m[2], m[1] || 'Ảnh đính kèm');
     }
 
-    const mdLinkRegex = /\[(.*?)\]\((https?:\/\/[^\s)]+)\)/gi;
+    const mdLinkRegex = /(?<!!)\[(.*?)\]\(([^)]+)\)/g;
     while ((m = mdLinkRegex.exec(text)) !== null) {
-      const url = m[2];
-      const label = m[1] || 'Tệp đính kèm';
-      const isImg = /\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i.test(url);
-      if (isImg) {
-        if (!images.some(i => i.url === url)) images.push({ label, url });
-      } else {
-        if (!files.some(f => f.url === url)) files.push({ label, url });
-      }
+      addMediaItem(m[2], m[1] || 'Tệp đính kèm');
     }
 
-    const rawUrlRegex = /(https?:\/\/[^\s<"']+(?:\/uploads\/|\.(?:png|jpg|jpeg|gif|webp|svg))[^\s<"']*)/gi;
+    const rawUrlRegex = /(?:https?:\/\/[^\s<"'\)]+)?\/?uploads\/[^\s<"'\)]+/gi;
     while ((m = rawUrlRegex.exec(text)) !== null) {
-      const url = m[1];
-      const isImg = /\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i.test(url);
-      if (isImg) {
-        if (!images.some(i => i.url === url)) images.push({ label: 'Ảnh đính kèm', url });
-      } else {
-        if (!files.some(f => f.url === url)) files.push({ label: 'Tệp đính kèm', url });
-      }
+      addMediaItem(m[0]);
     }
 
     return { images, files };
@@ -330,8 +341,9 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
   const attachedMedia = parseAttachments(formData);
   const cleanDescription = (formData.description || '')
-    .replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/g, '')
-    .replace(/\[.*?\]\((https?:\/\/[^\s)]+)\)/g, '')
+    .replace(/!\[.*?\]\([^)]+\)/g, '')
+    .replace(/\[.*?\]\([^)]+\)/g, '')
+    .replace(/(?:https?:\/\/[^\s<"'\)]+)?\/?uploads\/[^\s<"'\)]+/gi, '')
     .trim();
 
   const matchedAssignee = (users || []).find(u => Number(u.id) === Number(formData.assignee_id));
@@ -365,20 +377,21 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
           />
 
           <motion.div
-            initial={isMobile ? { y: '100%' } : { x: '100%' }}
-            animate={{ y: 0, x: 0 }}
-            exit={isMobile ? { y: '100%' } : { x: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+            initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
+            animate={{ y: 0, x: 0, opacity: 1 }}
+            exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
             onClick={e => e.stopPropagation()}
             style={{
-              width: isMobile ? '100%' : '1100px',
-              maxWidth: '100vw',
-              height: '100vh',
+              position: 'fixed',
+              top: 0,
+              bottom: 0,
+              left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+              right: 0,
               backgroundColor: 'var(--color-surface)',
-              boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.2)',
+              boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              position: 'relative',
               zIndex: 2000000010,
               overflow: 'hidden'
             }}
@@ -545,8 +558,9 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                         const isSelf = currentUser && String(msg.user_id) === String(currentUser.id);
                         const cAtt = parseAttachments(msg);
                         const cleanCommentText = (msg.body || msg.text || '')
-                          .replace(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/g, '')
-                          .replace(/\[.*?\]\((https?:\/\/[^\s)]+)\)/g, '')
+                          .replace(/!\[.*?\]\([^)]+\)/g, '')
+                          .replace(/\[.*?\]\([^)]+\)/g, '')
+                          .replace(/(?:https?:\/\/[^\s<"'\)]+)?\/?uploads\/[^\s<"'\)]+/gi, '')
                           .trim();
 
                         return (
