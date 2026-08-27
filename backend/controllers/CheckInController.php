@@ -717,240 +717,263 @@ class CheckInController {
     }
 
     public function suggestBulkDates(array $auth): void {
-        $userId = (int)$auth['user_id'];
-        
-        // Quy tắc: Trước hoặc ngày 5 tây (<= 5) mặc định quét tháng trước, sau ngày 5 tây (> 5) quét tháng này
-        $defaultMonth = (int)date('j') <= 5 ? date('Y-m', strtotime('first day of last month')) : date('Y-m');
-        $month = $_GET['month'] ?? $_GET['month_period'] ?? $defaultMonth; // format 'YYYY-MM'
-        
-        $startDate = $month . '-01';
-        $today = date('Y-m-d');
-        $endDate = date('Y-m-t', strtotime($startDate));
-        if ($endDate > $today) {
-            $endDate = $today;
-        }
-
-        // Fetch system settings
-        $stmtSettings = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_start_time', 'global_work_end_time', 'global_work_schedule', 'holiday_schedules')");
-        $stmtSettings->execute();
-        $settingsMap = [];
-        while ($row = $stmtSettings->fetch(PDO::FETCH_ASSOC)) {
-            $settingsMap[$row['setting_key']] = $row['setting_value'];
-        }
-
-        // Fetch user custom work hours and schedule
-        $stmtUser = $this->db->prepare("SELECT work_start_time, work_end_time, use_custom_work_hours, work_schedule FROM users WHERE id = ?");
-        $stmtUser->execute([$userId]);
-        $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
-
-        $userCustom = (int)($userRow['use_custom_work_hours'] ?? 0) === 1;
-        $baseWorkStart = ($userCustom && !empty($userRow['work_start_time'])) ? $userRow['work_start_time'] : ($settingsMap['global_work_start_time'] ?? '08:00');
-        $baseWorkEnd = ($userCustom && !empty($userRow['work_end_time'])) ? $userRow['work_end_time'] : ($settingsMap['global_work_end_time'] ?? '17:30');
-        $workScheduleJson = ($userCustom && !empty($userRow['work_schedule'])) ? $userRow['work_schedule'] : ($settingsMap['global_work_schedule'] ?? null);
-        $scheduleMap = !empty($workScheduleJson) ? json_decode($workScheduleJson, true) : null;
-
-        // Fetch leaves from both hrm_leave_requests, leaves and consultant_leaves with approved OR pending status
-        $stmtLeaves = $this->db->prepare("
-            SELECT DATE(start_date) as s_date, DATE(end_date) as e_date, status, reason, leave_type
-            FROM hrm_leave_requests 
-            WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ?
-        ");
-        $stmtLeaves->execute([$userId, $endDate, $startDate]);
-        $hrmLeaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
-
         try {
-            $stmtL2 = $this->db->prepare("
-                SELECT DATE(start_date) as s_date, DATE(end_date) as e_date, status, reason, leave_type 
-                FROM leaves 
-                WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ?
-            ");
-            $stmtL2->execute([$userId, $endDate, $startDate]);
-            $leaves2 = $stmtL2->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Throwable $e) {
-            $leaves2 = [];
-        }
-
-        $stmtCLeaves = $this->db->prepare("
-            SELECT start_date as s_date, end_date as e_date, status, reason, '' as leave_type 
-            FROM consultant_leaves 
-            WHERE consultant_id = ? AND status IN ('approved', 'pending') AND start_date <= ? AND end_date >= ?
-        ");
-        $stmtCLeaves->execute([$userId, $endDate, $startDate]);
-        $cLeaves = $stmtCLeaves->fetchAll(PDO::FETCH_ASSOC);
-        $allLeaves = array_merge($hrmLeaves, $leaves2, $cLeaves);
-
-        $getLeaveInfo = function($dateStr) use ($allLeaves) {
-            foreach ($allLeaves as $l) {
-                if ($dateStr >= $l['s_date'] && $dateStr <= $l['e_date']) {
-                    return $l;
-                }
+            $userId = (int)$auth['user_id'];
+            
+            // Quy tắc: Trước hoặc ngày 5 tây (<= 5) mặc định quét tháng trước, sau ngày 5 tây (> 5) quét tháng này
+            $defaultMonth = (int)date('j') <= 5 ? date('Y-m', strtotime('first day of last month')) : date('Y-m');
+            $month = $_GET['month'] ?? $_GET['month_period'] ?? $defaultMonth; // format 'YYYY-MM'
+            
+            $startDate = $month . '-01';
+            $today = date('Y-m-d');
+            $endDate = date('Y-m-t', strtotime($startDate));
+            if ($endDate > $today) {
+                $endDate = $today;
             }
-            return null;
-        };
 
-        // Fetch holiday schedules
-        $holidays = [];
-        if (!empty($settingsMap['holiday_schedules'])) {
-            $decoded = json_decode($settingsMap['holiday_schedules'], true);
-            if (is_array($decoded)) {
-                foreach ($decoded as $h) {
-                    $hStart = $h['start'] ?? $h['start_date'] ?? $h['date'] ?? '';
-                    $hEnd = $h['end'] ?? $h['end_date'] ?? $h['date'] ?? '';
-                    if (!empty($hStart) && !empty($hEnd)) {
-                        $curH = strtotime($hStart);
-                        $endH = strtotime($hEnd);
-                        while ($curH <= $endH) {
-                            $holidays[date('Y-m-d', $curH)] = true;
-                            $curH += 86400;
+            // Fetch system settings
+            $stmtSettings = $this->db->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_start_time', 'global_work_end_time', 'global_work_schedule', 'holiday_schedules')");
+            $stmtSettings->execute();
+            $settingsMap = [];
+            while ($row = $stmtSettings->fetch(PDO::FETCH_ASSOC)) {
+                $settingsMap[$row['setting_key']] = $row['setting_value'];
+            }
+
+            // Fetch user custom work hours and schedule
+            $stmtUser = $this->db->prepare("SELECT work_start_time, work_end_time, use_custom_work_hours, work_schedule FROM users WHERE id = ?");
+            $stmtUser->execute([$userId]);
+            $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+
+            $userCustom = (int)($userRow['use_custom_work_hours'] ?? 0) === 1;
+            $baseWorkStart = ($userCustom && !empty($userRow['work_start_time'])) ? $userRow['work_start_time'] : ($settingsMap['global_work_start_time'] ?? '08:00');
+            $baseWorkEnd = ($userCustom && !empty($userRow['work_end_time'])) ? $userRow['work_end_time'] : ($settingsMap['global_work_end_time'] ?? '17:30');
+            $workScheduleJson = ($userCustom && !empty($userRow['work_schedule'])) ? $userRow['work_schedule'] : ($settingsMap['global_work_schedule'] ?? 'monday_to_friday');
+            $scheduleMap = !empty($workScheduleJson) ? json_decode($workScheduleJson, true) : null;
+
+            // Fetch leaves from both hrm_leave_requests, leaves and consultant_leaves with approved OR pending status
+            $hrmLeaves = [];
+            try {
+                $stmtLeaves = $this->db->prepare("
+                    SELECT DATE(start_date) as s_date, DATE(end_date) as e_date, status, reason, leave_type
+                    FROM hrm_leave_requests 
+                    WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ?
+                ");
+                $stmtLeaves->execute([$userId, $endDate, $startDate]);
+                $hrmLeaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (\Throwable $e) {
+                $hrmLeaves = [];
+            }
+
+            $leaves2 = [];
+            try {
+                $stmtL2 = $this->db->prepare("
+                    SELECT DATE(start_date) as s_date, DATE(end_date) as e_date, status, reason, leave_type 
+                    FROM leaves 
+                    WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ?
+                ");
+                $stmtL2->execute([$userId, $endDate, $startDate]);
+                $leaves2 = $stmtL2->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (\Throwable $e) {
+                $leaves2 = [];
+            }
+
+            $cLeaves = [];
+            try {
+                $stmtCLeaves = $this->db->prepare("
+                    SELECT start_date as s_date, end_date as e_date, status, reason, '' as leave_type 
+                    FROM consultant_leaves 
+                    WHERE consultant_id = ? AND status IN ('approved', 'pending') AND start_date <= ? AND end_date >= ?
+                ");
+                $stmtCLeaves->execute([$userId, $endDate, $startDate]);
+                $cLeaves = $stmtCLeaves->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            } catch (\Throwable $e) {
+                $cLeaves = [];
+            }
+            $allLeaves = array_merge($hrmLeaves, $leaves2, $cLeaves);
+
+            $getLeaveInfo = function($dateStr) use ($allLeaves) {
+                foreach ($allLeaves as $l) {
+                    if ($dateStr >= $l['s_date'] && $dateStr <= $l['e_date']) {
+                        return $l;
+                    }
+                }
+                return null;
+            };
+
+            // Fetch holiday schedules
+            $holidays = [];
+            if (!empty($settingsMap['holiday_schedules'])) {
+                $decoded = json_decode($settingsMap['holiday_schedules'], true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $h) {
+                        $hStart = $h['start'] ?? $h['start_date'] ?? $h['date'] ?? '';
+                        $hEnd = $h['end'] ?? $h['end_date'] ?? $h['date'] ?? '';
+                        if (!empty($hStart) && !empty($hEnd)) {
+                            $curH = strtotime($hStart);
+                            $endH = strtotime($hEnd);
+                            while ($curH <= $endH) {
+                                $holidays[date('Y-m-d', $curH)] = true;
+                                $curH += 86400;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Fetch existing checkins
-        $stmtCheckins = $this->db->prepare("
-            SELECT check_in_date, check_in_time, check_out_time FROM check_ins 
-            WHERE user_id = ? AND check_in_date BETWEEN ? AND ?
-        ");
-        $stmtCheckins->execute([$userId, $startDate, $endDate]);
-        $checkins = [];
-        foreach ($stmtCheckins->fetchAll(PDO::FETCH_ASSOC) as $c) {
-            $checkins[$c['check_in_date']] = $c;
-        }
-
-        $formatTimeHHmm = function($str, $default) {
-            if (empty($str)) return $default;
-            $s = trim((string)$str);
-            if (strpos($s, ' ') !== false) {
-                $parts = explode(' ', $s);
-                $s = $parts[1];
+            // Fetch existing checkins
+            $stmtCheckins = $this->db->prepare("
+                SELECT check_in_date, check_in_time, check_out_time FROM check_ins 
+                WHERE user_id = ? AND check_in_date BETWEEN ? AND ?
+            ");
+            $stmtCheckins->execute([$userId, $startDate, $endDate]);
+            $checkins = [];
+            foreach ($stmtCheckins->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                $checkins[$c['check_in_date']] = $c;
             }
-            return strlen($s) >= 5 ? substr($s, 0, 5) : $default;
-        };
 
-        $suggestions = [];
-        $current = strtotime($startDate);
-        $last = strtotime($endDate);
+            $formatTimeHHmm = function($str, $default) {
+                if (empty($str)) return $default;
+                $s = trim((string)$str);
+                if (strpos($s, ' ') !== false) {
+                    $parts = explode(' ', $s);
+                    $s = $parts[1];
+                }
+                return strlen($s) >= 5 ? substr($s, 0, 5) : $default;
+            };
 
-        while ($current <= $last) {
-            $dateStr = date('Y-m-d', $current);
-            $dayOfWeekISO = (int)date('N', $current); // 1 = Monday ... 7 = Sunday
+            $suggestions = [];
+            $current = strtotime($startDate);
+            $last = strtotime($endDate);
 
-            $current += 86400;
+            while ($current <= $last) {
+                $dateStr = date('Y-m-d', $current);
+                $dayOfWeekISO = (int)date('N', $current); // 1 = Monday ... 7 = Sunday
 
-            // Resolve daily work hours and working status based on schedule map
-            $dayStart = substr($baseWorkStart, 0, 5);
-            $dayEnd = substr($baseWorkEnd, 0, 5);
-            $isWorkingDay = true;
+                $current += 86400;
 
-            if (is_array($scheduleMap) && isset($scheduleMap[$dayOfWeekISO])) {
-                $daySched = $scheduleMap[$dayOfWeekISO];
-                $isActive = true;
-                if (isset($daySched['active'])) {
-                    $isActive = (bool)$daySched['active'];
-                } elseif (isset($daySched['is_working'])) {
-                    $isActive = (bool)$daySched['is_working'];
+                // Resolve daily work hours and working status based on schedule map
+                $dayStart = substr($baseWorkStart, 0, 5);
+                $dayEnd = substr($baseWorkEnd, 0, 5);
+                $isWorkingDay = true;
+
+                $daySched = null;
+                if (is_array($scheduleMap)) {
+                    $daySched = $scheduleMap[$dayOfWeekISO] ?? $scheduleMap[(string)$dayOfWeekISO] ?? null;
                 }
 
-                if (!$isActive) {
-                    $isWorkingDay = false;
+                if ($daySched !== null) {
+                    $isActive = true;
+                    if (isset($daySched['active'])) {
+                        $isActive = (bool)$daySched['active'];
+                    } elseif (isset($daySched['is_working'])) {
+                        $isActive = (bool)$daySched['is_working'];
+                    }
+
+                    if (!$isActive) {
+                        $isWorkingDay = false;
+                    } else {
+                        if (!empty($daySched['start'])) {
+                            $dayStart = substr($daySched['start'], 0, 5);
+                        }
+                        if (!empty($daySched['end_afternoon'])) {
+                            $dayEnd = substr($daySched['end_afternoon'], 0, 5);
+                        } else if (!empty($daySched['start_afternoon'])) {
+                            $dayEnd = substr($daySched['end_afternoon'] ?? $baseWorkEnd, 0, 5);
+                        } else if (!empty($daySched['end'])) {
+                            // Single morning session (e.g. Saturday 08:00 - 12:00)
+                            $dayEnd = substr($daySched['end'], 0, 5);
+                        }
+                    }
                 } else {
-                    if (!empty($daySched['start'])) {
-                        $dayStart = substr($daySched['start'], 0, 5);
-                    }
-                    if (!empty($daySched['end_afternoon'])) {
-                        $dayEnd = substr($daySched['end_afternoon'], 0, 5);
-                    } else if (!empty($daySched['start_afternoon'])) {
-                        $dayEnd = substr($daySched['end_afternoon'] ?? $baseWorkEnd, 0, 5);
-                    } else if (!empty($daySched['end'])) {
-                        // Single morning session (e.g. Saturday 08:00 - 12:00)
-                        $dayEnd = substr($daySched['end'], 0, 5);
+                    if ($workScheduleJson === 'monday_to_saturday' || $workScheduleJson === 'monday_to_noon_saturday') {
+                        $isWorkingDay = $dayOfWeekISO >= 1 && $dayOfWeekISO <= 6;
+                    } elseif ($workScheduleJson === 'all_week') {
+                        $isWorkingDay = true;
+                    } else {
+                        // Default: Monday to Friday
+                        $isWorkingDay = $dayOfWeekISO >= 1 && $dayOfWeekISO <= 5;
                     }
                 }
-            } else {
-                // Default: Sunday is non-working
-                if ($dayOfWeekISO === 7) {
-                    $isWorkingDay = false;
+
+                if (!$isWorkingDay) {
+                    continue;
                 }
-            }
 
-            if (!$isWorkingDay) {
-                continue;
-            }
+                // Skip holidays
+                if (isset($holidays[$dateStr])) {
+                    continue;
+                }
 
-            // Skip holidays
-            if (isset($holidays[$dateStr])) {
-                continue;
-            }
+                $leaveInfo = $getLeaveInfo($dateStr);
+                $hasCheckIn = isset($checkins[$dateStr]) && !empty($checkins[$dateStr]['check_in_time']);
+                $hasCheckOut = isset($checkins[$dateStr]) && !empty($checkins[$dateStr]['check_out_time']);
 
-            $leaveInfo = $getLeaveInfo($dateStr);
-            $hasCheckIn = isset($checkins[$dateStr]) && !empty($checkins[$dateStr]['check_in_time']);
-            $hasCheckOut = isset($checkins[$dateStr]) && !empty($checkins[$dateStr]['check_out_time']);
+                // Nếu ngày này có đơn xin nghỉ (đã duyệt hoặc đang chờ duyệt) mà nhân viên không chấm công
+                // -> Đánh dấu là inactive (is_on_leave = true, disabled = true), không cho bổ sung công gộp
+                if ($leaveInfo !== null) {
+                    if (!$hasCheckIn || !$hasCheckOut) {
+                        $leaveTypeName = match($leaveInfo['leave_type'] ?? '') {
+                            'annual' => 'Nghỉ phép năm',
+                            'compensatory' => 'Nghỉ bù',
+                            'special_paid' => 'Nghỉ Hiếu/Hỉ',
+                            'sick' => 'Nghỉ ốm/thai sản',
+                            'unpaid' => 'Nghỉ việc riêng',
+                            default => !empty($leaveInfo['leave_type']) ? $leaveInfo['leave_type'] : 'Nghỉ phép'
+                        };
+                        $suggestions[] = [
+                            'date' => $dateStr,
+                            'has_check_in' => $hasCheckIn,
+                            'has_check_out' => $hasCheckOut,
+                            'check_in' => $dayStart,
+                            'check_out' => $dayEnd,
+                            'check_in_time' => $dayStart,
+                            'check_out_time' => $dayEnd,
+                            'is_on_leave' => true,
+                            'leave_type' => $leaveTypeName,
+                            'leave_reason' => $leaveInfo['reason'] ?? 'Đã có đơn xin nghỉ phép',
+                            'disabled' => true
+                        ];
+                    }
+                    continue;
+                }
 
-            // Nếu ngày này có đơn xin nghỉ (đã duyệt hoặc đang chờ duyệt) mà nhân viên không chấm công
-            // -> Đánh dấu là inactive (is_on_leave = true, disabled = true), không cho bổ sung công gộp
-            if ($leaveInfo !== null) {
-                if (!$hasCheckIn || !$hasCheckOut) {
-                    $leaveTypeName = match($leaveInfo['leave_type'] ?? '') {
-                        'annual' => 'Nghỉ phép năm',
-                        'compensatory' => 'Nghỉ bù',
-                        'special_paid' => 'Nghỉ Hiếu/Hỉ',
-                        'sick' => 'Nghỉ ốm/thai sản',
-                        'unpaid' => 'Nghỉ việc riêng',
-                        default => !empty($leaveInfo['leave_type']) ? $leaveInfo['leave_type'] : 'Nghỉ phép'
-                    };
+                if (!isset($checkins[$dateStr])) {
                     $suggestions[] = [
                         'date' => $dateStr,
-                        'has_check_in' => $hasCheckIn,
-                        'has_check_out' => $hasCheckOut,
+                        'has_check_in' => false,
+                        'has_check_out' => false,
                         'check_in' => $dayStart,
                         'check_out' => $dayEnd,
                         'check_in_time' => $dayStart,
                         'check_out_time' => $dayEnd,
-                        'is_on_leave' => true,
-                        'leave_type' => $leaveTypeName,
-                        'leave_reason' => $leaveInfo['reason'] ?? 'Đã có đơn xin nghỉ phép',
-                        'disabled' => true
-                    ];
-                }
-                continue;
-            }
-
-            if (!isset($checkins[$dateStr])) {
-                $suggestions[] = [
-                    'date' => $dateStr,
-                    'has_check_in' => false,
-                    'has_check_out' => false,
-                    'check_in' => $dayStart,
-                    'check_out' => $dayEnd,
-                    'check_in_time' => $dayStart,
-                    'check_out_time' => $dayEnd,
-                    'is_on_leave' => false,
-                    'disabled' => false
-                ];
-            } else {
-                $c = $checkins[$dateStr];
-                if (!$hasCheckIn || !$hasCheckOut) {
-                    $inTime = $hasCheckIn ? $formatTimeHHmm($c['check_in_time'], $dayStart) : $dayStart;
-                    $outTime = $hasCheckOut ? $formatTimeHHmm($c['check_out_time'], $dayEnd) : $dayEnd;
-
-                    $suggestions[] = [
-                        'date' => $dateStr,
-                        'has_check_in' => $hasCheckIn,
-                        'has_check_out' => $hasCheckOut,
-                        'check_in' => $inTime,
-                        'check_out' => $outTime,
-                        'check_in_time' => $inTime,
-                        'check_out_time' => $outTime,
                         'is_on_leave' => false,
                         'disabled' => false
                     ];
+                } else {
+                    $c = $checkins[$dateStr];
+                    if (!$hasCheckIn || !$hasCheckOut) {
+                        $inTime = $hasCheckIn ? $formatTimeHHmm($c['check_in_time'], $dayStart) : $dayStart;
+                        $outTime = $hasCheckOut ? $formatTimeHHmm($c['check_out_time'], $dayEnd) : $dayEnd;
+
+                        $suggestions[] = [
+                            'date' => $dateStr,
+                            'has_check_in' => $hasCheckIn,
+                            'has_check_out' => $hasCheckOut,
+                            'check_in' => $inTime,
+                            'check_out' => $outTime,
+                            'check_in_time' => $inTime,
+                            'check_out_time' => $outTime,
+                            'is_on_leave' => false,
+                            'disabled' => false
+                        ];
+                    }
                 }
             }
-        }
 
-        respond(200, $suggestions, 'Gợi ý ngày thiếu công thành công');
+            respond(200, $suggestions, 'Gợi ý ngày thiếu công thành công');
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi quét ngày thiếu công: ' . $e->getMessage(), false);
+        }
     }
 
     public function createBulkRequest(array $auth): void {
@@ -994,7 +1017,17 @@ class CheckInController {
                     }
                 }
             }
-            $relatedUserIds = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? json_encode($b['related_user_ids']) : $b['related_user_ids']) : null;
+
+            // Ensure HR / Hành chính is ALWAYS included in related_user_ids (Người liên quan)
+            $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $stmtHrLead = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
+            $stmtHrLead->execute([$userId]);
+            $hrLeaderId = (int)$stmtHrLead->fetchColumn();
+            if ($hrLeaderId > 0 && $hrLeaderId !== (int)$approverId && !in_array($hrLeaderId, $relArr, true)) {
+                $relArr[] = $hrLeaderId;
+            }
+            $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
             // Create bulk request
             $stmt = $this->db->prepare("
@@ -1066,18 +1099,15 @@ class CheckInController {
                 ]);
 
                 // Notify related persons
-                if (!empty($b['related_user_ids'])) {
-                    $relList = is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true);
-                    if (is_array($relList)) {
-                        foreach ($relList as $relUid) {
-                            $relUid = (int)$relUid;
-                            if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$targetUid) {
-                                NotificationService::send($this->db, 1, 'ATTENDANCE_UPDATE', [
-                                    'user_id' => $relUid,
-                                    'user_name' => $userName,
-                                    'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày) (Bạn được gắn là Người liên quan)"
-                                ]);
-                            }
+                if (!empty($relArr)) {
+                    foreach ($relArr as $relUid) {
+                        $relUid = (int)$relUid;
+                        if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$targetUid) {
+                            NotificationService::send($this->db, 1, 'ATTENDANCE_UPDATE', [
+                                'user_id' => $relUid,
+                                'user_name' => $userName,
+                                'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày) (Bạn được gắn là Người liên quan)"
+                            ]);
                         }
                     }
                 }
@@ -1196,23 +1226,26 @@ class CheckInController {
             return;
         }
 
-        // Manager checks: only approve their own team members
+        // Manager checks: approve their own team members or if explicitly designated as approver
         if ($auth['role'] === 'manager') {
-            $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
-            $stmtUserTeam->execute([$req['user_id']]);
-            $targetUserTeamId = $stmtUserTeam->fetchColumn();
+            $isAssignedApprover = (int)($req['manager_id'] ?? 0) === (int)$auth['user_id'];
+            if (!$isAssignedApprover) {
+                $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+                $stmtUserTeam->execute([$req['user_id']]);
+                $targetUserTeamId = $stmtUserTeam->fetchColumn();
 
-            $isTeamMember = false;
-            if ($targetUserTeamId !== null) {
-                $stmtCheckManager = $this->db->prepare("
-                    SELECT 1 FROM teams WHERE id = ? AND FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                ");
-                $stmtCheckManager->execute([$targetUserTeamId, $auth['user_id']]);
-                $isTeamMember = (bool)$stmtCheckManager->fetch();
-            }
+                $isTeamMember = false;
+                if ($targetUserTeamId !== null) {
+                    $stmtCheckManager = $this->db->prepare("
+                        SELECT 1 FROM teams WHERE id = ? AND FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                    ");
+                    $stmtCheckManager->execute([$targetUserTeamId, $auth['user_id']]);
+                    $isTeamMember = (bool)$stmtCheckManager->fetch();
+                }
 
-            if ((int)$req['user_id'] !== (int)$auth['user_id'] && !$isTeamMember) {
-                respond(403, null, 'Bạn chỉ có quyền phê duyệt chấm công cho nhân viên thuộc nhóm của mình', false);
+                if ((int)$req['user_id'] !== (int)$auth['user_id'] && !$isTeamMember) {
+                    respond(403, null, 'Bạn chỉ có quyền phê duyệt chấm công cho nhân viên thuộc nhóm của mình hoặc khi được chỉ định làm người duyệt', false);
+                }
             }
         }
 

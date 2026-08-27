@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save } from 'lucide-react';
+import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { TicketDrawer } from './TicketDrawer';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
@@ -31,6 +31,15 @@ const PRIORITIES = [
 
 export const TicketsPage: React.FC = () => {
   const { addToast, showConfirm, closeConfirm } = useUIStore();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [tickets, setTickets] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search.trim(), 300);
@@ -263,23 +272,161 @@ export const TicketsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '1rem', flex: 1, minWidth: '300px' }}>
-          <div className="filter-search" style={{ flex: 1 }}>
-            <input className="form-input" placeholder="Tìm theo ID, tiêu đề, tên khách hàng..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <div style={{ width: '180px' }}>
-            <CustomSelect 
-              options={[{ value: 'all', label: 'Tất cả trạng thái' }, ...TICKET_STATUSES.map(s => ({ value: s.id, label: s.label }))]} 
-              value={filterStatus} 
-              onChange={val => setFilterStatus(val.toString())} 
-            />
-          </div>
+      <div className="card" style={{ marginBottom: isMobile ? '0.875rem' : '1.5rem', padding: isMobile ? '8px 10px' : '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: isMobile ? '8px' : '1rem', position: 'relative' }}>
+        {/* Search Field */}
+        <div className="filter-search" style={{ flex: 1, minWidth: 0 }}>
+          <Search size={14} style={{ color: 'var(--color-text-muted)' }} />
+          <input className="form-input" placeholder="Tìm theo ID, tiêu đề, tên khách hàng..." value={search} onChange={e => setSearch(e.target.value)} />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={14} style={{ color: 'var(--color-text-muted)' }} />
+            </button>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-bg)', padding: '4px', borderRadius: '8px' }}>
-          <button className={`btn ghost sm ${viewMode === 'list' ? 'bg-[var(--color-surface)] shadow-sm' : ''}`} onClick={() => setViewMode('list')}>List</button>
-          <button className={`btn ghost sm ${viewMode === 'kanban' ? 'bg-[var(--color-surface)] shadow-sm' : ''}`} onClick={() => setViewMode('kanban')}>Kanban</button>
-        </div>
+
+        {/* Mobile [...] Filter & View Mode Button */}
+        {isMobile ? (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              style={{
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                border: '1px solid var(--color-border)',
+                borderRadius: '8px',
+                background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
+                color: filterStatus !== 'all' ? 'var(--color-primary)' : 'var(--color-text)',
+                outline: 'none',
+                boxShadow: 'var(--shadow-sm)',
+                flexShrink: 0,
+                position: 'relative'
+              }}
+              title="Bộ lọc & Chế độ xem"
+            >
+              <MoreHorizontal size={18} />
+              {filterStatus !== 'all' && (
+                <span style={{
+                  position: 'absolute',
+                  top: '6px',
+                  right: '6px',
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)'
+                }} />
+              )}
+            </button>
+
+            {/* Mobile Filters Dropdown Popover */}
+            <AnimatePresence>
+              {showMobileFilters && (
+                <>
+                  <div 
+                    onClick={() => setShowMobileFilters(false)} 
+                    style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '42px',
+                      width: '240px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                      padding: '12px',
+                      zIndex: 999,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}
+                  >
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        Chế độ hiển thị
+                      </label>
+                      <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px' }}>
+                        <button 
+                          className={`btn ghost sm ${viewMode === 'list' ? 'bg-[var(--color-surface)] shadow-sm font-bold text-[var(--color-primary)]' : ''}`} 
+                          style={{ flex: 1, fontSize: '0.75rem' }}
+                          onClick={() => { setViewMode('list'); setShowMobileFilters(false); }}
+                        >
+                          Danh sách
+                        </button>
+                        <button 
+                          className={`btn ghost sm ${viewMode === 'kanban' ? 'bg-[var(--color-surface)] shadow-sm font-bold text-[var(--color-primary)]' : ''}`} 
+                          style={{ flex: 1, fontSize: '0.75rem' }}
+                          onClick={() => { setViewMode('kanban'); setShowMobileFilters(false); }}
+                        >
+                          Kanban
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        Trạng thái Ticket
+                      </label>
+                      <CustomSelect 
+                        options={[{ value: 'all', label: 'Tất cả trạng thái' }, ...TICKET_STATUSES.map(s => ({ value: s.id, label: s.label }))]} 
+                        value={filterStatus} 
+                        onChange={val => { setFilterStatus(val.toString()); setShowMobileFilters(false); }} 
+                        size="xs"
+                        width="100%"
+                      />
+                    </div>
+
+                    {filterStatus !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => { setFilterStatus('all'); setShowMobileFilters(false); }}
+                        style={{
+                          marginTop: '2px',
+                          padding: '6px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textAlign: 'center'
+                        }}
+                      >
+                        Đặt lại bộ lọc
+                      </button>
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          /* Desktop Filter Controls */
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div style={{ width: '180px' }}>
+              <CustomSelect 
+                options={[{ value: 'all', label: 'Tất cả trạng thái' }, ...TICKET_STATUSES.map(s => ({ value: s.id, label: s.label }))]} 
+                value={filterStatus} 
+                onChange={val => setFilterStatus(val.toString())} 
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-bg)', padding: '4px', borderRadius: '8px' }}>
+              <button className={`btn ghost sm ${viewMode === 'list' ? 'bg-[var(--color-surface)] shadow-sm' : ''}`} onClick={() => setViewMode('list')}>List</button>
+              <button className={`btn ghost sm ${viewMode === 'kanban' ? 'bg-[var(--color-surface)] shadow-sm' : ''}`} onClick={() => setViewMode('kanban')}>Kanban</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {loading ? (

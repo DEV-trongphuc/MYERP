@@ -19,6 +19,42 @@ function sendZaloMessage($botToken, $chatId, $text, $sync = true, $leadId = 0)
 
     global $conn;
 
+    // BẢO VỆ TUYỆT ĐỐI GROUP ZALO DATA:
+    // Group Zalo (zalo_admin_group_chat_id) CHỈ ĐƯỢC PHÉP nhận thông báo liên quan đến Lead / Data.
+    // TUYỆT ĐỐI KHÔNG gửi thông báo đề xuất duyệt chi phí, chấm công, nghỉ phép, tạm ứng, trực ca vào Group Zalo.
+    $zaloGroupChatId = trim((string)get_system_setting($conn, 'zalo_admin_group_chat_id'));
+    if (!empty($zaloGroupChatId) && (string)$chatId === (string)$zaloGroupChatId) {
+        $lowerText = mb_strtolower($text, 'UTF-8');
+        $isLeadRelated = (
+            $leadId > 0 ||
+            strpos($lowerText, 'lead') !== false ||
+            strpos($lowerText, 'data') !== false ||
+            strpos($lowerText, 'khách hàng') !== false ||
+            strpos($lowerText, 'chia số') !== false ||
+            strpos($lowerText, 'thu hồi') !== false ||
+            strpos($lowerText, 'ticket') !== false ||
+            strpos($lowerText, 'phân bổ') !== false
+        );
+
+        $isInternalExcluded = (
+            strpos($lowerText, 'phê duyệt đề xuất') !== false ||
+            strpos($lowerText, 'yêu cầu phê duyệt') !== false ||
+            strpos($lowerText, 'duyệt đề xuất') !== false ||
+            strpos($lowerText, 'chấm công') !== false ||
+            strpos($lowerText, 'nghỉ phép') !== false ||
+            strpos($lowerText, 'chi phí') !== false ||
+            strpos($lowerText, 'tạm ứng') !== false ||
+            strpos($lowerText, 'trực ca') !== false ||
+            strpos($lowerText, 'trực đêm') !== false ||
+            strpos($lowerText, 'mua sắm') !== false
+        );
+
+        if (!$isLeadRelated || $isInternalExcluded) {
+            // Chặn ngay lập tức, không gửi vào Group Zalo Data
+            return true;
+        }
+    }
+
     if (!$sync) {
         $lId = ($leadId > 0) ? $leadId : null;
         if ($conn instanceof PDO) {

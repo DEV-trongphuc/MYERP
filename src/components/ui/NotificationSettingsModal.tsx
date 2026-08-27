@@ -308,6 +308,8 @@ const DEFAULT_EVENT_CONFIGS: Record<string, EventConfig> = {
   COOP_INVITATION: { master: true, zalo: false, telegram: true, email: true },
   PROJECT_ROSTER_UPDATE: { master: true, zalo: false, telegram: false, email: true },
   MONTHLY_ATTENDANCE_REPORT: { master: true, zalo: false, telegram: false, email: true },
+  ATTENDANCE_REMINDER: { master: true, zalo: false, telegram: true, email: true },
+  CHECKOUT_REMINDER: { master: true, zalo: false, telegram: true, email: true },
   HOLIDAY_ROSTER_OPEN: { master: true, zalo: false, telegram: false, email: true },
   HOLIDAY_ANNOUNCEMENT: { master: true, zalo: false, telegram: false, email: true },
 };

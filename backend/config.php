@@ -10,8 +10,8 @@ if (!defined('DB_NAME')) define('DB_NAME', $_ENV['DB_NAME'] ?? 'vhvxoigh_myerp')
 
 // JWT
 if (!defined('JWT_SECRET'))         define('JWT_SECRET',         $_ENV['JWT_SECRET'] ?? 'MYERP_SECRET_KEY_2026_IDEAS');
-if (!defined('JWT_EXPIRE_ACCESS'))  define('JWT_EXPIRE_ACCESS',  3600);
-if (!defined('JWT_EXPIRE_REFRESH')) define('JWT_EXPIRE_REFRESH', 2592000);
+if (!defined('JWT_EXPIRE_ACCESS'))  define('JWT_EXPIRE_ACCESS',  60 * 60 * 24 * 30); // 30 days
+if (!defined('JWT_EXPIRE_REFRESH')) define('JWT_EXPIRE_REFRESH', 60 * 60 * 24 * 90); // 90 days
 
 // CORS allowed origins
 if (!defined('ALLOWED_ORIGINS'))

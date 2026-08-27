@@ -624,8 +624,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 $action = $_GET['action'] ?? '';
 
-// Require authentication for all endpoints except login
-$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'debug_companies_db', 'public_student_schedule'];
+// Require authentication for all endpoints except login & test_email
+$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'debug_companies_db', 'public_student_schedule', 'test_email'];
 
 if (!in_array($action, $publicActions)) {
     $token = getBearerToken();
@@ -2628,6 +2628,67 @@ switch ($action) {
         }
         $stmtSale->close();
         break;
+
+    case 'auth/refresh':
+    case 'refresh':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $refreshToken = $input['refresh_token'] ?? '';
+        if (!$refreshToken) {
+            echo json_encode(['success' => false, 'message' => 'Thiếu refresh token']);
+            break;
+        }
+
+        $hash = hash('sha256', $refreshToken);
+        $stmt = $conn->prepare("
+            SELECT rt.*, u.email, u.role, u.full_name, u.tenant_id, u.is_active, u.id as u_id, u.avatar_url
+            FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id
+            WHERE rt.token_hash = ? AND rt.expires_at > NOW() AND u.is_active = 1 LIMIT 1
+        ");
+        $stmt->bind_param("s", $hash);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res->fetch_assoc();
+        $stmt->close();
+
+        if (!$row) {
+            echo json_encode(['success' => false, 'message' => 'Refresh token không hợp lệ hoặc đã hết hạn']);
+            break;
+        }
+
+        $payload = [
+            'id'        => $row['u_id'],
+            'user_id'   => $row['u_id'],
+            'tenant_id' => $row['tenant_id'],
+            'email'     => $row['email'],
+            'role'       => $row['role'] === 'sales' ? 'sale' : $row['role'],
+            'full_name'  => $row['full_name'],
+            'username'   => explode('@', $row['email'])[0],
+            'exp'        => time() + 86400 * 30
+        ];
+        $newAccess = create_jwt($payload, $JWT_SECRET);
+
+        $newRefresh = bin2hex(random_bytes(40));
+        $newHash = hash('sha256', $newRefresh);
+
+        $delStmt = $conn->prepare("DELETE FROM refresh_tokens WHERE id = ?");
+        $delStmt->bind_param("i", $row['id']);
+        $delStmt->execute();
+        $delStmt->close();
+
+        $insStmt = $conn->prepare("INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 90 DAY))");
+        $insStmt->bind_param("is", $row['u_id'], $newHash);
+        $insStmt->execute();
+        $insStmt->close();
+
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'access_token'  => $newAccess,
+                'refresh_token' => $newRefresh
+            ]
+        ]);
+        break;
+
     case 'get_sse_updates':
         // SSE runs persistently, disable execution timeout
         set_time_limit(0);
@@ -12508,6 +12569,40 @@ switch ($action) {
             $statsHtml = "<li>Sale Test 1: <b>15</b> data</li><li>Sale Test 2: <b>12</b> data</li>";
             sendDailyReportEmailToAdmins($email, "Admin Test", 27, $statsHtml, 3);
             $success = true;
+        } else if ($type === 'attendance_reminder') {
+            $workStart = $input['work_start'] ?? '08:00';
+            $userName = $input['user_name'] ?? 'Huỳnh Trọng Phúc';
+            $userRole = $input['role'] ?? 'Marketing';
+            $frontendUrl = get_system_setting($conn, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+            $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
+
+            $subject = "[IDEAS ERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
+            $title = "NHẮC NHỞ CHẤM CÔNG VÀO CA";
+            $content = "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                       "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Sắp đến giờ bắt đầu ca làm việc</h3>" .
+                       "  <p style=\"margin: 0; color: #334155; line-height: 1.6;\">Chào <strong>" . htmlspecialchars($userName) . "</strong> (Bộ phận: <strong>" . htmlspecialchars($userRole) . "</strong>),<br/><br/>Hệ thống nhắc nhở bạn sắp đến giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>). Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công đúng giờ nhé!</p>" .
+                       "</div>" .
+                       "<p style=\"margin-top: 25px; text-align: center;\">" .
+                       "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG</a>" .
+                       "</p>";
+            $success = sendEmailNotification($email, $subject, $title, $content, '', true);
+        } else if ($type === 'checkin_missing_reminder') {
+            $workStart = $input['work_start'] ?? '08:00';
+            $userName = $input['user_name'] ?? 'Huỳnh Trọng Phúc';
+            $userRole = $input['role'] ?? 'Marketing';
+            $frontendUrl = get_system_setting($conn, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+            $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
+
+            $subject = "[IDEAS ERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
+            $title = "CẢNH BÁO CHƯA CHẤM CÔNG HÔM NAY";
+            $content = "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                       "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công vào ca</h3>" .
+                       "  <p style=\"margin: 0; color: #7f1d1d; line-height: 1.6;\">Chào <strong>" . htmlspecialchars($userName) . "</strong> (Bộ phận: <strong>" . htmlspecialchars($userRole) . "</strong>),<br/><br/>Hệ thống ghi nhận đã quá giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>) nhưng bạn <strong>chưa thực hiện chấm công vào hôm nay</strong>.<br/><br/>Vui lòng truy cập hệ thống MYERP để thực hiện chấm công ngay hoặc tạo phiếu giải trình đi trễ nếu có lý do chính đáng.</p>" .
+                       "</div>" .
+                       "<p style=\"margin-top: 25px; text-align: center;\">" .
+                       "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG NGAY</a>" .
+                       "</p>";
+            $success = sendEmailNotification($email, $subject, $title, $content, '', true);
         } else {
             $subject = "Test Cấu hình Email từ IDEAS";
             $body = "<p>Nếu bạn nhận được email này, nghĩa là cấu hình gửi mail của bạn (Amazon SES hoặc AppScript) đang hoạt động hoàn hảo!</p><p style='color:#64748b;font-size:14px;'>Gửi lúc: " . date('d/m/Y H:i:s') . "</p>";

@@ -12,17 +12,30 @@ class DepositController {
         $tid = $auth['tenant_id'];
 
         $sql = "
-            SELECT d.*, c.full_name, c.phone, c.avatar_url, c.email, p.name as project_name, u.full_name as creator_name, u.avatar_url as creator_avatar,
+            SELECT d.*, 
+                   COALESCE(c.full_name, comp.name, sup.name) as full_name, 
+                   COALESCE(c.phone, comp.phone, sup.phone) as phone, 
+                   c.avatar_url, 
+                   COALESCE(c.email, comp.email, sup.email) as email, 
+                   p.name as project_name, u.full_name as creator_name, u.avatar_url as creator_avatar,
                    owner.full_name as owner_name, owner.avatar_url as owner_avatar,
-                   c.owner_id as contact_owner_id, c.pipeline_status
+                   c.owner_id as contact_owner_id, c.pipeline_status,
+                   comp.name as company_name, sup.name as supplier_name
             FROM deposits d
-            JOIN contacts c ON d.contact_id = c.id
+            LEFT JOIN contacts c ON d.contact_id = c.id
+            LEFT JOIN companies comp ON d.company_id = comp.id
+            LEFT JOIN suppliers sup ON d.supplier_id = sup.id
             JOIN projects p ON d.project_id = p.id
             JOIN users u ON d.created_by = u.id
             LEFT JOIN users owner ON c.owner_id = owner.id
-            WHERE c.tenant_id = ?
+            WHERE (
+                (d.contact_id IS NOT NULL AND c.tenant_id = ?) 
+                OR (d.company_id IS NOT NULL AND comp.tenant_id = ?) 
+                OR (d.supplier_id IS NOT NULL AND sup.tenant_id = ?)
+                OR (p.tenant_id = ?)
+            )
         ";
-        $params = [$tid];
+        $params = [$tid, $tid, $tid, $tid];
 
         $isAdminOrDirectorOrAccountant = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant'], true);
 
@@ -33,7 +46,7 @@ class DepositController {
                     OR c.owner_id = ? 
                     OR d.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)) 
                     OR c.owner_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?))
-                    OR FIND_IN_SET(?, d.participant_ids)
+                    OR (d.participant_ids IS NOT NULL AND FIND_IN_SET(?, d.participant_ids))
                 )";
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
@@ -44,9 +57,9 @@ class DepositController {
                 $sql .= " AND (
                     d.created_by = ? 
                     OR c.owner_id = ? 
-                    OR FIND_IN_SET(?, c.collaborator_ids) 
-                    OR d.contact_id IN (SELECT contact_id FROM quyen_truy_cap WHERE user_id = ?)
-                    OR FIND_IN_SET(?, d.participant_ids)
+                    OR (c.collaborator_ids IS NOT NULL AND FIND_IN_SET(?, c.collaborator_ids)) 
+                    OR (d.contact_id IS NOT NULL AND d.contact_id IN (SELECT contact_id FROM quyen_truy_cap WHERE user_id = ?))
+                    OR (d.participant_ids IS NOT NULL AND FIND_IN_SET(?, d.participant_ids))
                 )";
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
@@ -87,54 +100,55 @@ class DepositController {
             }
 
             // Fetch cooperation slips for these contacts to resolve shareholders
-            $contactIds = array_column($deposits, 'contact_id');
-            $inContacts = implode(',', array_fill(0, count($contactIds), '?'));
-            $stmtCslips = $this->db->prepare("SELECT * FROM cooperation_slips WHERE contact_id IN ($inContacts)");
-            $stmtCslips->execute($contactIds);
-            $cSlips = $stmtCslips->fetchAll(PDO::FETCH_ASSOC);
-
-            // Load users map for details
-            $allUids = [];
-            foreach ($cSlips as $cs) {
-                $shares = json_decode($cs['shares_json'] ?? '[]', true) ?: [];
-                foreach (array_keys($shares) as $uid) {
-                    $allUids[] = (int)$uid;
-                }
-            }
-            $userMap = [];
-            $uniqueUids = array_values(array_unique(array_filter($allUids)));
-            if (!empty($uniqueUids)) {
-                $inUsers = implode(',', array_fill(0, count($uniqueUids), '?'));
-                $stmtU = $this->db->prepare("SELECT id, full_name, email, avatar_url FROM users WHERE id IN ($inUsers)");
-                $stmtU->execute($uniqueUids);
-                $users = $stmtU->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($users as $u) {
-                    $userMap[(int)$u['id']] = $u;
-                }
-            }
-
+            $contactIds = array_values(array_filter(array_column($deposits, 'contact_id')));
             $slipsMap = [];
-            foreach ($cSlips as $cs) {
-                $shares = json_decode($cs['shares_json'] ?? '[]', true) ?: [];
-                $shareholdersDetails = [];
-                foreach ($shares as $uid => $percent) {
-                    $u = $userMap[(int)$uid] ?? null;
-                    if ($u) {
-                        $shareholdersDetails[] = [
-                            'user_id' => (int)$uid,
-                            'name' => $u['full_name'],
-                            'email' => $u['email'],
-                            'avatar' => $u['avatar_url'] ?? null,
-                            'percentage' => (int)$percent
-                        ];
+            if (!empty($contactIds)) {
+                $inContacts = implode(',', array_fill(0, count($contactIds), '?'));
+                $stmtCslips = $this->db->prepare("SELECT * FROM cooperation_slips WHERE contact_id IN ($inContacts)");
+                $stmtCslips->execute($contactIds);
+                $cSlips = $stmtCslips->fetchAll(PDO::FETCH_ASSOC);
+
+                // Load users map for details
+                $allUids = [];
+                foreach ($cSlips as $cs) {
+                    $shares = json_decode($cs['shares_json'] ?? '[]', true) ?: [];
+                    foreach (array_keys($shares) as $uid) {
+                        $allUids[(int)$uid] = true;
                     }
                 }
-                $slipsMap[(int)$cs['contact_id']] = $shareholdersDetails;
+                $userMap = [];
+                if (!empty($allUids)) {
+                    $inUsers = implode(',', array_fill(0, count(array_keys($allUids)), '?'));
+                    $stmtU = $this->db->prepare("SELECT id, full_name, email, avatar_url FROM users WHERE id IN ($inUsers)");
+                    $stmtU->execute(array_keys($allUids));
+                    $users = $stmtU->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($users as $u) {
+                        $userMap[(int)$u['id']] = $u;
+                    }
+                }
+
+                foreach ($cSlips as $cs) {
+                    $shares = json_decode($cs['shares_json'] ?? '[]', true) ?: [];
+                    $shareholdersDetails = [];
+                    foreach ($shares as $uid => $percent) {
+                        $u = $userMap[(int)$uid] ?? null;
+                        if ($u) {
+                            $shareholdersDetails[] = [
+                                'user_id' => (int)$uid,
+                                'name' => $u['full_name'],
+                                'email' => $u['email'],
+                                'avatar' => $u['avatar_url'] ?? null,
+                                'percentage' => (int)$percent
+                            ];
+                        }
+                    }
+                    $slipsMap[(int)$cs['contact_id']] = $shareholdersDetails;
+                }
             }
 
             foreach ($deposits as &$d) {
                 $d['milestones'] = $milestonesMap[$d['id']] ?? [];
-                $d['shareholders'] = $slipsMap[(int)$d['contact_id']] ?? [];
+                $d['shareholders'] = $d['contact_id'] ? ($slipsMap[(int)$d['contact_id']] ?? []) : [];
             }
         }
 
@@ -144,7 +158,9 @@ class DepositController {
     public function store(array $auth): void {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền thực hiện thao tác này', false);
         $b = getBody();
-        $contactId = (int)($b['contact_id'] ?? 0);
+        $contactId = !empty($b['contact_id']) ? (int)$b['contact_id'] : null;
+        $companyId = !empty($b['company_id']) ? (int)$b['company_id'] : null;
+        $supplierId = !empty($b['supplier_id']) ? (int)$b['supplier_id'] : null;
         $projectId = (int)($b['project_id'] ?? 0);
         $unitCode  = trim($b['unit_code'] ?? '') ?: '—';
         $price     = (float)($b['price'] ?? 0);
@@ -152,38 +168,54 @@ class DepositController {
         $notes     = trim($b['notes'] ?? '');
         $milestones = $b['milestones'] ?? []; // Array of { name, amount }
 
-        if (!$contactId || !$projectId || $price <= 0) {
-            respond(422, null, 'Thiếu thông tin bắt buộc để tạo đơn đặt hàng (khách hàng, chiến dịch, giá bán)', false);
+        if ((!$contactId && !$companyId && !$supplierId) || !$projectId || $price <= 0) {
+            respond(422, null, 'Thiếu thông tin bắt buộc để tạo đơn đặt hàng (khách hàng / đối tác, chương trình, giá bán)', false);
         }
 
         $this->db->beginTransaction();
         try {
-            // Check contact existence and ownership
-            $stmtC = $this->db->prepare("SELECT id, owner_id, pipeline_status, full_name FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
-            $stmtC->execute([$contactId, $auth['tenant_id']]);
-            $contact = $stmtC->fetch();
-            if (!$contact) {
-                $this->db->rollBack();
-                respond(404, null, 'Khách hàng không tồn tại', false);
-            }
-
-            if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-                if ($contact['owner_id'] != $auth['user_id']) {
+            if ($contactId) {
+                // Check contact existence and ownership
+                $stmtC = $this->db->prepare("SELECT id, owner_id, pipeline_status, full_name FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+                $stmtC->execute([$contactId, $auth['tenant_id']]);
+                $contact = $stmtC->fetch();
+                if (!$contact) {
                     $this->db->rollBack();
-                    respond(403, null, 'Bạn không thể tạo đơn hàng cho khách hàng của người khác', false);
+                    respond(404, null, 'Khách hàng không tồn tại', false);
                 }
-            } else if ($auth['role'] === 'manager') {
-                $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
-                $stmtUserTeam->execute([$contact['owner_id']]);
-                $targetUserTeamId = $stmtUserTeam->fetchColumn();
 
-                $stmtLead = $this->db->prepare("SELECT 1 FROM teams WHERE id = ? AND leader_id = ?");
-                $stmtLead->execute([$targetUserTeamId, $auth['user_id']]);
-                $isTeamMember = $stmtLead->fetch();
+                if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+                    if ($contact['owner_id'] != $auth['user_id']) {
+                        $this->db->rollBack();
+                        respond(403, null, 'Bạn không thể tạo đơn hàng cho khách hàng của người khác', false);
+                    }
+                } else if ($auth['role'] === 'manager') {
+                    $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+                    $stmtUserTeam->execute([$contact['owner_id']]);
+                    $targetUserTeamId = $stmtUserTeam->fetchColumn();
 
-                if ($contact['owner_id'] != $auth['user_id'] && !$isTeamMember) {
+                    $stmtLead = $this->db->prepare("SELECT 1 FROM teams WHERE id = ? AND leader_id = ?");
+                    $stmtLead->execute([$targetUserTeamId, $auth['user_id']]);
+                    $isTeamMember = $stmtLead->fetch();
+
+                    if ($contact['owner_id'] != $auth['user_id'] && !$isTeamMember) {
+                        $this->db->rollBack();
+                        respond(403, null, 'Bạn không thể tạo đơn hàng cho khách hàng thuộc quản lý của nhóm khác', false);
+                    }
+                }
+            } else if ($companyId) {
+                $stmtComp = $this->db->prepare("SELECT id, name FROM companies WHERE id = ? AND tenant_id = ?");
+                $stmtComp->execute([$companyId, $auth['tenant_id']]);
+                if (!$stmtComp->fetch()) {
                     $this->db->rollBack();
-                    respond(403, null, 'Bạn không thể tạo đơn hàng cho khách hàng thuộc quản lý của nhóm khác', false);
+                    respond(404, null, 'Đối tác/Công ty không tồn tại', false);
+                }
+            } else if ($supplierId) {
+                $stmtSup = $this->db->prepare("SELECT id, name FROM suppliers WHERE id = ? AND tenant_id = ?");
+                $stmtSup->execute([$supplierId, $auth['tenant_id']]);
+                if (!$stmtSup->fetch()) {
+                    $this->db->rollBack();
+                    respond(404, null, 'Nhà cung cấp/Đối tác không tồn tại', false);
                 }
             }
 
@@ -227,14 +259,14 @@ class DepositController {
 
             // Insert deposit record
             $stmt = $this->db->prepare("
-                INSERT INTO deposits (contact_id, project_id, unit_code, price, expected_commission, status, created_by, auto_remind, remind_days_before, remind_at_hour, notes, accountant_id, participant_ids, currency, exchange_rate)
-                VALUES (?, ?, ?, ?, ?, 'pending_admin', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO deposits (contact_id, company_id, supplier_id, project_id, unit_code, price, expected_commission, status, created_by, auto_remind, remind_days_before, remind_at_hour, notes, accountant_id, participant_ids, currency, exchange_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_admin', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$contactId, $projectId, $unitCode, $price, $expectedCommission, $auth['user_id'], $autoRemind, $remindDaysBefore, $remindAtHour, $notes, $accountantId, $participantIdsStr, $currency, $exchangeRate]);
+            $stmt->execute([$contactId, $companyId, $supplierId, $projectId, $unitCode, $price, $expectedCommission, $auth['user_id'], $autoRemind, $remindDaysBefore, $remindAtHour, $notes, $accountantId, $participantIdsStr, $currency, $exchangeRate]);
             $depositId = $this->db->lastInsertId();
 
-            // Grant access to contact for each participant
-            if (!empty($participantIds)) {
+            // Grant access to contact for each participant if contact exists
+            if (!empty($participantIds) && $contactId) {
                 $stmtGrant = $this->db->prepare("
                     INSERT IGNORE INTO quyen_truy_cap (contact_id, user_id, invited_by)
                     VALUES (?, ?, ?)
@@ -244,8 +276,8 @@ class DepositController {
                 }
             }
 
-            // Tag accountant & create notification if assigned
-            if ($accountantId > 0) {
+            // Tag accountant & create notification if assigned (prevent notifying self)
+            if ($accountantId > 0 && $accountantId !== (int)$auth['user_id']) {
                 try {
                     $stmtU = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
                     $stmtU->execute([$auth['user_id']]);
@@ -260,16 +292,20 @@ class DepositController {
                         $acctTag = '@' . str_replace(' ', '_', $acctName);
                         $bodyText = "Đã tạo phiếu thanh toán mới, chỉ định Kế toán $acctTag phê duyệt.";
 
+                        $entityType = $contactId ? 'contact' : ($companyId ? 'company' : ($supplierId ? 'supplier' : 'deposit'));
+                        $entityId = $contactId ?: ($companyId ?: ($supplierId ?: $depositId));
+                        $targetLink = $contactId ? "/contacts/$contactId" : ($companyId ? "/companies" : ($supplierId ? "/suppliers" : "/deposits"));
+
                         // Insert note
                         $stmtNote = $this->db->prepare("
                             INSERT INTO notes (tenant_id, entity_type, entity_id, user_id, body)
-                            VALUES (?, 'contact', ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?)
                         ");
-                        $stmtNote->execute([$auth['tenant_id'], $contactId, $auth['user_id'], $bodyText]);
+                        $stmtNote->execute([$auth['tenant_id'], $entityType, $entityId, $auth['user_id'], $bodyText]);
                         $noteId = $this->db->lastInsertId();
 
-                        // Log interaction for contact's timeline
-                        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Tạo Phiếu Thu', $bodyText, 'contact', $contactId);
+                        // Log interaction
+                        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Tạo Phiếu Thu', $bodyText, $entityType, $entityId);
 
                         // Add note mention
                         $stmtMention = $this->db->prepare("
@@ -287,7 +323,7 @@ class DepositController {
                             $accountantId,
                             $auth['tenant_id'],
                             "Nhân viên $creatorName đã tạo phiếu thanh toán mới và chỉ định bạn phê duyệt.",
-                            "/contacts/$contactId"
+                            $targetLink
                         ]);
                     }
                 } catch (Throwable $notifErr) {

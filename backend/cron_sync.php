@@ -3164,7 +3164,8 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
         'zalo_bot_token',
         'telegram_bot_token',
         'night_shift_start_time',
-        'night_shift_end_time'
+        'night_shift_end_time',
+        'global_work_start_time'
     )");
     if ($res) {
         while ($row = $res->fetch_assoc()) {
@@ -3243,20 +3244,41 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
             }
         }
         
-        // Query active users who have not checked in today (only Sales, or Managers in combined mode)
+        $globalWorkStart = !empty($settings['global_work_start_time']) ? substr($settings['global_work_start_time'], 0, 5) : '08:00';
+
+        // Query all active users (exemption rule: only Director is excluded)
         $userQuery = "
-            SELECT u.id, u.full_name, u.email, u.zalo_chat_id, u.telegram_chat_id, u.work_schedule, u.tenant_id,
-                   IF(u.use_custom_work_hours = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time
+            SELECT u.id, u.tenant_id, u.full_name, u.email, u.zalo_chat_id, u.telegram_chat_id, u.role,
+                   u.use_custom_work_hours, u.work_start_time, u.work_end_time, u.work_schedule, u.vacation_mode,
+                   u.leave_start, u.leave_end
             FROM users u
             WHERE u.status = 'active'
-              AND (u.role = 'sales' OR (u.role = 'manager' AND u.manager_behavior_mode = 'combined'))
         ";
         $userRes = $conn->query($userQuery);
         if ($userRes) {
             while ($user = $userRes->fetch_assoc()) {
                 $userId = (int)$user['id'];
                 
-                // 1. Check holiday shift registration
+                // 1. Exemption check: ONLY Director is exempt from check-in reminders
+                if (in_array(strtolower($user['role'] ?? ''), ['director'], true)) {
+                    continue;
+                }
+
+                // 2. Skip if user is in vacation mode or on approved leave
+                if (!empty($user['vacation_mode']) && (int)$user['vacation_mode'] === 1) continue;
+                if (!empty($user['leave_start']) && !empty($user['leave_end'])) {
+                    if ($todayStr >= $user['leave_start'] && $todayStr <= $user['leave_end']) continue;
+                }
+                $stmtLeave = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+                if ($stmtLeave) {
+                    $stmtLeave->bind_param("iss", $userId, $todayStr, $todayStr);
+                    $stmtLeave->execute();
+                    $hasLeave = (bool)$stmtLeave->get_result()->fetch_assoc();
+                    $stmtLeave->close();
+                    if ($hasLeave) continue;
+                }
+                
+                // 3. Check holiday shift registration
                 if ($isHolidayToday) {
                     $stmtCheckReg = $conn->prepare("SELECT 1 FROM holiday_shift_registrations WHERE user_id = ? AND shift_date = ? AND approved = 1 LIMIT 1");
                     if ($stmtCheckReg) {
@@ -3270,7 +3292,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                     }
                 }
                 
-                // 2. Check weekend / rest day shift registration
+                // 4. Check weekend / rest day shift registration
                 $isRestDayToday = isRestDayForUser($conn, $userId, $todayStr);
                 if ($isRestDayToday) {
                     $stmtCheckReg = $conn->prepare("SELECT 1 FROM weekend_shift_registrations WHERE user_id = ? AND shift_date = ? AND approved = 1 LIMIT 1");
@@ -3285,7 +3307,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                     }
                 }
 
-                $workStart = $user['work_start_time'] ?: '08:00';
+                $workStart = ($user['use_custom_work_hours'] == 1 && !empty($user['work_start_time'])) ? substr($user['work_start_time'], 0, 5) : $globalWorkStart;
                 
                 // Parse work start time to determine target reminder time
                 $workStartParts = explode(':', $workStart);
@@ -3309,21 +3331,21 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                             
                             if (!$hasSent) {
                                 // Double check if already checked in today
-                                $chkCheckin = $conn->prepare("SELECT id FROM check_ins WHERE user_id = ? AND check_in_date = ?");
+                                $chkCheckin = $conn->prepare("SELECT id FROM check_ins WHERE user_id = ? AND check_in_date = ? AND check_in_time IS NOT NULL LIMIT 1");
                                 $chkCheckin->bind_param("is", $userId, $todayStr);
                                 $chkCheckin->execute();
                                 $alreadyCheckedIn = (bool)$chkCheckin->get_result()->fetch_assoc();
                                 $chkCheckin->close();
                                 
                                 if (!$alreadyCheckedIn) {
-                                    $msg = "ĐÃ ĐẾN GIỜ CHẤM CÔNG";
+                                    $msg = "ĐÃ ĐẾN GIỜ CHẤM CÔNG (Ca $workStart)";
+                                    $userTenantId = (int)($user['tenant_id'] ?? 1);
                                     
                                     // 1. Send Web In-App Notification Bell (Isolated)
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'bell')) {
                                         try {
                                             $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, '⏰ ĐÃ ĐẾN GIỜ CHẤM CÔNG', ?, 'attendance_reminder', '/attendance')");
                                             if ($insNotif) {
-                                                $userTenantId = (int)$user['tenant_id'];
                                                 $insNotif->bind_param("iis", $userId, $userTenantId, $msg);
                                                 $insNotif->execute();
                                                 $insNotif->close();
@@ -3337,7 +3359,8 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'zalo')) {
                                         try {
                                             if (!empty($zaloBotToken) && !empty($user['zalo_chat_id']) && function_exists('sendZaloMessage')) {
-                                                sendZaloMessage($zaloBotToken, $user['zalo_chat_id'], $msg, false);
+                                                $zaloText = "⏰ [ NHẮC NHỞ CHẤM CÔNG ]\n\nXin chào {$user['full_name']},\nĐã sắp đến giờ vào ca làm việc ({$workStart}). Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!\n👉 https://myerp.ideas.edu.vn/attendance";
+                                                sendZaloMessage($zaloBotToken, $user['zalo_chat_id'], $zaloText, false);
                                             }
                                         } catch (Throwable $eZalo) {
                                             error_log("Checkin Reminder Zalo Error: " . $eZalo->getMessage());
@@ -3348,7 +3371,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'telegram')) {
                                         try {
                                             if (!empty($telegramBotToken) && !empty($user['telegram_chat_id']) && function_exists('sendTelegramMessage')) {
-                                                $tgText = "⏰ <b>ĐÃ ĐẾN GIỜ CHẤM CÔNG</b> (Ca " . $workStart . ")";
+                                                $tgText = "⏰ <b>NHẮC NHỞ CHẤM CÔNG</b> (Ca {$workStart})\n\nXin chào <b>" . htmlspecialchars($user['full_name']) . "</b>,\nĐã sắp đến giờ vào ca làm việc. Vui lòng truy cập MYERP để chấm công đúng giờ nhé!";
                                                 sendTelegramMessage($telegramBotToken, $user['telegram_chat_id'], $tgText);
                                             }
                                         } catch (Throwable $eTg) {
@@ -3356,14 +3379,14 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                         }
                                     }
 
-                                    // 4. Send Email notification if email exists (Isolated)
+                                    // 4. Send Email notification if email exists (Async via mail_queue)
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'email')) {
                                         try {
                                             if (!empty($user['email']) && function_exists('sendEmailNotification')) {
-                                                $emailSubject = "⏰ ĐÃ ĐẾN GIỜ CHẤM CÔNG";
-                                                $emailTitle = "ĐÃ ĐẾN GIỜ CHẤM CÔNG";
-                                                $emailContent = "Đã đến giờ chấm công cho ca làm việc hôm nay (lúc " . htmlspecialchars($workStart) . "). Vui lòng truy cập hệ thống để thực hiện điểm danh/chấm công đúng giờ.";
-                                                sendEmailNotification($user['email'], $emailSubject, $emailTitle, $emailContent, 'Chấm công ngay', true);
+                                                $emailSubject = "⏰ ĐÃ ĐẾN GIỜ CHẤM CÔNG [Ca $workStart]";
+                                                $emailTitle = "NHẮC NHỞ CHẤM CÔNG";
+                                                $emailContent = "Chào <strong>" . htmlspecialchars($user['full_name']) . "</strong>,<br/><br/>Hệ thống nhắc nhở bạn sắp đến giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>). Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công đúng giờ.";
+                                                sendEmailNotification($user['email'], $emailSubject, $emailTitle, $emailContent, '', false);
                                             }
                                         } catch (Throwable $eMail) {
                                             error_log("Checkin Reminder Email Error: " . $eMail->getMessage());
@@ -3375,7 +3398,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     $ins->execute();
                                     $ins->close();
                                     
-                                    logSync("Sent check-in reminder (Web/Zalo/Telegram/Email) to Sale: {$user['full_name']} (User ID: {$userId})");
+                                    logSync("Sent check-in reminder (Web/Zalo/Telegram/Email) to User: {$user['full_name']} (User ID: {$userId}, Role: {$user['role']})");
                                 }
                             }
                         }
@@ -3578,8 +3601,10 @@ function sendCheckInMissingReminders($conn) {
 
     while ($user = $res->fetch_assoc()) {
         $userId = (int)$user['id'];
-        // Skip if user is director / superadmin / admin (exempt from check-in)
-        if (in_array(strtolower($user['role'] ?? ''), ['director', 'superadmin', 'super_admin'], true)) continue;
+        $tenantId = (int)($user['tenant_id'] ?? 1);
+
+        // Exemption check: ONLY Director is exempt from check-in reminders
+        if (in_array(strtolower($user['role'] ?? ''), ['director'], true)) continue;
 
         // Skip if user is in vacation mode or on leave
         if (!empty($user['vacation_mode']) && (int)$user['vacation_mode'] === 1) continue;
@@ -3685,8 +3710,8 @@ function sendCheckOutMissingReminders($conn) {
         $userId = (int)$user['id'];
         $tenantId = (int)($user['tenant_id'] ?? 1);
 
-        // Skip if user is director / superadmin / admin (exempt from check-in)
-        if (in_array(strtolower($user['role'] ?? ''), ['director', 'superadmin', 'super_admin'], true)) continue;
+        // Exemption check: ONLY Director is exempt from check-in reminders
+        if (in_array(strtolower($user['role'] ?? ''), ['director'], true)) continue;
 
         // Skip if user is in vacation mode or on leave
         if (!empty($user['vacation_mode']) && (int)$user['vacation_mode'] === 1) continue;

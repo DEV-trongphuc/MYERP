@@ -59,7 +59,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
     title: 'QUY TRÌNH & PHÊ DUYỆT',
     items: [
-      { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals', hideForRoles: ['marketing'] }
+      { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
     ]
   },
   {
@@ -132,14 +132,14 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Tiềm năng', href: '/contacts', icon: Users },
     { name: 'Giao dịch', href: '/deals', icon: TrendingUp },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
-    { name: 'Chấm công', href: '/attendance', icon: Clock }
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   sales: [
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Tiềm năng', href: '/contacts', icon: Users },
     { name: 'Giao dịch', href: '/deals', icon: TrendingUp },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
-    { name: 'Chấm công', href: '/attendance', icon: Clock }
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   accountant: [
     { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap },
@@ -164,6 +164,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Khóa học', href: '/projects?tab=campaigns', icon: Layers },
     { name: 'Pre-screener', href: '/gatekeeper', icon: Filter, badgeKey: 'gatekeeper' },
     { name: 'Ticket data lỗi', href: '/tickets', icon: Ticket, badgeKey: 'tickets' },
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phòng ban', href: '/consultants?tab=teams', icon: Users },
     { name: 'Tích hợp', href: '/integrations', icon: Link2 }
   ],
@@ -213,6 +214,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Đối tác & GV', href: '/companies', icon: Building2 },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   teacher: [
@@ -220,6 +222,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   giang_vien: [
@@ -227,6 +230,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ],
   assistant: [
@@ -240,6 +244,7 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Lịch học', href: '/schedules', icon: Calendar },
+    { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' },
     { name: 'Chương trình', href: '/projects', icon: Building2 },
     { name: 'Phiếu lương', href: '/my-payslips', icon: FileText }
   ]
@@ -250,6 +255,8 @@ const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
   superadmin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
   super_admin: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
   director: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  sale: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
+  sales: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   accountant: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ'],
   hr: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'NHÂN SỰ', 'CHƯƠNG TRÌNH'],
   marketing: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
@@ -261,7 +268,7 @@ const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
   teacher: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   giang_vien: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   assistant: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
-  viewer: ['TỔNG QUAN', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ']
+  viewer: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ']
 };
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileClose }: { isCollapsed: boolean; onToggleCollapse: () => void; isMobileOpen?: boolean; onMobileClose?: () => void }) => {
@@ -716,6 +723,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                 )}
                  {group.items.map(({ name, href, icon: Icon, end, badgeKey }) => {
                    const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? (undoneTasksCount + pendingLeadsCount) : 0;
+                   const isAccountant = String(user?.role).toLowerCase() === 'accountant';
+                   const effectiveHref = (name === 'Lịch trình' && isAccountant) ? '/data?view=calendar' : href;
                    const checkIsActive = (locationPath: string, locationSearch: string, itemHref: string) => {
                      const qIdx = itemHref.indexOf('?');
                      if (qIdx !== -1) {
@@ -735,13 +744,13 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                        return true;
                      }
                    };
-                   const isActive = checkIsActive(location.pathname, location.search, href);
+                   const isActive = checkIsActive(location.pathname, location.search, effectiveHref);
                   const displayName = t(name);
 
                   return (
                     <NavLink
                       key={name + href}
-                      to={href}
+                      to={effectiveHref}
                       end={end}
                       className={() => `sidebar-nav-item ${isActive ? 'active' : ''}`}
                       title={isCollapsed ? displayName : undefined}

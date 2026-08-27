@@ -1035,16 +1035,18 @@ class FinanceController
             $statusVal = $data['status'] ?? 'pending';
             if ($statusVal === 'pending') {
                 require_once __DIR__ . '/../NotificationService.php';
-                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
-                    'approver_id' => $approver_id,
-                    'user_id' => $approver_id,
-                    'target_user_id' => $approver_id,
-                    'user_name' => $auth['full_name'],
-                    'title' => $data['title'],
-                    'amount' => $totalAmount,
-                    'reason' => $data['notes'] ?? 'Không có',
-                    'ref_id' => $expId
-                ]);
+                if ($approver_id && $approver_id !== (int)$auth['user_id']) {
+                    NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                        'approver_id' => $approver_id,
+                        'user_id' => $approver_id,
+                        'target_user_id' => $approver_id,
+                        'user_name' => $auth['full_name'],
+                        'title' => $data['title'],
+                        'amount' => $totalAmount,
+                        'reason' => $data['notes'] ?? 'Không có',
+                        'ref_id' => $expId
+                    ]);
+                }
 
                 // Notify related persons
                 if (!empty($data['related_user_ids'])) {

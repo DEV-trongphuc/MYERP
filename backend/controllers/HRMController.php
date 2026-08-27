@@ -166,7 +166,17 @@ class HRMController {
             }
         }
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
-        $relatedUserIds = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? json_encode($b['related_user_ids']) : $b['related_user_ids']) : null;
+
+        // Ensure HR / Hành chính is ALWAYS included in related_user_ids (Người liên quan)
+        $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true)) : [];
+        if (!is_array($relArr)) $relArr = [];
+        $stmtHrLead = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
+        $stmtHrLead->execute([$auth['user_id']]);
+        $hrLeaderId = (int)$stmtHrLead->fetchColumn();
+        if ($hrLeaderId > 0 && $hrLeaderId !== (int)$approverId && !in_array($hrLeaderId, $relArr, true)) {
+            $relArr[] = $hrLeaderId;
+        }
+        $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
         $stmt = $this->db->prepare("
             INSERT INTO hrm_leave_requests (user_id, leave_type, start_date, end_date, total_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, related_user_ids)
@@ -197,8 +207,11 @@ class HRMController {
             $targetUserId = $approverId ?: $auth['user_id'];
             $leaveId = (int)$this->db->lastInsertId();
             NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
+                'approver_id' => $targetUserId,
+                'target_user_id' => $targetUserId,
                 'user_id' => $targetUserId,
                 'user_name' => $userName,
+                'submitter_id' => (int)$auth['user_id'],
                 'leave_type_text' => $leaveTypeText,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
@@ -209,24 +222,24 @@ class HRMController {
             ]);
 
             // Notify related persons
-            if (!empty($b['related_user_ids'])) {
-                $relList = is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true);
-                if (is_array($relList)) {
-                    foreach ($relList as $relUid) {
-                        $relUid = (int)$relUid;
-                        if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
-                            NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
-                                'user_id' => $relUid,
-                                'user_name' => $userName,
-                                'leave_type_text' => $leaveTypeText,
-                                'start_date' => $startDate,
-                                'end_date' => $endDate,
-                                'total_days' => (float)($b['total_days'] ?? 1.0),
-                                'reason' => ($b['reason'] ?? '') . ' (Bạn được gắn là Người liên quan)',
-                                'date' => date('Y-m-d'),
-                                'ref_id' => $leaveId
-                            ]);
-                        }
+            if (!empty($relArr)) {
+                foreach ($relArr as $relUid) {
+                    $relUid = (int)$relUid;
+                    if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$targetUserId) {
+                        NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
+                            'approver_id' => $relUid,
+                            'target_user_id' => $relUid,
+                            'user_id' => $relUid,
+                            'user_name' => $userName,
+                            'submitter_id' => (int)$auth['user_id'],
+                            'leave_type_text' => $leaveTypeText,
+                            'start_date' => $startDate,
+                            'end_date' => $endDate,
+                            'total_days' => (float)($b['total_days'] ?? 1.0),
+                            'reason' => ($b['reason'] ?? '') . ' (Bạn được gắn là Người theo dõi)',
+                            'date' => date('Y-m-d'),
+                            'ref_id' => $leaveId
+                        ]);
                     }
                 }
             }
@@ -1663,7 +1676,7 @@ class HRMController {
 
         // 5. Pending Bulk Attendance Requests
         $stmtBulks = $this->db->prepare("
-            SELECT r.id, u.full_name as employee_name, r.month_period, r.status, r.created_at, r.approved_at, r.approved_by, u.team_id, r.manager_id, r.user_id
+            SELECT r.*, u.full_name as employee_name, u.team_id
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             WHERE u.tenant_id = ? AND r.status IN ('pending_manager', 'pending_hr')
@@ -1677,7 +1690,7 @@ class HRMController {
                 $shouldShow = true;
             } else if ($b['status'] === 'pending_hr' && $role === 'hr') {
                 $shouldShow = true;
-            } else if ($b['status'] === 'pending_manager' && $role === 'manager' && (in_array((int)$b['team_id'], $ledTeamIds, true) || (int)($b['manager_id'] ?? 0) === $userId)) {
+            } else if ($b['status'] === 'pending_manager' && $role === 'manager' && (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || (int)($b['manager_id'] ?? 0) === $userId)) {
                 $shouldShow = true;
             }
 
@@ -1830,7 +1843,7 @@ class HRMController {
 
         // 5. My Bulk Attendance Requests
         $stmtBulks = $this->db->prepare("
-            SELECT r.id, r.month_period, r.status, r.created_at, r.approved_at, r.approved_by, r.manager_id, r.user_id, u.full_name as employee_name
+            SELECT r.*, u.full_name as employee_name
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             WHERE r.user_id = ?
@@ -1859,6 +1872,257 @@ class HRMController {
         });
 
         respond(200, $pending);
+    }
+
+    public function getFollowingRequests(array $auth): void {
+        $pending = [];
+        $userId = (int)$auth['user_id'];
+        $role = strtolower($auth['role'] ?? '');
+
+        // 1. Leaves where user is in related_user_ids or user is HR (excluding leaves created by self)
+        $stmtLeaves = $this->db->prepare("
+            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                   l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
+            FROM hrm_leave_requests l
+            JOIN users u ON l.user_id = u.id
+            WHERE u.tenant_id = ?
+            ORDER BY l.created_at DESC
+        ");
+        $stmtLeaves->execute([$auth['tenant_id']]);
+        $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($leaves as $l) {
+            $relArr = !empty($l['related_user_ids']) ? (is_array($l['related_user_ids']) ? $l['related_user_ids'] : json_decode($l['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
+
+            $isWatcher = in_array($userId, $relArr, true) || ($role === 'hr' && (int)$l['user_id'] !== $userId);
+            if ($isWatcher && (int)$l['user_id'] !== $userId) {
+                $statusText = $l['status'];
+                if ($l['status'] === 'pending' && $l['status_level_1'] === 'approved' && !empty($l['approver_id_2'])) {
+                    $statusText = 'level1_approved';
+                }
+                $pending[] = [
+                    'id' => (int)$l['id'],
+                    'type' => 'leave',
+                    'employee_name' => $l['employee_name'],
+                    'user_id' => (int)$l['user_id'],
+                    'approver_id' => (int)($l['approver_id'] ?? 0),
+                    'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => $l['leave_type'] === 'overtime' ? 'Đăng ký tăng ca' : ($l['leave_type'] === 'remote_work' ? 'Đăng ký làm việc từ xa' : ('Đơn xin nghỉ phép (' . ($l['leave_type'] === 'annual' ? 'Phép năm' : ($l['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($l['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($l['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương')))) . ')')),
+                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                    'status' => $statusText,
+                    'created_at' => $l['created_at'],
+                    'is_following' => true
+                ];
+            }
+        }
+
+        // 2. Advances where user is in related_user_ids
+        $stmtAdvances = $this->db->prepare("
+            SELECT a.id, a.amount, a.reason, a.status, a.created_at,
+                   a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name
+            FROM hrm_salary_advances a
+            JOIN users u ON a.user_id = u.id
+            WHERE u.tenant_id = ?
+            ORDER BY a.created_at DESC
+        ");
+        $stmtAdvances->execute([$auth['tenant_id']]);
+        $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($advances as $a) {
+            $relArr = !empty($a['related_user_ids']) ? (is_array($a['related_user_ids']) ? $a['related_user_ids'] : json_decode($a['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
+
+            $isWatcher = in_array($userId, $relArr, true);
+            if ($isWatcher && (int)$a['user_id'] !== $userId) {
+                $statusText = $a['status'];
+                if ($a['status'] === 'pending' && $a['status_level_1'] === 'approved' && !empty($a['approver_id_2'])) {
+                    $statusText = 'level1_approved';
+                }
+                $pending[] = [
+                    'id' => (int)$a['id'],
+                    'type' => 'advance',
+                    'employee_name' => $a['employee_name'],
+                    'user_id' => (int)$a['user_id'],
+                    'approver_id' => (int)($a['approver_id'] ?? 0),
+                    'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => 'Đề xuất tạm ứng lương',
+                    'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
+                    'status' => $statusText,
+                    'created_at' => $a['created_at'],
+                    'is_following' => true
+                ];
+            }
+        }
+
+        // 3. Expenses where user is in related_user_ids
+        $stmtExpenses = $this->db->prepare("
+            SELECT e.id, e.title, e.amount, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
+            FROM expenses e
+            JOIN users u ON e.created_by = u.id
+            WHERE e.tenant_id = ? AND e.deleted_at IS NULL
+            ORDER BY e.created_at DESC
+        ");
+        $stmtExpenses->execute([$auth['tenant_id']]);
+        $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($expenses as $e) {
+            $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
+
+            $isWatcher = in_array($userId, $relArr, true);
+            if ($isWatcher && (int)$e['user_id'] !== $userId) {
+                $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
+                $displayTitle = $e['title'];
+                if (!$isZeroAmt && !str_starts_with(mb_strtolower($e['title']), 'đề xuất') && !str_starts_with(mb_strtolower($e['title']), 'đề nghị') && !str_starts_with(mb_strtolower($e['title']), 'yêu cầu')) {
+                    $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
+                }
+                
+                $displayDesc = $isZeroAmt 
+                    ? ($e['notes'] ?: $e['description'] ?: '')
+                    : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+
+                $pending[] = [
+                    'id' => (int)$e['id'],
+                    'type' => 'expense',
+                    'employee_name' => $e['employee_name'],
+                    'user_id' => (int)$e['user_id'],
+                    'approver_id' => (int)($e['approver_id'] ?? 0),
+                    'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
+                    'approver_id_3' => (int)($e['approver_id_3'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => $displayTitle,
+                    'description' => $displayDesc,
+                    'amount' => (float)$e['amount'],
+                    'currency' => $e['currency'] ?? 'VND',
+                    'notes' => $e['notes'] ?? '',
+                    'status' => $e['status'],
+                    'created_at' => $e['created_at'],
+                    'is_following' => true
+                ];
+            }
+        }
+
+        // Sort by created_at DESC
+        usort($pending, function($a, $b) {
+            return strcmp($b['created_at'], $a['created_at']);
+        });
+
+        respond(200, $pending);
+    }
+
+    public function getAllApprovals(array $auth): void {
+        $role = strtolower($auth['role'] ?? '');
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'accountant'], true);
+        if (!$isGlobalAdmin) {
+            $this->getFollowingRequests($auth);
+            return;
+        }
+
+        $all = [];
+
+        // 1. All Leaves
+        $stmtLeaves = $this->db->prepare("
+            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                   l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
+            FROM hrm_leave_requests l
+            JOIN users u ON l.user_id = u.id
+            WHERE u.tenant_id = ?
+            ORDER BY l.created_at DESC
+        ");
+        $stmtLeaves->execute([$auth['tenant_id']]);
+        $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($leaves as $l) {
+            $all[] = [
+                'id' => (int)$l['id'],
+                'type' => 'leave',
+                'employee_name' => $l['employee_name'],
+                'user_id' => (int)$l['user_id'],
+                'approver_id' => (int)($l['approver_id'] ?? 0),
+                'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
+                'related_user_ids' => $l['related_user_ids'],
+                'title' => $l['leave_type'] === 'overtime' ? 'Đăng ký tăng ca' : ($l['leave_type'] === 'remote_work' ? 'Đăng ký làm việc từ xa' : ('Đơn xin nghỉ phép (' . ($l['leave_type'] === 'annual' ? 'Phép năm' : ($l['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($l['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($l['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương')))) . ')')),
+                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                'status' => $l['status'],
+                'created_at' => $l['created_at']
+            ];
+        }
+
+        // 2. All Advances
+        $stmtAdvances = $this->db->prepare("
+            SELECT a.id, a.amount, a.reason, a.status, a.created_at,
+                   a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name
+            FROM hrm_salary_advances a
+            JOIN users u ON a.user_id = u.id
+            WHERE u.tenant_id = ?
+            ORDER BY a.created_at DESC
+        ");
+        $stmtAdvances->execute([$auth['tenant_id']]);
+        $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($advances as $a) {
+            $all[] = [
+                'id' => (int)$a['id'],
+                'type' => 'advance',
+                'employee_name' => $a['employee_name'],
+                'user_id' => (int)$a['user_id'],
+                'approver_id' => (int)($a['approver_id'] ?? 0),
+                'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
+                'related_user_ids' => $a['related_user_ids'],
+                'title' => 'Đề xuất tạm ứng lương',
+                'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
+                'status' => $a['status'],
+                'created_at' => $a['created_at']
+            ];
+        }
+
+        // 3. All Expenses
+        $stmtExpenses = $this->db->prepare("
+            SELECT e.id, e.title, e.amount, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
+            FROM expenses e
+            JOIN users u ON e.created_by = u.id
+            WHERE e.tenant_id = ? AND e.deleted_at IS NULL
+            ORDER BY e.created_at DESC
+        ");
+        $stmtExpenses->execute([$auth['tenant_id']]);
+        $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($expenses as $e) {
+            $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
+            $displayTitle = $e['title'];
+            if (!$isZeroAmt && !str_starts_with(mb_strtolower($e['title']), 'đề xuất') && !str_starts_with(mb_strtolower($e['title']), 'đề nghị') && !str_starts_with(mb_strtolower($e['title']), 'yêu cầu')) {
+                $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
+            }
+            
+            $displayDesc = $isZeroAmt 
+                ? ($e['notes'] ?: $e['description'] ?: '')
+                : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+
+            $all[] = [
+                'id' => (int)$e['id'],
+                'type' => 'expense',
+                'employee_name' => $e['employee_name'],
+                'user_id' => (int)$e['user_id'],
+                'approver_id' => (int)($e['approver_id'] ?? 0),
+                'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
+                'approver_id_3' => (int)($e['approver_id_3'] ?? 0),
+                'related_user_ids' => $e['related_user_ids'],
+                'title' => $displayTitle,
+                'description' => $displayDesc,
+                'amount' => (float)$e['amount'],
+                'currency' => $e['currency'] ?? 'VND',
+                'notes' => $e['notes'] ?? '',
+                'status' => $e['status'],
+                'created_at' => $e['created_at']
+            ];
+        }
+
+        // Sort by created_at DESC
+        usort($all, function($a, $b) {
+            return strcmp($b['created_at'], $a['created_at']);
+        });
+
+        respond(200, $all);
     }
 
     public function savePayroll(array $auth): void {

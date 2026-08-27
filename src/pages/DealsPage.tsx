@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Pagination } from '../components/ui/Pagination';
-import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Trash2, Calendar, Target, DollarSign, MessageSquare, Building2, Loader2, Search, Filter, Users, User, CheckCircle2, Phone, Mail, LayoutGrid, List, Clock, Download, RefreshCw, X, AlertCircle, AlertTriangle, ShieldAlert, ChevronRight, ChevronLeft, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { triggerFullConfetti } from '../utils/confettiHelper';
@@ -971,8 +971,9 @@ export const DealsPage: React.FC = () => {
                 <button 
                   onClick={() => setShowFilterPanel(!showFilterPanel)}
                   style={{
+                    width: isMobile ? '36px' : 'auto',
                     height: isMobile ? '36px' : '38px',
-                    padding: '0 0.875rem',
+                    padding: isMobile ? '0' : '0 0.875rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -981,17 +982,38 @@ export const DealsPage: React.FC = () => {
                     border: '1px solid var(--color-border)',
                     borderRadius: '8px',
                     background: showFilterPanel ? 'var(--color-bg-light)' : 'var(--color-surface)',
-                    color: showFilterPanel ? 'var(--color-primary)' : 'var(--color-text)',
+                    color: (showFilterPanel || hasActiveFilters) ? 'var(--color-primary)' : 'var(--color-text)',
                     fontSize: '0.8125rem',
                     fontWeight: 600,
                     boxShadow: 'var(--shadow-sm)',
                     transition: 'all 0.2s',
-                    outline: 'none'
+                    outline: 'none',
+                    position: 'relative',
+                    flexShrink: 0
                   }}
                   title="Bộ lọc nâng cao"
                 >
-                  <Filter size={15} />
-                  <span>Bộ lọc</span>
+                  {isMobile ? (
+                    <>
+                      <MoreHorizontal size={18} />
+                      {hasActiveFilters && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary)'
+                        }} />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Filter size={15} />
+                      <span>Bộ lọc</span>
+                    </>
+                  )}
                 </button>
 
                 {hasActiveFilters && (

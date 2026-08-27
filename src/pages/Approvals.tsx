@@ -9,7 +9,7 @@ import {
   Search, Trash2, Paperclip, Send, AlertTriangle, Users, CreditCard, ShoppingCart, Award,
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
-  UserPlus, Check
+  UserPlus, Check, MoreHorizontal, Filter
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -361,12 +361,15 @@ export default function Approvals() {
   }, []);
   
   const isAdmin = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'hr'].includes(String(user?.role).toLowerCase());
-  const [activeTab, setActiveTab] = useState<'pending' | 'my_requests'>(isAdmin ? 'pending' : 'my_requests');
+  const [activeTab, setActiveTab] = useState<'pending' | 'my_requests' | 'following' | 'all'>('pending');
   const [period, setPeriod] = useState<Period>('all');
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   
   const [pendingList, setPendingList] = useState<ApprovalItem[]>([]);
   const [myRequestsList, setMyRequestsList] = useState<ApprovalItem[]>([]);
+  const [followingList, setFollowingList] = useState<ApprovalItem[]>([]);
+  const [allList, setAllList] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null);
@@ -536,14 +539,22 @@ export default function Approvals() {
     }
   }, [teams, users, user, departmentName, editingItemId, getUserPrimaryDepartment]);
   const [paymentTarget, setPaymentTarget] = useState('Nội bộ');
+  const getTodayDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản');
   const [paymentDetails, setPaymentDetails] = useState('');
   const [paymentDestination, setPaymentDestination] = useState('');
   const [currencyType, setCurrencyType] = useState('VND');
   const [leaveType, setLeaveType] = useState('annual');
   const [leaveReason, setLeaveReason] = useState('');
-  const [leaveFrom, setLeaveFrom] = useState('');
-  const [leaveTo, setLeaveTo] = useState('');
+  const [leaveFrom, setLeaveFrom] = useState(getTodayDateString());
+  const [leaveTo, setLeaveTo] = useState(getTodayDateString());
   interface StationeryItem {
     id: number;
     name: string;
@@ -557,7 +568,7 @@ export default function Approvals() {
   const [stationeryItems, setStationeryItems] = useState<StationeryItem[]>([
     { id: Date.now(), name: '', quantity: 1, unit: 'Cái', notes: '' }
   ]);
-  const [intermittentDates, setIntermittentDates] = useState<{ date: string; session: 'full' | 'morning' | 'afternoon' }[]>([{ date: '', session: 'full' }]);
+  const [intermittentDates, setIntermittentDates] = useState<{ date: string; session: 'full' | 'morning' | 'afternoon' }[]>([{ date: getTodayDateString(), session: 'full' }]);
 
   // Form fields for "In, đóng dấu và gửi hồ sơ" (print_stamp_send)
   const [pssReqEmployeeId, setPssReqEmployeeId] = useState<string>('');
@@ -830,6 +841,20 @@ export default function Approvals() {
       const appVal2 = showStepAccountant ? (customApprover2?.id || defaultAccountant?.id || null) : null;
       const appVal3 = showStepDirector ? (customApprover3?.id || defaultDirector?.id || null) : null;
 
+      // Always ensure HR Leader / Hành chính is included in related users for attendance/HR workflows
+      const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
+      let finalRelatedUserIds = [...relatedUserIds];
+      if (isHrWf) {
+        const hrLeader = getDefaultHrLeader();
+        const primaryApproverId = appVal1 || finalApproverId;
+        if (hrLeader && Number(hrLeader.id) !== Number(primaryApproverId)) {
+          const hrId = Number(hrLeader.id);
+          if (!finalRelatedUserIds.includes(hrId)) {
+            finalRelatedUserIds.push(hrId);
+          }
+        }
+      }
+
       if (selectedWorkflowDef?.id === 'print_stamp_send') {
         if (!pssReqEmployeeId) {
           toast.error(t('Vui lòng chọn nhân viên yêu cầu.'));
@@ -874,7 +899,7 @@ export default function Approvals() {
           month_period: bulkMonth,
           details: validDays,
           approver_id: appVal1 || finalApproverId,
-          related_user_ids: relatedUserIds
+          related_user_ids: finalRelatedUserIds
         });
       } else if (formType === 'leave') {
         let fromVal = leaveFrom;
@@ -944,7 +969,7 @@ export default function Approvals() {
             total_days: daysVal,
             approver_id: appVal1 || finalApproverId,
             approver_id_2: appVal2,
-            related_user_ids: relatedUserIds
+            related_user_ids: finalRelatedUserIds
           })
         });
       } else if (formType === 'late_early') {
@@ -972,7 +997,7 @@ export default function Approvals() {
             to_date: formattedTo,
             total_days: 0.0,
             approver_id: appVal1 || finalApproverId,
-            related_user_ids: relatedUserIds
+            related_user_ids: finalRelatedUserIds
           })
         });
       } else if (formType === 'overtime') {
@@ -993,7 +1018,7 @@ export default function Approvals() {
             to_date: toStr,
             total_days: daysVal,
             approver_id: appVal1 || finalApproverId,
-            related_user_ids: relatedUserIds
+            related_user_ids: finalRelatedUserIds
           })
         });
       } else if (formType === 'remote_work') {
@@ -1032,7 +1057,7 @@ export default function Approvals() {
             to_date: toVal,
             total_days: daysVal,
             approver_id: appVal1 || finalApproverId,
-            related_user_ids: relatedUserIds
+            related_user_ids: finalRelatedUserIds
           })
         });
       } else if (formType === 'advance') {
@@ -1430,18 +1455,17 @@ export default function Approvals() {
     }
   }, [formType, selectedWorkflowDef, users, teams]);
 
-  // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR nếu người duyệt là Trưởng phòng
+  // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
   useEffect(() => {
     const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
     if (isHrWf && users.length > 0) {
       const hrLeader = getDefaultHrLeader();
       const currentApprover = customApprover1 || getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       
-      // If the approver is a team leader (not HR leader), and HR leader is not already in relatedUserIds, auto-fill HR leader as default follower
+      // If HR is not the direct approver, ensure HR leader is in relatedUserIds
       if (hrLeader && currentApprover && Number(currentApprover.id) !== Number(hrLeader.id)) {
-        if (relatedUserIds.length === 0) {
-          setRelatedUserIds([Number(hrLeader.id)]);
-        }
+        const hrId = Number(hrLeader.id);
+        setRelatedUserIds(prev => prev.includes(hrId) ? prev : [...prev, hrId]);
       }
     }
   }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams]);
@@ -1489,40 +1513,51 @@ export default function Approvals() {
   const loadData = async () => {
     setLoading(true);
     try {
+      const [pendingRes, myRequestsRes, followingRes, allRes] = await Promise.all([
+        fetchAPI('hrm/approvals/pending').catch(err => {
+          console.warn('Pending approvals load error:', err);
+          return { data: [] };
+        }),
+        fetchAPI('hrm/approvals/my-requests').catch(err => {
+          console.warn('My requests load error:', err);
+          return { data: [] };
+        }),
+        fetchAPI('hrm/approvals/following').catch(err => {
+          console.warn('Following approvals load error:', err);
+          return { data: [] };
+        }),
+        isAdmin ? fetchAPI('hrm/approvals/all').catch(err => {
+          console.warn('All approvals load error:', err);
+          return { data: [] };
+        }) : Promise.resolve({ data: [] })
+      ]);
+
+      const pList = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
+      const mList = Array.isArray(myRequestsRes?.data) ? myRequestsRes.data : [];
+      const fList = Array.isArray(followingRes?.data) ? followingRes.data : [];
+      const aList = Array.isArray(allRes?.data) ? allRes.data : [];
+
+      setPendingList(pList);
+      setMyRequestsList(mList);
+      setFollowingList(fList);
       if (isAdmin) {
-        const [pendingRes, myRequestsRes] = await Promise.all([
-          fetchAPI('hrm/approvals/pending'),
-          fetchAPI('hrm/approvals/my-requests')
-        ]);
-        const pList = pendingRes?.data || [];
-        const mList = myRequestsRes?.data || [];
-        setPendingList(pList);
-        setMyRequestsList(mList);
+        setAllList(aList);
+      }
 
-        const params = new URLSearchParams(location.search || window.location.search);
-        const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
-        if (autoOpen && !selectedTimelineItem) {
-          if (pList.length > 0) {
-            setSelectedTimelineItem(pList[0]);
-          } else if (mList.length > 0) {
-            setSelectedTimelineItem(mList[0]);
-          }
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      } else {
-        const res = await fetchAPI('hrm/approvals/my-requests');
-        const mList = res?.data || [];
-        setMyRequestsList(mList);
-
-        const params = new URLSearchParams(location.search || window.location.search);
-        const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
-        if (autoOpen && !selectedTimelineItem && mList.length > 0) {
+      const params = new URLSearchParams(location.search || window.location.search);
+      const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
+      if (autoOpen && !selectedTimelineItem) {
+        if (pList.length > 0) {
+          setSelectedTimelineItem(pList[0]);
+        } else if (mList.length > 0) {
           setSelectedTimelineItem(mList[0]);
-          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (fList.length > 0) {
+          setSelectedTimelineItem(fList[0]);
         }
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     } catch (err: any) {
-      toast.error(t('Lỗi tải dữ liệu quy trình'));
+      console.error('Lỗi tải dữ liệu quy trình:', err);
     } finally {
       setLoading(false);
     }
@@ -1545,7 +1580,7 @@ export default function Approvals() {
       } else if (item.type === 'expense') {
         await api.patch(`/expenses/${item.id}`, { status: 'approved' });
       } else if (item.type === 'checkin') {
-        await api.put(`/check_ins/${item.id}`, { status: 'approved' });
+        await api.put(`/check-ins/${item.id}`, { status: 'approved' });
       } else if (item.type === 'attendance_bulk') {
         await api.post(`/check-ins/${item.id}/bulk-approve`, { status: 'approved' });
       }
@@ -1586,7 +1621,7 @@ export default function Approvals() {
       } else if (selectedItem.type === 'expense') {
         await api.patch(`/expenses/${selectedItem.id}`, { status: 'rejected', reject_reason: rejectReason });
       } else if (selectedItem.type === 'checkin') {
-        await api.put(`/check_ins/${selectedItem.id}`, { status: 'rejected', reason: rejectReason });
+        await api.put(`/check-ins/${selectedItem.id}`, { status: 'rejected', reason: rejectReason });
       } else if (selectedItem.type === 'attendance_bulk') {
         await api.post(`/check-ins/${selectedItem.id}/bulk-approve`, { status: 'rejected', admin_note: rejectReason });
       }
@@ -1971,6 +2006,8 @@ export default function Approvals() {
 
   const filteredPendingList = filterList(pendingList);
   const filteredMyRequestsList = filterList(myRequestsList);
+  const filteredFollowingList = filterList(followingList);
+  const filteredAllList = filterList(allList);
 
   return (
     <div>
@@ -1993,119 +2030,177 @@ export default function Approvals() {
             {t('Quản lý tập trung các quy trình đề xuất nghỉ phép, tạm ứng lương, chi phí hành chính và giải trình đi trễ.')}
           </p>
         </div>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: isMobile ? '6px' : '10px',
-          width: isMobile ? 'auto' : 'auto',
-          flexWrap: 'nowrap'
-        }}>
+        
+        {/* Top Action Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
           <PeriodFilter
             value={period}
-            onChange={(p, r) => { setPeriod(p); setDateRange(r); }}
-            align={isMobile ? 'left' : 'right'}
-            buttonStyle={{
-              height: isMobile ? 32 : 38,
-              padding: isMobile ? '0 8px' : '0 1rem',
-              fontSize: isMobile ? '0.75rem' : '0.875rem',
-              minWidth: isMobile ? 'unset' : '160px',
-              gap: isMobile ? '4px' : '8px'
+            onChange={(p, r) => {
+              setPeriod(p);
+              setDateRange(r);
             }}
           />
           <button
             type="button"
+            className="btn primary"
             onClick={() => setShowCreateModal(true)}
-            className="btn primary hover-lift"
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '4px', 
-              height: isMobile ? '32px' : '38px', 
-              padding: isMobile ? '0 10px' : '0 16px',
-              fontSize: isMobile ? '0.75rem' : '0.875rem',
-              fontWeight: 700,
-              borderRadius: '8px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0
-            }}
-          >
-            <Plus size={isMobile ? 14 : 16} />
-            <span>{t('Tạo đề xuất')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: '4px',
-        marginBottom: isMobile ? '1rem' : '1.5rem',
-        background: 'var(--color-bg)',
-        padding: '3px',
-        borderRadius: '10px',
-        width: isMobile ? '100%' : 'fit-content'
-      }}>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('pending')}
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '6px',
-              padding: isMobile ? '6px 10px' : '0.5rem 1.125rem',
+              fontWeight: 700,
+              fontSize: isMobile ? '0.8rem' : '0.875rem',
+              padding: isMobile ? '6px 12px' : '0.625rem 1.25rem',
+              height: isMobile ? '36px' : '40px',
+              borderRadius: '10px',
+              flex: isMobile ? 1 : 'none',
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.25)'
+            }}
+          >
+            <Plus size={16} />
+            {t('Tạo đề xuất')}
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs (Desktop View) */}
+      {!isMobile && (
+        <div style={{
+          display: 'flex',
+          gap: '4px',
+          marginBottom: '1.5rem',
+          background: 'var(--color-bg)',
+          padding: '3px',
+          borderRadius: '10px',
+          width: 'fit-content'
+        }}>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('pending')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                padding: '0.5rem 1.125rem',
+                borderRadius: '7px',
+                fontWeight: activeTab === 'pending' ? 700 : 600,
+                fontSize: '0.875rem',
+                background: activeTab === 'pending' ? 'var(--color-surface)' : 'transparent',
+                color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-light)',
+                boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <Activity size={15} />
+              {t('Yêu cầu chờ duyệt')}
+              {pendingList.length > 0 && (
+                <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                  {pendingList.length}
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveTab('my_requests')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '0.5rem 1.125rem',
               borderRadius: '7px',
-              fontWeight: activeTab === 'pending' ? 700 : 600,
-              fontSize: isMobile ? '0.78rem' : '0.875rem',
-              background: activeTab === 'pending' ? 'var(--color-surface)' : 'transparent',
-              color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-light)',
-              boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              fontWeight: activeTab === 'my_requests' ? 700 : 600,
+              fontSize: '0.875rem',
+              background: activeTab === 'my_requests' ? 'var(--color-surface)' : 'transparent',
+              color: activeTab === 'my_requests' ? 'var(--color-text)' : 'var(--color-text-light)',
+              boxShadow: activeTab === 'my_requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               border: 'none',
               cursor: 'pointer',
-              flex: isMobile ? 1 : 'none',
               transition: 'all 0.2s'
             }}
           >
-            <Activity size={isMobile ? 13 : 15} />
-            {t('Yêu cầu chờ duyệt')}
-            {pendingList.length > 0 && (
-              <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                {pendingList.length}
+            <User size={15} />
+            {t('Yêu cầu của tôi')}
+            {myRequestsList.length > 0 && (
+              <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                {myRequestsList.length}
               </span>
             )}
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setActiveTab('my_requests')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: isMobile ? '6px 10px' : '0.5rem 1.125rem',
-            borderRadius: '7px',
-            fontWeight: activeTab === 'my_requests' ? 700 : 600,
-            fontSize: isMobile ? '0.78rem' : '0.875rem',
-            background: activeTab === 'my_requests' ? 'var(--color-surface)' : 'transparent',
-            color: activeTab === 'my_requests' ? 'var(--color-text)' : 'var(--color-text-light)',
-            boxShadow: activeTab === 'my_requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-            border: 'none',
-            cursor: 'pointer',
-            flex: isMobile ? 1 : 'none',
-            transition: 'all 0.2s'
-          }}
-        >
-          <User size={isMobile ? 13 : 15} />
-          {t('Yêu cầu của tôi')}
-        </button>
-      </div>
+
+          {/* Tab 3: Following / Watcher Requests */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('following')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '0.5rem 1.125rem',
+              borderRadius: '7px',
+              fontWeight: activeTab === 'following' ? 700 : 600,
+              fontSize: '0.875rem',
+              background: activeTab === 'following' ? 'var(--color-surface)' : 'transparent',
+              color: activeTab === 'following' ? 'var(--color-text)' : 'var(--color-text-light)',
+              boxShadow: activeTab === 'following' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Eye size={15} />
+            {t('Được gắn theo dõi')}
+            {followingList.length > 0 && (
+              <span style={{ fontSize: '0.7rem', background: '#3b82f6', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                {followingList.length}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 4: All Company Requests (for Admin/HR/Director) */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                padding: '0.5rem 1.125rem',
+                borderRadius: '7px',
+                fontWeight: activeTab === 'all' ? 700 : 600,
+                fontSize: '0.875rem',
+                background: activeTab === 'all' ? 'var(--color-surface)' : 'transparent',
+                color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-light)',
+                boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <FileText size={15} />
+              {t('Tất cả đề xuất')}
+              {allList.length > 0 && (
+                <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                  {allList.length}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Search and Filters Bar */}
       <div style={{
         display: 'flex',
-        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: isMobile ? '8px' : '1rem',
@@ -2114,17 +2209,30 @@ export default function Approvals() {
         borderRadius: isMobile ? '12px' : '16px',
         padding: isMobile ? '8px 10px' : '1rem 1.25rem',
         marginBottom: isMobile ? '0.75rem' : '1.5rem',
-        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)'
+        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+        position: 'relative'
       }}>
         {/* Search Field */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '0 10px', height: isMobile ? '32px' : '36px', width: isMobile ? '100%' : '300px' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          background: 'var(--color-bg-secondary)',
+          border: '1px solid var(--color-border)',
+          borderRadius: '8px',
+          padding: '0 10px',
+          height: isMobile ? '36px' : '36px',
+          flex: isMobile ? 1 : 'none',
+          width: isMobile ? 'auto' : '300px',
+          minWidth: 0
+        }}>
           <Search size={isMobile ? 14 : 16} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           <input
             type="text"
             placeholder={t('Tìm kiếm đề xuất...')}
             value={listSearchText}
             onChange={e => setListSearchText(e.target.value)}
-            style={{ border: 'none', background: 'transparent', width: '100%', fontSize: isMobile ? '0.78rem' : '0.85rem', outline: 'none', color: 'var(--color-text)' }}
+            style={{ border: 'none', background: 'transparent', width: '100%', fontSize: isMobile ? '0.82rem' : '0.85rem', outline: 'none', color: 'var(--color-text)', minWidth: 0 }}
           />
           {listSearchText && (
             <button onClick={() => setListSearchText('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2133,56 +2241,276 @@ export default function Approvals() {
           )}
         </div>
 
-        {/* Filters Group */}
-        <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', alignItems: 'center', gap: isMobile ? '6px' : '1rem', width: isMobile ? '100%' : 'auto' }}>
-          {/* Category Pills */}
-          <div style={{ display: 'flex', gap: '3px', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px', width: isMobile ? '100%' : 'auto', flex: isMobile ? '1 1 100%' : 'none' }}>
-            {[
-              { id: 'all', label: t('Tất cả') },
-              { id: 'finance', label: t('Tài chính') },
-              { id: 'hr', label: t('Nhân sự') },
-              { id: 'admin', label: t('Hành chính') }
-            ].map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setListCategoryFilter(cat.id)}
-                style={{
-                  border: 'none',
-                  background: listCategoryFilter === cat.id ? 'var(--color-surface)' : 'transparent',
-                  color: listCategoryFilter === cat.id ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  fontSize: isMobile ? '0.72rem' : '0.8rem',
-                  fontWeight: listCategoryFilter === cat.id ? 700 : 500,
-                  padding: isMobile ? '5px 4px' : '6px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  flex: isMobile ? 1 : 'none',
-                  textAlign: 'center',
-                  whiteSpace: 'nowrap',
-                  boxShadow: listCategoryFilter === cat.id ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
+        {/* Mobile [...] Filter & Actions Button */}
+        {isMobile && (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              style={{
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                border: '1px solid var(--color-border)',
+                borderRadius: '8px',
+                background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
+                color: (listCategoryFilter !== 'all' || listStatusFilter !== 'all') ? 'var(--color-primary)' : 'var(--color-text)',
+                outline: 'none',
+                boxShadow: 'var(--shadow-sm)',
+                flexShrink: 0,
+                position: 'relative'
+              }}
+              title={t('Bộ lọc & Tùy chọn')}
+            >
+              <MoreHorizontal size={18} />
+              {(listCategoryFilter !== 'all' || listStatusFilter !== 'all') && (
+                <span style={{
+                  position: 'absolute',
+                  top: '6px',
+                  right: '6px',
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)'
+                }} />
+              )}
+            </button>
 
-          {/* Status Dropdown */}
-          <div style={{ width: isMobile ? '100%' : '150px', flex: isMobile ? '1 1 100%' : 'none' }}>
-            <CustomSelect
-              value={listStatusFilter}
-              onChange={val => setListStatusFilter(val)}
-              options={[
-                { value: 'all', label: isMobile ? t('Tất cả trạng thái') : t('Trạng thái: Tất cả') },
-                { value: 'pending', label: t('Đang chờ duyệt') },
-                { value: 'approved', label: t('Đã duyệt') },
-                { value: 'rejected', label: t('Từ chối') }
-              ]}
-              size={isMobile ? 'xs' : 'sm'}
-              width="100%"
-            />
+            {/* Mobile Filters Dropdown Popover */}
+            <AnimatePresence>
+              {showMobileFilters && (
+                <>
+                  <div 
+                    onClick={() => setShowMobileFilters(false)} 
+                    style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '42px',
+                      width: '250px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                      padding: '12px',
+                      zIndex: 999,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}
+                  >
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                          {t('Chế độ xem')}
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => { setActiveTab('pending'); setShowMobileFilters(false); }}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: activeTab === 'pending' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                              color: activeTab === 'pending' ? 'white' : 'var(--color-text)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {t('Chờ duyệt')} ({pendingList.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setActiveTab('my_requests'); setShowMobileFilters(false); }}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: activeTab === 'my_requests' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                              color: activeTab === 'my_requests' ? 'white' : 'var(--color-text)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {t('Của tôi')} ({myRequestsList.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setActiveTab('following'); setShowMobileFilters(false); }}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: activeTab === 'following' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                              color: activeTab === 'following' ? 'white' : 'var(--color-text)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {t('Theo dõi')} ({followingList.length})
+                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => { setActiveTab('all'); setShowMobileFilters(false); }}
+                              style={{
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--color-border)',
+                                background: activeTab === 'all' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                                color: activeTab === 'all' ? 'white' : 'var(--color-text)',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {t('Tất cả')} ({allList.length})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        {t('Trạng thái')}
+                      </label>
+                      <CustomSelect
+                        value={listStatusFilter}
+                        onChange={val => { setListStatusFilter(val); setShowMobileFilters(false); }}
+                        options={[
+                          { value: 'all', label: t('Tất cả trạng thái') },
+                          { value: 'pending', label: t('Đang chờ duyệt') },
+                          { value: 'approved', label: t('Đã duyệt') },
+                          { value: 'rejected', label: t('Từ chối') }
+                        ]}
+                        size="xs"
+                        width="100%"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        {t('Danh mục')}
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                        {[
+                          { id: 'all', label: t('Tất cả') },
+                          { id: 'finance', label: t('Tài chính') },
+                          { id: 'hr', label: t('Nhân sự') },
+                          { id: 'admin', label: t('Hành chính') }
+                        ].map(cat => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => { setListCategoryFilter(cat.id); setShowMobileFilters(false); }}
+                            style={{
+                              padding: '5px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: listCategoryFilter === cat.id ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                              color: listCategoryFilter === cat.id ? 'white' : 'var(--color-text)',
+                              fontSize: '0.72rem',
+                              fontWeight: listCategoryFilter === cat.id ? 700 : 500,
+                              cursor: 'pointer',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(listCategoryFilter !== 'all' || listStatusFilter !== 'all') && (
+                      <button
+                        type="button"
+                        onClick={() => { setListCategoryFilter('all'); setListStatusFilter('all'); setShowMobileFilters(false); }}
+                        style={{
+                          marginTop: '4px',
+                          padding: '6px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {t('Đặt lại bộ lọc')}
+                      </button>
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
-        </div>
+        )}
+
+        {/* Filters Group (Desktop Only Category Pills & Status) */}
+        {!isMobile && (
+          <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '1rem', width: 'auto' }}>
+            {/* Category Pills */}
+            <div style={{ display: 'flex', gap: '3px', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px' }}>
+              {[
+                { id: 'all', label: t('Tất cả') },
+                { id: 'finance', label: t('Tài chính') },
+                { id: 'hr', label: t('Nhân sự') },
+                { id: 'admin', label: t('Hành chính') }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setListCategoryFilter(cat.id)}
+                  style={{
+                    border: 'none',
+                    background: listCategoryFilter === cat.id ? 'var(--color-surface)' : 'transparent',
+                    color: listCategoryFilter === cat.id ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    fontSize: '0.8rem',
+                    fontWeight: listCategoryFilter === cat.id ? 700 : 500,
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    whiteSpace: 'nowrap',
+                    boxShadow: listCategoryFilter === cat.id ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Status Dropdown */}
+            <div style={{ width: '150px' }}>
+              <CustomSelect
+                value={listStatusFilter}
+                onChange={val => setListStatusFilter(val)}
+                options={[
+                  { value: 'all', label: t('Trạng thái: Tất cả') },
+                  { value: 'pending', label: t('Đang chờ duyệt') },
+                  { value: 'approved', label: t('Đã duyệt') },
+                  { value: 'rejected', label: t('Từ chối') }
+                ]}
+                size="sm"
+                width="100%"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -2190,15 +2518,36 @@ export default function Approvals() {
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
           {t('Đang tải dữ liệu quy trình...')}
         </div>
-      ) : activeTab === 'pending' && isAdmin ? (
-        /* ADMIN PENDING LIST */
-        filteredPendingList.length === 0 ? (
-          <EmptyCard
-            icon={<ShieldCheck />}
-            title={t('Không có yêu cầu phê duyệt')}
-            description={t('Không có yêu cầu phê duyệt nào đang chờ xử lý.')}
-          />
-        ) : (
+      ) : (() => {
+        const currentList = activeTab === 'pending'
+          ? filteredPendingList
+          : activeTab === 'my_requests'
+          ? filteredMyRequestsList
+          : activeTab === 'following'
+          ? filteredFollowingList
+          : filteredAllList;
+
+        if (currentList.length === 0) {
+          const emptyIcon = activeTab === 'pending' ? <ShieldCheck /> : activeTab === 'following' ? <Eye /> : <Clipboard />;
+          const emptyTitle = activeTab === 'pending' 
+            ? t('Không có yêu cầu phê duyệt') 
+            : activeTab === 'my_requests' 
+            ? t('Không tìm thấy yêu cầu') 
+            : activeTab === 'following'
+            ? t('Chưa có đề xuất được gắn theo dõi')
+            : t('Không có đề xuất');
+          const emptyDesc = activeTab === 'pending'
+            ? t('Không có yêu cầu phê duyệt nào đang chờ xử lý.')
+            : activeTab === 'my_requests'
+            ? t('Bạn chưa gửi yêu cầu quy trình nào.')
+            : activeTab === 'following'
+            ? t('Bạn chưa được gắn làm Người liên quan trong đề xuất nào.')
+            : t('Không có dữ liệu quy trình phù hợp với bộ lọc.');
+
+          return <EmptyCard icon={emptyIcon} title={emptyTitle} description={emptyDesc} />;
+        }
+
+        return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="responsive-table-wrap" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
@@ -2211,171 +2560,8 @@ export default function Approvals() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPendingList.slice((page - 1) * pageSize, page * pageSize).map(item => {
-                    const deadline = (item as any).deadline || new Date(new Date(item.created_at).getTime() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString('vi-VN') + ' 17:00';
-                    const reminder = (item as any).reminder_interval || (item.type === 'leave' ? t('Mỗi 4 giờ') : item.type === 'advance' ? t('Mỗi 2 giờ') : item.type === 'expense' ? t('Hằng ngày') : t('Mỗi 1 giờ'));
-                    const related = (item as any).related_persons || (item.id % 2 === 0 ? ['Dev Admin', 'Dev Director'] : ['Dev Manager', 'Dev Accountant']);
-                    const approver = (item as any).approver_name || (item.status === 'approved' ? 'Dev Admin' : t('Chờ duyệt'));
-
-                    return (
-                      <tr 
-                        key={`${item.type}-${item.id}`} 
-                        onClick={() => setSelectedTimelineItem(item)}
-                        style={{ borderBottom: '1px solid var(--color-border-light)', cursor: 'pointer', transition: 'background 0.2s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                            <div style={{
-                              width: '32px', height: '32px', borderRadius: '8px',
-                              background: 'var(--color-bg-secondary)', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                            }}>
-                              {getTypeIcon(item.type)}
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{item.title}</div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{item.description}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ padding: '14px 16px' }}>
-                          {(() => {
-                            const creatorUser = users.find(u => String(u.full_name) === String(item.employee_name) || String(u.name) === String(item.employee_name));
-                            const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
-                            return (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Avatar src={avatarUrl} name={item.employee_name} size={28} />
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontWeight: 600 }}>{item.employee_name}</span>
-                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                    {new Date(item.created_at).toLocaleString('vi-VN')}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
-                            {renderCurrentApprover(item)}
-                            {formatBadge(item.status || 'pending')}
-                          </div>
-                        </td>
-
-
-                        <td style={{ padding: '14px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                            <button 
-                              onClick={() => openRejectModal(item)} 
-                              style={{ 
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                background: '#b91c1c',
-                                border: 'none',
-                                color: '#ffffff', 
-                                padding: '4px 10px', 
-                                fontSize: '0.75rem', 
-                                height: '28px', 
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease-in-out'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#991b1b';
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(185, 28, 28, 0.2)';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#b91c1c';
-                                e.currentTarget.style.transform = 'none';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                            >
-                              <XCircle size={12} />
-                              {t('Từ chối')}
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setItemToApprove(item);
-                                setApproveConfirmOpen(true);
-                              }} 
-                              style={{ 
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                background: '#10b981',
-                                border: 'none',
-                                color: '#ffffff', 
-                                padding: '4px 12px', 
-                                fontSize: '0.75rem', 
-                                height: '28px', 
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease-in-out'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#059669';
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.2)';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#10b981';
-                                e.currentTarget.style.transform = 'none';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                            >
-                              <CheckCircle2 size={12} />
-                              {t('Duyệt')}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            
-            <Pagination 
-              total={filteredPendingList.length}
-              page={page}
-              pageSize={pageSize}
-              onChange={(p) => setPage(p)}
-            />
-          </div>
-        )
-      ) : (
-        /* MY REQUESTS LIST */
-        filteredMyRequestsList.length === 0 ? (
-          <EmptyCard
-            icon={<Clipboard />}
-            title={t('Không tìm thấy yêu cầu')}
-            description={t('Bạn chưa gửi yêu cầu quy trình nào.')}
-          />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="responsive-table-wrap" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '450px' }}>{t('Yêu cầu & Nội dung')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '220px' }}>{t('Người tạo & Thời gian')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '180px' }}>{t('Người duyệt')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '150px' }}>{t('Thao tác')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMyRequestsList.slice((page - 1) * pageSize, page * pageSize).map(item => {
-                    const deadline = (item as any).deadline || new Date(new Date(item.created_at).getTime() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString('vi-VN') + ' 17:00';
-                    const reminder = (item as any).reminder_interval || (item.type === 'leave' ? t('Mỗi 4 giờ') : item.type === 'advance' ? t('Mỗi 2 giờ') : item.type === 'expense' ? t('Hằng ngày') : t('Mỗi 1 giờ'));
-                    const related = (item as any).related_persons || (item.id % 2 === 0 ? ['Dev Admin', 'Dev Director'] : ['Dev Manager', 'Dev Accountant']);
-                    const approver = (item as any).approver_name || (item.status === 'approved' ? 'Dev Admin' : t('Chờ duyệt'));
+                  {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
+                    const isPendingAction = activeTab === 'pending';
 
                     return (
                       <tr 
@@ -2423,64 +2609,103 @@ export default function Approvals() {
                             {formatBadge(item.status || 'pending')}
                           </div>
                         </td>
-
-
                         <td style={{ padding: '14px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                            {(item.status === 'pending' || item.status === 'pending_approval') && (
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            {isPendingAction ? (
                               <>
                                 <button
-                                  onClick={() => handleEditRequest(item)}
-                                  className="btn secondary"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedItem(item);
+                                    setRejectModalOpen(true);
+                                  }}
                                   style={{
-                                    height: '28px',
-                                    width: '28px',
-                                    padding: 0,
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center',
+                                    gap: '4px',
+                                    background: '#ef4444',
+                                    color: 'white',
+                                    border: 'none',
                                     borderRadius: '6px',
-                                    color: 'var(--color-primary)'
+                                    padding: '5px 10px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
                                   }}
-                                  title={t('Sửa')}
                                 >
-                                  <Edit size={12} />
+                                  <XCircle size={12} />
+                                  {t('Từ chối')}
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteRequest(item)}
-                                  className="btn secondary"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setItemToApprove(item);
+                                    setApproveConfirmOpen(true);
+                                  }}
                                   style={{
-                                    height: '28px',
-                                    width: '28px',
-                                    padding: 0,
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center',
+                                    gap: '4px',
+                                    background: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
                                     borderRadius: '6px',
-                                    color: 'var(--color-danger)'
+                                    padding: '5px 10px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
                                   }}
-                                  title={t('Xóa')}
                                 >
-                                  <Trash2 size={12} />
+                                  <CheckCircle2 size={12} />
+                                  {t('Duyệt')}
                                 </button>
                               </>
+                            ) : activeTab === 'my_requests' ? (
+                              <>
+                                {(item.status === 'pending' || item.status === 'pending_approval') && (
+                                  <>
+                                    <button
+                                      onClick={() => handleEditRequest(item)}
+                                      className="btn secondary"
+                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                      title={t('Sửa')}
+                                    >
+                                      <Edit size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteRequest(item)}
+                                      className="btn secondary"
+                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                      title={t('Xóa')}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleDuplicate(item)}
+                                  className="btn secondary"
+                                  style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
+                                  title={t('Nhân bản')}
+                                >
+                                  <Copy size={12} />
+                                </button>
+                              </>
+                            ) : activeTab === 'following' ? (
+                              <span style={{ fontSize: '0.75rem', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
+                                <Eye size={12} /> {t('Theo dõi')}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setSelectedTimelineItem(item)}
+                                className="btn secondary"
+                                style={{ height: '28px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
+                              >
+                                <Eye size={12} /> {t('Chi tiết')}
+                              </button>
                             )}
-                            <button
-                              onClick={() => handleDuplicate(item)}
-                              className="btn secondary"
-                              style={{
-                                height: '28px',
-                                width: '28px',
-                                padding: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '6px'
-                              }}
-                              title={t('Nhân bản')}
-                            >
-                              <Copy size={12} />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -2491,14 +2716,14 @@ export default function Approvals() {
             </div>
 
             <Pagination 
-              total={filteredMyRequestsList.length}
+              total={currentList.length}
               page={page}
               pageSize={pageSize}
               onChange={(p) => setPage(p)}
             />
           </div>
-        )
-      )}
+        );
+      })()}
 
       {/* Reject Modal */}
       {rejectModalOpen && createPortal(
@@ -2979,6 +3204,11 @@ export default function Approvals() {
                             <div
                               key={item.id}
                               onClick={() => {
+                                const today = getTodayDateString();
+                                setLeaveFrom(today);
+                                setLeaveTo(today);
+                                setOtDate(today);
+                                setIntermittentDates([{ date: today, session: 'full' }]);
                                 setSelectedWorkflowDef(item);
                                 if (item.id === 'leave_late') {
                                   setFormType('leave');
@@ -6447,7 +6677,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           const found = res?.data?.data?.find((e: any) => e.id === item.id);
           if (active) setDetail(found);
         } else if (item.type === 'checkin') {
-          const res = await api.get('/check_ins');
+          const res = await api.get('/check-ins');
           const found = res?.data?.data?.find((c: any) => c.id === item.id);
           if (active) setDetail(found);
         } else if (item.type === 'attendance_bulk') {
@@ -6584,100 +6814,135 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const rawDesc = detail?.notes || detail?.description || item.description || '';
     const isPrintStampSend = item.type === 'expense' && rawDesc.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
 
-    let currentStepIndex = 1;
-    const stepIndex1 = currentStepIndex++;
-    
-    const isMultiLevel = item.type === 'leave' || item.type === 'advance';
-    const stepIndex2 = isMultiLevel ? currentStepIndex++ : null;
-    const stepIndex3 = isMultiLevel ? currentStepIndex++ : null;
-    const stepIndex4 = isMultiLevel ? currentStepIndex++ : null;
+    // Determine actual approver user IDs configured for this proposal
+    const app1Id = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
+    const app2Id = detail?.approver_id_2 || (item as any)?.approver_id_2;
+    const app3Id = detail?.director_id || detail?.approver_id_3 || (item as any)?.approver_id_3;
 
-    const isSingleLevel = !isMultiLevel;
-    const singleStepIndex = isSingleLevel ? currentStepIndex++ : null;
+    // Is it an HR workflow (leave, remote_work, late_early, overtime, attendance_bulk, checkin)?
+    const isHrItem = item.type === 'leave' || item.type === 'checkin' || item.type === 'attendance_bulk' || rawDesc.includes('[Đăng ký làm việc từ xa]') || rawDesc.includes('[Đi muộn/Về sớm]') || rawDesc.includes('[Tăng ca]') || rawDesc.includes('[Nghỉ phép]');
 
-    const targetApproverId = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
-    const managerUser = (detail?.approver_id || (item as any)?.approver_id)
-      ? users.find(u => Number(u.id) === Number(detail?.approver_id || (item as any)?.approver_id))
-      : (users.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase())));
-    const accountantUser = (detail?.approver_id_2 || (item as any)?.approver_id_2)
-      ? users.find(u => Number(u.id) === Number(detail?.approver_id_2 || (item as any)?.approver_id_2))
-      : (users.find(u => String(u.role).toLowerCase() === 'accountant'));
-    const directorUser = (detail?.director_id || detail?.approver_id_3 || (item as any)?.approver_id_3)
-      ? users.find(u => Number(u.id) === Number(detail?.director_id || detail?.approver_id_3 || (item as any)?.approver_id_3))
-      : (users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase())));
+    const managerUser = app1Id
+      ? users.find(u => Number(u.id) === Number(app1Id))
+      : (users.find(u => ['manager', 'director', 'admin'].includes(String(u.role).toLowerCase())) || users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương')));
 
-    const singleApproverUser = targetApproverId 
-      ? users.find(u => Number(u.id) === Number(targetApproverId))
-      : (users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương') || u.username === 'phuongntd') || users.find(u => ['manager', 'director', 'admin', 'hr', 'accountant'].includes(String(u.role).toLowerCase())));
+    const accountantUser = app2Id
+      ? users.find(u => Number(u.id) === Number(app2Id))
+      : users.find(u => String(u.role).toLowerCase() === 'accountant');
 
-    // Helper to get step status and details
-    const getStepDetails = (stepKey: 'step1' | 'step2' | 'step3' | 'step4' | 'single', stepNum: number) => {
-      const overall = (item.status || 'pending').toLowerCase();
-      const s1 = (detail?.status_level_1 || 'pending').toLowerCase();
-      const s2 = (detail?.status_level_2 || 'pending').toLowerCase();
+    const directorUser = app3Id
+      ? users.find(u => Number(u.id) === Number(app3Id))
+      : users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()));
 
-      let status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+    // Multi-level conditions: Only show Level 2 if app2Id exists or it's multi-level finance
+    const hasLevel2 = !isHrItem && (Boolean(app2Id) || item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2)));
+    const hasLevel3 = !isHrItem && (Boolean(app3Id) || (item.type === 'expense' && Boolean(detail?.approver_id_3)));
 
-      if (stepKey === 'step1') {
-        status = 'approved';
-      } else if (stepKey === 'single') {
-        if (overall === 'approved') status = 'approved';
-        else if (overall === 'rejected') status = 'rejected';
-        else status = 'pending';
-      } else if (stepKey === 'step2') {
-        if (s1 === 'approved' || overall === 'approved') status = 'approved';
-        else if (s1 === 'rejected' || overall === 'rejected') status = 'rejected';
-        else status = 'pending';
-      } else if (stepKey === 'step3') {
-        if (s2 === 'approved' || overall === 'approved') status = 'approved';
-        else if (s1 !== 'approved' && overall !== 'approved') status = 'not_reached';
-        else if (s2 === 'rejected' || overall === 'rejected') status = 'rejected';
-        else status = 'pending';
-      } else if (stepKey === 'step4') {
-        if (overall === 'approved') status = 'approved';
-        else if (s2 !== 'approved' && overall !== 'approved') status = 'not_reached';
-        else if (overall === 'rejected') status = 'rejected';
-        else status = 'pending';
-      }
+    const overallStatus = (item.status || 'pending').toLowerCase();
+    const s1 = (detail?.status_level_1 || (item as any)?.status_level_1 || overallStatus).toLowerCase();
+    const s2 = (detail?.status_level_2 || (item as any)?.status_level_2 || 'pending').toLowerCase();
 
-      // Styles based on status
-      let bg = 'var(--color-primary)';
-      let textCol = '#ffffff';
-      let iconContent: React.ReactNode = String(stepNum);
-      let showBell = false;
-
-      if (status === 'approved') {
-        bg = '#10b981'; // Green
-        iconContent = '✓';
-      } else if (status === 'rejected') {
-        bg = '#ef4444'; // Red
-        iconContent = '✗';
-      } else if (status === 'not_reached') {
-        bg = 'var(--color-border-light)';
-        textCol = 'var(--color-text-muted)';
-      } else if (status === 'pending') {
-        bg = 'var(--color-primary)';
-        showBell = true;
-      }
-
-      return { bg, textCol, iconContent, showBell };
-    };
-
+    // Helper to format approval time
     const formatApprovalTime = (rawDate: any) => {
       if (!rawDate) return '';
       const d = new Date(rawDate);
       return !isNaN(d.getTime()) ? d.toLocaleString('vi-VN') : '';
     };
 
+    // Construct array of actual steps
+    const steps: Array<{
+      stepNumber: number;
+      title: string;
+      roleTitle: string;
+      user: any;
+      status: 'approved' | 'rejected' | 'pending' | 'not_reached';
+      approvedAt?: string;
+      showBell?: boolean;
+    }> = [];
+
+    // Step 1: Submitter
+    steps.push({
+      stepNumber: 1,
+      title: isPrintStampSend ? t('Thông tin hồ sơ') : t('Lập đề xuất & gửi'),
+      roleTitle: t('Người lập đề xuất'),
+      user: creatorUser,
+      status: 'approved',
+      approvedAt: formatApprovalTime(detail?.created_at || item.created_at)
+    });
+
+    // Step 2: Level 1 Approver
+    let s1Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+    if (s1 === 'approved' || overallStatus === 'approved') s1Status = 'approved';
+    else if (s1 === 'rejected' || overallStatus === 'rejected') s1Status = 'rejected';
+
+    steps.push({
+      stepNumber: steps.length + 1,
+      title: isPrintStampSend ? t('Xác nhận hoàn thành') : (item.type === 'expense' ? t('Quản lý trực tiếp duyệt') : t('Phê duyệt')),
+      roleTitle: managerUser?.role ? (managerUser.role.charAt(0).toUpperCase() + managerUser.role.slice(1)) : t('Quản lý'),
+      user: managerUser,
+      status: s1Status,
+      approvedAt: formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at),
+      showBell: s1Status === 'pending'
+    });
+
+    // Step 3: Level 2 Approver (Accountant) if exists
+    if (hasLevel2) {
+      let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      if (s2 === 'approved' || overallStatus === 'approved') s2Status = 'approved';
+      else if (s1 !== 'approved' && overallStatus !== 'approved') s2Status = 'not_reached';
+      else if (s2 === 'rejected' || overallStatus === 'rejected') s2Status = 'rejected';
+
+      steps.push({
+        stepNumber: steps.length + 1,
+        title: t('Kế toán duyệt (Cấp 2)'),
+        roleTitle: t('Kế toán'),
+        user: accountantUser,
+        status: s2Status,
+        approvedAt: formatApprovalTime(detail?.approved_at_2 || detail?.updated_at),
+        showBell: s2Status === 'pending'
+      });
+    }
+
+    // Step 4: Level 3 Approver (Director) if exists
+    if (hasLevel3) {
+      let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      if (overallStatus === 'approved') s3Status = 'approved';
+      else if (s2 !== 'approved' && overallStatus !== 'approved') s3Status = 'not_reached';
+      else if (overallStatus === 'rejected') s3Status = 'rejected';
+
+      steps.push({
+        stepNumber: steps.length + 1,
+        title: t('Ban Giám đốc duyệt (Cấp 3)'),
+        roleTitle: t('Ban Giám đốc'),
+        user: directorUser,
+        status: s3Status,
+        approvedAt: formatApprovalTime(detail?.approved_at_3 || detail?.updated_at),
+        showBell: s3Status === 'pending'
+      });
+    }
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '12px', position: 'relative', paddingLeft: '30px', textAlign: 'left' }}>
         <div style={{ position: 'absolute', left: '10px', top: '10px', bottom: '10px', width: '2px', background: 'var(--color-border-light)' }} />
         
-        {/* Step 1: Submitter */}
-        {(() => {
-          const sDetails = getStepDetails('step1', 1);
+        {steps.map((st) => {
+          let bg = 'var(--color-primary)';
+          let textCol = '#ffffff';
+          let iconContent: React.ReactNode = String(st.stepNumber);
+
+          if (st.status === 'approved') {
+            bg = '#10b981';
+            iconContent = '✓';
+          } else if (st.status === 'rejected') {
+            bg = '#ef4444';
+            iconContent = '✗';
+          } else if (st.status === 'not_reached') {
+            bg = 'var(--color-border-light)';
+            textCol = 'var(--color-text-muted)';
+          }
+
           return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+            <div key={st.stepNumber} style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
               <div style={{
                 position: 'absolute',
                 left: '-30px',
@@ -6685,8 +6950,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 width: '22px',
                 height: '22px',
                 borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
+                background: bg,
+                color: textCol,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -6694,246 +6959,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 fontWeight: 800,
                 zIndex: 2
               }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>
-                  {isPrintStampSend ? t('Thông tin hồ sơ') : t('Lập đề xuất & gửi')}
-                </strong>
-                <CustomSelect
-                  options={users.map(u => ({
-                    value: String(u.id),
-                    label: `${u.full_name || u.name} (${u.role || 'Nhân sự'})`,
-                    avatar: u.avatar || u.avatar_url
-                  }))}
-                  value={creatorUser ? String(creatorUser.id) : ''}
-                  onChange={() => {}}
-                  disabled
-                  showAvatars
-                  width="100%"
-                />
-                <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                  {t('Đã gửi lúc')} {formatApprovalTime(detail?.created_at || item.created_at) || new Date().toLocaleString('vi-VN')}
-                </span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Multi-level steps */}
-        {isMultiLevel && (
-          <>
-            {/* Step 2: Manager */}
-            {(() => {
-              const sDetails = getStepDetails('step2', 2);
-              const appTime = formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at);
-              return (
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{
-                    position: 'absolute',
-                    left: '-30px',
-                    top: '0px',
-                    width: '22px',
-                    height: '22px',
-                    borderRadius: '50%',
-                    background: sDetails.bg,
-                    color: sDetails.textCol,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    zIndex: 2
-                  }}>
-                    {sDetails.iconContent}
-                  </div>
-                  <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>{t('Phê duyệt')}</strong>
-                      {sDetails.showBell && (
-                        <button 
-                          onClick={() => { setReminderTargetUser(managerUser); setReminderMessage(''); }}
-                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                          title={t('Gửi nhắc nhở')}
-                        >
-                          <Bell size={18} fill="#ef4444" />
-                        </button>
-                      )}
-                    </div>
-                    <CustomSelect
-                      options={users.map(u => ({
-                        value: String(u.id),
-                        label: `${u.full_name || u.name} (${u.role || 'Trưởng phòng'})`,
-                        avatar: u.avatar || u.avatar_url
-                      }))}
-                      value={managerUser ? String(managerUser.id) : ''}
-                      onChange={() => {}}
-                      disabled
-                      showAvatars
-                      width="100%"
-                    />
-                    {sDetails.bg === '#10b981' && (
-                      <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                        ✓ {t('Đã duyệt')} {appTime ? `${t('lúc')} ${appTime}` : ''}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Step 3: Accountant */}
-            {(() => {
-              const sDetails = getStepDetails('step3', 3);
-              const appTime = formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at);
-              return (
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{
-                    position: 'absolute',
-                    left: '-30px',
-                    top: '0px',
-                    width: '22px',
-                    height: '22px',
-                    borderRadius: '50%',
-                    background: sDetails.bg,
-                    color: sDetails.textCol,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    zIndex: 2
-                  }}>
-                    {sDetails.iconContent}
-                  </div>
-                  <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>{t('Phê duyệt')}</strong>
-                      {sDetails.showBell && (
-                        <button 
-                          onClick={() => { setReminderTargetUser(accountantUser); setReminderMessage(''); }}
-                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                          title={t('Gửi nhắc nhở')}
-                        >
-                          <Bell size={18} fill="#ef4444" />
-                        </button>
-                      )}
-                    </div>
-                    <CustomSelect
-                      options={users.map(u => ({
-                        value: String(u.id),
-                        label: `${u.full_name || u.name} (${u.role || 'Kế toán'})`,
-                        avatar: u.avatar || u.avatar_url
-                      }))}
-                      value={accountantUser ? String(accountantUser.id) : ''}
-                      onChange={() => {}}
-                      disabled
-                      showAvatars
-                      width="100%"
-                    />
-                    {sDetails.bg === '#10b981' && (
-                      <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                        ✓ {t('Đã duyệt')} {appTime ? `${t('lúc')} ${appTime}` : ''}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Step 4: Director */}
-            {(() => {
-              const sDetails = getStepDetails('step4', 4);
-              const appTime = formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at);
-              return (
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{
-                    position: 'absolute',
-                    left: '-30px',
-                    top: '0px',
-                    width: '22px',
-                    height: '22px',
-                    borderRadius: '50%',
-                    background: sDetails.bg,
-                    color: sDetails.textCol,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    zIndex: 2
-                  }}>
-                    {sDetails.iconContent}
-                  </div>
-                  <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>{t('Phê duyệt')}</strong>
-                      {sDetails.showBell && (
-                        <button 
-                          onClick={() => { setReminderTargetUser(directorUser); setReminderMessage(''); }}
-                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                          title={t('Gửi nhắc nhở')}
-                        >
-                          <Bell size={18} fill="#ef4444" />
-                        </button>
-                      )}
-                    </div>
-                    <CustomSelect
-                      options={users.map(u => ({
-                        value: String(u.id),
-                        label: `${u.full_name || u.name} (${u.role || 'Ban giám đốc'})`,
-                        avatar: u.avatar || u.avatar_url
-                      }))}
-                      value={directorUser ? String(directorUser.id) : ''}
-                      onChange={() => {}}
-                      disabled
-                      showAvatars
-                      width="100%"
-                    />
-                    {sDetails.bg === '#10b981' && (
-                      <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                        ✓ {t('Đã duyệt')} {appTime ? `${t('lúc')} ${appTime}` : ''}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-          </>
-        )}
-
-        {/* Single level steps */}
-        {isSingleLevel && (() => {
-          const sDetails = getStepDetails('single', 2);
-          const appTime = formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at);
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
+                {iconContent}
               </div>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>
-                    {isPrintStampSend ? t('Xác nhận hoàn thành') : (item.type === 'expense' ? t('Phê duyệt đề xuất') : item.type === 'attendance_bulk' ? t('Phê duyệt cập nhật công') : item.type === 'leave' ? t('Phê duyệt đơn nghỉ') : t('Phê duyệt yêu cầu'))}
-                  </strong>
-                  {sDetails.showBell && (
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>{st.title}</strong>
+                  {st.showBell && st.user && (
                     <button 
-                      onClick={() => { setReminderTargetUser(singleApproverUser); setReminderMessage(''); }}
+                      onClick={() => { setReminderTargetUser(st.user); setReminderMessage(''); }}
                       style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
                       title={t('Gửi nhắc nhở')}
                     >
@@ -6944,24 +6977,29 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <CustomSelect
                   options={users.map(u => ({
                     value: String(u.id),
-                    label: `${u.full_name || u.name} (${u.role || 'Người phê duyệt'})`,
+                    label: `${u.full_name || u.name} (${u.role || st.roleTitle})`,
                     avatar: u.avatar || u.avatar_url
                   }))}
-                  value={singleApproverUser ? String(singleApproverUser.id) : ''}
+                  value={st.user ? String(st.user.id) : ''}
                   onChange={() => {}}
                   disabled
                   showAvatars
                   width="100%"
                 />
-                {sDetails.bg === '#10b981' && (
+                {st.status === 'approved' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ {t('Đã duyệt')} {appTime ? `${t('lúc')} ${appTime}` : ''}
+                    {st.stepNumber === 1 ? `${t('Đã gửi lúc')} ${st.approvedAt || new Date().toLocaleString('vi-VN')}` : `✓ ${t('Đã duyệt')} ${st.approvedAt ? `${t('lúc')} ${st.approvedAt}` : ''}`}
+                  </span>
+                )}
+                {st.status === 'rejected' && (
+                  <span style={{ fontSize: '0.725rem', color: '#ef4444', marginTop: '4px', display: 'block', fontWeight: 600 }}>
+                    ✗ {t('Đã từ chối')} {st.approvedAt ? `${t('lúc')} ${st.approvedAt}` : ''}
                   </span>
                 )}
               </div>
             </div>
           );
-        })()}
+        })}
       </div>
     );
   };
@@ -8119,7 +8157,6 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 loadingHistory={loadingComments}
                 currentUser={user}
                 showAttachments={true}
-                maxHeight={320}
                 onAddComment={async (text, fileAttachments) => {
                   const endpoint = getCommentsEndpoint(item.type, item.id);
                   if (!endpoint) {

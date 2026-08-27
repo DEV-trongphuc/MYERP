@@ -39,6 +39,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [rightPaneTab, setRightPaneTab] = useState<'discussion' | 'timeline'>('discussion');
 
   // Refund states
   const [refundImgUrl, setRefundImgUrl] = useState('');
@@ -1507,7 +1508,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
             {/* Right Pane: Discussion & Activity */}
             <div style={{
-              flex: '0 0 420px',
+              flex: isMobile ? '1' : '0 0 460px',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
@@ -1515,38 +1516,129 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               borderLeft: '1px solid var(--color-border-light)',
               boxSizing: 'border-box'
             }}>
-              {/* Stepper (Always Visible on Top) */}
-              <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border-light)', flexShrink: 0 }}>
-                <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.8125rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
-                  Các bước thực hiện
-                </h3>
-                {renderTimeline()}
+              {/* Right Pane Navigation Tabs */}
+              <div style={{
+                display: 'flex',
+                background: 'var(--color-bg)',
+                padding: '6px',
+                borderBottom: '1px solid var(--color-border-light)',
+                gap: '4px',
+                flexShrink: 0
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setRightPaneTab('discussion')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: rightPaneTab === 'discussion' ? 'var(--color-surface)' : 'transparent',
+                    color: rightPaneTab === 'discussion' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    fontWeight: rightPaneTab === 'discussion' ? 700 : 600,
+                    fontSize: '0.8125rem',
+                    boxShadow: rightPaneTab === 'discussion' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <MessageSquare size={14} />
+                  Thảo luận ({comments.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightPaneTab('timeline')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: rightPaneTab === 'timeline' ? 'var(--color-surface)' : 'transparent',
+                    color: rightPaneTab === 'timeline' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    fontWeight: rightPaneTab === 'timeline' ? 700 : 600,
+                    fontSize: '0.8125rem',
+                    boxShadow: rightPaneTab === 'timeline' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <Activity size={14} />
+                  Tiến trình duyệt
+                </button>
               </div>
 
-              {/* Unified Discussion & Activity Feed */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '1rem 1.25rem 1.25rem 1.25rem' }}>
-                <ProcessFeed
-                  comments={comments}
-                  historyLogs={historyLogs}
-                  loadingComments={loadingComments}
-                  loadingHistory={loadingHistory}
-                  currentUser={user}
-                  onAddComment={async (text) => {
-                    if (!text.trim() || !viewItem) return;
-                    await api.post(`/expenses/${viewItem.id}/comments`, {
-                      body: text.trim()
-                    });
-                    addToast('Thêm bình luận thành công', 'success');
-                    fetchComments(viewItem.id);
-                  }}
-                  onDeleteComment={async (commentId) => {
-                    if (!viewItem) return;
-                    await api.delete(`/expenses/comments/${commentId}`);
-                    addToast('Đã xóa bình luận', 'success');
-                    fetchComments(viewItem.id);
-                  }}
-                />
-              </div>
+              {/* View 1: Discussion Feed (Full Height) */}
+              {rightPaneTab === 'discussion' && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0.75rem 1rem 1rem 1rem' }}>
+                  {/* Status Banner Shortcut */}
+                  <div 
+                    onClick={() => setRightPaneTab('timeline')}
+                    style={{
+                      background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border-light)',
+                      borderRadius: '8px',
+                      padding: '6px 10px',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      color: 'var(--color-text-muted)',
+                      flexShrink: 0
+                    }}
+                    title="Bấm để xem chi tiết tiến trình phê duyệt"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: viewItem?.status === 'approved' ? '#10b981' : viewItem?.status === 'rejected' ? '#ef4444' : '#f59e0b' }} />
+                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                        {viewItem?.status === 'approved' ? (viewItem?.is_refunded ? 'Đã chi tiền' : 'Đã duyệt • Chờ kế toán chi') : viewItem?.status === 'rejected' ? 'Đã từ chối' : 'Đang chờ phê duyệt'}
+                      </span>
+                    </div>
+                    <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Xem tiến trình →</span>
+                  </div>
+
+                  <ProcessFeed
+                    comments={comments}
+                    historyLogs={historyLogs}
+                    loadingComments={loadingComments}
+                    loadingHistory={loadingHistory}
+                    currentUser={user}
+                    onAddComment={async (text) => {
+                      if (!text.trim() || !viewItem) return;
+                      await api.post(`/expenses/${viewItem.id}/comments`, {
+                        body: text.trim()
+                      });
+                      addToast('Thêm bình luận thành công', 'success');
+                      fetchComments(viewItem.id);
+                    }}
+                    onDeleteComment={async (commentId) => {
+                      if (!viewItem) return;
+                      await api.delete(`/expenses/comments/${commentId}`);
+                      addToast('Đã xóa bình luận', 'success');
+                      fetchComments(viewItem.id);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* View 2: Timeline Steps (Full Height) */}
+              {rightPaneTab === 'timeline' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.8125rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
+                    Các bước thực hiện
+                  </h3>
+                  {renderTimeline()}
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

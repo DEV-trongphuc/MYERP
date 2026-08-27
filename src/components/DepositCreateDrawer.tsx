@@ -394,7 +394,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
 
         localStorage.setItem('last_selected_accountant_id', depositAccountantId);
         addToast('Tạo đơn đặt hàng và lịch thanh toán thành công!', 'success');
-        window.dispatchEvent(new CustomEvent('deposit-created', { detail: { contactId: selectedContactId } }));
+        window.dispatchEvent(new CustomEvent('deposit-created', { detail: { contactId: selectedContactId, depositId: createdDepositId } }));
+        window.dispatchEvent(new CustomEvent('refresh-deposits'));
+        window.dispatchEvent(new CustomEvent('refresh-page', { detail: { path: '/deposits' } }));
+        window.dispatchEvent(new CustomEvent('refresh-page', { detail: { path: '/data' } }));
         onClose();
         if (onSaveSuccess) onSaveSuccess();
       } else {

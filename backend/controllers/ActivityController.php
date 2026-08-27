@@ -965,7 +965,7 @@ class ActivityController {
         $currentReqApproval = isset($b['require_approval']) ? (int)$b['require_approval'] : (int)$activity['require_approval'];
         $currentApprover = isset($b['approver_id']) ? (int)$b['approver_id'] : (int)$activity['approver_id'];
 
-        if ($currentProgress === 100 && $currentReqApproval === 1 && $currentApprover) {
+        if ($currentProgress === 100 && $currentReqApproval === 1 && $currentApprover && $currentApprover !== (int)$auth['user_id']) {
             if ((int)$activity['progress'] < 100 || (isset($b['approver_id']) && (int)$b['approver_id'] !== (int)$activity['approver_id']) || (isset($b['approval_status']) && $b['approval_status'] === 'pending' && $activity['approval_status'] !== 'pending')) {
                 $this->notifyUser(
                     $currentApprover,
@@ -981,24 +981,26 @@ class ActivityController {
         // 3. Approval status result
         if (isset($b['approval_status']) && $b['approval_status'] !== $activity['approval_status']) {
             $assignee = isset($b['user_id']) ? (int)$b['user_id'] : (int)$activity['user_id'];
-            if ($b['approval_status'] === 'approved') {
-                $this->notifyUser(
-                    $assignee,
-                    'Nhiệm vụ được phê duyệt hoàn thành',
-                    'Công việc "' . $activity['subject'] . '" của bạn đã được phê duyệt hoàn thành bởi ' . $editorName . '.',
-                    'approval_status',
-                    "/workspace?task_id={$id}",
-                    $id
-                );
-            } elseif ($b['approval_status'] === 'rejected') {
-                $this->notifyUser(
-                    $assignee,
-                    'Yêu cầu hoàn thành nhiệm vụ bị từ chối',
-                    'Yêu cầu hoàn thành công việc "' . $activity['subject'] . '" của bạn đã bị từ chối bởi ' . $editorName . '.',
-                    'approval_status',
-                    "/workspace?task_id={$id}",
-                    $id
-                );
+            if ($assignee !== (int)$auth['user_id']) {
+                if ($b['approval_status'] === 'approved') {
+                    $this->notifyUser(
+                        $assignee,
+                        'Nhiệm vụ được phê duyệt hoàn thành',
+                        'Công việc "' . $activity['subject'] . '" của bạn đã được phê duyệt hoàn thành bởi ' . $editorName . '.',
+                        'approval_status',
+                        "/workspace?task_id={$id}",
+                        $id
+                    );
+                } elseif ($b['approval_status'] === 'rejected') {
+                    $this->notifyUser(
+                        $assignee,
+                        'Yêu cầu hoàn thành nhiệm vụ bị từ chối',
+                        'Yêu cầu hoàn thành công việc "' . $activity['subject'] . '" của bạn đã bị từ chối bởi ' . $editorName . '.',
+                        'approval_status',
+                        "/workspace?task_id={$id}",
+                        $id
+                    );
+                }
             }
         }
 
@@ -1078,20 +1080,59 @@ class ActivityController {
         $actualChanges = [];
         foreach ($fields as $f) {
             if (array_key_exists($f, $b)) {
-                $oldVal = $activity[$f];
-                $newVal = $b[$f];
+                $oldVal = $activity[$f] ?? null;
+                $newVal = $b[$f] ?? null;
                 
                 // Normalize empty values and nulls
-                $oldNorm = ($oldVal === null || $oldVal === '') ? null : $oldVal;
-                $newNorm = ($newVal === null || $newVal === '') ? null : $newVal;
+                $oldNorm = ($oldVal === null || $oldVal === '' || $oldVal === 'null') ? null : $oldVal;
+                $newNorm = ($newVal === null || $newVal === '' || $newVal === 'null') ? null : $newVal;
                 
                 if (in_array($f, ['user_id', 'related_id', 'contact_id', 'approver_id', 'progress', 'require_approval'])) {
                     $oldNorm = $oldNorm !== null ? (int)$oldNorm : null;
                     $newNorm = $newNorm !== null ? (int)$newNorm : null;
                 }
+
+                if ($f === 'due_date') {
+                    $oldNorm = $this->normalizeDueDate($oldNorm);
+                    $newNorm = $this->normalizeDueDate($newNorm);
+                }
+
+                if ($f === 'participant_ids') {
+                    $oldP = $this->parseUserIds($oldNorm);
+                    $newP = $this->parseUserIds($newNorm);
+                    sort($oldP);
+                    sort($newP);
+                    $oldNorm = !empty($oldP) ? implode(',', $oldP) : null;
+                    $newNorm = !empty($newP) ? implode(',', $newP) : null;
+                }
+
+                if ($f === 'tags') {
+                    $oldTags = is_array($oldNorm) ? $oldNorm : (is_string($oldNorm) ? array_filter(array_map('trim', explode(',', $oldNorm))) : []);
+                    $newTags = is_array($newNorm) ? $newNorm : (is_string($newNorm) ? array_filter(array_map('trim', explode(',', $newNorm))) : []);
+                    sort($oldTags);
+                    sort($newTags);
+                    $oldNorm = !empty($oldTags) ? implode(', ', $oldTags) : null;
+                    $newNorm = !empty($newTags) ? implode(', ', $newTags) : null;
+                }
+
+                if ($f === 'body') {
+                    // Handled specifically for task description vs checklist
+                    $oldDesc = $oldBodyData['erp_task']['description'] ?? (is_string($oldNorm) ? $oldNorm : '');
+                    $newDesc = $newBodyData['erp_task']['description'] ?? (is_string($newNorm) ? $newNorm : '');
+                    if ($oldDesc !== $newDesc) {
+                        $actualChanges['body'] = [
+                            'old' => $oldDesc,
+                            'new' => $newDesc
+                        ];
+                    }
+                    continue;
+                }
                 
                 if ($oldNorm !== $newNorm) {
-                    $actualChanges[$f] = $newNorm;
+                    $actualChanges[$f] = [
+                        'old' => $oldNorm,
+                        'new' => $newNorm
+                    ];
                 }
             }
         }
@@ -1791,8 +1832,8 @@ class ActivityController {
             }
 
             // 2. Multi-channel Notification (Zalo / Telegram / Email)
-            if ($type === 'task_assigned' || $type === 'assignment') {
-                require_once __DIR__ . '/../NotificationService.php';
+            require_once __DIR__ . '/../NotificationService.php';
+            if (in_array($type, ['task_assignment', 'task_assigned', 'assignment', 'approval_request', 'participant_added', 'task_status'], true)) {
                 NotificationService::send($this->db, $tenantId, 'WORKFLOW_TASK_ASSIGNED', [
                     'user_id' => $userId,
                     'recipients' => [$u],
@@ -1800,7 +1841,15 @@ class ActivityController {
                     'reason' => $body,
                     'link' => $link
                 ]);
-            } else if ($type === 'comment') {
+            } else if ($type === 'comment' || $type === 'mention') {
+                NotificationService::send($this->db, $tenantId, 'MENTION_TAGGED', [
+                    'user_id' => $userId,
+                    'recipients' => [$u],
+                    'author_name' => $title,
+                    'comment' => $body,
+                    'link' => $link
+                ]);
+            } else {
                 if (!empty($u['email'])) {
                     require_once __DIR__ . '/../mailer.php';
                     $stmtFe = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
@@ -1808,7 +1857,7 @@ class ActivityController {
                     $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($link, '/');
 
                     $emailSubject = "[IDEAS ERP] " . $title;
-                    $emailTitle = "BÌNH LUẬN CÔNG VIỆC";
+                    $emailTitle = "THÔNG BÁO CÔNG VIỆC";
                     $emailContent = "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($title) . "</h3>" .
                                     "  <p style=\"margin: 0; color: #334155;\">" . htmlspecialchars($body) . "</p>" .
@@ -1853,7 +1902,7 @@ class ActivityController {
             LIMIT 100
         ");
         $stmt->execute([$auth['tenant_id'], $id, $id]);
-        $logs = array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         respond(200, $logs);
     }

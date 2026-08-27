@@ -784,17 +784,19 @@ export default function HRM() {
       </div>
 
       {/* Tabs */}
-      <div style={{ 
+      <div className="no-scrollbar" style={{ 
         display: 'flex',
         background: 'var(--color-border-light)',
         border: '1px solid var(--color-border)',
         padding: '2px',
         borderRadius: '8px',
         gap: '2px',
-        width: 'fit-content',
+        width: isMobile ? '100%' : 'fit-content',
         position: 'relative',
-        marginBottom: '1.5rem',
-        flexWrap: isMobile ? 'wrap' : 'nowrap'
+        marginBottom: isMobile ? '1rem' : '1.5rem',
+        flexWrap: 'nowrap',
+        overflowX: isMobile ? 'auto' : 'visible',
+        WebkitOverflowScrolling: 'touch'
       }}>
         {[
           { id: 'dashboard', label: t('Tổng quan HR'), icon: LayoutDashboard },

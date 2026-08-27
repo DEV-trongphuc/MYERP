@@ -974,27 +974,6 @@ export const Header = ({
           </span>
         </button>
 
-        {/* Mobile Search Icon Button */}
-        <button 
-          onClick={handleOpenSearch}
-          style={{
-            width: 36,
-            height: 36,
-            display: isMobile ? 'flex' : 'none',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--color-text-light)',
-            borderRadius: 8,
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            outline: 'none'
-          }}
-          title={t("Tìm kiếm toàn hệ thống")}
-        >
-          <Search size={20} />
-        </button>
 
         {/* Keyboard Shortcuts Trigger Button */}
         <button 
@@ -1046,9 +1025,9 @@ export const Header = ({
           </div>
         )}
         
-        {/* Sales widgets for check-in */}
-        {isSales && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '8px', marginRight: isMobile ? '2px' : '8px' }}>
+        {/* Sales widgets for check-in (Hidden on mobile) */}
+        {isSales && !isMobile && (
+          <div className="responsive-hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px' }}>
             {headerCheckIn && headerCheckIn.status === 'approved' && (
               <div 
                 onMouseEnter={prewarmSmartCheckInGPS}
@@ -1064,8 +1043,8 @@ export const Header = ({
                   border: headerCheckIn.check_out_time ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)', 
                   color: headerCheckIn.check_out_time ? '#2563eb' : 'var(--color-success)', 
                   borderRadius: '8px', 
-                  padding: isMobile ? '4px 6px' : '4px 10px', 
-                  height: isMobile ? '30px' : '36px', 
+                  padding: '4px 10px', 
+                  height: '36px', 
                   fontSize: '0.72rem', 
                   fontWeight: 700, 
                   whiteSpace: 'nowrap',
@@ -1085,11 +1064,11 @@ export const Header = ({
             {headerCheckIn && headerCheckIn.status === 'pending_approval' && (
               <div 
                 onClick={() => navigate('/attendance')}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', borderRadius: '8px', padding: isMobile ? '4px 6px' : '4px 10px', height: isMobile ? '30px' : '36px', fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', borderRadius: '8px', padding: '4px 10px', height: '36px', fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
                 title={t('Click để Xem bảng chấm công cá nhân')}
               >
                 <Clock size={12} />
-                <span>{isMobile ? 'Chờ duyệt' : `${t('Chờ duyệt trễ')} (${headerCheckIn.check_in_time.substring(0, 5)})`}</span>
+                <span>{`${t('Chờ duyệt trễ')} (${headerCheckIn.check_in_time.substring(0, 5)})`}</span>
               </div>
             )}
           </div>

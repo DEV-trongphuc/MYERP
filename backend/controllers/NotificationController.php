@@ -348,4 +348,49 @@ class NotificationController {
 
         respond(200, null, 'Cập nhật cấu hình thông báo thành công');
     }
+
+    public function sendTestAttendanceEmail(array $auth): void {
+        $b = getBody();
+        $email = trim((string)($b['email'] ?? 'phucht@ideas.edu.vn'));
+        $name = trim((string)($b['user_name'] ?? $b['name'] ?? 'Huỳnh Trọng Phúc'));
+        $role = trim((string)($b['role'] ?? 'Marketing'));
+        $workStart = trim((string)($b['work_start'] ?? '08:00'));
+        $type = trim((string)($b['type'] ?? 'all'));
+
+        require_once __DIR__ . '/../mailer.php';
+        $frontendUrl = get_system_setting($this->db, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
+        $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
+
+        $sentResults = [];
+
+        if ($type === 'attendance_reminder' || $type === 'all') {
+            $subject1 = "⏰ [IDEAS ERP] Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
+            $title1 = "NHẮC NHỞ CHẤM CÔNG VÀO CA";
+            $content1 = "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                        "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Sắp đến giờ bắt đầu ca làm việc</h3>" .
+                        "  <p style=\"margin: 0; color: #334155; line-height: 1.6;\">Chào <strong>" . htmlspecialchars($name) . "</strong> (Bộ phận: <strong>" . htmlspecialchars($role) . "</strong>),<br/><br/>Hệ thống nhắc nhở bạn sắp đến giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>). Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công đúng giờ nhé!</p>" .
+                        "</div>" .
+                        "<p style=\"margin-top: 25px; text-align: center;\">" .
+                        "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG</a>" .
+                        "</p>";
+            $res1 = sendEmailNotification($email, $subject1, $title1, $content1, '', false);
+            $sentResults['attendance_reminder'] = $res1;
+        }
+
+        if ($type === 'checkin_missing_reminder' || $type === 'all') {
+            $subject2 = "⚠️ [IDEAS ERP] Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
+            $title2 = "CẢNH BÁO CHƯA CHẤM CÔNG HÔM NAY";
+            $content2 = "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                        "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công vào ca</h3>" .
+                        "  <p style=\"margin: 0; color: #7f1d1d; line-height: 1.6;\">Chào <strong>" . htmlspecialchars($name) . "</strong> (Bộ phận: <strong>" . htmlspecialchars($role) . "</strong>),<br/><br/>Hệ thống ghi nhận đã quá giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>) nhưng bạn <strong>chưa thực hiện chấm công vào hôm nay</strong>.<br/><br/>Vui lòng truy cập hệ thống MYERP để thực hiện chấm công ngay hoặc tạo phiếu giải trình đi trễ nếu có lý do chính đáng.</p>" .
+                        "</div>" .
+                        "<p style=\"margin-top: 25px; text-align: center;\">" .
+                        "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG NGAY</a>" .
+                        "</p>";
+            $res2 = sendEmailNotification($email, $subject2, $title2, $content2, '', false);
+            $sentResults['checkin_missing_reminder'] = $res2;
+        }
+
+        respond(200, $sentResults, "Đã gửi xếp hàng đợi 2 mẫu email nhắc chấm công thành công cho $email");
+    }
 }

@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useUIStore } from '../store/uiStore';
 import { CustomModal } from '../components/ui/CustomModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
-import { CreditCard, Plus, Check, X, Upload, AlertCircle, Trash2, Calendar, FileText, Ban, ChevronLeft, ChevronRight, Info, Eye, Edit, Loader2, Search, MessageSquare, Clock, Send, Bell, DollarSign, TrendingUp, Award, CheckCircle2, User, Building2 } from 'lucide-react';
+import { CreditCard, Plus, Check, X, Upload, AlertCircle, Trash2, Calendar, FileText, Ban, ChevronLeft, ChevronRight, Info, Eye, Edit, Loader2, Search, MessageSquare, Clock, Send, Bell, DollarSign, TrendingUp, Award, CheckCircle2, User, Building2, MoreHorizontal, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -128,6 +128,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const ITEMS_PER_PAGE = 8;
   const [period, setPeriod] = useState<Period>('all');
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterProjectId, setFilterProjectId] = useState('');
@@ -413,6 +414,17 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
 
   useEffect(() => {
     loadData();
+    const handleRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('deposit-created', handleRefresh);
+    window.addEventListener('deposit-updated', handleRefresh);
+    window.addEventListener('refresh-deposits', handleRefresh);
+    return () => {
+      window.removeEventListener('deposit-created', handleRefresh);
+      window.removeEventListener('deposit-updated', handleRefresh);
+      window.removeEventListener('refresh-deposits', handleRefresh);
+    };
   }, []);
 
   const loadComments = async () => {
@@ -1537,51 +1549,176 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
           {/* Search & Filter Bar */}
           <div style={{ 
             display: 'flex', 
-            flexWrap: 'wrap', 
-            gap: '12px', 
+            gap: isMobile ? '8px' : '12px', 
             marginBottom: '1.25rem', 
             alignItems: 'center',
+            justifyContent: 'space-between',
             background: 'var(--color-surface)',
-            padding: '12px',
+            padding: isMobile ? '8px 10px' : '12px',
             borderRadius: '12px',
-            border: '1px solid var(--color-border-light)'
+            border: '1px solid var(--color-border-light)',
+            position: 'relative'
           }}>
-            <div style={{ position: 'relative', flex: '1', minWidth: '240px' }}>
+            <div style={{ position: 'relative', flex: '1', minWidth: 0 }}>
               <input
                 type="text"
                 placeholder={t("Tìm kiếm theo khách hàng, số điện thoại...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="form-input"
-                style={{ width: '100%', paddingRight: '2.5rem', paddingLeft: '12px', height: '38px', borderRadius: '10px', margin: 0 }}
+                style={{ width: '100%', paddingRight: '2.5rem', paddingLeft: '12px', height: isMobile ? '36px' : '38px', borderRadius: '10px', margin: 0, fontSize: isMobile ? '0.82rem' : '0.875rem' }}
               />
-              <Search style={{ position: 'absolute', right: '12px', top: '11px', color: 'var(--color-text-muted)' }} size={16} />
+              <Search style={{ position: 'absolute', right: '12px', top: isMobile ? '10px' : '11px', color: 'var(--color-text-muted)' }} size={16} />
             </div>
 
-            {/* Project Filter */}
-            <div style={{ width: '220px' }}>
-              <CustomSelect
-                options={projectOptions}
-                value={filterProjectId}
-                onChange={(val) => setFilterProjectId(val)}
-                searchable={true}
-                placeholder={t("Tất cả chương trình")}
-                width="100%"
-                size="md"
-              />
-            </div>
+            {/* Mobile [...] Filter Button */}
+            {isMobile ? (
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowMobileFilters(!showMobileFilters)}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '8px',
+                    background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
+                    color: (filterProjectId || filterStatus) ? 'var(--color-primary)' : 'var(--color-text)',
+                    outline: 'none',
+                    boxShadow: 'var(--shadow-sm)',
+                    flexShrink: 0,
+                    position: 'relative'
+                  }}
+                  title="Bộ lọc đơn hàng / cọc"
+                >
+                  <MoreHorizontal size={18} />
+                  {(filterProjectId || filterStatus) && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '6px',
+                      right: '6px',
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: 'var(--color-primary)'
+                    }} />
+                  )}
+                </button>
 
-            {/* Status Filter */}
-            <div style={{ width: '180px' }}>
-              <CustomSelect
-                options={statusOptions}
-                value={filterStatus}
-                onChange={(val) => setFilterStatus(val)}
-                placeholder={t("Tất cả trạng thái")}
-                width="100%"
-                size="md"
-              />
-            </div>
+                {/* Mobile Filters Dropdown Popover */}
+                <AnimatePresence>
+                  {showMobileFilters && (
+                    <>
+                      <div 
+                        onClick={() => setShowMobileFilters(false)} 
+                        style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: '42px',
+                          width: '250px',
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: '12px',
+                          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                          padding: '12px',
+                          zIndex: 999,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}
+                      >
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                            {t("Chương trình")}
+                          </label>
+                          <CustomSelect
+                            options={projectOptions}
+                            value={filterProjectId}
+                            onChange={(val) => { setFilterProjectId(val); setShowMobileFilters(false); }}
+                            searchable={true}
+                            placeholder={t("Tất cả chương trình")}
+                            width="100%"
+                            size="xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                            {t("Trạng thái")}
+                          </label>
+                          <CustomSelect
+                            options={statusOptions}
+                            value={filterStatus}
+                            onChange={(val) => { setFilterStatus(val); setShowMobileFilters(false); }}
+                            placeholder={t("Tất cả trạng thái")}
+                            width="100%"
+                            size="xs"
+                          />
+                        </div>
+
+                        {(filterProjectId || filterStatus) && (
+                          <button
+                            type="button"
+                            onClick={() => { setFilterProjectId(''); setFilterStatus(''); setShowMobileFilters(false); }}
+                            style={{
+                              marginTop: '2px',
+                              padding: '6px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: '#ef4444',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {t("Đặt lại bộ lọc")}
+                          </button>
+                        )}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              /* Desktop Filters */
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ width: '220px' }}>
+                  <CustomSelect
+                    options={projectOptions}
+                    value={filterProjectId}
+                    onChange={(val) => setFilterProjectId(val)}
+                    searchable={true}
+                    placeholder={t("Tất cả chương trình")}
+                    width="100%"
+                    size="md"
+                  />
+                </div>
+
+                <div style={{ width: '180px' }}>
+                  <CustomSelect
+                    options={statusOptions}
+                    value={filterStatus}
+                    onChange={(val) => setFilterStatus(val)}
+                    placeholder={t("Tất cả trạng thái")}
+                    width="100%"
+                    size="md"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* List */}

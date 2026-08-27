@@ -4,7 +4,7 @@ import {
   DollarSign, Plus, Search, Download, Truck, Coffee, Home,
   Briefcase, CreditCard, Tag, Eye, Pencil, Trash2, Loader2,
   CheckCircle2, Clock, Activity, TrendingDown, X, ArrowUpRight, ArrowDownRight, ChevronDown, Building2, Wallet, User, Package,
-  Upload, Paperclip, XCircle, Send, MessageSquare, Copy, Calendar, Bell, Info
+  Upload, Paperclip, XCircle, Send, MessageSquare, Copy, Calendar, Bell, Info, MoreHorizontal, Filter
 } from 'lucide-react';
 import { compressToWebP } from '../utils/imageCompress';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -79,6 +79,15 @@ export const ExpensesPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const urlStatus = searchParams.get('status') || '';
   const { addToast, showConfirm } = useUIStore();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>(urlStatus ? 'all' : (location.state?.period || 'all'));
@@ -133,13 +142,7 @@ export const ExpensesPage: React.FC = () => {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const [drawerRightTab, setDrawerRightTab] = useState<'discussion' | 'timeline'>('discussion');
 
   const fetchComments = useCallback(async (expenseId: number) => {
     setLoadingComments(true);
@@ -1071,9 +1074,9 @@ export const ExpensesPage: React.FC = () => {
         })}
       </div>
 
-      {/* Category breakdown mini-bar */}
+      {/* Category breakdown mini-bar (Desktop only) */}
       {catBreakdown.length > 0 && (
-        <div className="card" style={{ padding: '1rem 1.5rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+        <div className="card responsive-hide-mobile" style={{ padding: '1rem 1.5rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Theo danh mục:</span>
           {catBreakdown.map(c => {
             const Icon = c.icon;
@@ -1091,29 +1094,157 @@ export const ExpensesPage: React.FC = () => {
       )}
 
       {/* Filter bar */}
-      <div className="card" style={{ padding: '0.875rem 1.25rem', marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <div className="filter-search" style={{ flex: 1, minWidth: 200 }}>
+      <div className="card" style={{ padding: isMobile ? '8px 10px' : '0.875rem 1.25rem', marginBottom: '1rem', display: 'flex', gap: isMobile ? '8px' : '0.75rem', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        <div className="filter-search" style={{ flex: 1, minWidth: 0 }}>
           <Search size={15} style={{ color: 'var(--color-text-muted)' }} />
           <input placeholder="Tìm theo nội dung, người nhập..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
           {search && <button onClick={() => setSearch('')}><X size={13} /></button>}
         </div>
 
-        <div style={{ width: 180 }}>
-          <CustomSelect 
-            options={[
-              { value: '', label: 'Tất cả trạng thái' },
-              { value: 'approved', label: 'Đã duyệt' },
-              { value: 'pending', label: 'Chờ duyệt' }
-            ]} 
-            value={statusFilter} 
-            onChange={val => { setStatusFilter(val.toString()); setPage(1); }} 
-          />
-        </div>
+        {isMobile ? (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              style={{
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                border: '1px solid var(--color-border)',
+                borderRadius: '8px',
+                background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
+                color: (statusFilter || catFilter) ? 'var(--color-primary)' : 'var(--color-text)',
+                outline: 'none',
+                boxShadow: 'var(--shadow-sm)',
+                flexShrink: 0,
+                position: 'relative'
+              }}
+              title="Bộ lọc chi phí"
+            >
+              <MoreHorizontal size={18} />
+              {(statusFilter || catFilter) && (
+                <span style={{
+                  position: 'absolute',
+                  top: '6px',
+                  right: '6px',
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'var(--color-primary)'
+                }} />
+              )}
+            </button>
 
-        {selected.size > 0 && (
-          <button className="btn danger sm" onClick={() => { setItems(prev => prev.filter((e: any) => !selected.has(e.id))); setSelected(new Set()); addToast(`Đã xóa ${selected.size} khoản`, 'success'); }}>
-            <Trash2 size={14} /> Xóa {selected.size} đã chọn
-          </button>
+            {/* Mobile Filters Dropdown Popover */}
+            <AnimatePresence>
+              {showMobileFilters && (
+                <>
+                  <div 
+                    onClick={() => setShowMobileFilters(false)} 
+                    style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '42px',
+                      width: '240px',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                      padding: '12px',
+                      zIndex: 999,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}
+                  >
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        Trạng thái
+                      </label>
+                      <CustomSelect 
+                        options={[
+                          { value: '', label: 'Tất cả trạng thái' },
+                          { value: 'approved', label: 'Đã duyệt' },
+                          { value: 'pending', label: 'Chờ duyệt' }
+                        ]} 
+                        value={statusFilter} 
+                        onChange={val => { setStatusFilter(val.toString()); setPage(1); setShowMobileFilters(false); }} 
+                        size="xs"
+                        width="100%"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        Danh mục
+                      </label>
+                      <CustomSelect 
+                        options={[
+                          { value: '', label: 'Tất cả danh mục' },
+                          ...CATEGORIES.map(c => ({ value: c.label, label: c.label }))
+                        ]} 
+                        value={catFilter} 
+                        onChange={val => { setCatFilter(val.toString()); setPage(1); setShowMobileFilters(false); }} 
+                        size="xs"
+                        width="100%"
+                      />
+                    </div>
+
+                    {(statusFilter || catFilter) && (
+                      <button
+                        type="button"
+                        onClick={() => { setStatusFilter(''); setCatFilter(''); setPage(1); setShowMobileFilters(false); }}
+                        style={{
+                          marginTop: '2px',
+                          padding: '6px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textAlign: 'center'
+                        }}
+                      >
+                        Đặt lại bộ lọc
+                      </button>
+                    )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          /* Desktop Filter Controls */
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <div style={{ width: 180 }}>
+              <CustomSelect 
+                options={[
+                  { value: '', label: 'Tất cả trạng thái' },
+                  { value: 'approved', label: 'Đã duyệt' },
+                  { value: 'pending', label: 'Chờ duyệt' }
+                ]} 
+                value={statusFilter} 
+                onChange={val => { setStatusFilter(val.toString()); setPage(1); }} 
+              />
+            </div>
+            {selected.size > 0 && (
+              <button className="btn danger sm" onClick={() => { setItems(prev => prev.filter((e: any) => !selected.has(e.id))); setSelected(new Set()); addToast(`Đã xóa ${selected.size} khoản`, 'success'); }}>
+                <Trash2 size={14} /> Xóa {selected.size} đã chọn
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -2158,9 +2289,9 @@ export const ExpensesPage: React.FC = () => {
                     )}
                   </div>
 
-                    {/* Right Pane: Discussion & Activity (40%) */}
+                    {/* Right Pane: Discussion & Activity */}
                     <div style={{
-                      flex: 2,
+                      flex: isMobile ? '1' : 2,
                       display: 'flex',
                       flexDirection: 'column',
                       overflow: 'hidden',
@@ -2168,38 +2299,129 @@ export const ExpensesPage: React.FC = () => {
                       borderLeft: '1px solid var(--color-border-light)',
                       boxSizing: 'border-box'
                     }}>
-                      {/* Stepper (Always Visible on Top) */}
-                      <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border-light)', flexShrink: 0 }}>
-                        <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.8125rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
-                          Các bước thực hiện
-                        </h3>
-                        {renderTimeline()}
+                      {/* Right Pane Navigation Tabs */}
+                      <div style={{
+                        display: 'flex',
+                        background: 'var(--color-bg)',
+                        padding: '6px',
+                        borderBottom: '1px solid var(--color-border-light)',
+                        gap: '4px',
+                        flexShrink: 0
+                      }}>
+                        <button
+                          type="button"
+                          onClick={() => setDrawerRightTab('discussion')}
+                          style={{
+                            flex: 1,
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: drawerRightTab === 'discussion' ? 'var(--color-surface)' : 'transparent',
+                            color: drawerRightTab === 'discussion' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: drawerRightTab === 'discussion' ? 700 : 600,
+                            fontSize: '0.8125rem',
+                            boxShadow: drawerRightTab === 'discussion' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <MessageSquare size={14} />
+                          Thảo luận ({comments.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDrawerRightTab('timeline')}
+                          style={{
+                            flex: 1,
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: drawerRightTab === 'timeline' ? 'var(--color-surface)' : 'transparent',
+                            color: drawerRightTab === 'timeline' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: drawerRightTab === 'timeline' ? 700 : 600,
+                            fontSize: '0.8125rem',
+                            boxShadow: drawerRightTab === 'timeline' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <Activity size={14} />
+                          Tiến trình duyệt
+                        </button>
                       </div>
 
-                      {/* Unified Discussion & Activity Feed */}
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '1rem 1.25rem 1.25rem 1.25rem' }}>
-                        <ProcessFeed
-                          comments={comments}
-                          historyLogs={historyLogs}
-                          loadingComments={loadingComments}
-                          loadingHistory={loadingHistory}
-                          currentUser={user}
-                          onAddComment={async (text) => {
-                            if (!text.trim() || !viewItem) return;
-                            await api.post(`/expenses/${viewItem.id}/comments`, {
-                              body: text.trim()
-                            });
-                            addToast('Thêm bình luận thành công', 'success');
-                            fetchComments(viewItem.id);
-                          }}
-                          onDeleteComment={async (commentId) => {
-                            if (!viewItem) return;
-                            await api.delete(`/expenses/comments/${commentId}`);
-                            addToast('Đã xóa bình luận', 'success');
-                            fetchComments(viewItem.id);
-                          }}
-                        />
-                      </div>
+                      {/* View 1: Discussion Feed (Full Height) */}
+                      {drawerRightTab === 'discussion' && (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0.75rem 1rem 1rem 1rem' }}>
+                          {/* Status Banner Shortcut */}
+                          <div 
+                            onClick={() => setDrawerRightTab('timeline')}
+                            style={{
+                              background: 'var(--color-bg)',
+                              border: '1px solid var(--color-border-light)',
+                              borderRadius: '8px',
+                              padding: '6px 10px',
+                              marginBottom: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              color: 'var(--color-text-muted)',
+                              flexShrink: 0
+                            }}
+                            title="Bấm để xem chi tiết tiến trình phê duyệt"
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: viewItem?.status === 'approved' ? '#10b981' : viewItem?.status === 'rejected' ? '#ef4444' : '#f59e0b' }} />
+                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                                {viewItem?.status === 'approved' ? (viewItem?.is_refunded ? 'Đã chi tiền' : 'Đã duyệt • Chờ kế toán chi') : viewItem?.status === 'rejected' ? 'Đã từ chối' : 'Đang chờ phê duyệt'}
+                              </span>
+                            </div>
+                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Xem tiến trình →</span>
+                          </div>
+
+                          <ProcessFeed
+                            comments={comments}
+                            historyLogs={historyLogs}
+                            loadingComments={loadingComments}
+                            loadingHistory={loadingHistory}
+                            currentUser={user}
+                            onAddComment={async (text) => {
+                              if (!text.trim() || !viewItem) return;
+                              await api.post(`/expenses/${viewItem.id}/comments`, {
+                                body: text.trim()
+                              });
+                              addToast('Thêm bình luận thành công', 'success');
+                              fetchComments(viewItem.id);
+                            }}
+                            onDeleteComment={async (commentId) => {
+                              if (!viewItem) return;
+                              await api.delete(`/expenses/comments/${commentId}`);
+                              addToast('Đã xóa bình luận', 'success');
+                              fetchComments(viewItem.id);
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* View 2: Timeline Steps (Full Height) */}
+                      {drawerRightTab === 'timeline' && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem' }}>
+                          <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.8125rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
+                            Các bước thực hiện
+                          </h3>
+                          {renderTimeline()}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {reminderTargetUser && (

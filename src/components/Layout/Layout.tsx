@@ -820,8 +820,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
 
 
-        <main className="responsive-main" style={{ flex: 1, overflow: 'auto', padding: '1.25rem 1.75rem', position: 'relative', zIndex: 10 }}>
-          <div style={{ width: '100%' }}>
+        <main className="responsive-main" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative', zIndex: 10 }}>
+          <div style={{ width: '100%', minHeight: '100%' }}>
             {children}
           </div>
         </main>

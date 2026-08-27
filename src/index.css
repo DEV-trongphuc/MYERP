@@ -594,6 +594,8 @@
   margin: 0 !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  padding: 1.25rem 1.75rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ================================================
@@ -5283,13 +5285,19 @@ a,
   touch-action: manipulation;
 }
 
-/* Mobile page bottom scroll spacing */
+/* Mobile page bottom scroll spacing so content is never obscured by browser bottom bar or navigation */
 @media (max-width: 768px) {
   .responsive-main,
   .sale-portal-main,
+  .portal-main-content,
   .page-container,
+  .page-content,
+  .page-wrapper,
+  .app-main-content,
+  .content-wrapper,
   main {
-    padding-bottom: calc(85px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(95px + env(safe-area-inset-bottom, 20px)) !important;
+    scroll-padding-bottom: calc(95px + env(safe-area-inset-bottom, 20px)) !important;
   }
 }
 

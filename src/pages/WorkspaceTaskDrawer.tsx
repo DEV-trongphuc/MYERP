@@ -735,7 +735,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const res = await api.get(`/activities/${taskId}/timeline`);
       if (res.data) {
         const list = Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
-        setTimeline(list);
+        const sortedList = [...list].sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at.replace(/-/g, '/')).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at.replace(/-/g, '/')).getTime() : 0;
+          return (timeB - timeA) || (Number(b.id) - Number(a.id));
+        });
+        setTimeline(sortedList);
       }
     } catch (e) {
       console.error(e);
@@ -4034,7 +4039,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             // Parse changes
                             const keys = Object.keys(data);
                             const displayKeys = keys.filter(k => [
-                              'status', 'progress', 'priority', 'user_id', 'due_date'
+                              'status', 'progress', 'priority', 'user_id', 'due_date', 'start_date', 'subject', 'body', 'participant_ids', 'tags', 'approver_id', 'approval_status', 'require_approval'
                             ].includes(k));
 
                             const getActionMainText = () => {
@@ -4067,6 +4072,112 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               }
                             };
 
+                            const renderFieldDiff = (k: string, rawVal: any) => {
+                              const isDiff = rawVal && typeof rawVal === 'object' && ('new' in rawVal || 'to' in rawVal);
+                              const oldVal = isDiff ? (rawVal.old ?? rawVal.from) : undefined;
+                              const newVal = isDiff ? (rawVal.new ?? rawVal.to) : rawVal;
+
+                              const formatValue = (fieldKey: string, v: any) => {
+                                if (v === null || v === undefined || v === '' || v === 'null') return t('Không có');
+                                if (fieldKey === 'status') {
+                                  const statusLabels: Record<string, string> = {
+                                    todo: t('Cần làm'),
+                                    in_progress: t('Đang làm'),
+                                    done: t('Hoàn thành'),
+                                    cancelled: t('Đã hủy'),
+                                    pending: t('Chờ duyệt'),
+                                    planned: t('Lên kế hoạch')
+                                  };
+                                  return statusLabels[v] || v;
+                                }
+                                if (fieldKey === 'approval_status') {
+                                  const approvalLabels: Record<string, string> = {
+                                    pending: t('Chờ duyệt'),
+                                    approved: t('Đã duyệt'),
+                                    rejected: t('Từ chối')
+                                  };
+                                  return approvalLabels[v] || v;
+                                }
+                                if (fieldKey === 'progress') {
+                                  return `${v}%`;
+                                }
+                                if (fieldKey === 'priority') {
+                                  const priorityLabels: Record<string, string> = {
+                                    low: t('Thấp'),
+                                    medium: t('Trung bình'),
+                                    high: t('Cao'),
+                                    urgent: t('Khẩn cấp')
+                                  };
+                                  return priorityLabels[v] || v;
+                                }
+                                if (fieldKey === 'user_id' || fieldKey === 'approver_id') {
+                                  const u = users.find(usr => Number(usr.id) === Number(v));
+                                  return u?.full_name || `#${v}`;
+                                }
+                                if (fieldKey === 'due_date' || fieldKey === 'start_date') {
+                                  try {
+                                    const d = new Date(String(v).replace(/-/g, '/'));
+                                    return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('vi-VN');
+                                  } catch (e) {
+                                    return String(v);
+                                  }
+                                }
+                                if (fieldKey === 'participant_ids') {
+                                  if (!v) return t('Không có');
+                                  const pIds = String(v).split(',').map(Number).filter(Boolean);
+                                  const names = pIds.map(pid => users.find(usr => Number(usr.id) === pid)?.full_name || `#${pid}`);
+                                  return names.length > 0 ? names.join(', ') : t('Không có');
+                                }
+                                if (fieldKey === 'require_approval') {
+                                  return v ? t('Bắt buộc duyệt') : t('Không bắt buộc');
+                                }
+                                if (fieldKey === 'body') {
+                                  return t('Đã cập nhật mô tả');
+                                }
+                                return String(v);
+                              };
+
+                              const getLabel = (fieldKey: string) => {
+                                switch (fieldKey) {
+                                  case 'status': return t('Trạng thái');
+                                  case 'progress': return t('Tiến độ');
+                                  case 'priority': return t('Độ ưu tiên');
+                                  case 'user_id': return t('Người thực hiện');
+                                  case 'approver_id': return t('Người duyệt');
+                                  case 'approval_status': return t('Phê duyệt');
+                                  case 'due_date': return t('Thời hạn');
+                                  case 'start_date': return t('Ngày bắt đầu');
+                                  case 'subject': return t('Tiêu đề');
+                                  case 'body': return t('Mô tả');
+                                  case 'participant_ids': return t('Người liên quan');
+                                  case 'tags': return t('Nhãn tag');
+                                  case 'require_approval': return t('Cần duyệt');
+                                  default: return fieldKey;
+                                }
+                              };
+
+                              const label = getLabel(k);
+                              const formattedNew = formatValue(k, newVal);
+                              const formattedOld = (oldVal !== undefined && oldVal !== null && oldVal !== '') ? formatValue(k, oldVal) : null;
+
+                              if (formattedOld && formattedOld !== formattedNew) {
+                                return (
+                                  <div key={k} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: '1.4' }}>
+                                    <span style={{ fontWeight: 600 }}>• {label}:</span>
+                                    <span style={{ textDecoration: 'line-through', opacity: 0.65, color: 'var(--color-text-muted)' }}>{formattedOld}</span>
+                                    <span style={{ color: 'var(--color-primary)', fontWeight: 800, fontSize: '0.8rem' }}>➔</span>
+                                    <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{formattedNew}</strong>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div key={k} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
+                                  <span style={{ fontWeight: 600 }}>• {label}:</span> <strong style={{ color: 'var(--color-text)', fontWeight: 700 }}>{formattedNew}</strong>
+                                </div>
+                              );
+                            };
+
                             return (
                               <div key={idx} style={{ display: 'flex', gap: '15px', position: 'relative', zIndex: 1 }}>
                                 {/* Avatar */}
@@ -4091,67 +4202,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       display: 'flex', 
                                       flexDirection: 'column', 
                                       gap: '4px', 
-                                      marginTop: '2px',
-                                      marginBottom: '2px',
+                                      marginTop: '3px',
+                                      marginBottom: '3px',
                                       paddingLeft: '10px',
-                                      borderLeft: '2px solid var(--color-border-light)'
+                                      borderLeft: '2px solid var(--color-primary)',
+                                      background: 'rgba(0,0,0,0.015)',
+                                      padding: '6px 10px',
+                                      borderRadius: '0 8px 8px 0'
                                     }}>
-                                      {displayKeys.map(k => {
-                                        const val = data[k];
-                                        let label = '';
-                                        let displayVal = val;
-                                        
-                                        if (k === 'status') {
-                                          label = t('Trạng thái');
-                                          const statusLabels: Record<string, string> = {
-                                            todo: t('Cần làm'),
-                                            in_progress: t('Đang làm'),
-                                            done: t('Hoàn thành'),
-                                            cancelled: t('Đã hủy'),
-                                            pending: t('Chờ duyệt'),
-                                            planned: t('Lên kế hoạch')
-                                          };
-                                          displayVal = statusLabels[val] || val;
-                                        } else if (k === 'progress') {
-                                          label = t('Tiến độ');
-                                          displayVal = `${val}%`;
-                                        } else if (k === 'priority') {
-                                          label = t('Độ ưu tiên');
-                                          const priorityLabels: Record<string, string> = {
-                                            low: t('Thấp'),
-                                            medium: t('Trung bình'),
-                                            high: t('Cao')
-                                          };
-                                          displayVal = priorityLabels[val] || val;
-                                        } else if (k === 'user_id') {
-                                          label = t('Người thực hiện');
-                                          const assignedUser = users.find(u => Number(u.id) === Number(val));
-                                          displayVal = assignedUser?.full_name || val;
-                                        } else if (k === 'due_date') {
-                                          label = t('Thời hạn');
-                                          displayVal = val ? new Date(val).toLocaleDateString('vi-VN') : t('Không có');
-                                        } else if (k === 'body') {
-                                          label = t('Mô tả');
-                                          displayVal = t('Đã cập nhật nội dung');
-                                        } else if (k === 'subject') {
-                                          label = t('Tên công việc');
-                                          displayVal = val;
-                                        } else if (k === 'participant_ids') {
-                                          label = t('Người liên quan');
-                                          displayVal = t('Đã cập nhật danh sách');
-                                        } else if (k === 'tags') {
-                                          label = t('Nhãn công việc');
-                                          displayVal = val;
-                                        } else {
-                                          label = k;
-                                        }
-                                        
-                                        return (
-                                          <span key={k} style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
-                                            • {label}: <strong style={{ color: 'var(--color-text)', fontWeight: 600 }}>{displayVal}</strong>
-                                          </span>
-                                        );
-                                      })}
+                                      {displayKeys.map(k => renderFieldDiff(k, data[k]))}
                                     </div>
                                   )}
                                   

@@ -498,6 +498,33 @@ try {
             }
         }
     }
+
+    // Ensure columns exist on attendance_bulk_requests
+    try {
+        $cols = $db->query("SHOW COLUMNS FROM attendance_bulk_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        if (!in_array('approved_at', $cols, true)) {
+            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_at TIMESTAMP NULL DEFAULT NULL AFTER admin_note");
+        }
+        if (!in_array('approved_by', $cols, true)) {
+            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER approved_at");
+        }
+        if (!in_array('related_user_ids', $cols, true)) {
+            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN related_user_ids LONGTEXT NULL DEFAULT NULL AFTER manager_id");
+        }
+        if (!in_array('updated_at', $cols, true)) {
+            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
+        }
+
+        // Ensure company_id and supplier_id exist on deposits table
+        $depositCols = $db->query("SHOW COLUMNS FROM deposits")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        if (!in_array('company_id', $depositCols, true)) {
+            $db->exec("ALTER TABLE deposits ADD COLUMN company_id INT NULL DEFAULT NULL AFTER contact_id");
+        }
+        if (!in_array('supplier_id', $depositCols, true)) {
+            $db->exec("ALTER TABLE deposits ADD COLUMN supplier_id INT NULL DEFAULT NULL AFTER company_id");
+        }
+        $db->exec("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL");
+    } catch (\Throwable $e) {}
 } catch (Exception $e) {
     error_log("Auto Migration Error: " . $e->getMessage());
 }
@@ -805,6 +832,8 @@ switch ($resource) {
         }
         elseif ($resourceId === 'approvals' && $subResource === 'pending' && $method === 'GET') $ctrl->getPendingApprovals($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'my-requests' && $method === 'GET') $ctrl->getMyRequests($auth);
+        elseif ($resourceId === 'approvals' && $subResource === 'following' && $method === 'GET') $ctrl->getFollowingRequests($auth);
+        elseif ($resourceId === 'approvals' && $subResource === 'all' && $method === 'GET') $ctrl->getAllApprovals($auth);
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
@@ -842,6 +871,12 @@ switch ($resource) {
                 $ctrl->sendReminder($auth);
             } else {
                 respond(405, null, 'Phương thức không hỗ trợ cho reminder', false);
+            }
+        } elseif ($resourceId === 'test-attendance') {
+            if ($method === 'POST') {
+                $ctrl->sendTestAttendanceEmail($auth);
+            } else {
+                respond(405, null, 'Phương thức không hỗ trợ cho test-attendance', false);
             }
         } else {
             if ($method === 'GET') {
@@ -1211,6 +1246,7 @@ switch ($resource) {
         break;
 
     // CHECK-INS
+    case 'check_ins':
     case 'check-ins':
         $auth = requireAuth();
         $ctrl = new CheckInController($db);

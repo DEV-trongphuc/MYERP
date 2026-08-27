@@ -20,6 +20,15 @@ class NotificationService {
             }
 
             $recipients = $resolved['recipients'] ?? [];
+            $excludeUserId = (int)($payload['exclude_user_id'] ?? $payload['actor_id'] ?? $payload['current_user_id'] ?? 0);
+            if ($excludeUserId > 0 && !empty($recipients)) {
+                $recipients = array_values(array_filter($recipients, function($r) use ($excludeUserId) {
+                    return (int)($r['id'] ?? 0) !== $excludeUserId;
+                }));
+            }
+            if (empty($recipients) && empty($resolved['force_broadcast'])) {
+                return;
+            }
             $title = $resolved['title'] ?? 'Thông báo hệ thống';
             $body = $resolved['body'] ?? '';
             $type = $resolved['type'] ?? 'attendance';
@@ -139,8 +148,9 @@ class NotificationService {
                         require_once __DIR__ . '/zalo_bot.php';
 
                         $zaloChatIds = [];
-                        // 1. Group Admin Zalo: Gửi các sự kiện quản trị / broadcast tới group admin bình thường
-                        if (!empty($zaloGroupChatId) && $isAdminBroadcastEvent) {
+                        // 1. Group Admin Zalo: TUYỆT ĐỐI CHỈ gửi tới group Zalo các sự kiện liên quan đến Lead / Data
+                        $isLeadEvent = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN', 'LEAD_RECALL', 'TICKET_LEAD', 'TICKET_NEW', 'TICKET_APPROVED', 'TICKET_REJECTED'], true);
+                        if (!empty($zaloGroupChatId) && $isAdminBroadcastEvent && $isLeadEvent) {
                             $zaloChatIds[] = $zaloGroupChatId;
                         }
 
@@ -458,12 +468,11 @@ class NotificationService {
                     'email_content' => nl2br(htmlspecialchars($summaryText))
                 ];
 
-            case 'CHECKIN_MISSING_REMINDER':
+            case 'ATTENDANCE_REMINDER':
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
-                // Do NOT send attendance reminders to directors / superadmins or users on leave/vacation
                 $todayDate = date('Y-m-d');
                 $recipients = array_values(array_filter($recipients, function($r) use ($db, $todayDate) {
-                    if (in_array(strtolower($r['role'] ?? ''), ['director', 'superadmin', 'super_admin'], true)) return false;
+                    if (in_array(strtolower($r['role'] ?? ''), ['director'], true)) return false;
                     $uid = (int)($r['id'] ?? 0);
                     if ($uid <= 0) return true;
                     if (!empty($r['vacation_mode']) && (int)$r['vacation_mode'] === 1) return false;
@@ -482,7 +491,7 @@ class NotificationService {
                 $workStart = !empty($payload['work_start']) ? $payload['work_start'] : '';
                 if (empty($workStart)) {
                     $stmtWs = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1");
-                    $workStart = substr((string)($stmtWs ? $stmtWs->fetchColumn() : ''), 0, 5);
+                    $workStart = substr((string)($stmtWs ? $stmtWs->fetchColumn() : ''), 0, 5) ?: '08:00';
                 }
                 $timeText = !empty($workStart) ? " ($workStart)" : "";
                 $name = $payload['user_name'] ?? ($recipients[0]['full_name'] ?? 'bạn');
@@ -493,30 +502,82 @@ class NotificationService {
 
                 return [
                     'recipients' => $recipients,
-                    'title' => "⏰ Nhắc nhở: Bạn chưa chấm công hôm nay!",
-                    'body' => "Đã đến giờ bắt đầu ca{$timeText}. Bạn vui lòng chấm công vào hôm nay nhé!",
+                    'title' => "⏰ ĐÃ ĐẾN GIỜ CHẤM CÔNG{$timeText}",
+                    'body' => "Đã sắp đến giờ vào ca làm việc{$timeText}. Vui lòng chấm công đúng giờ nhé!",
                     'type' => "attendance",
                     'link' => "/attendance",
-                    'zalo_msg' => "⏰ [ NHẮC NHỞ CHẤM CÔNG HÔM NAY ]\n\nXin chào $name,\nĐã đến giờ bắt đầu ca làm việc{$timeText} nhưng bạn chưa thực hiện chấm công vào hôm nay.\n👉 Đăng nhập MYERP để chấm công ngay:\n$loginAttendanceLink",
-                    'tg_msg' => "⏰ <b>[ NHẮC NHỞ CHẤM CÔNG HÔM NAY ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã đến giờ bắt đầu ca làm việc" . (!empty($workStart) ? " (<code>$workStart</code>)" : "") . " nhưng bạn chưa thực hiện chấm công vào hôm nay.\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công ngay</b></a>",
-                    'email_subject' => "[IDEAS ERP] Nhắc nhở: Đến giờ chấm công vào ca hôm nay",
-                    'email_title' => "NHẮC NHỞ CHẤM CÔNG",
+                    'zalo_msg' => "⏰ [ NHẮC NHỞ CHẤM CÔNG ]\n\nXin chào $name,\nĐã sắp đến giờ vào ca làm việc{$timeText}. Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!\n👉 $loginAttendanceLink",
+                    'tg_msg' => "⏰ <b>[ NHẮC NHỞ CHẤM CÔNG ]</b> (Ca {$workStart})\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã sắp đến giờ vào ca làm việc (<code>$workStart</code>). Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công ngay</b></a>",
+                    'email_subject' => "[IDEAS ERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]",
+                    'email_title' => "NHẮC NHỞ CHẤM CÔNG VÀO CA",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
-                                    "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Nhắc nhở chấm công vào ca</h3>" .
-                                    "  <p style=\"margin: 0; color: #334155;\">Chào <strong>" . htmlspecialchars($name) . "</strong>, hệ thống ghi nhận đã đến giờ bắt đầu ca làm việc" . (!empty($workStart) ? " (<strong>$workStart</strong>)" : "") . " nhưng bạn chưa thực hiện chấm công vào hôm nay.</p>" .
+                                    "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Sắp đến giờ bắt đầu ca làm việc</h3>" .
+                                    "  <p style=\"margin: 0; color: #334155;\">Chào <strong>" . htmlspecialchars($name) . "</strong>, hệ thống nhắc nhở bạn sắp đến giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>). Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công đúng giờ.</p>" .
                                     "</div>" .
                                     "<p style=\"margin-top: 25px; text-align: center;\">" .
                                     "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG</a>" .
                                     "</p>"
                 ];
 
+            case 'CHECKIN_MISSING_REMINDER':
+                $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
+                // Do NOT send attendance reminders to directors or users on leave/vacation
+                $todayDate = date('Y-m-d');
+                $recipients = array_values(array_filter($recipients, function($r) use ($db, $todayDate) {
+                    if (in_array(strtolower($r['role'] ?? ''), ['director'], true)) return false;
+                    $uid = (int)($r['id'] ?? 0);
+                    if ($uid <= 0) return true;
+                    if (!empty($r['vacation_mode']) && (int)$r['vacation_mode'] === 1) return false;
+                    if (!empty($r['leave_start']) && !empty($r['leave_end'])) {
+                        if ($todayDate >= $r['leave_start'] && $todayDate <= $r['leave_end']) return false;
+                    }
+                    try {
+                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+                        $st->execute([$uid, $todayDate, $todayDate]);
+                        if ($st->fetchColumn()) return false;
+                    } catch (\Throwable $t) {}
+                    return true;
+                }));
+                if (empty($recipients)) return null;
+
+                $workStart = !empty($payload['work_start']) ? $payload['work_start'] : '';
+                if (empty($workStart)) {
+                    $stmtWs = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1");
+                    $workStart = substr((string)($stmtWs ? $stmtWs->fetchColumn() : ''), 0, 5) ?: '08:00';
+                }
+                $timeText = !empty($workStart) ? " ($workStart)" : "";
+                $name = $payload['user_name'] ?? ($recipients[0]['full_name'] ?? 'bạn');
+                
+                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "⚠️ CẢNH BÁO: Bạn chưa chấm công hôm nay!",
+                    'body' => "Đã quá giờ bắt đầu ca{$timeText} nhưng bạn chưa thực hiện chấm công vào hôm nay.",
+                    'type' => "attendance",
+                    'link' => "/attendance",
+                    'zalo_msg' => "⚠️ [ CẢNH BÁO: CHƯA CHẤM CÔNG HÔM NAY ]\n\nXin chào $name,\nĐã quá giờ bắt đầu ca làm việc{$timeText} nhưng hệ thống chưa ghi nhận lượt chấm công vào hôm nay của bạn.\n👉 Đăng nhập MYERP để chấm công ngay:\n$loginAttendanceLink",
+                    'tg_msg' => "⚠️ <b>[ CẢNH BÁO: CHƯA CHẤM CÔNG HÔM NAY ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã quá giờ bắt đầu ca làm việc" . (!empty($workStart) ? " (<code>$workStart</code>)" : "") . " nhưng bạn chưa thực hiện chấm công vào hôm nay.\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công ngay</b></a>",
+                    'email_subject' => "[IDEAS ERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]",
+                    'email_title' => "CẢNH BÁO CHƯA CHẤM CÔNG HÔM NAY",
+                    'email_content' => "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                                    "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công vào ca</h3>" .
+                                    "  <p style=\"margin: 0; color: #7f1d1d;\">Chào <strong>" . htmlspecialchars($name) . "</strong>, hệ thống ghi nhận đã quá giờ bắt đầu ca làm việc" . (!empty($workStart) ? " (<strong>$workStart</strong>)" : "") . " nhưng bạn <strong>chưa thực hiện chấm công vào hôm nay</strong>.<br/><br/>Vui lòng truy cập hệ thống MYERP để thực hiện chấm công ngay hoặc tạo phiếu giải trình đi trễ nếu có lý do chính đáng.</p>" .
+                                    "</div>" .
+                                    "<p style=\"margin-top: 25px; text-align: center;\">" .
+                                    "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG NGAY</a>" .
+                                    "</p>"
+                ];
+
             case 'CHECKOUT_REMINDER':
             case 'CHECKOUT_MISSING_REMINDER':
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
-                // Do NOT send attendance reminders to directors / superadmins or users on leave/vacation
+                // Do NOT send attendance reminders to directors or users on leave/vacation
                 $todayDate = date('Y-m-d');
                 $recipients = array_values(array_filter($recipients, function($r) use ($db, $todayDate) {
-                    if (in_array(strtolower($r['role'] ?? ''), ['director', 'superadmin', 'super_admin'], true)) return false;
+                    if (in_array(strtolower($r['role'] ?? ''), ['director'], true)) return false;
                     $uid = (int)($r['id'] ?? 0);
                     if ($uid <= 0) return true;
                     if (!empty($r['vacation_mode']) && (int)$r['vacation_mode'] === 1) return false;
