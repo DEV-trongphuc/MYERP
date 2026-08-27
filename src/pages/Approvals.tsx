@@ -363,6 +363,7 @@ export default function Approvals() {
   
   const isAdmin = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'hr'].includes(String(user?.role).toLowerCase());
   const [activeTab, setActiveTab] = useState<'pending' | 'my_requests' | 'following' | 'all'>('pending');
+  const hasAutoSwitchedTabRef = useRef(false);
   const [period, setPeriod] = useState<Period>('all');
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -1479,6 +1480,11 @@ export default function Approvals() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search || window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'pending' || tabParam === 'my_requests' || tabParam === 'following' || tabParam === 'all') {
+      setActiveTab(tabParam);
+      hasAutoSwitchedTabRef.current = true;
+    }
     const openId = params.get('open_id');
     const openType = params.get('open_type');
     const openStatus = params.get('open_status');
@@ -1542,6 +1548,16 @@ export default function Approvals() {
       setMyRequestsList(mList);
       setFollowingList(fList);
       setAllList(aList);
+
+      // Tự động active tab 'all' (Tất cả đề xuất) nếu tab 'pending' đang trống
+      if (!hasAutoSwitchedTabRef.current) {
+        const params = new URLSearchParams(location.search || window.location.search);
+        const specifiedTab = params.get('tab');
+        if (!specifiedTab && pList.length === 0) {
+          setActiveTab('all');
+        }
+        hasAutoSwitchedTabRef.current = true;
+      }
 
       const params = new URLSearchParams(location.search || window.location.search);
       const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
