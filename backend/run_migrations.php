@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 232;
+$targetVersion = 233;
 $currentVersion = 186;
 
 // Query current DB version
@@ -1798,8 +1798,25 @@ try {
         $logMsg("Nâng cấp lên phiên bản 232 hoàn tất.", "success");
     }
 
+    // -------------------------------------------------------------
+    // Migration 233: Update Existing Notifications from "CẢNH BÁO SLA" to "⚠️ Nhắc nhở"
+    // -------------------------------------------------------------
+    if ($currentVersion < 233) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 233 (Cập nhật thông báo sang tiếng Việt dễ hiểu)...", "info");
+        try {
+            $conn->query("UPDATE notifications SET title = REPLACE(title, 'CẢNH BÁO SLA: Công việc quá hạn', '⚠️ Nhắc nhở: Công việc đã quá hạn hoàn thành') WHERE title LIKE '%CẢNH BÁO SLA: Công việc quá hạn%'");
+            $conn->query("UPDATE notifications SET title = REPLACE(title, 'CẢNH BÁO SLA: Công việc con quá hạn', '⚠️ Nhắc nhở: Công việc con đã quá hạn') WHERE title LIKE '%CẢNH BÁO SLA: Công việc con quá hạn%'");
+            $conn->query("UPDATE notifications SET title = REPLACE(title, 'CẢNH BÁO SLA:', '⚠️ Nhắc nhở:') WHERE title LIKE '%CẢNH BÁO SLA:%'");
+            $conn->query("UPDATE notifications SET title = REPLACE(title, 'CẢNH BÁO SLA', '⚠️ Nhắc nhở quá hạn') WHERE title LIKE '%CẢNH BÁO SLA%'");
+            $logMsg("Đã chuyển đổi toàn bộ thông báo kỹ thuật 'CẢNH BÁO SLA' thành tiêu đề tiếng Việt rõ ràng, dễ hiểu.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 233: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 233 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '232') ON DUPLICATE KEY UPDATE setting_value = '232'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '233') ON DUPLICATE KEY UPDATE setting_value = '233'");
 
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");

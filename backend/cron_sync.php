@@ -2944,8 +2944,8 @@ function checkTaskDueSlaAlerts($conn) {
             $isEndOfDay = (date('H:i:s', $dueTs) === '23:59:59' || date('H:i:s', $dueTs) === '00:00:00' || date('H:i', $dueTs) === '23:59');
             $dueFormatted = $isEndOfDay ? date('d/m/Y', $dueTs) : date('H:i d/m/Y', $dueTs);
 
-            $title = "CẢNH BÁO SLA: Công việc quá hạn";
-            $body = "Công việc \"" . $subject . "\" đã quá hạn xử lý (thời hạn: " . $dueFormatted . ")!";
+            $title = "⚠️ Nhắc nhở: Công việc đã quá hạn hoàn thành";
+            $body = "Nhiệm vụ \"" . $subject . "\" đã quá hạn xử lý (thời hạn: " . $dueFormatted . "). Vui lòng kiểm tra và cập nhật tiến độ!";
             $link = "/workspace?task_id=" . $taskId;
 
             $recipients = array_filter(array_unique([$userId, $createdBy]));
@@ -2969,7 +2969,7 @@ function checkTaskDueSlaAlerts($conn) {
                 $upd->close();
             }
 
-            logSync("Sent Task Overdue SLA Alert for Task #$taskId ($subject)");
+            logSync("Sent Task Overdue Alert for Task #$taskId ($subject)");
         }
         if ($notifStmt) {
             $notifStmt->close();
@@ -3046,8 +3046,8 @@ function checkSubtaskDueAlerts($conn) {
                             
                             if ($recipientId) {
                                 $dueFormatted = $isEndOfDay ? date('d/m/Y', $dueTime) : date('H:i d/m/Y', $dueTime);
-                                $title = "CẢNH BÁO SLA: Công việc con quá hạn";
-                                $body = "Công việc con \"" . $item['title'] . "\" thuộc nhiệm vụ \"" . $taskSubject . "\" đã quá hạn xử lý (thời hạn: " . $dueFormatted . ")!";
+                                $title = "⚠️ Nhắc nhở: Công việc con đã quá hạn";
+                                $body = "Công việc con \"" . $item['title'] . "\" trong nhiệm vụ \"" . $taskSubject . "\" đã quá hạn xử lý (thời hạn: " . $dueFormatted . "). Vui lòng hoàn thành!";
                                 $link = "/workspace?task_id=" . $taskId . (!empty($item['id']) ? "&subtask_id=" . $item['id'] : "");
                                 
                                 if ($notifStmt) {
@@ -3057,7 +3057,7 @@ function checkSubtaskDueAlerts($conn) {
                                 
                                 $item['notified_sla'] = true;
                                 $updated = true;
-                                logSync("Sent Subtask Overdue SLA Alert for Task #$taskId (Subtask: {$item['title']}) to User #$recipientId");
+                                logSync("Sent Subtask Overdue Alert for Task #$taskId (Subtask: {$item['title']}) to User #$recipientId");
                             }
                         }
                     }
