@@ -364,6 +364,7 @@ export default function Approvals() {
   const isAdmin = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'hr'].includes(String(user?.role).toLowerCase());
   const [activeTab, setActiveTab] = useState<'pending' | 'my_requests' | 'following' | 'all'>('pending');
   const hasAutoSwitchedTabRef = useRef(false);
+  const pendingOpenRef = useRef<{ id: number; type?: string; status?: string } | null>(null);
   const [period, setPeriod] = useState<Period>('all');
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -1501,6 +1502,7 @@ export default function Approvals() {
       }
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (openId) {
+      pendingOpenRef.current = { id: Number(openId), type: openType || undefined, status: openStatus || undefined };
       setSelectedTimelineItem({
         id: Number(openId),
         type: (openType || 'expense') as any,
@@ -1557,6 +1559,17 @@ export default function Approvals() {
           setActiveTab('all');
         }
         hasAutoSwitchedTabRef.current = true;
+      }
+
+      // Đồng bộ thông tin đầy đủ cho item được mở qua link thông báo
+      const targetOpenId = pendingOpenRef.current?.id || (selectedTimelineItem?.title === '' ? selectedTimelineItem.id : null);
+      if (targetOpenId) {
+        const targetType = pendingOpenRef.current?.type || selectedTimelineItem?.type;
+        const combined = [...pList, ...mList, ...fList, ...aList];
+        const matchedItem = combined.find(it => it.id === targetOpenId && (targetType ? it.type === targetType : true)) || combined.find(it => it.id === targetOpenId);
+        if (matchedItem) {
+          setSelectedTimelineItem(matchedItem);
+        }
       }
 
       const params = new URLSearchParams(location.search || window.location.search);
@@ -6827,7 +6840,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       );
     }
 
-    const rawDesc = detail?.notes || detail?.description || item.description || '';
+    const rawDesc = detail?.notes || detail?.description || detail?.reason || item.description || '';
     const isPrintStampSend = item.type === 'expense' && rawDesc.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
 
     // Determine actual approver user IDs configured for this proposal
@@ -7077,7 +7090,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     const creatorUser = users.find(u => String(u.full_name) === String(getEmployeeName()) || String(u.name) === String(getEmployeeName()) || String(u.id) === String(detail?.user_id || detail?.created_by));
 
-    const rawDesc = detail?.notes || detail?.description || item.description || '';
+    const rawDesc = detail?.notes || detail?.description || detail?.reason || item.description || '';
     const hasInstallments = rawDesc.includes('[Thanh toán theo đợt]');
     const hasRecurring = rawDesc.includes('[Lặp lại định kỳ]');
     const isPrintStampSend = item.type === 'expense' && rawDesc.includes('Quy trình: In, đóng dấu và gửi hồ sơ');
@@ -7213,15 +7226,24 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     }
 
     const extractMetaField = (text: string, label: string) => {
+      if (!text) return '';
       const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
       const m = text.match(reg);
       return m ? m[1].trim() : '';
     };
 
-    const positionVal = extractMetaField(rawDesc, 'Vị trí');
-    const departmentVal = extractMetaField(rawDesc, 'Phòng ban');
-    const contentVal = extractMetaField(rawDesc, 'Nội dung đề xuất');
-    const reasonVal = extractMetaField(rawDesc, 'Lý do');
+    const positionVal = extractMetaField(rawDesc, 'Vị trí') || detail?.position || '';
+    const departmentVal = extractMetaField(rawDesc, 'Phòng ban') || detail?.department || '';
+    const contentVal = extractMetaField(rawDesc, 'Nội dung đề xuất') || extractMetaField(rawDesc, 'Nội dung') || detail?.content || '';
+    
+    let reasonVal = extractMetaField(rawDesc, 'Lý do');
+    if (!reasonVal && detail?.reason) {
+      const extracted = extractMetaField(detail.reason, 'Lý do');
+      reasonVal = extracted || detail.reason;
+    }
+    if (!reasonVal && detail?.notes && !contentVal) {
+      reasonVal = detail.notes;
+    }
 
     let installmentText = '';
     if (hasInstallments) {
@@ -7235,10 +7257,35 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       if (match) recurringText = match[1];
     }
 
-    const cleanHeaderTitle = (item.title || '')
+    const getLeaveTitle = (type?: string) => {
+      switch (type) {
+        case 'annual': return t('Đề xuất nghỉ phép năm');
+        case 'sick': return t('Đề xuất nghỉ ốm / thai sản');
+        case 'compensatory': return t('Đề xuất nghỉ bù');
+        case 'special_paid': return t('Đề xuất nghỉ chế độ');
+        case 'late_early': return t('Giải trình đi trễ / về sớm');
+        case 'unpaid': return t('Đề xuất nghỉ việc riêng');
+        case 'overtime': return t('Đăng ký tăng ca (OT)');
+        case 'remote_work': return t('Đăng ký làm việc từ xa (WFH)');
+        case 'business_trip': return t('Đăng ký đi công tác');
+        default: return t('Đề xuất nghỉ phép');
+      }
+    };
+
+    const rawTitle = (
+      item.title ||
+      detail?.title ||
+      (item.type === 'leave' ? getLeaveTitle(detail?.leave_type || (item as any).leave_type) : '') ||
+      (item.type === 'advance' ? t('Đề nghị tạm ứng lương') : '') ||
+      (item.type === 'checkin' ? t('Giải trình quên chấm công') : '') ||
+      (item.type === 'attendance_bulk' ? (detail?.title || t('Đề xuất bổ sung chấm công hàng loạt')) : '') ||
+      (detail?.expense_title || detail?.name || '')
+    );
+
+    const cleanHeaderTitle = (rawTitle || `IDEAS - ${t('Quy trình')} #${item.id}`)
       .replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '');
 
-    const cleanNoteText = (detail?.notes || rawDesc || '')
+    const cleanNoteText = (detail?.reason || detail?.notes || detail?.description || rawDesc || '')
       .replace(/^Số tiền:\s*[\d.,]+\s*đ\.\s*Ghi chú:\s*"?/i, '')
       .replace(/^Số tiền:\s*[\d.,]+\s*đ\s*"?/i, '')
       .replace(/^Ghi chú:\s*"?/i, '')
@@ -7642,7 +7689,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             ) : (
               <textarea
                 rows={3}
-                value={cleanNoteText}
+                value={cleanNoteText || detail?.reason || detail?.notes || detail?.description || item.description || t('Không có mô tả chi tiết')}
                 disabled
                 style={{
                   width: '100%',
