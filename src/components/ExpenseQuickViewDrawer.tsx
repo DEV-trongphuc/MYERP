@@ -165,6 +165,51 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     return feedItems.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   }, [comments, historyLogs]);
 
+  const isMyTurnToApprove = (item: any) => {
+    if (!item) return false;
+    const overall = String(item.status || 'pending').toLowerCase();
+    if (overall !== 'pending') return false;
+
+    const role = String(user?.role || '').toLowerCase();
+    const userId = Number(user?.id || 0);
+    const isSuperAdmin = ['superadmin', 'super_admin', 'admin'].includes(role);
+
+    const s1 = String(item.status_level_1 || 'pending').toLowerCase();
+    const s2 = String(item.status_level_2 || 'pending').toLowerCase();
+    const s3 = String(item.status_level_3 || 'pending').toLowerCase();
+
+    const app1 = Number(item.approver_id || 0);
+    const app2 = Number(item.approver_id_2 || 0);
+    const app3 = Number(item.approver_id_3 || 0);
+
+    let currentLevel = 1;
+    if (s1 === 'approved' && app2 && s2 === 'pending') {
+      currentLevel = 2;
+    } else if (s1 === 'approved' && s2 === 'approved' && app3 && s3 === 'pending') {
+      currentLevel = 3;
+    } else if (s1 !== 'pending') {
+      return false;
+    }
+
+    if (currentLevel === 1) {
+      if (app1 > 0 && app1 === userId) return true;
+      if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
+      return isSuperAdmin;
+    }
+
+    if (currentLevel === 2) {
+      if (app2 > 0 && app2 === userId) return true;
+      return isSuperAdmin;
+    }
+
+    if (currentLevel === 3) {
+      if (app3 > 0 && app3 === userId) return true;
+      return isSuperAdmin;
+    }
+
+    return false;
+  };
+
   const renderTimeline = () => {
     if (!viewItem) return null;
 
@@ -743,10 +788,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               </h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {viewItem.status === 'pending' && (
-                ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'accountant'].includes(String(user?.role).toLowerCase()) || 
-                (viewItem.approver_id && Number(viewItem.approver_id) === Number(user?.id))
-              ) && (
+              {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
                     className="btn danger sm" 
@@ -913,10 +955,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
               })()}
 
               {/* Action Buttons 50/50 below money banner */}
-              {viewItem.status === 'pending' && (
-                ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'accountant'].includes(String(user?.role).toLowerCase()) || 
-                (viewItem.approver_id && Number(viewItem.approver_id) === Number(user?.id))
-              ) && (
+              {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '12px', width: '100%', flexShrink: 0 }}>
                   <button 
                     className="btn danger" 

@@ -6586,25 +6586,77 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const isPending = ['pending', 'pending_manager', 'pending_hr'].includes(overallStatus);
     if (!isPending) return false;
 
-    const isGlobalAdmin = ['superadmin', 'admin', 'director', 'hr'].includes((user?.role || '').toLowerCase());
-    if (isGlobalAdmin) return true;
+    const role = (user?.role || '').toLowerCase();
+    const userId = Number(user?.id || 0);
+    const isSuperAdmin = ['superadmin', 'super_admin', 'admin'].includes(role);
+
+    if (item.type === 'expense') {
+      const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();
+      const s2 = String(detail?.status_level_2 || (item as any)?.status_level_2 || 'pending').toLowerCase();
+      const s3 = String(detail?.status_level_3 || (item as any)?.status_level_3 || 'pending').toLowerCase();
+
+      const app1 = Number(detail?.approver_id || (item as any)?.approver_id || 0);
+      const app2 = Number(detail?.approver_id_2 || (item as any)?.approver_id_2 || 0);
+      const app3 = Number(detail?.approver_id_3 || (item as any)?.approver_id_3 || 0);
+
+      let currentLevel = 1;
+      if (s1 === 'approved' && app2 && s2 === 'pending') {
+        currentLevel = 2;
+      } else if (s1 === 'approved' && s2 === 'approved' && app3 && s3 === 'pending') {
+        currentLevel = 3;
+      } else if (s1 !== 'pending') {
+        return false;
+      }
+
+      if (currentLevel === 1) {
+        if (app1 > 0 && app1 === userId) return true;
+        if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
+        return isSuperAdmin;
+      }
+      if (currentLevel === 2) {
+        if (app2 > 0 && app2 === userId) return true;
+        return isSuperAdmin;
+      }
+      if (currentLevel === 3) {
+        if (app3 > 0 && app3 === userId) return true;
+        return isSuperAdmin;
+      }
+      return false;
+    }
 
     if (item.type === 'leave' || item.type === 'advance') {
-      const isLevel1Active = (detail?.status_level_1 || 'pending').toLowerCase() === 'pending';
-      const isLevel2Active = (detail?.status_level_1 || '').toLowerCase() === 'approved' && (detail?.status_level_2 || 'pending').toLowerCase() === 'pending';
-      
-      const isLevel1Approver = Number(detail?.approver_id || (item as any).approver_id) === Number(user?.id);
-      const isLevel2Approver = Number(detail?.approver_id_2 || (item as any).approver_id_2) === Number(user?.id);
-      
-      return (isLevel1Active && isLevel1Approver) || (isLevel2Active && isLevel2Approver);
+      const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();
+      const s2 = String(detail?.status_level_2 || (item as any)?.status_level_2 || 'pending').toLowerCase();
+
+      const app1 = Number(detail?.approver_id || (item as any)?.approver_id || 0);
+      const app2 = Number(detail?.approver_id_2 || (item as any)?.approver_id_2 || 0);
+
+      let currentLevel = 1;
+      if (s1 === 'approved' && app2 && s2 === 'pending') {
+        currentLevel = 2;
+      } else if (s1 !== 'pending') {
+        return false;
+      }
+
+      if (currentLevel === 1) {
+        if (app1 > 0 && app1 === userId) return true;
+        if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
+        return isSuperAdmin;
+      }
+      if (currentLevel === 2) {
+        if (app2 > 0 && app2 === userId) return true;
+        return isSuperAdmin;
+      }
+      return false;
     }
 
-    if (item.type === 'attendance_bulk') {
+    if (item.type === 'attendance_bulk' || item.type === 'checkin') {
       const targetApproverId = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
-      if (targetApproverId && Number(targetApproverId) === Number(user?.id)) return true;
+      if (targetApproverId && Number(targetApproverId) === userId) return true;
+      return isSuperAdmin;
     }
     
-    return isAdmin;
+    return isSuperAdmin;
   };
 
   const [reminderTargetUser, setReminderTargetUser] = useState<any>(null);
