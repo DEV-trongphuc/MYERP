@@ -117,19 +117,6 @@ class NotificationController {
         $stmtUser->execute([$targetUserId]);
         $targetUserRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
 
-        // Always insert notification for target user into notifications table for In-App Bell
-        $stmt = $this->db->prepare("
-            INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-            VALUES (?, ?, ?, ?, 'approval', ?)
-        ");
-        $stmt->execute([
-            $targetUserId,
-            $tenantId,
-            $title,
-            $body,
-            "/approvals?open_id={$itemId}&open_type={$itemType}"
-        ]);
-
         if ($targetUserRow) {
             try {
                 require_once __DIR__ . '/../NotificationService.php';
@@ -145,6 +132,19 @@ class NotificationController {
             } catch (\Throwable $e) {
                 error_log("Reminder NotificationService error: " . $e->getMessage());
             }
+        } else {
+            // Fallback direct insert if targetUserRow not found in user query
+            $stmt = $this->db->prepare("
+                INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                VALUES (?, ?, ?, ?, 'approval', ?)
+            ");
+            $stmt->execute([
+                $targetUserId,
+                $tenantId,
+                $title,
+                $body,
+                "/approvals?open_id={$itemId}&open_type={$itemType}"
+            ]);
         }
 
         respond(200, null, 'Gửi nhắc nhở thành công');

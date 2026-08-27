@@ -2946,7 +2946,7 @@ function checkTaskDueSlaAlerts($conn) {
 
             $title = "CẢNH BÁO SLA: Công việc quá hạn";
             $body = "Công việc \"" . $subject . "\" đã quá hạn xử lý (thời hạn: " . $dueFormatted . ")!";
-            $link = "/activities";
+            $link = "/workspace?task_id=" . $taskId;
 
             $recipients = array_filter(array_unique([$userId, $createdBy]));
             foreach ($recipients as $targetUid) {
@@ -3048,7 +3048,7 @@ function checkSubtaskDueAlerts($conn) {
                                 $dueFormatted = $isEndOfDay ? date('d/m/Y', $dueTime) : date('H:i d/m/Y', $dueTime);
                                 $title = "CẢNH BÁO SLA: Công việc con quá hạn";
                                 $body = "Công việc con \"" . $item['title'] . "\" thuộc nhiệm vụ \"" . $taskSubject . "\" đã quá hạn xử lý (thời hạn: " . $dueFormatted . ")!";
-                                $link = "/activities";
+                                $link = "/workspace?task_id=" . $taskId . (!empty($item['id']) ? "&subtask_id=" . $item['id'] : "");
                                 
                                 if ($notifStmt) {
                                     $notifStmt->bind_param("iisss", $recipientId, $tenantId, $title, $body, $link);

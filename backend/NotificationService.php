@@ -1296,10 +1296,13 @@ class NotificationService {
 
             case 'HRM_LEAVE_REQUEST':
                 $targetApproverId = (int)($payload['approver_id'] ?? $payload['target_user_id'] ?? 0);
+                if ($targetApproverId === 0 && !empty($payload['user_id']) && !empty($payload['submitter_id']) && (int)$payload['user_id'] !== (int)$payload['submitter_id']) {
+                    $targetApproverId = (int)$payload['user_id'];
+                }
                 if ($targetApproverId > 0) {
                     $recipients = self::getRecipientById($db, $targetApproverId);
                 } else {
-                    $submitterId = (int)($payload['user_id'] ?? 0);
+                    $submitterId = (int)($payload['submitter_id'] ?? $payload['user_id'] ?? 0);
                     $recipients = self::getApproversForEvent($db, $tenantId, 'leave', $submitterId);
                 }
                 $leaveType = $payload['leave_type_text'] ?? 'Nghỉ phép';
@@ -1380,10 +1383,13 @@ class NotificationService {
 
             case 'HRM_ADVANCE_REQUEST':
                 $targetApproverId = (int)($payload['approver_id'] ?? $payload['target_user_id'] ?? 0);
+                if ($targetApproverId === 0 && !empty($payload['user_id']) && !empty($payload['submitter_id']) && (int)$payload['user_id'] !== (int)$payload['submitter_id']) {
+                    $targetApproverId = (int)$payload['user_id'];
+                }
                 if ($targetApproverId > 0) {
                     $recipients = self::getRecipientById($db, $targetApproverId);
                 } else {
-                    $submitterId = (int)($payload['user_id'] ?? 0);
+                    $submitterId = (int)($payload['submitter_id'] ?? $payload['user_id'] ?? 0);
                     $amt = (float)($payload['amount'] ?? 0);
                     $recipients = self::getApproversForEvent($db, $tenantId, 'advance', $submitterId, $amt);
                 }

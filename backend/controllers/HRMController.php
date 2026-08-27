@@ -492,13 +492,16 @@ class HRMController {
 
             if ($statusInput === 'approved' && $isApprover1 && !empty($leaveRow['approver_id_2'])) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_REQUEST', [
-                    'user_id' => $leaveRow['approver_id_2'],
+                    'approver_id' => (int)$leaveRow['approver_id_2'],
+                    'target_user_id' => (int)$leaveRow['approver_id_2'],
+                    'user_id' => (int)$leaveRow['approver_id_2'],
                     'user_name' => $leaveRow['full_name'],
+                    'submitter_id' => (int)$leaveRow['user_id'],
                     'leave_type_text' => $leaveTypeText,
                     'start_date' => $leaveRow['start_date'],
                     'end_date' => $leaveRow['end_date'],
                     'total_days' => (float)$leaveRow['total_days'],
-                    'reason' => 'Đã duyệt Cấp 1. Lý do ban đầu: ' . $leaveRow['reason'],
+                    'reason' => 'Đã duyệt Cấp 1 (Chờ Giám đốc duyệt). Lý do ban đầu: ' . $leaveRow['reason'],
                     'date' => date('Y-m-d'),
                     'ref_id' => $id
                 ]);
@@ -735,10 +738,13 @@ class HRMController {
 
             if ($statusInput === 'approved' && $isApprover1 && !empty($advRow['approver_id_2'])) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_REQUEST', [
-                    'user_id' => $advRow['approver_id_2'],
+                    'approver_id' => (int)$advRow['approver_id_2'],
+                    'target_user_id' => (int)$advRow['approver_id_2'],
+                    'user_id' => (int)$advRow['approver_id_2'],
                     'user_name' => $advRow['full_name'],
+                    'submitter_id' => (int)$advRow['user_id'],
                     'amount' => (float)$advRow['amount'],
-                    'reason' => 'Đã duyệt Cấp 1. Lý do ban đầu: ' . $advRow['reason'],
+                    'reason' => 'Đã duyệt Cấp 1 (Chờ Giám đốc duyệt). Lý do ban đầu: ' . $advRow['reason'],
                     'date' => date('Y-m-d'),
                     'ref_id' => $id
                 ]);
