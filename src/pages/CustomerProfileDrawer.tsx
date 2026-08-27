@@ -12949,15 +12949,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       {!!selectedTicketDetail && (
         <Suspense fallback={null}>
           <TicketDrawer
+            key={selectedTicketDetail?.id ? `ticket-drawer-${selectedTicketDetail.id}` : 'ticket-drawer-empty'}
             isOpen={!!selectedTicketDetail}
             onClose={() => setSelectedTicketDetail(null)}
             ticket={selectedTicketDetail}
-            onUpdate={async (updated) => {
-              try {
-                await api.put(`/tickets/${updated.id}`, updated);
-                setDrawerTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
-              } catch (e: any) {
-                addToast(e.response?.data?.message || 'Không thể cập nhật Ticket', 'error');
+            onUpdate={(updated) => {
+              setDrawerTickets(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
+              setSelectedTicketDetail(prev => prev ? { ...prev, ...updated } : updated);
+            }}
+            onDelete={(deletedId) => {
+              setDrawerTickets(prev => prev.filter(t => t.id !== deletedId));
+              if (selectedTicketDetail?.id === deletedId) {
+                setSelectedTicketDetail(null);
               }
             }}
             contacts={contacts}

@@ -75,6 +75,23 @@ export const TicketsPage: React.FC = () => {
     return d.toLocaleDateString('vi-VN');
   };
 
+  const normalizeMediaUrl = (url: string) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+      return trimmed;
+    }
+    const apiBase = import.meta.env.VITE_API_URL || '/backend';
+    let path = trimmed.replace(/^\/+/, '');
+    if (path.startsWith('backend/')) {
+      return `/${path}`;
+    }
+    if (path.startsWith('storage/uploads/')) {
+      path = path.replace('storage/uploads/', 'uploads/');
+    }
+    return `${apiBase}/${path}`;
+  };
+
   const isSlaOverdue = (dateStr: any) => {
     if (!dateStr) return false;
     const d = new Date(dateStr);
@@ -217,12 +234,17 @@ export const TicketsPage: React.FC = () => {
     setPage(1);
   }, [debouncedSearch, filterStatus]);
 
-  const handleUpdate = async (updated: any) => {
-    try {
-      await api.put(`/tickets/${updated.id}`, updated);
-      setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
-    } catch (e: any) {
-      addToast(e.response?.data?.message || 'Không thể cập nhật Ticket', 'error');
+  const handleUpdate = (updated: any) => {
+    setTickets(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
+    if (selectedTicket?.id === updated.id) {
+      setSelectedTicket(prev => prev ? { ...prev, ...updated } : updated);
+    }
+  };
+
+  const handleDelete = (deletedId: number) => {
+    setTickets(prev => prev.filter(t => t.id !== deletedId));
+    if (selectedTicket?.id === deletedId) {
+      setSelectedTicket(null);
     }
   };
 
@@ -813,7 +835,7 @@ export const TicketsPage: React.FC = () => {
                             position: 'relative'
                           }}>
                             {isImg ? (
-                              <img src={att.url} alt={att.name} style={{ width: '28px', height: '28px', borderRadius: '4px', objectFit: 'cover' }} />
+                              <img src={normalizeMediaUrl(att.url)} alt={att.name} style={{ width: '28px', height: '28px', borderRadius: '4px', objectFit: 'cover' }} />
                             ) : (
                               <FileText size={18} style={{ color: 'var(--color-primary)' }} />
                             )}
@@ -842,10 +864,12 @@ export const TicketsPage: React.FC = () => {
       </AnimatePresence>
     , document.body)}
       <TicketDrawer 
+        key={selectedTicket?.id ? `ticket-drawer-${selectedTicket.id}` : 'ticket-drawer-empty'}
         isOpen={!!selectedTicket} 
         onClose={() => setSelectedTicket(null)} 
         ticket={selectedTicket} 
         onUpdate={handleUpdate}
+        onDelete={handleDelete}
         contacts={contacts}
         users={users}
         onOpenContact={(contactData) => setSelectedContactForDrawer(contactData)}

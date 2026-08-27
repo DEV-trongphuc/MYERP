@@ -679,7 +679,7 @@ if (!in_array($action, $publicActions)) {
             $currentSaleConsultantId = (int)$cRow['id'];
         } else if (isset($decodedUser['role']) && in_array($decodedUser['role'], ['sale', 'sales', 'manager'], true)) {
             // Auto-create consultant record if missing for this company user
-            $stmtInsert = $conn->prepare("INSERT INTO consultants (name, email, status, work_start_time, work_end_time, vacation_mode, overtime_mode) VALUES (?, ?, 'active', '08:00', '17:30', 0, 0)");
+            $stmtInsert = $conn->prepare("INSERT INTO consultants (name, email, status, work_start_time, work_end_time, vacation_mode, overtime_mode) VALUES (?, ?, 'active', '08:00', '17:00', 0, 0)");
             $userName = $decodedUser['name'] ?? $decodedUser['username'] ?? 'User';
             $stmtInsert->bind_param("ss", $userName, $decodedUser['email']);
             if ($stmtInsert->execute()) {

@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { 
   X, MessageSquare, Clock, AlertCircle, User, Paperclip, Send, CheckCircle2, 
   XCircle, Inbox, Image as ImageIcon, FileText, ExternalLink, Loader2, Lock, 
-  Eye, Calendar, Trash2, Download, File
+  Eye, Calendar, Trash2, Download, File, RotateCcw
 } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -21,6 +21,7 @@ interface Props {
   onClose: () => void;
   ticket: any;
   onUpdate?: (data: any) => void;
+  onDelete?: (ticketId: number) => void;
   contacts?: any[];
   users?: any[];
   onOpenContact?: (contact: any) => void;
@@ -33,7 +34,7 @@ const PRIORITIES = [
   { id: 'urgent', label: 'Khẩn cấp', color: '#ef4444' },
 ];
 
-export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdate, contacts = [], users = [], onOpenContact }) => {
+export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdate, onDelete, contacts = [], users = [], onOpenContact }) => {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -66,53 +67,63 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [prevTicketId, setPrevTicketId] = useState<number | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [resolvedContact, setResolvedContact] = useState<any>(null);
+  const currentTicketIdRef = useRef<number | null>(null);
 
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  if (isOpen && ticket?.id && ticket.id !== prevTicketId && !loading) {
-    setLoading(true);
-  }
-
-  const fetchComments = async () => {
-    if (!ticket?.id) return;
+  const fetchComments = async (targetId?: number) => {
+    const tid = targetId ?? formData?.id ?? ticket?.id;
+    if (!tid) return;
     setLoading(true);
     try {
-      const r = await api.get(`/tickets/${ticket.id}/comments`);
-      setComments(r.data.data || []);
+      const r = await api.get(`/tickets/${tid}/comments`);
+      if (currentTicketIdRef.current === tid) {
+        setComments(Array.isArray(r.data?.data) ? r.data.data : []);
+      }
     } catch (err: any) {
       console.error('Failed to fetch ticket comments', err);
+      if (currentTicketIdRef.current === tid) {
+        setComments([]);
+      }
     } finally {
-      setLoading(false);
+      if (currentTicketIdRef.current === tid) {
+        setLoading(false);
+      }
     }
   };
 
   const handleDeleteComment = async (commentId: number) => {
-    if (!ticket?.id) return;
+    const tid = formData?.id || ticket?.id;
+    if (!tid) return;
     try {
-      await api.delete(`/tickets/${ticket.id}/comments/${commentId}`);
+      await api.delete(`/tickets/${tid}/comments/${commentId}`);
       addToast(t('Đã xóa bình luận!'), 'success');
-      fetchComments();
+      fetchComments(tid);
     } catch (err: any) {
       addToast(t('Lỗi khi xóa bình luận: ') + (err.response?.data?.message || err.message), 'error');
     }
   };
 
   useEffect(() => {
-    if (ticket?.id) {
+    if (isOpen && ticket?.id) {
+      currentTicketIdRef.current = ticket.id;
       setFormData(ticket);
-      setPrevTicketId(ticket.id);
-      fetchComments();
-      setResolvedContact(null);
+      setComments([]); // Always clear comments of previous ticket immediately!
+      setNewComment('');
       setCommentAttachments([]);
+      setReplyTo(null);
+      setResolvedContact(null);
+      fetchComments(ticket.id);
 
       const cid = ticket.contact_id || ticket.customer_id || (ticket.related_contacts && ticket.related_contacts.length > 0 ? ticket.related_contacts[0] : null);
       if (cid) {
         api.get(`/contacts/${cid}`).then(res => {
-          if (res.data.success && res.data.data) {
+          if (res.data.success && res.data.data && currentTicketIdRef.current === ticket.id) {
             setResolvedContact(res.data.data);
           }
         }).catch(() => {});
@@ -125,13 +136,21 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
             const target = ticket.customer_name.trim().toLowerCase();
             return fullName === target || cName === target;
           });
-          if (matched) {
+          if (matched && currentTicketIdRef.current === ticket.id) {
             setResolvedContact(matched);
           }
         }).catch(() => {});
       }
+    } else if (!isOpen) {
+      currentTicketIdRef.current = null;
+      setFormData({});
+      setComments([]);
+      setNewComment('');
+      setCommentAttachments([]);
+      setReplyTo(null);
+      setResolvedContact(null);
     }
-  }, [ticket]);
+  }, [isOpen, ticket?.id]);
 
   useEffect(() => {
     if (isOpen) {
@@ -188,10 +207,11 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   };
 
   const handleSend = async () => {
-    if ((!newComment.trim() && commentAttachments.length === 0) || isSubmitting) return;
+    const tid = formData?.id || ticket?.id;
+    if (!tid || (!newComment.trim() && commentAttachments.length === 0) || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const r = await api.post(`/tickets/${ticket.id}/comments`, { 
+      const r = await api.post(`/tickets/${tid}/comments`, { 
         body: newComment.trim() || 'Đã gửi tệp đính kèm',
         parent_id: replyTo ? replyTo.id : null,
         attachments: commentAttachments
@@ -209,11 +229,12 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   };
 
   const handleAcceptTicket = async () => {
-    if (isSubmitting) return;
+    const tid = formData?.id || ticket?.id;
+    if (!tid || isSubmitting) return;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'in_progress' };
-      await api.put(`/tickets/${ticket.id}`, { status: 'in_progress' });
+      await api.put(`/tickets/${tid}`, { status: 'in_progress' });
       setFormData(updated);
       onUpdate?.(updated);
       addToast('Đã tiếp nhận ticket và gửi thông báo cho người tạo', 'success');
@@ -225,13 +246,15 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   };
 
   const handleResolveTicket = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !formData.id) return;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'closed', resolution_status: 'resolved' };
-      await api.put(`/tickets/${ticket.id}`, { status: 'closed', resolution_status: 'resolved' });
+      await api.put(`/tickets/${formData.id}`, { status: 'closed', resolution_status: 'resolved' });
       setFormData(updated);
       onUpdate?.(updated);
+      window.dispatchEvent(new CustomEvent('ticket-updated'));
+      window.dispatchEvent(new CustomEvent('ticket-resolved'));
       addToast('Đã hoàn thành và đóng ticket', 'success');
     } catch (err: any) {
       addToast('Lỗi khi đóng ticket', 'error');
@@ -240,20 +263,56 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     }
   };
 
+  const handleReopenTicket = async () => {
+    if (isSubmitting || !formData.id) return;
+    setIsSubmitting(true);
+    try {
+      const updated = { ...formData, status: 'in_progress', resolution_status: null, rejection_reason: null };
+      await api.put(`/tickets/${formData.id}`, { status: 'in_progress', resolution_status: null });
+      setFormData(updated);
+      onUpdate?.(updated);
+      window.dispatchEvent(new CustomEvent('ticket-updated'));
+      addToast('Đã mở lại ticket', 'success');
+    } catch (err: any) {
+      addToast('Lỗi khi mở lại ticket', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteTicket = async () => {
+    if (!formData.id || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/tickets/${formData.id}`);
+      addToast('Đã xóa ticket thành công', 'success');
+      window.dispatchEvent(new CustomEvent('ticket-updated'));
+      window.dispatchEvent(new CustomEvent('ticket-resolved'));
+      setShowDeleteModal(false);
+      onDelete?.(formData.id);
+      onClose();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || 'Lỗi khi xóa ticket', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleRejectTicket = async () => {
-    if (!rejectReason.trim() || isSubmitting) return;
+    if (!rejectReason.trim() || isSubmitting || !formData.id) return;
     setIsSubmitting(true);
     try {
       const updated = { ...formData, status: 'closed', resolution_status: 'rejected', rejection_reason: rejectReason };
-      await api.put(`/tickets/${ticket.id}`, { status: 'closed', resolution_status: 'rejected', rejection_reason: rejectReason });
+      await api.put(`/tickets/${formData.id}`, { status: 'closed', resolution_status: 'rejected', rejection_reason: rejectReason });
       
-      await api.post(`/tickets/${ticket.id}/comments`, { 
+      await api.post(`/tickets/${formData.id}/comments`, { 
         body: `[Từ chối Hỗ trợ]: ${rejectReason}`
       });
       
       fetchComments();
       setFormData(updated);
       onUpdate?.(updated);
+      window.dispatchEvent(new CustomEvent('ticket-updated'));
       setShowRejectModal(false);
       setRejectReason('');
       addToast('Đã từ chối và đóng ticket', 'success');
@@ -270,10 +329,15 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
       return trimmed;
     }
-    if (trimmed.startsWith('/')) {
-      return trimmed;
+    const apiBase = import.meta.env.VITE_API_URL || '/backend';
+    let path = trimmed.replace(/^\/+/, '');
+    if (path.startsWith('backend/')) {
+      return `/${path}`;
     }
-    return '/' + trimmed;
+    if (path.startsWith('storage/uploads/')) {
+      path = path.replace('storage/uploads/', 'uploads/');
+    }
+    return `${apiBase}/${path}`;
   };
 
   const parseAttachments = (data: any) => {
@@ -345,6 +409,11 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
     .replace(/\[.*?\]\([^)]+\)/g, '')
     .replace(/(?:https?:\/\/[^\s<"'\)]+)?\/?uploads\/[^\s<"'\)]+/gi, '')
     .trim();
+
+  const isCreator = currentUser && formData?.created_by && (Number(formData.created_by) === Number(currentUser.id) || formData.created_by == currentUser.id);
+  const isAssignee = currentUser && formData?.assignee_id && (Number(formData.assignee_id) === Number(currentUser.id) || formData.assignee_id == currentUser.id);
+  const canManageTicket = isAdminOrManager || isCreator || isAssignee;
+  const canDeleteTicket = isAdminOrManager || isCreator;
 
   const matchedAssignee = (users || []).find(u => Number(u.id) === Number(formData.assignee_id));
   const assigneeName = formData.assignee_name || matchedAssignee?.full_name || 'Hệ thống / Admin';
@@ -471,9 +540,9 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
               </div>
 
               <div className={styles.headerActions} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-                {isAdminOrManager && (
+                {formData.status !== 'closed' && (
                   <>
-                    {(formData.status === 'open' || formData.status === 'new' || !formData.status) && (
+                    {isAdminOrManager && (formData.status === 'open' || formData.status === 'new' || !formData.status) && (
                       <button 
                         type="button"
                         className="btn primary sm"
@@ -486,31 +555,59 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                       </button>
                     )}
 
-                    {formData.status === 'in_progress' && (
-                      <>
-                        <button 
-                          type="button"
-                          className="btn success sm"
-                          onClick={handleResolveTicket}
-                          disabled={isSubmitting}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#10b981', color: '#fff', fontWeight: 700, border: 'none', borderRadius: '8px' }}
-                        >
-                          {isSubmitting ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
-                          Hoàn thành & Đóng
-                        </button>
-                        <button 
-                          type="button"
-                          className="btn danger sm outline"
-                          onClick={() => setShowRejectModal(true)}
-                          disabled={isSubmitting}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, borderRadius: '8px' }}
-                        >
-                          <XCircle size={14} />
-                          Từ chối & Đóng
-                        </button>
-                      </>
+                    {canManageTicket && (
+                      <button 
+                        type="button"
+                        className="btn success sm"
+                        onClick={handleResolveTicket}
+                        disabled={isSubmitting}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#10b981', color: '#fff', fontWeight: 700, border: 'none', borderRadius: '8px' }}
+                      >
+                        {isSubmitting ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
+                        Hoàn thành & Đóng
+                      </button>
+                    )}
+
+                    {isAdminOrManager && formData.status === 'in_progress' && (
+                      <button 
+                        type="button"
+                        className="btn danger sm outline"
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={isSubmitting}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, borderRadius: '8px' }}
+                      >
+                        <XCircle size={14} />
+                        Từ chối & Đóng
+                      </button>
                     )}
                   </>
+                )}
+
+                {formData.status === 'closed' && canManageTicket && (
+                  <button 
+                    type="button"
+                    className="btn secondary sm"
+                    onClick={handleReopenTicket}
+                    disabled={isSubmitting}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, borderRadius: '8px' }}
+                    title="Mở lại Ticket để tiếp tục xử lý"
+                  >
+                    {isSubmitting ? <Loader2 size={14} className="spin" /> : <RotateCcw size={14} />}
+                    Mở lại Ticket
+                  </button>
+                )}
+
+                {canDeleteTicket && (
+                  <button 
+                    type="button"
+                    className="btn danger sm outline"
+                    onClick={() => setShowDeleteModal(true)}
+                    disabled={isSubmitting || isDeleting}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '8px', padding: '6px 10px' }}
+                    title="Xóa Ticket"
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 )}
 
                 <button className={styles.closeBtn} onClick={onClose} style={{ borderRadius: '8px', padding: '6px', cursor: 'pointer' }}>
@@ -966,7 +1063,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                   </div>
                 )}
 
-                {formData.related_contacts?.length > 0 && (
+                {formData.related_contacts?.length > 0 && !isSystemTicket && (
                   <div>
                     <h4 style={{ fontSize: '0.825rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-light)', marginBottom: '0.625rem' }}>Khách hàng liên quan khác</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -1025,6 +1122,22 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
             </div>
           </div>
         </div>
+      )}
+
+      {showDeleteModal && (
+        <ConfirmModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={async () => {
+            setShowDeleteModal(false);
+            await handleDeleteTicket();
+          }}
+          title={t('Xác nhận xóa Ticket')}
+          message={t('Bạn có chắc chắn muốn xóa ticket này không? Tất cả nhật ký trao đổi và tệp đính kèm cũng sẽ bị xóa. Hành động này không thể hoàn tác.')}
+          confirmText={t('Xóa vĩnh viễn')}
+          cancelText={t('Hủy')}
+          confirmType="danger"
+        />
       )}
 
       {previewImage && (

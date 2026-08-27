@@ -93,9 +93,11 @@ class TicketController {
         $total = (int)$cnt->fetchColumn();
 
         $stmt = $this->db->prepare("
-            SELECT t.*, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+            SELECT t.*, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                   uc.full_name as creator_name, uc.avatar_url as creator_avatar
             FROM tickets t
             LEFT JOIN users u ON t.assignee_id = u.id
+            LEFT JOIN users uc ON t.created_by = uc.id
             WHERE $w 
             ORDER BY t.created_at DESC 
             LIMIT $limit OFFSET $offset
@@ -121,9 +123,11 @@ class TicketController {
             respond(403, null, 'Bạn không có quyền truy cập ticket này', false);
         }
         $stmt = $this->db->prepare("
-            SELECT t.*, u.full_name as assignee_name, u.avatar_url as assignee_avatar
+            SELECT t.*, u.full_name as assignee_name, u.avatar_url as assignee_avatar,
+                   uc.full_name as creator_name, uc.avatar_url as creator_avatar
             FROM tickets t
             LEFT JOIN users u ON t.assignee_id = u.id
+            LEFT JOIN users uc ON t.created_by = uc.id
             WHERE t.id=? AND t.tenant_id=?
         ");
         $stmt->execute([$id, $auth['tenant_id']]);
@@ -403,26 +407,28 @@ class TicketController {
         $oldTicket = $stmtOld->fetch(PDO::FETCH_ASSOC);
         
         $sql = "UPDATE tickets SET " . implode(',', $sets) . " WHERE id=? AND tenant_id=?";
-        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-            $sql .= " AND (created_by = ? OR assignee_id = ?)";
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-        } else if ($auth['role'] === 'manager') {
-            $sql .= " AND (created_by = ? OR assignee_id = ? OR created_by IN (
-                SELECT id FROM users WHERE team_id IN (
-                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
-            ) OR assignee_id IN (
-                SELECT id FROM users WHERE team_id IN (
-                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
-            ))";
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
+        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+            if ($auth['role'] === 'manager') {
+                $sql .= " AND (created_by = ? OR assignee_id = ? OR created_by IN (
+                    SELECT id FROM users WHERE team_id IN (
+                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                    ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+                ) OR assignee_id IN (
+                    SELECT id FROM users WHERE team_id IN (
+                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                    ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+                ))";
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+            } else {
+                $sql .= " AND (created_by = ? OR assignee_id = ?)";
+                $params[] = $auth['user_id'];
+                $params[] = $auth['user_id'];
+            }
         }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
@@ -523,27 +529,39 @@ class TicketController {
     }
 
     public function destroy(array $auth, int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'manager'], true)) respond(403, null, 'Bạn không có quyền xóa ticket', false);
+        if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền xóa ticket', false);
         
-        $sql = "DELETE FROM tickets WHERE id=? AND tenant_id=?";
+        $sql = "SELECT id, created_by FROM tickets WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
-        if ($auth['role'] === 'manager') {
-            $sql .= " AND (created_by = ? OR assignee_id = ? OR created_by IN (
-                SELECT id FROM users WHERE team_id IN (
-                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
-            ) OR assignee_id IN (
-                SELECT id FROM users WHERE team_id IN (
-                    SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
-            ))";
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
+        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director'], true)) {
+            if ($auth['role'] === 'manager') {
+                $sql .= " AND (created_by = ? OR assignee_id = ? OR created_by IN (
+                    SELECT id FROM users WHERE team_id IN (
+                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                    ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+                ) OR assignee_id IN (
+                    SELECT id FROM users WHERE team_id IN (
+                        SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                    ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+                ))";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+            } else {
+                $sql .= " AND (created_by = ? OR assignee_id = ?)";
+                $p[] = $auth['user_id'];
+                $p[] = $auth['user_id'];
+            }
         }
+        $checkStmt = $this->db->prepare($sql);
+        $checkStmt->execute($p);
+        if (!$checkStmt->fetch()) {
+            respond(403, null, 'Không tìm thấy ticket hoặc bạn không có quyền xóa ticket này', false);
+        }
+
         // Delete ticket comments physical files
         $tcStmt = $this->db->prepare("SELECT body FROM ticket_comments WHERE ticket_id = ?");
         $tcStmt->execute([$id]);
@@ -553,9 +571,8 @@ class TicketController {
         }
         $this->db->prepare("DELETE FROM ticket_comments WHERE ticket_id = ?")->execute([$id]);
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($p);
-        if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy ticket hoặc bạn không có quyền', false);
+        $delStmt = $this->db->prepare("DELETE FROM tickets WHERE id=? AND tenant_id=?");
+        $delStmt->execute([$id, $auth['tenant_id']]);
         respond(200, null, 'Đã xóa ticket thành công');
     }
 

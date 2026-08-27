@@ -3681,7 +3681,7 @@ function sendCheckOutMissingReminders($conn) {
             $settings[$r['setting_key']] = $r['setting_value'];
         }
     }
-    $globalWorkEnd = !empty($settings['global_work_end_time']) ? substr($settings['global_work_end_time'], 0, 5) : '17:30';
+    $globalWorkEnd = !empty($settings['global_work_end_time']) ? substr($settings['global_work_end_time'], 0, 5) : '17:00';
 
     // 2. Query users who checked in today but haven't checked out yet
     $sql = "

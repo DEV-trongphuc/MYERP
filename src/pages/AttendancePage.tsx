@@ -1129,7 +1129,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               type="button"
               onClick={() => {
                 setIsOpeningBulkModal(true);
-                navigate('/approvals?create=attendance_bulk');
+                navigate('/approvals?create=attendance_bulk&scan=1');
               }}
               disabled={isOpeningBulkModal}
               className="btn outline hover-lift"
@@ -3840,7 +3840,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               type="button"
               onClick={() => {
                 setIsOpeningBulkModal(true);
-                navigate('/approvals?create=attendance_bulk');
+                navigate('/approvals?create=attendance_bulk&scan=1');
               }}
               disabled={isOpeningBulkModal}
               className="btn outline hover-lift"
