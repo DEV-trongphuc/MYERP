@@ -10,6 +10,33 @@ class HRMController {
         return in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'hr'], true);
     }
 
+    public static function formatLeaveTypeText(string $type): string {
+        $map = [
+            'annual' => 'Phép năm',
+            'sick' => 'Nghỉ ốm',
+            'compensatory' => 'Nghỉ bù',
+            'late_early' => 'Đi trễ/Về sớm',
+            'overtime' => 'Tăng ca (OT)',
+            'remote_work' => 'Làm việc từ xa (WFH)',
+            'maternity' => 'Nghỉ thai sản',
+            'paternity' => 'Nghỉ thai sản (nam)',
+            'marriage' => 'Nghỉ kết hôn',
+            'funeral' => 'Nghỉ tang chế',
+            'special_paid' => 'Nghỉ hưởng nguyên lương',
+            'business_trip' => 'Đi công tác',
+            'unpaid' => 'Nghỉ không lương',
+        ];
+        return $map[$type] ?? ($type ?: 'Nghỉ phép');
+    }
+
+    public static function formatLeaveTitle(string $type): string {
+        if ($type === 'remote_work') return 'Đăng ký làm việc từ xa (WFH)';
+        if ($type === 'overtime') return 'Đăng ký tăng ca (OT)';
+        if ($type === 'late_early') return 'Đăng ký đi trễ / về sớm';
+        if ($type === 'business_trip') return 'Đăng ký đi công tác';
+        return 'Đơn xin nghỉ phép (' . self::formatLeaveTypeText($type) . ')';
+    }
+
     // --- PROFILES & CONTRACTS ---
 
     public function indexProfiles(array $auth): void {
@@ -201,7 +228,7 @@ class HRMController {
             $stmtUser->execute([$auth['user_id']]);
             $userName = $stmtUser->fetchColumn() ?: 'Nhân viên';
 
-            $leaveTypeText = $b['leave_type'] === 'annual' ? 'Phép năm' : ($b['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($b['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($b['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : ($b['leave_type'] === 'overtime' ? 'Tăng ca OT' : ($b['leave_type'] === 'remote_work' ? 'Làm việc từ xa' : 'Không lương')))));
+            $leaveTypeText = self::formatLeaveTypeText($b['leave_type']);
 
             require_once __DIR__ . '/../NotificationService.php';
             $targetUserId = $approverId ?: $auth['user_id'];
@@ -455,7 +482,7 @@ class HRMController {
         }
 
         try {
-            $leaveTypeText = $leaveRow['leave_type'] === 'annual' ? 'Phép năm' : ($leaveRow['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($leaveRow['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($leaveRow['leave_type'] === 'overtime' ? 'Tăng ca' : ($leaveRow['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương'))));
+            $leaveTypeText = self::formatLeaveTypeText($leaveRow['leave_type']);
             $statusText = $nextStatus === 'approved' ? 'Phê duyệt hoàn toàn' : ($nextStatus === 'rejected' ? 'Từ chối' : 'Phê duyệt cấp 1 (Chờ Giám đốc duyệt)');
 
             require_once __DIR__ . '/../NotificationService.php';
@@ -1517,7 +1544,7 @@ class HRMController {
                     'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
                     'status_level_1' => $l['status_level_1'] ?? 'pending',
                     'status_level_2' => $l['status_level_2'] ?? 'none',
-                    'title' => ($l['leave_type'] === 'overtime' ? 'Đăng ký tăng ca' : ($l['leave_type'] === 'remote_work' ? 'Đăng ký làm việc từ xa' : ('Đơn xin nghỉ phép (' . ($l['leave_type'] === 'annual' ? 'Phép năm' : ($l['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($l['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($l['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương')))) . ')'))) . ' - ' . $levelText,
+                    'title' => self::formatLeaveTitle($l['leave_type']) . ' - ' . $levelText,
                     'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
                     'status' => $l['status'] ?? 'pending',
                     'created_at' => $l['created_at']
@@ -1745,7 +1772,7 @@ class HRMController {
                 'user_id' => (int)$l['user_id'],
                 'approver_id' => (int)($l['approver_id'] ?? 0),
                 'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
-                'title' => $l['leave_type'] === 'overtime' ? 'Đăng ký tăng ca' : ($l['leave_type'] === 'remote_work' ? 'Đăng ký làm việc từ xa' : ('Đơn xin nghỉ phép (' . ($l['leave_type'] === 'annual' ? 'Phép năm' : ($l['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($l['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($l['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương')))) . ')')),
+                'title' => self::formatLeaveTitle($l['leave_type']),
                 'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
                 'status' => $statusText,
                 'created_at' => $l['created_at']
@@ -1909,7 +1936,7 @@ class HRMController {
                     'approver_id' => (int)($l['approver_id'] ?? 0),
                     'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
                     'related_user_ids' => $relArr,
-                    'title' => $l['leave_type'] === 'overtime' ? 'Đăng ký tăng ca' : ($l['leave_type'] === 'remote_work' ? 'Đăng ký làm việc từ xa' : ('Đơn xin nghỉ phép (' . ($l['leave_type'] === 'annual' ? 'Phép năm' : ($l['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($l['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($l['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương')))) . ')')),
+                    'title' => self::formatLeaveTitle($l['leave_type']),
                     'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
                     'status' => $statusText,
                     'created_at' => $l['created_at'],
@@ -2014,11 +2041,23 @@ class HRMController {
     }
 
     public function getAllApprovals(array $auth): void {
+        $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role'] ?? '');
         $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'accountant'], true);
-        if (!$isGlobalAdmin) {
-            $this->getFollowingRequests($auth);
-            return;
+
+        $ledTeamIds = [];
+        $managedUserIds = [];
+        if ($role === 'manager') {
+            $stmtL = $this->db->prepare("SELECT id FROM teams WHERE leader_id = ?");
+            $stmtL->execute([$userId]);
+            $ledTeamIds = array_map('intval', $stmtL->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+            if (!empty($ledTeamIds)) {
+                $placeholders = implode(',', array_fill(0, count($ledTeamIds), '?'));
+                $stmtM = $this->db->prepare("SELECT id FROM users WHERE team_id IN ($placeholders)");
+                $stmtM->execute($ledTeamIds);
+                $managedUserIds = array_map('intval', $stmtM->fetchAll(PDO::FETCH_COLUMN) ?: []);
+            }
         }
 
         $all = [];
@@ -2035,19 +2074,32 @@ class HRMController {
         $stmtLeaves->execute([$auth['tenant_id']]);
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
         foreach ($leaves as $l) {
-            $all[] = [
-                'id' => (int)$l['id'],
-                'type' => 'leave',
-                'employee_name' => $l['employee_name'],
-                'user_id' => (int)$l['user_id'],
-                'approver_id' => (int)($l['approver_id'] ?? 0),
-                'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
-                'related_user_ids' => $l['related_user_ids'],
-                'title' => $l['leave_type'] === 'overtime' ? 'Đăng ký tăng ca' : ($l['leave_type'] === 'remote_work' ? 'Đăng ký làm việc từ xa' : ('Đơn xin nghỉ phép (' . ($l['leave_type'] === 'annual' ? 'Phép năm' : ($l['leave_type'] === 'sick' ? 'Nghỉ ốm' : ($l['leave_type'] === 'compensatory' ? 'Nghỉ bù' : ($l['leave_type'] === 'late_early' ? 'Đi trễ/Về sớm' : 'Không lương')))) . ')')),
-                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
-                'status' => $l['status'],
-                'created_at' => $l['created_at']
-            ];
+            $relArr = !empty($l['related_user_ids']) ? (is_array($l['related_user_ids']) ? $l['related_user_ids'] : json_decode($l['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
+
+            $isPermitted = $isGlobalAdmin 
+                || (int)$l['user_id'] === $userId 
+                || (int)($l['approver_id'] ?? 0) === $userId 
+                || (int)($l['approver_id_2'] ?? 0) === $userId 
+                || in_array($userId, $relArr, true) 
+                || in_array((int)$l['user_id'], $managedUserIds, true);
+
+            if ($isPermitted) {
+                $all[] = [
+                    'id' => (int)$l['id'],
+                    'type' => 'leave',
+                    'employee_name' => $l['employee_name'],
+                    'user_id' => (int)$l['user_id'],
+                    'approver_id' => (int)($l['approver_id'] ?? 0),
+                    'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => self::formatLeaveTitle($l['leave_type']),
+                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                    'status' => $l['status'],
+                    'created_at' => $l['created_at']
+                ];
+            }
         }
 
         // 2. All Advances
@@ -2062,19 +2114,32 @@ class HRMController {
         $stmtAdvances->execute([$auth['tenant_id']]);
         $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
         foreach ($advances as $a) {
-            $all[] = [
-                'id' => (int)$a['id'],
-                'type' => 'advance',
-                'employee_name' => $a['employee_name'],
-                'user_id' => (int)$a['user_id'],
-                'approver_id' => (int)($a['approver_id'] ?? 0),
-                'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
-                'related_user_ids' => $a['related_user_ids'],
-                'title' => 'Đề xuất tạm ứng lương',
-                'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
-                'status' => $a['status'],
-                'created_at' => $a['created_at']
-            ];
+            $relArr = !empty($a['related_user_ids']) ? (is_array($a['related_user_ids']) ? $a['related_user_ids'] : json_decode($a['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
+
+            $isPermitted = $isGlobalAdmin 
+                || (int)$a['user_id'] === $userId 
+                || (int)($a['approver_id'] ?? 0) === $userId 
+                || (int)($a['approver_id_2'] ?? 0) === $userId 
+                || in_array($userId, $relArr, true) 
+                || in_array((int)$a['user_id'], $managedUserIds, true);
+
+            if ($isPermitted) {
+                $all[] = [
+                    'id' => (int)$a['id'],
+                    'type' => 'advance',
+                    'employee_name' => $a['employee_name'],
+                    'user_id' => (int)$a['user_id'],
+                    'approver_id' => (int)($a['approver_id'] ?? 0),
+                    'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => 'Đề xuất tạm ứng lương',
+                    'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
+                    'status' => $a['status'],
+                    'created_at' => $a['created_at']
+                ];
+            }
         }
 
         // 3. All Expenses
@@ -2088,33 +2153,47 @@ class HRMController {
         $stmtExpenses->execute([$auth['tenant_id']]);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
         foreach ($expenses as $e) {
-            $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
-            $displayTitle = $e['title'];
-            if (!$isZeroAmt && !str_starts_with(mb_strtolower($e['title']), 'đề xuất') && !str_starts_with(mb_strtolower($e['title']), 'đề nghị') && !str_starts_with(mb_strtolower($e['title']), 'yêu cầu')) {
-                $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
-            }
-            
-            $displayDesc = $isZeroAmt 
-                ? ($e['notes'] ?: $e['description'] ?: '')
-                : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+            $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
 
-            $all[] = [
-                'id' => (int)$e['id'],
-                'type' => 'expense',
-                'employee_name' => $e['employee_name'],
-                'user_id' => (int)$e['user_id'],
-                'approver_id' => (int)($e['approver_id'] ?? 0),
-                'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
-                'approver_id_3' => (int)($e['approver_id_3'] ?? 0),
-                'related_user_ids' => $e['related_user_ids'],
-                'title' => $displayTitle,
-                'description' => $displayDesc,
-                'amount' => (float)$e['amount'],
-                'currency' => $e['currency'] ?? 'VND',
-                'notes' => $e['notes'] ?? '',
-                'status' => $e['status'],
-                'created_at' => $e['created_at']
-            ];
+            $isPermitted = $isGlobalAdmin 
+                || (int)$e['user_id'] === $userId 
+                || (int)($e['approver_id'] ?? 0) === $userId 
+                || (int)($e['approver_id_2'] ?? 0) === $userId 
+                || (int)($e['approver_id_3'] ?? 0) === $userId 
+                || in_array($userId, $relArr, true) 
+                || in_array((int)$e['user_id'], $managedUserIds, true);
+
+            if ($isPermitted) {
+                $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
+                $displayTitle = $e['title'];
+                if (!$isZeroAmt && !str_starts_with(mb_strtolower($e['title']), 'đề xuất') && !str_starts_with(mb_strtolower($e['title']), 'đề nghị') && !str_starts_with(mb_strtolower($e['title']), 'yêu cầu')) {
+                    $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
+                }
+                
+                $displayDesc = $isZeroAmt 
+                    ? ($e['notes'] ?: $e['description'] ?: '')
+                    : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+
+                $all[] = [
+                    'id' => (int)$e['id'],
+                    'type' => 'expense',
+                    'employee_name' => $e['employee_name'],
+                    'user_id' => (int)$e['user_id'],
+                    'approver_id' => (int)($e['approver_id'] ?? 0),
+                    'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
+                    'approver_id_3' => (int)($e['approver_id_3'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => $displayTitle,
+                    'description' => $displayDesc,
+                    'amount' => (float)$e['amount'],
+                    'currency' => $e['currency'] ?? 'VND',
+                    'notes' => $e['notes'] ?? '',
+                    'status' => $e['status'],
+                    'created_at' => $e['created_at']
+                ];
+            }
         }
 
         // Sort by created_at DESC

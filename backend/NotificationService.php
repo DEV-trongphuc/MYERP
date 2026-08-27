@@ -1265,26 +1265,35 @@ class NotificationService {
                 $leaveType = $payload['leave_type_text'] ?? 'Nghỉ phép';
                 $leaveDays = $payload['total_days'] ?? 1;
                 $leavePeriod = ($payload['start_date'] ?? '') . ' -> ' . ($payload['end_date'] ?? '');
+                
+                $isWFH = strpos(mb_strtolower($leaveType), 'làm việc từ xa') !== false || strpos(mb_strtolower($leaveType), 'remote') !== false;
+                $isOT = strpos(mb_strtolower($leaveType), 'tăng ca') !== false || strpos(mb_strtolower($leaveType), 'overtime') !== false;
+                $isLateEarly = strpos(mb_strtolower($leaveType), 'đi trễ') !== false || strpos(mb_strtolower($leaveType), 'về sớm') !== false;
+                
+                $actionName = $isWFH ? "đăng ký Làm việc từ xa (WFH)" : ($isOT ? "đăng ký Tăng ca (OT)" : ($isLateEarly ? "đăng ký Đi trễ/Về sớm" : "đơn xin nghỉ $leaveType"));
+                $headerTitle = $isWFH ? "ĐĂNG KÝ LÀM VIỆC TỪ XA" : ($isOT ? "ĐĂNG KÝ TĂNG CA" : ($isLateEarly ? "ĐĂNG KÝ ĐI TRỄ/VỀ SỚM" : "YÊU CẦU DUYỆT NGHỈ PHÉP"));
+                $icon = $isWFH ? "🏠" : ($isOT ? "⏰" : ($isLateEarly ? "⏱️" : "🏖️"));
+
                 return [
                     'recipients' => $recipients,
-                    'title' => "Đơn xin nghỉ phép mới ($leaveType)",
-                    'body' => "Nhân viên $userName vừa gửi đơn xin nghỉ $leaveType từ $leavePeriod ($leaveDays ngày). Lý do: \"$reason\"",
+                    'title' => "Yêu cầu phê duyệt ($leaveType)",
+                    'body' => "Nhân viên $userName vừa gửi $actionName từ $leavePeriod ($leaveDays ngày/giờ). Lý do: \"$reason\"",
                     'type' => "leave",
                     'link' => "/approvals?open_id=" . ($payload['ref_id'] ?? '') . "&open_type=leave",
-                    'zalo_msg' => "🏖️ [ ĐƠN XIN NGHỈ PHÉP MỚI - $leaveType ]\n\n"
+                    'zalo_msg' => "$icon [ $headerTitle MỚI ]\n\n"
                         . "Nhân viên: $userName\n"
-                        . "Thời gian: $leavePeriod ($leaveDays ngày)\n"
-                        . "Lý do: \"$reason\"\n\nVui lòng truy cập trang Quản lý nhân sự để phê duyệt.",
-                    'tg_msg' => "🏖️ <b>[ ĐƠN XIN NGHỈ PHÉP MỚI - $leaveType ]</b>\n\n"
+                        . "Thời gian: $leavePeriod ($leaveDays ngày/giờ)\n"
+                        . "Lý do: \"$reason\"\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
+                    'tg_msg' => "$icon <b>[ $headerTitle MỚI ]</b>\n\n"
                         . "Nhân viên: <b>$userName</b>\n"
-                        . "Thời gian: <code>$leavePeriod</code> ($leaveDays ngày)\n"
-                        . "Lý do: <i>\"$reason\"</i>\n\nVui lòng truy cập trang Quản lý nhân sự để phê duyệt.",
-                    'email_subject' => "[IDEAS] Đơn xin nghỉ $leaveType mới - $userName",
-                    'email_title' => "YÊU CẦU DUYỆT NGHỈ PHÉP",
-                    'email_content' => "Chào quản trị viên,<br/><br/>" .
-                                    "Nhân viên <strong>$userName</strong> vừa gửi đơn xin nghỉ <strong>$leaveType</strong> từ $leavePeriod ($leaveDays ngày).<br/>" .
+                        . "Thời gian: <code>$leavePeriod</code> ($leaveDays ngày/giờ)\n"
+                        . "Lý do: <i>\"$reason\"</i>\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
+                    'email_subject' => "[IDEAS] $headerTitle mới - $userName",
+                    'email_title' => $headerTitle,
+                    'email_content' => "Chào quản lý,<br/><br/>" .
+                                    "Nhân viên <strong>$userName</strong> vừa gửi <strong>$actionName</strong> từ <strong>$leavePeriod</strong> ($leaveDays ngày/giờ).<br/>" .
                                     "Lý do: <em>\"$reason\"</em>.<br/>" .
-                                    "Vui lòng truy cập trang Quản lý nhân sự trên CRM để phê duyệt."
+                                    "Vui lòng truy cập hệ thống IDEAS ERP để xem chi tiết và phê duyệt."
                 ];
 
             case 'HRM_LEAVE_APPROVAL':
@@ -1293,32 +1302,40 @@ class NotificationService {
                 $statusText = $payload['status_text'] ?? 'được cập nhật';
                 $leavePeriod = ($payload['start_date'] ?? '') . ' -> ' . ($payload['end_date'] ?? '');
                 
+                $isWFH = strpos(mb_strtolower($leaveType), 'làm việc từ xa') !== false || strpos(mb_strtolower($leaveType), 'remote') !== false;
+                $isOT = strpos(mb_strtolower($leaveType), 'tăng ca') !== false || strpos(mb_strtolower($leaveType), 'overtime') !== false;
+                $isLateEarly = strpos(mb_strtolower($leaveType), 'đi trễ') !== false || strpos(mb_strtolower($leaveType), 'về sớm') !== false;
+                $isLeave = !$isWFH && !$isOT && !$isLateEarly;
+                
+                $actionName = $isWFH ? "Đăng ký Làm việc từ xa (WFH)" : ($isOT ? "Đăng ký Tăng ca (OT)" : ($isLateEarly ? "Đăng ký Đi trễ/Về sớm" : "Đơn xin nghỉ $leaveType"));
+                $headerTitle = $isWFH ? "KẾT QUẢ DUYỆT LÀM VIỆC TỪ XA" : ($isOT ? "KẾT QUẢ DUYỆT TĂNG CA" : ($isLateEarly ? "KẾT QUẢ DUYỆT ĐI TRỄ/VỀ SỚM" : "KẾT QUẢ DUYỆT NGHỈ PHÉP"));
+                
                 $balanceStr = '';
-                if (isset($payload['remaining_annual_leave'])) {
-                    $balanceStr = "\nSố phép năm còn lại: " . $payload['remaining_annual_leave'] . " ngày. Nghỉ bù còn lại: " . ($payload['remaining_compensatory_leave'] ?? 0) . " ngày.";
-                }
                 $balanceHtml = '';
-                if (isset($payload['remaining_annual_leave'])) {
+                if ($isLeave && isset($payload['remaining_annual_leave'])) {
+                    $balanceStr = "\nSố phép năm còn lại: " . $payload['remaining_annual_leave'] . " ngày. Nghỉ bù còn lại: " . ($payload['remaining_compensatory_leave'] ?? 0) . " ngày.";
                     $balanceHtml = "<br/><br/><strong>Số dư ngày phép hiện tại của bạn:</strong><br/>- Phép năm còn lại: <strong>" . $payload['remaining_annual_leave'] . " ngày</strong><br/>- Nghỉ bù còn lại: <strong>" . ($payload['remaining_compensatory_leave'] ?? 0) . " ngày</strong>";
                 }
 
+                $icon = ($payload['status'] ?? '') === 'rejected' ? '❌' : '✅';
+
                 return [
                     'recipients' => $recipients,
-                    'title' => "Kết quả duyệt nghỉ phép ($leaveType)",
-                    'body' => "Đơn xin nghỉ $leaveType từ $leavePeriod của bạn đã được $statusText. Ghi chú: \"$reason\"" . $balanceStr,
+                    'title' => "Kết quả duyệt: $leaveType",
+                    'body' => "$actionName từ $leavePeriod của bạn đã được $statusText." . (!empty($reason) ? " Ghi chú: \"$reason\"" : "") . $balanceStr,
                     'type' => "leave",
                     'link' => "/approvals?open_id=" . ($payload['ref_id'] ?? '') . "&open_type=leave&open_status=" . ($payload['status'] ?? ''),
-                    'zalo_msg' => "✅ [ KẾT QUẢ DUYỆT NGHỈ PHÉP ]\n\n"
-                        . "Đơn xin nghỉ $leaveType ($leavePeriod) của bạn đã được $statusText.\n"
-                        . "Ghi chú: \"$reason\"" . $balanceStr,
-                    'tg_msg' => "✅ <b>[ KẾT QUẢ DUYỆT NGHỈ PHÉP ]</b>\n\n"
-                        . "Đơn xin nghỉ $leaveType (<code>$leavePeriod</code>) của bạn đã được <b>$statusText</b>.\n"
-                        . "Ghi chú: <i>\"$reason\"</i>" . $balanceStr,
-                    'email_subject' => "[IDEAS] Kết quả duyệt đơn nghỉ $leaveType của bạn",
-                    'email_title' => "KẾT QUẢ DUYỆT NGHỈ PHÉP",
+                    'zalo_msg' => "$icon [ $headerTitle ]\n\n"
+                        . "$actionName ($leavePeriod) của bạn đã được $statusText.\n"
+                        . (!empty($reason) ? "Ghi chú: \"$reason\"\n" : "") . $balanceStr,
+                    'tg_msg' => "$icon <b>[ $headerTitle ]</b>\n\n"
+                        . "$actionName (<code>$leavePeriod</code>) của bạn đã được <b>$statusText</b>.\n"
+                        . (!empty($reason) ? "Ghi chú: <i>\"$reason\"</i>\n" : "") . $balanceStr,
+                    'email_subject' => "[IDEAS] Kết quả duyệt $actionName của bạn",
+                    'email_title' => $headerTitle,
                     'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
-                                    "Đơn xin nghỉ <strong>$leaveType</strong> từ $leavePeriod của bạn đã được <strong>$statusText</strong> bởi quản lý.<br/>" .
-                                    "Ghi chú/lý do: <em>\"$reason\"</em>." . $balanceHtml
+                                    "$actionName từ <strong>$leavePeriod</strong> của bạn đã được <strong>$statusText</strong> bởi người phê duyệt.<br/>" .
+                                    (!empty($reason) ? "Ghi chú: <em>\"$reason\"</em>." : "") . $balanceHtml
                 ];
 
             case 'HRM_ADVANCE_REQUEST':

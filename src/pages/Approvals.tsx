@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
+import { TableSkeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { MentionInput } from '../components/ui/MentionInput';
@@ -1526,10 +1527,10 @@ export default function Approvals() {
           console.warn('Following approvals load error:', err);
           return { data: [] };
         }),
-        isAdmin ? fetchAPI('hrm/approvals/all').catch(err => {
+        fetchAPI('hrm/approvals/all').catch(err => {
           console.warn('All approvals load error:', err);
           return { data: [] };
-        }) : Promise.resolve({ data: [] })
+        })
       ]);
 
       const pList = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
@@ -1540,9 +1541,7 @@ export default function Approvals() {
       setPendingList(pList);
       setMyRequestsList(mList);
       setFollowingList(fList);
-      if (isAdmin) {
-        setAllList(aList);
-      }
+      setAllList(aList);
 
       const params = new URLSearchParams(location.search || window.location.search);
       const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
@@ -2079,36 +2078,34 @@ export default function Approvals() {
           borderRadius: '10px',
           width: 'fit-content'
         }}>
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('pending')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                padding: '0.5rem 1.125rem',
-                borderRadius: '7px',
-                fontWeight: activeTab === 'pending' ? 700 : 600,
-                fontSize: '0.875rem',
-                background: activeTab === 'pending' ? 'var(--color-surface)' : 'transparent',
-                color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-light)',
-                boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              <Activity size={15} />
-              {t('Yêu cầu chờ duyệt')}
-              {pendingList.length > 0 && (
-                <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                  {pendingList.length}
-                </span>
-              )}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setActiveTab('pending')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '0.5rem 1.125rem',
+              borderRadius: '7px',
+              fontWeight: activeTab === 'pending' ? 700 : 600,
+              fontSize: '0.875rem',
+              background: activeTab === 'pending' ? 'var(--color-surface)' : 'transparent',
+              color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-light)',
+              boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Activity size={15} />
+            {t('Yêu cầu chờ duyệt')}
+            {pendingList.length > 0 && (
+              <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                {pendingList.length}
+              </span>
+            )}
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab('my_requests')}
@@ -2168,37 +2165,35 @@ export default function Approvals() {
             )}
           </button>
 
-          {/* Tab 4: All Company Requests (for Admin/HR/Director) */}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                padding: '0.5rem 1.125rem',
-                borderRadius: '7px',
-                fontWeight: activeTab === 'all' ? 700 : 600,
-                fontSize: '0.875rem',
-                background: activeTab === 'all' ? 'var(--color-surface)' : 'transparent',
-                color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-light)',
-                boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              <FileText size={15} />
-              {t('Tất cả đề xuất')}
-              {allList.length > 0 && (
-                <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                  {allList.length}
-                </span>
-              )}
-            </button>
-          )}
+          {/* Tab 4: All Requests / Processed (Available to all users) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '0.5rem 1.125rem',
+              borderRadius: '7px',
+              fontWeight: activeTab === 'all' ? 700 : 600,
+              fontSize: '0.875rem',
+              background: activeTab === 'all' ? 'var(--color-surface)' : 'transparent',
+              color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-light)',
+              boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <FileText size={15} />
+            {t('Tất cả đề xuất')}
+            {allList.length > 0 && (
+              <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                {allList.length}
+              </span>
+            )}
+          </button>
         </div>
       )}
 
@@ -2365,24 +2360,22 @@ export default function Approvals() {
                           >
                             {t('Theo dõi')} ({followingList.length})
                           </button>
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => { setActiveTab('all'); setShowMobileFilters(false); }}
-                              style={{
-                                padding: '6px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid var(--color-border)',
-                                background: activeTab === 'all' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
-                                color: activeTab === 'all' ? 'white' : 'var(--color-text)',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {t('Tất cả')} ({allList.length})
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setActiveTab('all'); setShowMobileFilters(false); }}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: activeTab === 'all' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                              color: activeTab === 'all' ? 'white' : 'var(--color-text)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {t('Tất cả')} ({allList.length})
+                          </button>
                         </div>
                       </div>
 
@@ -2519,8 +2512,8 @@ export default function Approvals() {
 
       {/* Content */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
-          {t('Đang tải dữ liệu quy trình...')}
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', padding: '1.5rem' }}>
+          <TableSkeleton rows={5} cols={4} />
         </div>
       ) : (() => {
         const currentList = activeTab === 'pending'
@@ -7255,59 +7248,72 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             {t('Thông tin chi tiết đề xuất')}
           </div>
 
-          {item.type === 'leave' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại nghỉ phép')}</label>
-                <CustomSelect
-                  value={detail?.leave_type || 'annual'}
-                  onChange={() => {}}
-                  disabled
-                  options={[
-                    { value: 'annual', label: t('Nghỉ phép năm') },
-                    { value: 'sick', label: t('Nghỉ ốm / thai sản') },
-                    { value: 'compensatory', label: t('Nghỉ bù') },
-                    { value: 'special_paid', label: t('Nghỉ chế độ (Hiếu/Hỉ theo luật)') },
-                    { value: 'late_early', label: t('Đi trễ/Về sớm') },
-                    { value: 'unpaid', label: t('Nghỉ việc riêng (không lương)') },
-                    { value: 'overtime', label: t('Đăng ký tăng ca') },
-                    { value: 'remote_work', label: t('Làm việc từ xa') }
-                  ]}
-                  width="100%"
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số ngày nghỉ')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={`${detail?.total_days || 1} ngày`}
-                  disabled
-                  style={{ width: '100%' }}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Thời gian nghỉ')}</label>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={detail?.start_date ? new Date(detail.start_date).toLocaleDateString('vi-VN') : ''}
+          {item.type === 'leave' && (() => {
+            const lType = detail?.leave_type || '';
+            const isWFH = lType === 'remote_work';
+            const isOT = lType === 'overtime';
+            const isLateEarly = lType === 'late_early';
+            const isBusinessTrip = lType === 'business_trip';
+
+            const typeLabel = isWFH ? t('Hình thức làm việc') : (isOT ? t('Loại tăng ca') : (isLateEarly ? t('Loại điều chỉnh') : (isBusinessTrip ? t('Loại công tác') : t('Loại nghỉ phép'))));
+            const durationLabel = isWFH ? t('Thời lượng làm việc') : (isOT ? t('Số ngày công quy đổi') : (isLateEarly ? t('Thời lượng') : (isBusinessTrip ? t('Số ngày công tác') : t('Số ngày nghỉ'))));
+            const periodLabel = isWFH ? t('Thời gian làm việc từ xa') : (isOT ? t('Thời gian tăng ca') : (isLateEarly ? t('Thời gian áp dụng') : (isBusinessTrip ? t('Thời gian công tác') : t('Thời gian nghỉ'))));
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{typeLabel}</label>
+                  <CustomSelect
+                    value={detail?.leave_type || 'annual'}
+                    onChange={() => {}}
                     disabled
-                    style={{ flex: 1 }}
-                  />
-                  <span style={{ color: 'var(--color-text-muted)' }}>➔</span>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={detail?.end_date ? new Date(detail.end_date).toLocaleDateString('vi-VN') : ''}
-                    disabled
-                    style={{ flex: 1 }}
+                    options={[
+                      { value: 'annual', label: t('Nghỉ phép năm') },
+                      { value: 'sick', label: t('Nghỉ ốm / thai sản') },
+                      { value: 'compensatory', label: t('Nghỉ bù') },
+                      { value: 'special_paid', label: t('Nghỉ chế độ (Hiếu/Hỉ theo luật)') },
+                      { value: 'late_early', label: t('Đi trễ/Về sớm') },
+                      { value: 'unpaid', label: t('Nghỉ việc riêng (không lương)') },
+                      { value: 'overtime', label: t('Đăng ký tăng ca (OT)') },
+                      { value: 'remote_work', label: t('Làm việc từ xa (WFH)') },
+                      { value: 'business_trip', label: t('Đi công tác') }
+                    ]}
+                    width="100%"
                   />
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{durationLabel}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={`${detail?.total_days || 1} ngày`}
+                    disabled
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{periodLabel}</label>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={detail?.start_date ? new Date(detail.start_date).toLocaleDateString('vi-VN') : ''}
+                      disabled
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ color: 'var(--color-text-muted)' }}>➔</span>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={detail?.end_date ? new Date(detail.end_date).toLocaleDateString('vi-VN') : ''}
+                      disabled
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {item.type === 'advance' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
