@@ -480,7 +480,7 @@ class NotificationService {
                         if ($todayDate >= $r['leave_start'] && $todayDate <= $r['leave_end']) return false;
                     }
                     try {
-                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
                         $st->execute([$uid, $todayDate, $todayDate]);
                         if ($st->fetchColumn()) return false;
                     } catch (\Throwable $t) {}
@@ -532,7 +532,7 @@ class NotificationService {
                         if ($todayDate >= $r['leave_start'] && $todayDate <= $r['leave_end']) return false;
                     }
                     try {
-                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
                         $st->execute([$uid, $todayDate, $todayDate]);
                         if ($st->fetchColumn()) return false;
                     } catch (\Throwable $t) {}
@@ -585,7 +585,7 @@ class NotificationService {
                         if ($todayDate >= $r['leave_start'] && $todayDate <= $r['leave_end']) return false;
                     }
                     try {
-                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+                        $st = $db->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
                         $st->execute([$uid, $todayDate, $todayDate]);
                         if ($st->fetchColumn()) return false;
                     } catch (\Throwable $t) {}

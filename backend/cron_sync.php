@@ -3269,7 +3269,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                 if (!empty($user['leave_start']) && !empty($user['leave_end'])) {
                     if ($todayStr >= $user['leave_start'] && $todayStr <= $user['leave_end']) continue;
                 }
-                $stmtLeave = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+                $stmtLeave = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
                 if ($stmtLeave) {
                     $stmtLeave->bind_param("iss", $userId, $todayStr, $todayStr);
                     $stmtLeave->execute();
@@ -3613,7 +3613,7 @@ function sendCheckInMissingReminders($conn) {
         }
 
         // Check if user has approved or pending leave in hrm_leave_requests today (excluding late_early waiver)
-        $stmtLeave = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+        $stmtLeave = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
         $stmtLeave->bind_param("iss", $userId, $todayStr, $todayStr);
         $stmtLeave->execute();
         $hasLeave = (bool)$stmtLeave->get_result()->fetch_assoc();
@@ -3720,7 +3720,7 @@ function sendCheckOutMissingReminders($conn) {
         }
 
         // Check if user has approved or pending leave in hrm_leave_requests today (excluding late_early waiver)
-        $stmtLeaveOut = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type != 'late_early' LIMIT 1");
+        $stmtLeaveOut = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
         $stmtLeaveOut->bind_param("iss", $userId, $todayStr, $todayStr);
         $stmtLeaveOut->execute();
         $hasLeaveOut = (bool)$stmtLeaveOut->get_result()->fetch_assoc();

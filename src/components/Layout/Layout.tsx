@@ -643,6 +643,15 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const isAccountant = String(user?.role || '').toLowerCase() === 'accountant' || String(user?.role || '').toLowerCase() === 'ke_toan';
+  const effTicketsCount = isAccountant ? 0 : pendingTicketsCount;
+  const effHeldCount = isAccountant ? 0 : heldLeadsCount;
+  const effCheckInsCount = isAccountant ? 0 : pendingCheckInsCount;
+  const effCoopsCount = isAccountant ? 0 : pendingCoopsCount;
+  const effSupportCount = isAccountant ? 0 : supportTicketsCount;
+  const effExpensesCount = pendingExpensesCount;
+  const totalPendingInboxCount = effTicketsCount + effHeldCount + effCheckInsCount + effCoopsCount + effSupportCount + effExpensesCount;
+
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', background: 'var(--color-bg)', overflow: 'hidden' }}>
       <style>{`
@@ -812,7 +821,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           onActivityFeedClick={() => setIsActivityFeedOpen(true)}
           onMenuClick={() => setIsMobileSidebarOpen(true)}
           version={backendVersion}
-          pendingInboxCount={pendingTicketsCount + heldLeadsCount + pendingCheckInsCount + pendingCoopsCount + supportTicketsCount + pendingExpensesCount}
+          pendingInboxCount={totalPendingInboxCount}
           onUnifiedInboxClick={() => setIsUnifiedInboxOpen(true)}
           requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
           todayCheckIn={todayCheckIn}
@@ -901,7 +910,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
           {/* Header & List Container */}
           {(() => {
-            const totalPending = pendingTicketsCount + heldLeadsCount + pendingCheckInsCount + pendingCoopsCount + supportTicketsCount + pendingExpensesCount;
+            const totalPending = totalPendingInboxCount;
             const hasPendingTasks = totalPending > 0;
             if (hasPendingTasks) {
               return (
@@ -943,7 +952,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '1.5rem' }}>
                     {/* 1. Ticket báo lỗi */}
-                    {pendingTicketsCount > 0 && (
+                    {effTicketsCount > 0 && (
                       <div 
                         onClick={() => { setIsUnifiedInboxOpen(false); navigate('/tickets'); }}
                         className="unified-inbox-card"
@@ -960,7 +969,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Ticket báo lỗi data")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge danger" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', boxShadow: '0 2px 6px rgba(239, 68, 68, 0.12)' }}>{pendingTicketsCount} {t('chờ duyệt')}</span>
+                          <span className="badge danger" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', boxShadow: '0 2px 6px rgba(239, 68, 68, 0.12)' }}>{effTicketsCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
                             borderRadius: '20px',
@@ -985,7 +994,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     )}
 
                     {/* 2. AI Pre-screener */}
-                    {heldLeadsCount > 0 && (
+                    {effHeldCount > 0 && (
                       <div 
                         onClick={() => { setIsUnifiedInboxOpen(false); navigate('/gatekeeper'); }}
                         className="unified-inbox-card"
@@ -1002,7 +1011,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Data tạm giữ (AI Lọc)")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge warning" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.12)' }}>{heldLeadsCount} {t('chờ duyệt')}</span>
+                          <span className="badge warning" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', boxShadow: '0 2px 6px rgba(245, 158, 11, 0.12)' }}>{effHeldCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
                             borderRadius: '20px',
@@ -1027,7 +1036,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     )}
 
                     {/* 3. Chấm công */}
-                    {pendingCheckInsCount > 0 && (
+                    {effCheckInsCount > 0 && (
                       <div 
                         onClick={() => { setIsUnifiedInboxOpen(false); navigate('/attendance'); }}
                         className="unified-inbox-card"
@@ -1044,7 +1053,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Yêu cầu chấm công bổ sung")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', boxShadow: '0 2px 6px rgba(189, 29, 45, 0.12)' }}>{pendingCheckInsCount} {t('chờ duyệt')}</span>
+                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', boxShadow: '0 2px 6px rgba(189, 29, 45, 0.12)' }}>{effCheckInsCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
                             borderRadius: '20px',
@@ -1069,7 +1078,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     )}
 
                     {/* 4. Ký hợp tác */}
-                    {pendingCoopsCount > 0 && (
+                    {effCoopsCount > 0 && (
                       <div 
                         onClick={() => { setIsUnifiedInboxOpen(false); navigate('/cooperation-slips'); }}
                         className="unified-inbox-card"
@@ -1086,7 +1095,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Phê duyệt ký hợp tác chia hoa hồng")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', boxShadow: '0 2px 6px rgba(189, 29, 45, 0.12)' }}>{pendingCoopsCount} {t('chờ duyệt')}</span>
+                          <span className="badge" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(189, 29, 45, 0.1)', color: 'var(--color-primary)', boxShadow: '0 2px 6px rgba(189, 29, 45, 0.12)' }}>{effCoopsCount} {t('chờ duyệt')}</span>
                           
                           <div style={{
                             borderRadius: '20px',

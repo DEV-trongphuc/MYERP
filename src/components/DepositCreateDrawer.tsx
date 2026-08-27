@@ -592,22 +592,27 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                           <CustomSelect
                             options={entitySubtab === 'contact' ? contacts.map(c => ({
                               value: String(c.id),
-                              label: `${c.full_name || ''} (${c.phone || c.email || 'KH'})`,
+                              label: c.full_name || '',
+                              sublabel: c.phone || c.email || 'Khách hàng',
                               avatar: c.avatar_url || c.avatar
                             })) : [
                               ...companies.map((comp: any) => ({
                                 value: `comp_${comp.id}`,
-                                label: `[Công ty / Đối tác] ${comp.name} (${comp.phone || comp.email || 'Công ty'})`
+                                label: comp.name || '',
+                                sublabel: `Doanh nghiệp • ${comp.phone || comp.email || comp.tax_code || 'Công ty / Đối tác'}`,
+                                avatar: comp.avatar_url || comp.avatar || comp.logo_url || comp.logo
                               })),
                               ...suppliers.map((sup: any) => ({
                                 value: `sup_${sup.id}`,
-                                label: `[Đối tác / NCC / Giảng viên] ${sup.name} (${sup.phone || sup.contact_person || 'NCC'})`
+                                label: sup.name || '',
+                                sublabel: `${sup.type_label || 'Đối tác / NCC / Giảng viên'} • ${sup.phone || sup.contact_person || 'NCC'}`,
+                                avatar: sup.avatar_url || sup.avatar || sup.logo_url
                               }))
                             ]}
                             value={selectedContactId}
                             onChange={val => setSelectedContactId(val.toString())}
                             placeholder={entitySubtab === 'contact' ? "-- Chọn khách hàng --" : "-- Chọn đối tác --"}
-                            showAvatars={entitySubtab === 'contact'}
+                            showAvatars={true}
                             searchable
                           />
                         </div>

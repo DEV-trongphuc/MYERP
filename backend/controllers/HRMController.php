@@ -453,10 +453,13 @@ class HRMController {
                 $deductionLog = " [Phân bổ ngày nghỉ: " . implode(', ', $parts) . "]";
                 $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ? WHERE id = ?");
                 $updReason->execute([$deductionLog, $deductUnpaid, (int)$leaveRow['id']]);
+            } elseif ($type === 'unpaid') {
+                $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET unpaid_days = ? WHERE id = ?");
+                $updReason->execute([$days, (int)$leaveRow['id']]);
             }
 
             // Sync to consultant_leaves so the lead assignment / check-in rotation excludes this user when on leave
-            if (in_array($type, ['annual', 'sick', 'compensatory', 'unpaid', 'special_paid'])) {
+            if (in_array($type, ['annual', 'sick', 'compensatory', 'unpaid', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral'])) {
                 try {
                     $cLeaveStmt = $this->db->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
                     $startDateOnly = explode('T', explode(' ', $leaveRow['start_date'])[0])[0];
@@ -941,14 +944,14 @@ class HRMController {
                 }
             }
 
-            // 2. Add approved leaves that are paid (leave_type = 'annual', 'sick', 'compensatory', 'remote_work', 'special_paid')
+            // 2. Add approved leaves that are paid (leave_type = 'annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
             if ($isSpecialPeriod) {
                 $paidLeaveDays = 0;
             } else {
                 $lvStmt = $this->db->prepare("
                     SELECT SUM(total_days - unpaid_days) as paid_days
                     FROM hrm_leave_requests
-                    WHERE user_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid')
+                    WHERE user_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
                       AND DATE_FORMAT(start_date, '%Y-%m') = ?
                 ");
                 $lvStmt->execute([$userId, $monthYear]);
@@ -2281,10 +2284,11 @@ class HRMController {
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
         }
-        if ((int)$row['user_id'] !== (int)$auth['user_id']) {
+        $isAdmin = $this->isAdmin($auth);
+        if ((int)$row['user_id'] !== (int)$auth['user_id'] && !$isAdmin) {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
-        if ($row['status'] !== 'pending') {
+        if ($row['status'] !== 'pending' && !$isAdmin) {
             respond(400, null, 'Chỉ có thể xóa yêu cầu ở trạng thái Chờ duyệt', false);
         }
         
@@ -2299,10 +2303,11 @@ class HRMController {
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
         }
-        if ((int)$row['user_id'] !== (int)$auth['user_id']) {
+        $isAdmin = $this->isAdmin($auth);
+        if ((int)$row['user_id'] !== (int)$auth['user_id'] && !$isAdmin) {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
         }
-        if ($row['status'] !== 'pending') {
+        if ($row['status'] !== 'pending' && !$isAdmin) {
             respond(400, null, 'Chỉ có thể xóa yêu cầu ở trạng thái Chờ duyệt', false);
         }
         

@@ -9237,145 +9237,153 @@ switch ($action) {
         $isAdminOrManager = $isGlobalAdmin || $isManager || $isHR || $isAccountant;
 
         if ($isAdminOrManager) {
-            // 1. Tickets (Reports) count
-            $isManager = ($role === 'manager');
-            $managedConsultantIds = [];
-            if ($isManager) {
-                $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
-                $stmtM->bind_param("i", $userId);
-                $stmtM->execute();
-                $resM = $stmtM->get_result();
-                while ($rowM = $resM->fetch_assoc()) {
-                    $managedConsultantIds[] = (int)$rowM['id'];
+            // 1. Tickets (Reports) count (Accountant does not manage data error tickets)
+            if (!$isAccountant) {
+                $isManager = ($role === 'manager');
+                $managedConsultantIds = [];
+                if ($isManager) {
+                    $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
+                    $stmtM->bind_param("i", $userId);
+                    $stmtM->execute();
+                    $resM = $stmtM->get_result();
+                    while ($rowM = $resM->fetch_assoc()) {
+                        $managedConsultantIds[] = (int)$rowM['id'];
+                    }
+                    $stmtM->close();
                 }
-                $stmtM->close();
+
+                if (!$isManager || !empty($managedConsultantIds)) {
+                    $sqlRep = "SELECT COUNT(*) FROM data_reports r WHERE r.status = 'pending'";
+                    if ($isManager) {
+                        $placeholders = implode(',', array_fill(0, count($managedConsultantIds), '?'));
+                        $sqlRep .= " AND r.consultant_id IN ($placeholders)";
+                    }
+                    $stmtRep = $conn->prepare($sqlRep);
+                    if ($isManager) {
+                        $stmtRep->bind_param(str_repeat("i", count($managedConsultantIds)), ...$managedConsultantIds);
+                    }
+                    $stmtRep->execute();
+                    $ticketsCount = (int)($stmtRep->get_result()->fetch_row()[0] ?? 0);
+                    $stmtRep->close();
+                }
             }
 
-            if (!$isManager || !empty($managedConsultantIds)) {
-                $sqlRep = "SELECT COUNT(*) FROM data_reports r WHERE r.status = 'pending'";
+            // 2. Held Leads count (Accountant does not review AI held sales leads)
+            if (!$isAccountant) {
+                $isDirector = ($role === 'director');
+                $isProjManager = false;
+                $projIds = [];
                 if ($isManager) {
-                    $placeholders = implode(',', array_fill(0, count($managedConsultantIds), '?'));
-                    $sqlRep .= " AND r.consultant_id IN ($placeholders)";
-                }
-                $stmtRep = $conn->prepare($sqlRep);
-                if ($isManager) {
-                    $stmtRep->bind_param(str_repeat("i", count($managedConsultantIds)), ...$managedConsultantIds);
-                }
-                $stmtRep->execute();
-                $ticketsCount = (int)($stmtRep->get_result()->fetch_row()[0] ?? 0);
-                $stmtRep->close();
-            }
-
-            // 2. Held Leads count
-            $isDirector = ($role === 'director');
-            $isProjManager = false;
-            $projIds = [];
-            if ($isManager) {
-                $pRes = $conn->query("SELECT id, manager_ids FROM projects");
-                if ($pRes) {
-                    while ($pRow = $pRes->fetch_assoc()) {
-                        if (!empty($pRow['manager_ids'])) {
-                            $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
-                            if (in_array($userId, $mIds, true)) {
-                                $projIds[] = (int)$pRow['id'];
-                                $isProjManager = true;
+                    $pRes = $conn->query("SELECT id, manager_ids FROM projects");
+                    if ($pRes) {
+                        while ($pRow = $pRes->fetch_assoc()) {
+                            if (!empty($pRow['manager_ids'])) {
+                                $mIds = array_filter(array_map('intval', explode(',', $pRow['manager_ids'])));
+                                if (in_array($userId, $mIds, true)) {
+                                    $projIds[] = (int)$pRow['id'];
+                                    $isProjManager = true;
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            $campIds = [];
-            if ($isProjManager && !empty($projIds)) {
-                $projIdsStr = implode(',', $projIds);
-                $cRes = $conn->query("SELECT id FROM marketing_campaigns WHERE project_id IN ($projIdsStr)");
-                if ($cRes) {
-                    while ($cRow = $cRes->fetch_assoc()) {
-                        $campIds[] = (int)$cRow['id'];
+                $campIds = [];
+                if ($isProjManager && !empty($projIds)) {
+                    $projIdsStr = implode(',', $projIds);
+                    $cRes = $conn->query("SELECT id FROM marketing_campaigns WHERE project_id IN ($projIdsStr)");
+                    if ($cRes) {
+                        while ($cRow = $cRes->fetch_assoc()) {
+                            $campIds[] = (int)$cRow['id'];
+                        }
                     }
                 }
-            }
 
-            $sqlHeld = "
-                SELECT COUNT(*) 
-                FROM leads l
-                WHERE l.status = 'pending_approval' 
-                  AND NOT ( (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) )
-            ";
-            if ($isProjManager) {
-                if (!empty($campIds)) {
-                    $sqlHeld .= " AND l.campaign_id IN (" . implode(',', $campIds) . ")";
-                } else {
-                    $sqlHeld .= " AND 1=0";
+                $sqlHeld = "
+                    SELECT COUNT(*) 
+                    FROM leads l
+                    WHERE l.status = 'pending_approval' 
+                      AND NOT ( (l.ai_screener_status = 'pending' OR (l.ai_screener_status = 'error' AND l.ai_attempts < 3)) AND l.created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE) )
+                ";
+                if ($isProjManager) {
+                    if (!empty($campIds)) {
+                        $sqlHeld .= " AND l.campaign_id IN (" . implode(',', $campIds) . ")";
+                    } else {
+                        $sqlHeld .= " AND 1=0";
+                    }
                 }
+                $stmtHeld = $conn->prepare($sqlHeld);
+                $stmtHeld->execute();
+                $heldCount = (int)($stmtHeld->get_result()->fetch_row()[0] ?? 0);
+                $stmtHeld->close();
             }
-            $stmtHeld = $conn->prepare($sqlHeld);
-            $stmtHeld->execute();
-            $heldCount = (int)($stmtHeld->get_result()->fetch_row()[0] ?? 0);
-            $stmtHeld->close();
 
             // 3. Check-ins count
-            $sqlCheck = "
-                SELECT COUNT(*) 
-                FROM check_ins c
-                JOIN users u ON c.user_id = u.id
-                WHERE u.tenant_id = ? AND c.status = 'pending_approval'
-            ";
-            if ($role === 'manager') {
-                $sqlCheck .= " AND (u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))) OR (u.team_id IS NOT NULL AND u.team_id = (SELECT team_id FROM users WHERE id = ?)))";
+            if (!$isAccountant) {
+                $sqlCheck = "
+                    SELECT COUNT(*) 
+                    FROM check_ins c
+                    JOIN users u ON c.user_id = u.id
+                    WHERE u.tenant_id = ? AND c.status = 'pending_approval'
+                ";
+                if ($role === 'manager') {
+                    $sqlCheck .= " AND (u.id = ? OR u.team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))) OR (u.team_id IS NOT NULL AND u.team_id = (SELECT team_id FROM users WHERE id = ?)))";
+                }
+                $stmtCheck = $conn->prepare($sqlCheck);
+                if ($role === 'manager') {
+                    $stmtCheck->bind_param("iiii", $tenantId, $userId, $userId, $userId);
+                } else {
+                    $stmtCheck->bind_param("i", $tenantId);
+                }
+                $stmtCheck->execute();
+                $checkinsCount = (int)($stmtCheck->get_result()->fetch_row()[0] ?? 0);
+                $stmtCheck->close();
             }
-            $stmtCheck = $conn->prepare($sqlCheck);
-            if ($role === 'manager') {
-                $stmtCheck->bind_param("iiii", $tenantId, $userId, $userId, $userId);
-            } else {
-                $stmtCheck->bind_param("i", $tenantId);
-            }
-            $stmtCheck->execute();
-            $checkinsCount = (int)($stmtCheck->get_result()->fetch_row()[0] ?? 0);
-            $stmtCheck->close();
 
             // 4. Cooperation slips count
-            $sqlCoop = "
-                SELECT COUNT(*)
-                FROM cooperation_slips cs
-                JOIN contacts c ON cs.contact_id = c.id
-                WHERE c.tenant_id = ?
-                  AND (cs.status = 'pending_manager_approval' OR (cs.status = 'approved' AND cs.adjustment_request_user_id > 0))
-            ";
-            $scope = getModulePermissionScope($conn, $decodedUser, 'cooperation', 'read');
-            if ($scope === 'team') {
-                $sqlCoop .= " AND (
-                    (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(? AS CHAR))))
-                    OR cs.created_by = ?
-                    OR EXISTS (
-                        SELECT 1 FROM users u2 
-                        WHERE u2.team_id IN (SELECT id FROM teams WHERE leader_id = ?)
-                        AND (
-                            (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(u2.id AS CHAR))))
-                            OR cs.created_by = u2.id
+            if (!$isAccountant) {
+                $sqlCoop = "
+                    SELECT COUNT(*)
+                    FROM cooperation_slips cs
+                    JOIN contacts c ON cs.contact_id = c.id
+                    WHERE c.tenant_id = ?
+                      AND (cs.status = 'pending_manager_approval' OR (cs.status = 'approved' AND cs.adjustment_request_user_id > 0))
+                ";
+                $scope = getModulePermissionScope($conn, $decodedUser, 'cooperation', 'read');
+                if ($scope === 'team') {
+                    $sqlCoop .= " AND (
+                        (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(? AS CHAR))))
+                        OR cs.created_by = ?
+                        OR EXISTS (
+                            SELECT 1 FROM users u2 
+                            WHERE u2.team_id IN (SELECT id FROM teams WHERE leader_id = ?)
+                            AND (
+                                (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(u2.id AS CHAR))))
+                                OR cs.created_by = u2.id
+                            )
                         )
-                    )
-                )";
-            } else if ($scope === 'own') {
-                $sqlCoop .= " AND (
-                    (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(? AS CHAR))))
-                    OR cs.created_by = ?
-                )";
-            } else if ($scope !== 'all') {
-                $sqlCoop .= ' AND 1=0';
-            }
+                    )";
+                } else if ($scope === 'own') {
+                    $sqlCoop .= " AND (
+                        (cs.shares_json IS NOT NULL AND JSON_VALID(cs.shares_json) AND JSON_CONTAINS(JSON_KEYS(cs.shares_json), JSON_QUOTE(CAST(? AS CHAR))))
+                        OR cs.created_by = ?
+                    )";
+                } else if ($scope !== 'all') {
+                    $sqlCoop .= ' AND 1=0';
+                }
 
-            $stmtCoop = $conn->prepare($sqlCoop);
-            if ($scope === 'team') {
-                $stmtCoop->bind_param("iiii", $tenantId, $userId, $userId, $userId);
-            } else if ($scope === 'own') {
-                $stmtCoop->bind_param("iii", $tenantId, $userId, $userId);
-            } else {
-                $stmtCoop->bind_param("i", $tenantId);
+                $stmtCoop = $conn->prepare($sqlCoop);
+                if ($scope === 'team') {
+                    $stmtCoop->bind_param("iiii", $tenantId, $userId, $userId, $userId);
+                } else if ($scope === 'own') {
+                    $stmtCoop->bind_param("iii", $tenantId, $userId, $userId);
+                } else {
+                    $stmtCoop->bind_param("i", $tenantId);
+                }
+                $stmtCoop->execute();
+                $coopsCount = (int)($stmtCoop->get_result()->fetch_row()[0] ?? 0);
+                $stmtCoop->close();
             }
-            $stmtCoop->execute();
-            $coopsCount = (int)($stmtCoop->get_result()->fetch_row()[0] ?? 0);
-            $stmtCoop->close();
 
             // 5. Support tickets count
             $isSupportRole = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
