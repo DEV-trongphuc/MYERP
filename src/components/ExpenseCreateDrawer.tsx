@@ -419,21 +419,24 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
           {/* Drawer Sheet Panel */}
           <motion.div
-            initial={isMobile ? { y: '100%' } : { x: '100%' }}
-            animate={{ y: 0, x: 0 }}
-            exit={isMobile ? { y: '100%' } : { x: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+            initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
+            animate={{ y: 0, x: 0, opacity: 1 }}
+            exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
             onClick={e => e.stopPropagation()}
             style={{
-              width: isMobile ? '100%' : '1100px',
-              maxWidth: '100vw',
-              height: '100vh',
+              position: 'fixed',
+              top: 0,
+              bottom: 0,
+              left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+              right: 0,
+              width: isMobile ? '100vw' : 'auto',
+              height: isMobile ? '100dvh' : '100vh',
               background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
-              boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.2)',
+              boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
               boxSizing: 'border-box',
-              position: 'relative',
               overflow: 'hidden',
               zIndex: 2000000010
             }}
