@@ -6670,9 +6670,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           const found = res?.data?.find((a: any) => a.id === item.id);
           if (active) setDetail(found);
         } else if (item.type === 'expense') {
-          const res = await api.get('/expenses');
-          const found = res?.data?.data?.find((e: any) => e.id === item.id);
-          if (active) setDetail(found);
+          const res = await api.get(`/expenses/${item.id}`);
+          const found = res?.data?.data || res?.data;
+          if (active && found) setDetail(found);
         } else if (item.type === 'checkin') {
           const res = await api.get('/check-ins');
           const found = res?.data?.data?.find((c: any) => c.id === item.id);
@@ -7219,8 +7219,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const cleanHeaderTitle = (item.title || '')
       .replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '');
 
-    const cleanNoteText = (rawDesc || '')
-      .replace(/^Số tiền:\s*0\s*đ\.\s*Ghi chú:\s*"?/i, '')
+    const cleanNoteText = (detail?.notes || rawDesc || '')
+      .replace(/^Số tiền:\s*[\d.,]+\s*đ\.\s*Ghi chú:\s*"?/i, '')
+      .replace(/^Số tiền:\s*[\d.,]+\s*đ\s*"?/i, '')
+      .replace(/^Ghi chú:\s*"?/i, '')
       .replace(/"$/, '')
       .trim();
 
@@ -7379,7 +7381,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   <input
                     type="text"
                     className="form-input"
-                    value={formatApprovalCurrency(detail?.amount || 0, detail?.currency || item?.currency || 'VND')}
+                    value={formatApprovalCurrency(detail?.amount ?? (item as any)?.amount ?? 0, detail?.currency || (item as any)?.currency || 'VND')}
                     disabled
                   />
                 </div>
@@ -7388,7 +7390,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   <input
                     type="text"
                     className="form-input"
-                    value={detail?.category || 'Vận hành'}
+                    value={detail?.category || (item as any)?.category || 'Vận hành'}
                     disabled
                   />
                 </div>
@@ -7397,7 +7399,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   <input
                     type="text"
                     className="form-input"
-                    value={detail?.date ? new Date(detail.date).toLocaleDateString('vi-VN') : new Date(detail?.created_at || item.created_at).toLocaleDateString('vi-VN')}
+                    value={detail?.date ? new Date(detail.date).toLocaleDateString('vi-VN') : ((item as any)?.date ? new Date((item as any).date).toLocaleDateString('vi-VN') : new Date(detail?.created_at || item.created_at).toLocaleDateString('vi-VN'))}
                     disabled
                   />
                 </div>
