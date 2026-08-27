@@ -393,9 +393,9 @@ class PurchaseOrderController {
 
             // Check if current user is the authorized approver for this level
             $expectedApproverId = (int)$po["approver_id" . ($currentLevel > 1 ? "_" . $currentLevel : "")];
-            if ($expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+            if ($expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true)) {
                 $this->db->rollBack();
-                respond(403, null, 'Bạn không có quyền phê duyệt cấp này', false);
+                respond(403, null, 'Bạn không có quyền phê duyệt cấp này hoặc chưa đến lượt phê duyệt của bạn', false);
             }
 
             // Update status of the current level

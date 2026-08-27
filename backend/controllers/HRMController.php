@@ -295,6 +295,17 @@ class HRMController {
 
         $isApprover1 = ($auth['user_id'] == $leaveRow['approver_id']);
         $isApprover2 = ($auth['user_id'] == $leaveRow['approver_id_2']);
+        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true);
+
+        if (!$isApprover1 && !$isApprover2 && !$isSuperAdmin) {
+            respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
+        }
+
+        if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
+            if ($leaveRow['status_level_1'] === 'pending') {
+                respond(403, null, 'Cần có phê duyệt Cấp 1 trước khi Cấp 2 phê duyệt', false);
+            }
+        }
 
         $nextStatus = 'pending';
         $updateFields = [];
@@ -671,6 +682,17 @@ class HRMController {
 
         $isApprover1 = ($auth['user_id'] == $advRow['approver_id']);
         $isApprover2 = ($auth['user_id'] == $advRow['approver_id_2']);
+        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true);
+
+        if (!$isApprover1 && !$isApprover2 && !$isSuperAdmin) {
+            respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
+        }
+
+        if ($isApprover2 && !$isApprover1 && !$isSuperAdmin) {
+            if ($advRow['status_level_1'] === 'pending') {
+                respond(403, null, 'Cần có phê duyệt Cấp 1 trước khi Cấp 2 phê duyệt', false);
+            }
+        }
 
         $nextStatus = 'pending';
         $updateFields = [];

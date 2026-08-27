@@ -1371,9 +1371,9 @@ class FinanceController
                 $expectedApproverId = (int)($expenseRow['approver_id_3'] ?? 0);
             }
 
-            if ($expectedApproverId > 0 && $expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true)) {
+            if ($expectedApproverId > 0 && $expectedApproverId !== (int)$userId && !in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true)) {
                 $this->db->rollBack();
-                respond(403, null, 'Bạn không có quyền phê duyệt cấp này', false);
+                respond(403, null, 'Bạn không có quyền phê duyệt cấp này hoặc chưa đến lượt phê duyệt của bạn', false);
             }
 
             // Update status of current level
