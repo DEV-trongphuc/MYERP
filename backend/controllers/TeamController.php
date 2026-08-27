@@ -9,9 +9,9 @@ class TeamController
 
     public function index(array $auth): void
     {
-        // Allow all system roles to view the full team list
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'sale', 'sales', 'hr', 'accountant', 'marketing', 'assistant', 'viewer', 'sale_admin', 'saleadmin'], true)) {
-            respond(403, null, 'Quyền truy cập bị từ chối', false);
+        // Allow all authenticated users within the same tenant to retrieve the team list
+        if (empty($auth['user_id'])) {
+            respond(401, null, 'Chưa đăng nhập', false);
         }
 
         $role = $auth['role'];

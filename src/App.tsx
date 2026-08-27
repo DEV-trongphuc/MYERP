@@ -102,7 +102,7 @@ const AppTabs = () => {
       return <Navigate to="/" replace />;
     }
   } else if (currentPath === '/consultants') {
-    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'].includes(user?.role || '') && !hasModuleApprovalAccess(user, 'attendance')) {
+    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(user?.role || '') && !hasModuleApprovalAccess(user, 'attendance')) {
       console.warn("[Router] Access denied for /consultants, role:", user?.role);
       return <Navigate to="/" replace />;
     }

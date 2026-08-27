@@ -68,8 +68,8 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: 'Tài khoản cá nhân', href: '/account', icon: User },
       { name: 'Chấm công', href: '/attendance', icon: Clock, hideForRoles: ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'] },
       { name: 'Phiếu lương', href: '/my-payslips', icon: FileText },
-      { name: 'Phòng ban', href: '/consultants?tab=teams', icon: Users, hideForRoles: ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
-      { name: 'Nhân sự công ty', href: '/consultants', icon: Users, hideForRoles: ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
+      { name: 'Phòng ban', href: '/consultants?tab=teams', icon: Users },
+      { name: 'Nhân sự công ty', href: '/consultants', icon: Users },
       { name: 'Quản lý chấm công', href: '/attendance', icon: Clock, hideForRoles: ['assistant', 'sale', 'viewer', 'sales', 'marketing', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
       { name: 'Nhân sự & Lương', href: '/hrm', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
