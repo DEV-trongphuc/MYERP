@@ -1846,6 +1846,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleToggleParticipant = (userId: number) => {
+    const primaryUserId = Number(formData.user_id || 0);
+    if (primaryUserId && userId === primaryUserId) {
+      toast.error(t('Người thực hiện chính không cần thêm vào người liên quan'));
+      return;
+    }
     const current = getParticipantIds(formData.participant_ids);
     const isSelected = current.includes(String(userId));
     
@@ -1866,7 +1871,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
       handleUpdateField('participant_ids', nextString);
     } else {
-      const next = [...current, String(userId)];
+      const next = [...current.filter(id => Number(id) !== primaryUserId), String(userId)];
       const nextString = next.join(',');
       setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
       handleUpdateField('participant_ids', nextString);
@@ -1919,8 +1924,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, [formData.participant_ids]);
 
   const participants = React.useMemo(() => {
-    return users.filter(u => participantIds.includes(Number(u.id)));
-  }, [users, participantIds]);
+    const primaryUserId = Number(formData.user_id || 0);
+    return users.filter(u => participantIds.includes(Number(u.id)) && Number(u.id) !== primaryUserId);
+  }, [users, participantIds, formData.user_id]);
 
   const isSale = currentUser && ['sales', 'sale'].includes(currentUser.role?.toLowerCase());
 
@@ -1974,8 +1980,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     const removeAccents = (str: string) =>
       (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
     const searchClean = removeAccents(participantsSearch || '');
+    const primaryUserId = Number(formData.user_id || 0);
     return users
       .filter(u => {
+        if (primaryUserId && Number(u.id) === primaryUserId) return false;
         return removeAccents(u.full_name || u.name || '').includes(searchClean) ||
                removeAccents(u.role || '').includes(searchClean);
       })
@@ -1984,7 +1992,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         const bChecked = participantIds.includes(Number(b.id)) ? 1 : 0;
         return bChecked - aChecked;
       });
-  }, [users, participantsSearch, participantIds]);
+  }, [users, participantsSearch, participantIds, formData.user_id]);
 
   const currentHash = React.useMemo(() => {
     const cleanObj = (obj: any) => {
@@ -5021,7 +5029,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     options={userSelectOptions}
                     value={String(formData.user_id || '')}
                     onChange={val => {
-                      handleUpdateField('user_id', Number(val));
+                      const newUserId = Number(val);
+                      handleUpdateField('user_id', newUserId);
+                      if (newUserId) {
+                        const currentP = getParticipantIds(formData.participant_ids);
+                        if (currentP.includes(String(newUserId))) {
+                          const nextP = currentP.filter(id => id !== String(newUserId));
+                          const nextPString = nextP.join(',');
+                          setFormData((prev: any) => ({ ...prev, participant_ids: nextPString }));
+                          handleUpdateField('participant_ids', nextPString);
+                        }
+                      }
                     }}
                     searchable
                     showAvatars
