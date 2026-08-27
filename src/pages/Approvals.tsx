@@ -1551,9 +1551,11 @@ export default function Approvals() {
         setSelectedWorkflowDef(def);
         setFormType('attendance_bulk');
         setExpenseTitle(def.name);
-        const initMonth = getDefaultBulkMonth();
+        const reqDate = params.get('date');
+        const initMonth = reqDate ? reqDate.substring(0, 7) : getDefaultBulkMonth();
         setBulkMonth(initMonth);
         handleScanMissingDays(initMonth);
+        setShowCreateModal(true);
       }
       navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
     } else if (openId) {

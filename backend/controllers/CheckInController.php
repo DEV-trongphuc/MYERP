@@ -377,6 +377,13 @@ class CheckInController {
         if ($action === 'checkout' || ($reqCheckout === 1 && $existingRow && empty($existingRow['check_out_time']) && !$isSupplementary)) {
             if (!$existingRow) {
                 respond(400, null, 'Bạn chưa thực hiện Chấm công Vào ca hôm nay, không thể chấm công Ra ca.', false);
+                return;
+            }
+
+            $currentHM = substr($currentTime, 0, 5);
+            if ($currentHM < $morningStart) {
+                respond(400, null, "Không thể chấm công Ra ca trước khi ca làm việc bắt đầu ({$morningStart}).", false);
+                return;
             }
 
             $outTimeStr = $today . ' ' . $currentTime;
@@ -449,6 +456,16 @@ class CheckInController {
         // ==================== FLOW B: CHECK-IN (VÀO CA) ====================
         if ($existingRow) {
             respond(409, null, 'Bạn đã thực hiện check-in hoặc gửi yêu cầu cho ngày này rồi', false);
+            return;
+        }
+
+        // Chặn chấm công Vào ca sau khi đã quá giờ tan ca làm việc (chỉ cho phép tạo phiếu Cập nhật công)
+        if (!$isSupplementary) {
+            $currentHM = substr($currentTime, 0, 5);
+            if ($currentHM >= $afternoonEnd) {
+                respond(400, null, "Đã quá giờ tan ca hôm nay ({$afternoonEnd}). Bạn không thể chấm công vào ca trực tiếp mà cần tạo phiếu Cập nhật / Giải trình công để Quản lý phê duyệt.", false);
+                return;
+            }
         }
 
         if (empty($selfieUrl) && !$isSupplementary) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -41,7 +41,9 @@ export const Header = ({
   pendingInboxCount,
   onUnifiedInboxClick,
   requireCheckout = false,
-  todayCheckIn = null
+  todayCheckIn = null,
+  consultantProfile = null,
+  sysSettings = null
 }: { 
   onActivityFeedClick: () => void; 
   onMenuClick?: () => void; 
@@ -50,6 +52,8 @@ export const Header = ({
   onUnifiedInboxClick?: () => void;
   requireCheckout?: boolean;
   todayCheckIn?: any;
+  consultantProfile?: any;
+  sysSettings?: any;
 }) => {
   const isDemo = localStorage.getItem('IDEAS_DEMO_MODE') === 'true';
   const { user, logout } = useAuth();
@@ -59,6 +63,40 @@ export const Header = ({
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  // Compute shift schedule and work hours for today
+  const todayScheduleInfo = useMemo(() => {
+    const now = new Date();
+    let dayOfWeek = now.getDay();
+    if (dayOfWeek === 0) dayOfWeek = 7;
+
+    let rawSchedule = consultantProfile?.work_schedule || (user as any)?.work_schedule;
+    if (!rawSchedule && sysSettings?.global_work_schedule) {
+      try {
+        rawSchedule = typeof sysSettings.global_work_schedule === 'string' 
+          ? JSON.parse(sysSettings.global_work_schedule) 
+          : sysSettings.global_work_schedule;
+      } catch (e) {}
+    }
+
+    const dayConfig = rawSchedule?.[String(dayOfWeek)] || rawSchedule?.[dayOfWeek];
+    const isDayOff = Boolean(dayConfig && dayConfig.active === false);
+    const morningStart = String(dayConfig?.start || consultantProfile?.work_start_time || (user as any)?.work_start_time || sysSettings?.global_work_start_time || '08:00').substring(0, 5);
+    const afternoonEnd = String(dayConfig?.end_afternoon || dayConfig?.end || consultantProfile?.work_end_time || (user as any)?.work_end_time || sysSettings?.global_work_end_time || '17:30').substring(0, 5);
+
+    const curHM = now.toTimeString().substring(0, 5);
+    const isPastShiftEnd = !isDayOff && curHM >= afternoonEnd;
+    const isBeforeMorningStart = curHM < morningStart;
+
+    return {
+      isDayOff,
+      morningStart,
+      afternoonEnd,
+      curHM,
+      isPastShiftEnd,
+      isBeforeMorningStart
+    };
+  }, [consultantProfile, user, sysSettings]);
 
 
 
@@ -1012,7 +1050,7 @@ export const Header = ({
             e.currentTarget.style.color = 'var(--color-text-muted)';
             e.currentTarget.style.background = 'none';
           }}
-         >
+        >
           <Keyboard size={20} />
         </button>
       </div>
@@ -1038,49 +1076,91 @@ export const Header = ({
         {/* Sales widgets for check-in (Hidden on mobile) */}
         {isSales && !isMobile && (
           <div className="responsive-hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px' }}>
-            {headerCheckIn && headerCheckIn.status === 'approved' && (
-              <div 
-                onMouseEnter={prewarmSmartCheckInGPS}
-                onTouchStart={prewarmSmartCheckInGPS}
-                onClick={() => {
-                  navigate('/attendance');
-                }}
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '4px', 
-                  background: headerCheckIn.check_out_time ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                  border: headerCheckIn.check_out_time ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)', 
-                  color: headerCheckIn.check_out_time ? '#2563eb' : 'var(--color-success)', 
-                  borderRadius: '8px', 
-                  padding: '4px 10px', 
-                  height: '36px', 
-                  fontSize: '0.72rem', 
-                  fontWeight: 700, 
-                  whiteSpace: 'nowrap',
-                  cursor: 'pointer'
-                }}
-                title={requireCheckout && !headerCheckIn.check_out_time ? t('Click để Chấm công Ra ca') : t('Click để Xem bảng chấm công cá nhân')}
-              >
-                <CheckCircle2 size={12} color={headerCheckIn.check_out_time ? '#2563eb' : undefined} />
-                <span>
-                  {headerCheckIn.check_out_time 
-                    ? `${t('Đã Ra ca')} (${headerCheckIn.check_out_time.substring(11, 16) || headerCheckIn.check_out_time.substring(0, 5)})` 
-                    : `${t('Đã Vào ca')} (${headerCheckIn.check_in_time.substring(0, 5)})`
-                  }
-                </span>
-              </div>
-            )}
-            {headerCheckIn && headerCheckIn.status === 'pending_approval' && (
-              <div 
-                onClick={() => navigate('/attendance')}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', borderRadius: '8px', padding: '4px 10px', height: '36px', fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
-                title={t('Click để Xem bảng chấm công cá nhân')}
-              >
-                <Clock size={12} />
-                <span>{`${t('Chờ duyệt trễ')} (${headerCheckIn.check_in_time.substring(0, 5)})`}</span>
-              </div>
-            )}
+            {(() => {
+              const activeCheckIn = todayCheckIn || headerCheckIn;
+              const isNotCheckedIn = !activeCheckIn || activeCheckIn.status === 'rejected';
+              const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd;
+
+              if (isPastShiftEndWithoutCheckIn) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                return (
+                  <div 
+                    onClick={() => navigate(`/approvals?create=attendance_bulk&date=${todayStr}`)}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '5px', 
+                      background: 'rgba(139, 92, 246, 0.1)', 
+                      border: '1px solid rgba(139, 92, 246, 0.3)', 
+                      color: '#7c3aed', 
+                      borderRadius: '8px', 
+                      padding: '4px 10px', 
+                      height: '36px', 
+                      fontSize: '0.72rem', 
+                      fontWeight: 700, 
+                      whiteSpace: 'nowrap', 
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(124, 58, 237, 0.12)'
+                    }}
+                    title={t('Đã quá giờ tan ca hôm nay - Click để tạo phiếu Cập nhật công')}
+                  >
+                    <FileText size={13} color="#7c3aed" />
+                    <span>{t('Cập nhật công hôm nay')}</span>
+                  </div>
+                );
+              }
+
+              if (headerCheckIn && headerCheckIn.status === 'approved') {
+                return (
+                  <div 
+                    onMouseEnter={prewarmSmartCheckInGPS}
+                    onTouchStart={prewarmSmartCheckInGPS}
+                    onClick={() => {
+                      navigate('/attendance');
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '4px', 
+                      background: headerCheckIn.check_out_time ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                      border: headerCheckIn.check_out_time ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)', 
+                      color: headerCheckIn.check_out_time ? '#2563eb' : 'var(--color-success)', 
+                      borderRadius: '8px', 
+                      padding: '4px 10px', 
+                      height: '36px', 
+                      fontSize: '0.72rem', 
+                      fontWeight: 700, 
+                      whiteSpace: 'nowrap', 
+                      cursor: 'pointer' 
+                    }}
+                    title={requireCheckout && !headerCheckIn.check_out_time ? t('Click để Chấm công Ra ca') : t('Click để Xem bảng chấm công cá nhân')}
+                  >
+                    <CheckCircle2 size={12} color={headerCheckIn.check_out_time ? '#2563eb' : undefined} />
+                    <span>
+                      {headerCheckIn.check_out_time 
+                        ? `${t('Đã Ra ca')} (${headerCheckIn.check_out_time.substring(11, 16) || headerCheckIn.check_out_time.substring(0, 5)})` 
+                        : `${t('Đã Vào ca')} (${headerCheckIn.check_in_time.substring(0, 5)})`
+                      }
+                    </span>
+                  </div>
+                );
+              }
+
+              if (headerCheckIn && headerCheckIn.status === 'pending_approval') {
+                return (
+                  <div 
+                    onClick={() => navigate('/attendance')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', borderRadius: '8px', padding: '4px 10px', height: '36px', fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                    title={t('Click để Xem bảng chấm công cá nhân')}
+                  >
+                    <Clock size={12} />
+                    <span>{`${t('Chờ duyệt trễ')} (${headerCheckIn.check_in_time.substring(0, 5)})`}</span>
+                  </div>
+                );
+              }
+
+              return null;
+            })()}
           </div>
         )}
 
@@ -2468,8 +2548,14 @@ export const Header = ({
             const needsCheckOut = requireCheckout && isApprovedCheckIn && !activeCheckIn.check_out_time;
             const isCompletedCheckIn = isApprovedCheckIn && (!requireCheckout || Boolean(activeCheckIn.check_out_time));
 
+            // Quá giờ tan ca hôm nay mà cả ngày chưa chấm công (trừ ngày nghỉ)
+            const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd;
+
             const handleClick = () => {
-              if (isNotCheckedIn || needsCheckOut) {
+              if (isPastShiftEndWithoutCheckIn) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                navigate(`/approvals?create=attendance_bulk&date=${todayStr}`);
+              } else if (isNotCheckedIn || needsCheckOut) {
                 prewarmSmartCheckInGPS();
                 window.dispatchEvent(new CustomEvent('trigger-checkin-modal'));
               } else {
@@ -2477,29 +2563,35 @@ export const Header = ({
               }
             };
 
-            const btnBg = isNotCheckedIn 
-              ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
-              : needsCheckOut || isPendingApproval
-                ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+            const btnBg = isPastShiftEndWithoutCheckIn
+              ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)'
+              : isNotCheckedIn 
+                ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                : needsCheckOut || isPendingApproval
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
 
-            const btnShadow = isNotCheckedIn
-              ? '0 10px 25px rgba(239, 68, 68, 0.45)'
-              : needsCheckOut || isPendingApproval
-                ? '0 10px 25px rgba(245, 158, 11, 0.45)'
-                : '0 8px 20px rgba(16, 185, 129, 0.35)';
+            const btnShadow = isPastShiftEndWithoutCheckIn
+              ? '0 10px 25px rgba(124, 58, 237, 0.45)'
+              : isNotCheckedIn
+                ? '0 10px 25px rgba(239, 68, 68, 0.45)'
+                : needsCheckOut || isPendingApproval
+                  ? '0 10px 25px rgba(245, 158, 11, 0.45)'
+                  : '0 8px 20px rgba(16, 185, 129, 0.35)';
 
-            const btnTitle = isNotCheckedIn
-              ? t('Chưa chấm công - Click để chấm công ngay')
-              : needsCheckOut
-                ? t('Đã vào ca - Click để chấm công ra về')
-                : isPendingApproval
-                  ? t('Chấm công đang chờ duyệt - Click để xem bảng chấm công')
-                  : t('Đã hoàn tất chấm công hôm nay - Click để xem bảng chấm công');
+            const btnTitle = isPastShiftEndWithoutCheckIn
+              ? t('Đã quá giờ tan ca hôm nay - Click để tạo phiếu Cập nhật công')
+              : isNotCheckedIn
+                ? t('Chưa chấm công - Click để chấm công ngay')
+                : needsCheckOut
+                  ? t('Đã vào ca - Click để chấm công ra về')
+                  : isPendingApproval
+                    ? t('Chấm công đang chờ duyệt - Click để xem bảng chấm công')
+                    : t('Đã hoàn tất chấm công hôm nay - Click để xem bảng chấm công');
 
             return (
               <button
-                className={`floating-checkin-btn ${isNotCheckedIn ? 'floating-checkin-uncompleted' : ''}`}
+                className={`floating-checkin-btn ${isNotCheckedIn && !isPastShiftEndWithoutCheckIn ? 'floating-checkin-uncompleted' : ''}`}
                 onTouchStart={prewarmSmartCheckInGPS}
                 onClick={handleClick}
                 style={{
@@ -2528,7 +2620,9 @@ export const Header = ({
                 }}
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
               >
-                {isCompletedCheckIn ? (
+                {isPastShiftEndWithoutCheckIn ? (
+                  <FileText size={22} />
+                ) : isCompletedCheckIn ? (
                   <CheckCircle2 size={24} />
                 ) : (
                   <Fingerprint size={24} />

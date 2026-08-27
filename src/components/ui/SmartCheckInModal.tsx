@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, AlertTriangle, CheckCircle2, Clock, Sparkles, RefreshCw, X, Fingerprint, MapPin } from 'lucide-react';
+import { Camera, AlertTriangle, CheckCircle2, Clock, Sparkles, RefreshCw, X, Fingerprint, MapPin, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { CustomModal } from './CustomModal';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { fetchAPI } from '../../utils/api';
@@ -51,6 +52,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   requireCheckout = false
 }) => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
 
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -191,26 +193,38 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const now = new Date();
+  const curHM = now.toTimeString().substring(0, 5); 
+  let currentDayOfWeek = now.getDay();
+  if (currentDayOfWeek === 0) currentDayOfWeek = 7;
+  
+  const currentDayConfig = consultantProfile?.work_schedule?.[String(currentDayOfWeek)] || 
+                    consultantProfile?.work_schedule?.[currentDayOfWeek] ||
+                    user?.work_schedule?.[String(currentDayOfWeek)] ||
+                    user?.work_schedule?.[currentDayOfWeek];
+                    
+  const isTodayDayOff = Boolean(currentDayConfig && currentDayConfig.active === false);
+  const morningShiftStart = String(currentDayConfig?.start || consultantProfile?.work_start_time || user?.work_start_time || '08:00').substring(0, 5);
+  const afternoonShiftEnd = String(currentDayConfig?.end_afternoon || currentDayConfig?.end || consultantProfile?.work_end_time || user?.work_end_time || '17:30').substring(0, 5);
+
+  const isCheckOutMode = !!(requireCheckout && todayCheckIn && todayCheckIn.status !== 'rejected' && !todayCheckIn.check_out_time);
+  const isBeforeMorningStart = curHM < morningShiftStart;
+  const isAfterShiftEnd = !isTodayDayOff && curHM >= afternoonShiftEnd;
+
+  // Chặn ra ca trước khi ca sáng bắt đầu
+  const isBlockedEarlyCheckOut = isCheckOutMode && isBeforeMorningStart;
+  // Chặn vào ca sau khi đã quá giờ tan ca hôm nay
+  const isBlockedLateCheckIn = !isCheckOutMode && (!todayCheckIn || todayCheckIn.status === 'rejected') && isAfterShiftEnd;
+
   const checkIsLate = () => {
-    const now = new Date();
-    const curHM = now.toTimeString().substring(0, 5); 
+    if (isTodayDayOff) return false; 
     
-    let dayOfWeek = now.getDay();
-    if (dayOfWeek === 0) dayOfWeek = 7;
-    
-    const dayConfig = consultantProfile?.work_schedule?.[String(dayOfWeek)] || 
-                      consultantProfile?.work_schedule?.[dayOfWeek];
-                      
-    if (dayConfig && !dayConfig.active) {
-      return false; 
-    }
-    
-    const workStart = dayConfig?.start || consultantProfile?.work_start_time || '08:00';
-    const morningEnd = dayConfig?.end || '12:00';
-    const afternoonStart = dayConfig?.start_afternoon || '13:00';
+    const workStart = currentDayConfig?.start || consultantProfile?.work_start_time || '08:00';
+    const morningEnd = currentDayConfig?.end || '12:00';
+    const afternoonStart = currentDayConfig?.start_afternoon || '13:00';
     
     if (curHM > morningEnd) {
-      if (!dayConfig?.start_afternoon && !dayConfig?.end_afternoon) {
+      if (!currentDayConfig?.start_afternoon && !currentDayConfig?.end_afternoon) {
         return curHM > workStart;
       }
       return curHM > afternoonStart;
@@ -220,26 +234,15 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   };
 
   const getMinutesLate = () => {
-    const now = new Date();
-    const curHM = now.toTimeString().substring(0, 5); 
+    if (isTodayDayOff) return 0; 
     
-    let dayOfWeek = now.getDay();
-    if (dayOfWeek === 0) dayOfWeek = 7;
-    
-    const dayConfig = consultantProfile?.work_schedule?.[String(dayOfWeek)] || 
-                      consultantProfile?.work_schedule?.[dayOfWeek];
-                      
-    if (dayConfig && !dayConfig.active) {
-      return 0; 
-    }
-    
-    const workStart = dayConfig?.start || consultantProfile?.work_start_time || '08:00';
-    const morningEnd = dayConfig?.end || '12:00';
-    const afternoonStart = dayConfig?.start_afternoon || '13:00';
+    const workStart = currentDayConfig?.start || consultantProfile?.work_start_time || '08:00';
+    const morningEnd = currentDayConfig?.end || '12:00';
+    const afternoonStart = currentDayConfig?.start_afternoon || '13:00';
     
     let startHM = workStart;
     if (curHM > morningEnd) {
-      if (dayConfig?.start_afternoon || dayConfig?.end_afternoon) {
+      if (currentDayConfig?.start_afternoon || currentDayConfig?.end_afternoon) {
         startHM = afternoonStart;
       }
     }
@@ -252,7 +255,6 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
     return Math.max(0, currentTotal - startTotal);
   };
 
-  const isCheckOutMode = !!(requireCheckout && todayCheckIn && todayCheckIn.status !== 'rejected' && !todayCheckIn.check_out_time);
   const isLate = isCheckOutMode ? false : checkIsLate();
   const minutesLate = isCheckOutMode ? 0 : getMinutesLate();
 
@@ -316,9 +318,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
 
   // Start camera automatically when modal opens
   useEffect(() => {
-    if (isOpen && (!todayCheckIn || todayCheckIn.status === 'rejected' || isCheckOutMode) && !isSuccessScreen) {
+    if (isOpen && (!todayCheckIn || todayCheckIn.status === 'rejected' || isCheckOutMode) && !isSuccessScreen && !isBlockedEarlyCheckOut && !isBlockedLateCheckIn) {
       startCamera();
-    } else if (!isOpen) {
+    } else if (!isOpen || isBlockedEarlyCheckOut || isBlockedLateCheckIn) {
       stopCamera();
       setCapturedImage(null);
       setCapturedBlob(null);
@@ -330,7 +332,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
     return () => {
       stopCamera();
     };
-  }, [isOpen, todayCheckIn, isSuccessScreen, isCheckOutMode]);
+  }, [isOpen, todayCheckIn, isSuccessScreen, isCheckOutMode, isBlockedEarlyCheckOut, isBlockedLateCheckIn]);
 
   // Single-pass direct WebP snapshot & preview generator (Ultra-fast, 0 re-encoding)
   const takeSnapshotDirect = (): Promise<{ dataUrl: string; blob: Blob } | null> => {
@@ -482,9 +484,20 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   }, [isCameraActive, capturedImage, isSuccessScreen, isLate, isCheckOutMode]);
 
   // Submit Check-in API (Ultra-optimized single-pass upload, non-blocking GPS)
-  const submitCheckIn = async (overrideImage?: string, overrideBlob?: Blob) => {
+  const submitCheckIn = async (overrideImage?: string, overrideBlob?: Blob | null) => {
+    if (isBlockedEarlyCheckOut) {
+      toast.error(t(`Không thể chấm công Ra ca trước khi ca làm việc bắt đầu (${morningShiftStart}).`));
+      return;
+    }
+
+    if (isBlockedLateCheckIn) {
+      toast.error(t(`Đã quá giờ tan ca hôm nay (${afternoonShiftEnd}). Vui lòng tạo phiếu Cập nhật / Giải trình công để Quản lý phê duyệt.`));
+      return;
+    }
+
     const imageToUse = overrideImage || capturedImage;
-    const blobToUse = overrideBlob || capturedBlob;
+    const blobToUse = overrideBlob !== undefined ? overrideBlob : capturedBlob;
+
     if (!imageToUse || submitting) return;
 
     if (isCheckOutMode) {
@@ -600,8 +613,116 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       fullScreenOnMobile={false}
       modalClassName="checkin-modal-dark"
     >
-      {/* 1. Already Checked-In / Out State */}
-      {todayCheckIn && todayCheckIn.status !== 'rejected' && (!requireCheckout || todayCheckIn.check_out_time) && !isSuccessScreen ? (
+      {/* 1. Blocked Early Check-Out State */}
+      {isBlockedEarlyCheckOut && !isSuccessScreen ? (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: isMobile ? '70dvh' : 'auto',
+          gap: '1.5rem',
+          padding: '2rem 1.5rem',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            background: 'rgba(239, 68, 68, 0.12)',
+            color: 'var(--color-danger)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '2.5rem',
+            boxShadow: '0 8px 24px rgba(239, 68, 68, 0.15)'
+          }}>
+            <AlertTriangle size={38} color="#ef4444" />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)' }}>
+              {t('Chưa đến giờ bắt đầu ca làm việc')}
+            </h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
+              {t(`Bạn không thể thực hiện Chấm công Ra ca trước khi ca sáng bắt đầu (${morningShiftStart}). Vui lòng quay lại sau khi đã vào ca làm việc.`)}
+            </p>
+          </div>
+          <button 
+            className="btn outline" 
+            onClick={onClose} 
+            style={{ borderRadius: '24px', padding: '10px 32px', fontWeight: 700 }}
+          >
+            {t('Đã hiểu')}
+          </button>
+        </div>
+      ) : isBlockedLateCheckIn && !isSuccessScreen ? (
+        /* 2. Blocked Late Check-In State -> Prompt to Create Attendance Update */
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: isMobile ? '70dvh' : 'auto',
+          gap: '1.5rem',
+          padding: '2rem 1.5rem',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            background: 'rgba(139, 92, 246, 0.15)',
+            color: '#7c3aed',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '2.5rem',
+            boxShadow: '0 8px 24px rgba(124, 58, 237, 0.2)'
+          }}>
+            <FileText size={38} color="#7c3aed" />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)' }}>
+              {t('Đã quá giờ tan ca hôm nay')}
+            </h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
+              {t(`Ca làm việc hôm nay đã kết thúc lúc ${afternoonShiftEnd}. Bạn không thể chấm công vào ca trực tiếp mà cần tạo phiếu Cập nhật / Giải trình công để Quản lý phê duyệt.`)}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button 
+              className="btn outline" 
+              onClick={onClose} 
+              style={{ borderRadius: '24px', padding: '10px 20px', fontWeight: 600 }}
+            >
+              {t('Đóng')}
+            </button>
+            <button 
+              onClick={() => {
+                onClose();
+                const todayStr = new Date().toISOString().split('T')[0];
+                navigate(`/approvals?create=attendance_bulk&date=${todayStr}`);
+              }} 
+              style={{ 
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', 
+                color: '#ffffff', 
+                border: 'none', 
+                borderRadius: '24px', 
+                padding: '10px 24px', 
+                fontWeight: 700, 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(124, 58, 237, 0.35)'
+              }}
+            >
+              <FileText size={16} />
+              <span>{t('Tạo phiếu Cập nhật công ngay')}</span>
+            </button>
+          </div>
+        </div>
+      ) : todayCheckIn && todayCheckIn.status !== 'rejected' && (!requireCheckout || todayCheckIn.check_out_time) && !isSuccessScreen ? (
         <div style={{
           display: 'flex',
           flexDirection: 'column',

@@ -825,6 +825,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           onUnifiedInboxClick={() => setIsUnifiedInboxOpen(true)}
           requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
           todayCheckIn={todayCheckIn}
+          consultantProfile={consultantProfile}
+          sysSettings={sysSettings}
         />
 
 
