@@ -3059,7 +3059,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
           status: c.status || 'active',
           vacation_mode: c.vacation_mode || 0,
           work_start_time: c.work_start_time || '08:00',
-          work_end_time: c.work_end_time || '17:30',
+          work_end_time: c.work_end_time || '17:00',
           work_schedule: c.work_schedule || null,
           data: dataCount,
           percent: 0,
@@ -3101,7 +3101,7 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
           status: rc.status || 'active',
           vacation_mode: rc.vacation_mode || 0,
           work_start_time: rc.work_start_time || '08:00',
-          work_end_time: rc.work_end_time || '17:30',
+          work_end_time: rc.work_end_time || '17:00',
           work_schedule: rc.work_schedule || null,
           data: rc.data || 0,
           percent: 0,
@@ -3112,10 +3112,10 @@ export const WarRoomFlightDeck: React.FC<WarRoomProps> = ({
       });
     } else {
       list = [
-        { name: 'Nguyễn Thị Linh Đan', data: 3, avatar: '', status: 'active', percent: 80, color: '#a31422', efficiency: '98%', work_start_time: '08:00', work_end_time: '17:30' },
-        { name: 'Lưu Phan Hoàng Phúc', data: 2, avatar: '', status: 'active', percent: 50, color: '#3b82f6', efficiency: '92%', work_start_time: '08:00', work_end_time: '17:30' },
-        { name: 'Lê Đình Ý Nhi', data: 1, avatar: '', status: 'active', percent: 40, color: '#10b981', efficiency: '87%', work_start_time: '08:00', work_end_time: '17:30' },
-        { name: 'Nguyễn Phương Uyên', data: 1, avatar: '', status: 'active', percent: 25, color: '#f59e0b', efficiency: '88%', work_start_time: '08:00', work_end_time: '17:30' }
+        { name: 'Nguyễn Thị Linh Đan', data: 3, avatar: '', status: 'active', percent: 80, color: '#a31422', efficiency: '98%', work_start_time: '08:00', work_end_time: '17:00' },
+        { name: 'Lưu Phan Hoàng Phúc', data: 2, avatar: '', status: 'active', percent: 50, color: '#3b82f6', efficiency: '92%', work_start_time: '08:00', work_end_time: '17:00' },
+        { name: 'Lê Đình Ý Nhi', data: 1, avatar: '', status: 'active', percent: 40, color: '#10b981', efficiency: '87%', work_start_time: '08:00', work_end_time: '17:00' },
+        { name: 'Nguyễn Phương Uyên', data: 1, avatar: '', status: 'active', percent: 25, color: '#f59e0b', efficiency: '88%', work_start_time: '08:00', work_end_time: '17:00' }
       ].map(item => {
         const isWorking = isCurrentlyWorking(item);
         return {

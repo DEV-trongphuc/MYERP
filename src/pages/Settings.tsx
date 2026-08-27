@@ -356,16 +356,16 @@ const SettingsInner = () => {
   const [globalWorkStartTime, setGlobalWorkStartTime] = useState<string>("08:00");
   const [globalWorkEndTime, setGlobalWorkEndTime] = useState<string>("12:00");
   const [globalWorkStartTimeAfternoon, setGlobalWorkStartTimeAfternoon] = useState<string>("13:30");
-  const [globalWorkEndTimeAfternoon, setGlobalWorkEndTimeAfternoon] = useState<string>("17:30");
+  const [globalWorkEndTimeAfternoon, setGlobalWorkEndTimeAfternoon] = useState<string>("17:00");
   const [globalScheduleMode, setGlobalScheduleMode] = useState<string>("daily");
   const [globalWorkSchedule, setGlobalWorkSchedule] = useState<any>({
-    "1": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-    "2": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-    "3": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-    "4": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-    "5": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-    "6": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-    "7": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" }
+    "1": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+    "2": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+    "3": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+    "4": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+    "5": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+    "6": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+    "7": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" }
   });
   const [goldenHoursStartTime, setGoldenHoursStartTime] = useState<string>("06:00");
   const [goldenHoursEndTime, setGoldenHoursEndTime] = useState<string>("08:30");

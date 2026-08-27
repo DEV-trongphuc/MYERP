@@ -42,13 +42,13 @@ interface User {
 }
 
 const DEFAULT_SCHEDULE = {
-  "1": { active: true, start: "08:00", end: "17:30" },
-  "2": { active: true, start: "08:00", end: "17:30" },
-  "3": { active: true, start: "08:00", end: "17:30" },
-  "4": { active: true, start: "08:00", end: "17:30" },
-  "5": { active: true, start: "08:00", end: "17:30" },
-  "6": { active: true, start: "08:00", end: "17:30" },
-  "7": { active: true, start: "08:00", end: "17:30" }
+  "1": { active: true, start: "08:00", end: "17:00" },
+  "2": { active: true, start: "08:00", end: "17:00" },
+  "3": { active: true, start: "08:00", end: "17:00" },
+  "4": { active: true, start: "08:00", end: "17:00" },
+  "5": { active: true, start: "08:00", end: "17:00" },
+  "6": { active: true, start: "08:00", end: "17:00" },
+  "7": { active: true, start: "08:00", end: "17:00" }
 };
 
 const dayNames: { [key: string]: string } = {

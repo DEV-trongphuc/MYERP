@@ -328,16 +328,16 @@ class CheckInController {
         $uRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
         
         $workStartTime = '08:00';
-        $workEndTime = '17:30';
+        $workEndTime = '17:00';
         $workScheduleJson = null;
         if ($uRow) {
             if ((int)($uRow['use_custom_work_hours'] ?? 0) === 1) {
                 $workStartTime = $uRow['work_start_time'] ?: '08:00';
-                $workEndTime = $uRow['work_end_time'] ?: '17:30';
+                $workEndTime = $uRow['work_end_time'] ?: '17:00';
                 $workScheduleJson = $uRow['work_schedule'] ?? null;
             } else {
                 $workStartTime = $settingsMap['global_work_start_time'] ?? '08:00';
-                $workEndTime = $settingsMap['global_work_end_time'] ?? '17:30';
+                $workEndTime = $settingsMap['global_work_end_time'] ?? '17:00';
                 $workScheduleJson = $settingsMap['global_work_schedule'] ?? null;
             }
         }
@@ -763,7 +763,7 @@ class CheckInController {
 
             $userCustom = (int)($userRow['use_custom_work_hours'] ?? 0) === 1;
             $baseWorkStart = ($userCustom && !empty($userRow['work_start_time'])) ? $userRow['work_start_time'] : ($settingsMap['global_work_start_time'] ?? '08:00');
-            $baseWorkEnd = ($userCustom && !empty($userRow['work_end_time'])) ? $userRow['work_end_time'] : ($settingsMap['global_work_end_time'] ?? '17:30');
+            $baseWorkEnd = ($userCustom && !empty($userRow['work_end_time'])) ? $userRow['work_end_time'] : ($settingsMap['global_work_end_time'] ?? '17:00');
             $workScheduleJson = ($userCustom && !empty($userRow['work_schedule'])) ? $userRow['work_schedule'] : ($settingsMap['global_work_schedule'] ?? 'monday_to_friday');
             $scheduleMap = !empty($workScheduleJson) ? json_decode($workScheduleJson, true) : null;
 
@@ -1322,7 +1322,7 @@ class CheckInController {
                 foreach ($details as $d) {
                     $date = $d['check_in_date'];
                     $inTime = $d['suggested_check_in'] ? "$date " . $d['suggested_check_in'] . ":00" : "$date 08:30:00";
-                    $outTime = $d['suggested_check_out'] ? "$date " . $d['suggested_check_out'] . ":00" : "$date 17:30:00";
+                    $outTime = $d['suggested_check_out'] ? "$date " . $d['suggested_check_out'] . ":00" : "$date 17:00:00";
 
                     $stmtUpsert->execute([
                         $req['user_id'],

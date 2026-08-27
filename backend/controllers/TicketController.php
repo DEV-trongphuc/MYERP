@@ -105,6 +105,7 @@ class TicketController {
         foreach ($tickets as &$t) {
             $t['related_contacts'] = json_decode($t['related_contacts'] ?? '[]');
             $t['related_users'] = json_decode($t['related_users'] ?? '[]');
+            $t['attachments'] = !empty($t['attachments']) ? json_decode($t['attachments'], true) : [];
         }
         
         respond(200, [
@@ -130,6 +131,7 @@ class TicketController {
         if (!$ticket) respond(404, null, 'Không tìm thấy ticket', false);
         $ticket['related_contacts'] = json_decode($ticket['related_contacts'] ?? '[]');
         $ticket['related_users'] = json_decode($ticket['related_users'] ?? '[]');
+        $ticket['attachments'] = !empty($ticket['attachments']) ? json_decode($ticket['attachments'], true) : [];
         respond(200, $ticket);
     }
 
@@ -247,10 +249,11 @@ class TicketController {
         }
 
         $contactId = !empty($validContacts) ? (int)$validContacts[0] : null;
+        $attachments = !empty($data['attachments']) ? (is_string($data['attachments']) ? $data['attachments'] : json_encode($data['attachments'], JSON_UNESCAPED_UNICODE)) : null;
 
         $stmt = $this->db->prepare("
-            INSERT INTO tickets (tenant_id, created_by, assignee_id, contact_id, subject, customer_name, description, status, priority, due_date, related_contacts, related_users)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tickets (tenant_id, created_by, assignee_id, contact_id, subject, customer_name, description, status, priority, due_date, related_contacts, related_users, attachments)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $due_date = empty($data['due_date']) ? date('Y-m-d H:i:s', strtotime('+1 day')) : $data['due_date'];
         $stmt->execute([
@@ -265,7 +268,8 @@ class TicketController {
             $data['priority'] ?? 'medium',
             $due_date,
             !empty($validContacts) ? json_encode($validContacts) : null,
-            !empty($validUsers) ? json_encode($validUsers) : null
+            !empty($validUsers) ? json_encode($validUsers) : null,
+            $attachments
         ]);
         $id = $this->db->lastInsertId();
 
@@ -325,7 +329,7 @@ class TicketController {
     public function update(array $auth, int $id): void {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền cập nhật ticket', false);
         $data = getBody();
-        $fields = ['subject', 'customer_name', 'description', 'status', 'priority', 'due_date', 'assignee_id'];
+        $fields = ['subject', 'customer_name', 'description', 'status', 'priority', 'due_date', 'assignee_id', 'attachments'];
         $sets = []; 
         $params = [];
         
@@ -338,6 +342,10 @@ class TicketController {
                     $checkUser = $this->db->prepare("SELECT id FROM users WHERE id=? AND tenant_id=?");
                     $checkUser->execute([$val, $auth['tenant_id']]);
                     if (!$checkUser->fetch()) continue; // Skip invalid assignee
+                }
+
+                if ($f === 'attachments' && is_array($val)) {
+                    $val = json_encode($val, JSON_UNESCAPED_UNICODE);
                 }
 
                 $sets[] = "$f=?"; 
@@ -563,7 +571,11 @@ class TicketController {
             ORDER BY tc.created_at DESC
         ");
         $stmt->execute([$ticketId]);
-        respond(200, $stmt->fetchAll());
+        $comments = $stmt->fetchAll();
+        foreach ($comments as &$c) {
+            $c['attachments'] = !empty($c['attachments']) ? (is_string($c['attachments']) ? json_decode($c['attachments'], true) : $c['attachments']) : [];
+        }
+        respond(200, $comments);
     }
 
     public function addComment(array $auth, int $ticketId): void {
@@ -575,9 +587,10 @@ class TicketController {
         if (empty($data['body'])) respond(400, null, 'Nội dung ghi chú không được để trống', false);
 
         $parentId = !empty($data['parent_id']) ? (int)$data['parent_id'] : null;
+        $attachments = !empty($data['attachments']) ? (is_string($data['attachments']) ? $data['attachments'] : json_encode($data['attachments'], JSON_UNESCAPED_UNICODE)) : null;
 
-        $stmt = $this->db->prepare("INSERT INTO ticket_comments (ticket_id, user_id, body, parent_id) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$ticketId, $auth['user_id'], $data['body'], $parentId]);
+        $stmt = $this->db->prepare("INSERT INTO ticket_comments (ticket_id, user_id, body, parent_id, attachments) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$ticketId, $auth['user_id'], $data['body'], $parentId, $attachments]);
         $newId = $this->db->lastInsertId();
         $notifiedUserIds = [(int)$auth['user_id']];
         $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';

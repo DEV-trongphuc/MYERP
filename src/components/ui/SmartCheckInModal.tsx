@@ -205,7 +205,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                     
   const isTodayDayOff = Boolean(currentDayConfig && currentDayConfig.active === false);
   const morningShiftStart = String(currentDayConfig?.start || consultantProfile?.work_start_time || user?.work_start_time || '08:00').substring(0, 5);
-  const afternoonShiftEnd = String(currentDayConfig?.end_afternoon || currentDayConfig?.end || consultantProfile?.work_end_time || user?.work_end_time || '17:30').substring(0, 5);
+  const afternoonShiftEnd = String(currentDayConfig?.end_afternoon || currentDayConfig?.end || consultantProfile?.work_end_time || user?.work_end_time || '17:00').substring(0, 5);
 
   const isCheckOutMode = !!(requireCheckout && todayCheckIn && todayCheckIn.status !== 'rejected' && !todayCheckIn.check_out_time);
   const isBeforeMorningStart = curHM < morningShiftStart;
@@ -866,7 +866,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             }}>
               {t('Quy định:')} <span style={{ color: '#BD1D2D' }}>
                 {isCheckOutMode 
-                  ? (consultantProfile?.work_end_time || '17:30') 
+                  ? (consultantProfile?.work_end_time || '17:00') 
                   : (consultantProfile?.work_start_time || '08:00')}
               </span>
             </div>

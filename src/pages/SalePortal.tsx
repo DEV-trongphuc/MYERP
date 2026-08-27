@@ -140,13 +140,13 @@ const DAY_LABELS: { [key: string]: string } = {
 };
 
 const DEFAULT_SCHEDULE = {
-  "1": { active: true, start: "08:00", end: "17:30" },
-  "2": { active: true, start: "08:00", end: "17:30" },
-  "3": { active: true, start: "08:00", end: "17:30" },
-  "4": { active: true, start: "08:00", end: "17:30" },
-  "5": { active: true, start: "08:00", end: "17:30" },
-  "6": { active: true, start: "08:00", end: "17:30" },
-  "7": { active: true, start: "08:00", end: "17:30" }
+  "1": { active: true, start: "08:00", end: "17:00" },
+  "2": { active: true, start: "08:00", end: "17:00" },
+  "3": { active: true, start: "08:00", end: "17:00" },
+  "4": { active: true, start: "08:00", end: "17:00" },
+  "5": { active: true, start: "08:00", end: "17:00" },
+  "6": { active: true, start: "08:00", end: "17:00" },
+  "7": { active: true, start: "08:00", end: "17:00" }
 };
 
 const isCurrentlyOnLeave = (profile: any) => {
@@ -1580,7 +1580,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [editName, setEditName] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [editWorkStartTime, setEditWorkStartTime] = useState('08:00');
-  const [editWorkEndTime, setEditWorkEndTime] = useState('17:30');
+  const [editWorkEndTime, setEditWorkEndTime] = useState('17:00');
   const [editWorkSchedule, setEditWorkSchedule] = useState<any>(DEFAULT_SCHEDULE);
   const [scheduleMode, setScheduleMode] = useState<'daily' | 'custom'>('daily');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -3765,7 +3765,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         setEditName(data.consultant_profile.name || '');
         setEditAvatar(data.consultant_profile.avatar || '');
         const fallbackStart = sysSettings?.global_work_start_time || '08:00';
-        const fallbackEnd = sysSettings?.global_work_end_time || '17:30';
+        const fallbackEnd = sysSettings?.global_work_end_time || '17:00';
 
         setEditWorkStartTime(data.consultant_profile.work_start_time || fallbackStart);
         setEditWorkEndTime(data.consultant_profile.work_end_time || fallbackEnd);

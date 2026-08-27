@@ -82,7 +82,7 @@ export const Header = ({
     const dayConfig = rawSchedule?.[String(dayOfWeek)] || rawSchedule?.[dayOfWeek];
     const isDayOff = Boolean(dayConfig && dayConfig.active === false);
     const morningStart = String(dayConfig?.start || consultantProfile?.work_start_time || (user as any)?.work_start_time || sysSettings?.global_work_start_time || '08:00').substring(0, 5);
-    const afternoonEnd = String(dayConfig?.end_afternoon || dayConfig?.end || consultantProfile?.work_end_time || (user as any)?.work_end_time || sysSettings?.global_work_end_time || '17:30').substring(0, 5);
+    const afternoonEnd = String(dayConfig?.end_afternoon || dayConfig?.end || consultantProfile?.work_end_time || (user as any)?.work_end_time || sysSettings?.global_work_end_time || '17:00').substring(0, 5);
 
     const curHM = now.toTimeString().substring(0, 5);
     const isPastShiftEnd = !isDayOff && curHM >= afternoonEnd;

@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 234;
+$targetVersion = 235;
 $currentVersion = 186;
 
 // Query current DB version
@@ -1852,8 +1852,39 @@ try {
         $logMsg("Nâng cấp lên phiên bản 234 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 235) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 235: Cập nhật giờ ra ca chuẩn thành 17:00 và hỗ trợ đính kèm tệp cho Ticket...", "info");
+        try {
+            // 1. Update system_settings
+            $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('global_work_end_time', '17:00') ON DUPLICATE KEY UPDATE setting_value = '17:00'");
+            $conn->query("UPDATE system_settings SET setting_value = REPLACE(setting_value, '17:30', '17:00') WHERE setting_key = 'global_work_schedule'");
+
+            // 2. Update users default work end time
+            $conn->query("UPDATE users SET work_end_time = '17:00' WHERE work_end_time = '17:30' OR work_end_time = '17:30:00' OR work_end_time IS NULL OR work_end_time = ''");
+            $conn->query("UPDATE users SET work_schedule = REPLACE(work_schedule, '17:30', '17:00') WHERE work_schedule LIKE '%17:30%'");
+            $conn->query("ALTER TABLE users MODIFY COLUMN work_end_time VARCHAR(10) DEFAULT '17:00'");
+
+            // 3. Add attachments column to tickets & ticket_comments
+            $addColumnSafe = function($table, $column, $definition) use ($conn, $logMsg) {
+                try {
+                    $chk = $conn->query("SHOW COLUMNS FROM `$table` LIKE '$column'");
+                    if ($chk && $chk->num_rows == 0) {
+                        $conn->query("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+                        $logMsg("Đã thêm cột $column vào bảng $table.", "success");
+                    }
+                } catch (Throwable $e) {}
+            };
+
+            $addColumnSafe('tickets', 'attachments', 'LONGTEXT DEFAULT NULL');
+            $addColumnSafe('ticket_comments', 'attachments', 'LONGTEXT DEFAULT NULL');
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 235: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 235 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '234') ON DUPLICATE KEY UPDATE setting_value = '234'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '235') ON DUPLICATE KEY UPDATE setting_value = '235'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

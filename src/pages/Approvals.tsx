@@ -491,7 +491,7 @@ export default function Approvals() {
   const [lateEarlyMinutes, setLateEarlyMinutes] = useState(30);
   const [isCustomMinutesMode, setIsCustomMinutesMode] = useState(false);
   const [otDate, setOtDate] = useState(new Date().toISOString().split('T')[0]);
-  const [otStart, setOtStart] = useState('17:30');
+  const [otStart, setOtStart] = useState('17:00');
   const [otEnd, setOtEnd] = useState('21:30');
   const [expenseTitle, setExpenseTitle] = useState('');
   const [jobPosition, setJobPosition] = useState('');
@@ -752,7 +752,7 @@ export default function Approvals() {
       const res = await api.get(`/check-ins/suggest-bulk-dates?month=${monthStr}`);
       if (res.data?.success) {
         const userDefaultIn = (user as any)?.work_start_time ? String((user as any).work_start_time).substring(0, 5) : '08:00';
-        const userDefaultOut = (user as any)?.work_end_time ? String((user as any).work_end_time).substring(0, 5) : '17:30';
+        const userDefaultOut = (user as any)?.work_end_time ? String((user as any).work_end_time).substring(0, 5) : '17:00';
         const list = (res.data.data || []).map((item: any) => ({
           ...item,
           check_in: formatTimeHHmm(item.check_in || item.check_in_time, userDefaultIn),
@@ -942,7 +942,7 @@ export default function Approvals() {
         if (leaveSession === 'full') {
           const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
           fromVal = `${d}T08:00`;
-          toVal = `${d}T17:30`;
+          toVal = `${d}T17:00`;
           daysVal = 1.0;
         } else if (leaveSession === 'morning') {
           const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
@@ -952,7 +952,7 @@ export default function Approvals() {
         } else if (leaveSession === 'afternoon') {
           const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
           fromVal = `${d}T13:30`;
-          toVal = `${d}T17:30`;
+          toVal = `${d}T17:00`;
           daysVal = 0.5;
         } else if (leaveSession === 'intermittent') {
           const validDates = intermittentDates.filter(item => item.date);
@@ -967,7 +967,7 @@ export default function Approvals() {
           const lastDate = sortedDates[sortedDates.length - 1].date;
           
           fromVal = `${firstDate}T08:00`;
-          toVal = `${lastDate}T17:30`;
+          toVal = `${lastDate}T17:00`;
           
           daysVal = validDates.reduce((acc, item) => acc + (item.session === 'full' ? 1.0 : 0.5), 0);
         } else {
@@ -1062,7 +1062,7 @@ export default function Approvals() {
         if (leaveSession === 'full') {
           const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
           fromVal = `${d}T08:00`;
-          toVal = `${d}T17:30`;
+          toVal = `${d}T17:00`;
           daysVal = 1.0;
         } else if (leaveSession === 'morning') {
           const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
@@ -1072,7 +1072,7 @@ export default function Approvals() {
         } else if (leaveSession === 'afternoon') {
           const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
           fromVal = `${d}T13:30`;
-          toVal = `${d}T17:30`;
+          toVal = `${d}T17:00`;
           daysVal = 0.5;
         } else {
           daysVal = calculateWorkingDays(leaveFrom, leaveTo, 'range');
@@ -7700,7 +7700,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                             {d.suggested_check_in ? String(d.suggested_check_in).substring(0, 5) : '08:30'}
                           </td>
                           <td style={{ padding: '8px 12px', color: '#2563eb', fontWeight: 700 }}>
-                            {d.suggested_check_out ? String(d.suggested_check_out).substring(0, 5) : '17:30'}
+                            {d.suggested_check_out ? String(d.suggested_check_out).substring(0, 5) : '17:00'}
                           </td>
                           <td style={{ padding: '8px 12px', color: 'var(--color-text-muted)' }}>
                             {d.reason || t('Bổ sung công')}

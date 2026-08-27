@@ -120,8 +120,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [lateEarlyTimeField, setLateEarlyTimeField] = useState('08:30');
   
   const [otDateField, setOtDateField] = useState(() => new Date().toISOString().split('T')[0]);
-  const [otStartField, setOtStartField] = useState('17:30');
-  const [otEndField, setOtEndField] = useState('21:30');
+  const [otStartField, setOtStartField] = useState('17:00');
+  const [otEndField, setOtEndField] = useState('21:00');
   
   const [approverIdField, setApproverIdField] = useState('');
   const [approverId2Field, setApproverId2Field] = useState('');
@@ -277,7 +277,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           leave_type: leaveTypeField,
           reason: leaveReasonField,
           from_date: `${leaveFromField}T08:00`,
-          to_date: `${leaveToField}T17:30`,
+          to_date: `${leaveToField}T17:00`,
           total_days: calculateWorkingDays(leaveFromField, leaveToField, leaveSessionField),
           approver_id: Number(approverIdField),
           approver_id_2: approverId2Field ? Number(approverId2Field) : null,
@@ -319,7 +319,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         };
       } else if (createLeaveType === 'remote_work') {
         let fromVal = `${leaveFromField}T08:00`;
-        let toVal = `${leaveToField}T17:30`;
+        let toVal = `${leaveToField}T17:00`;
         let daysVal = 1.0;
 
         if (leaveSessionField === 'morning') {
@@ -328,7 +328,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           daysVal = 0.5;
         } else if (leaveSessionField === 'afternoon') {
           fromVal = `${leaveFromField}T13:30`;
-          toVal = `${leaveFromField}T17:30`;
+          toVal = `${leaveFromField}T17:00`;
           daysVal = 0.5;
         } else if (leaveSessionField === 'range') {
           daysVal = calculateWorkingDays(leaveFromField, leaveToField, 'range');
@@ -507,7 +507,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         const days = (res.data || []).map((day: any) => ({
           date: day.date,
           check_in: day.check_in ? String(day.check_in).substring(0, 5) : (day.check_in_time ? String(day.check_in_time).substring(0, 5) : '08:00'),
-          check_out: day.check_out ? String(day.check_out).substring(0, 5) : (day.check_out_time ? String(day.check_out_time).substring(0, 5) : '17:30'),
+          check_out: day.check_out ? String(day.check_out).substring(0, 5) : (day.check_out_time ? String(day.check_out_time).substring(0, 5) : '17:00'),
           reason: day.reason || '',
           has_check_in: Boolean(day.has_check_in),
           has_check_out: Boolean(day.has_check_out),

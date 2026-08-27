@@ -31,13 +31,13 @@ interface Props {
 }
 
 const DEFAULT_SCHEDULE = {
-  "1": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-  "2": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-  "3": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-  "4": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-  "5": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-  "6": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" },
-  "7": { active: false, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:30" }
+  "1": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+  "2": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+  "3": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+  "4": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+  "5": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+  "6": { active: true, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" },
+  "7": { active: false, start: "08:00", end: "12:00", start_afternoon: "13:30", end_afternoon: "17:00" }
 };
 
 const DAY_LABELS: Record<string, string> = {
@@ -362,7 +362,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
   const [leaveStart, setLeaveStart] = useState('');
   const [leaveEnd, setLeaveEnd] = useState('');
   const [workStartTime, setWorkStartTime] = useState('08:00');
-  const [workEndTime, setWorkEndTime] = useState('17:30');
+  const [workEndTime, setWorkEndTime] = useState('17:00');
   const [scheduleMode, setScheduleMode] = useState<'daily' | 'custom'>('daily');
   const [workSchedule, setWorkSchedule] = useState<any>(DEFAULT_SCHEDULE);
   const [useCustomWorkHours, setUseCustomWorkHours] = useState(false);
@@ -442,7 +442,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
             setWeekendShifts(d.weekend_shifts || []);
             setNightShifts(d.night_shifts || []);
             setWorkStartTime(d.work_start_time || '08:00');
-            setWorkEndTime(d.work_end_time || '17:30');
+            setWorkEndTime(d.work_end_time || '17:00');
             setLeaveStart(d.leave_start || '');
             setLeaveEnd(d.leave_end || '');
             setDob(d.dob || '');
@@ -659,7 +659,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
       setWeekendShifts([]);
       setNightShifts([]);
       setWorkStartTime('08:00');
-      setWorkEndTime('17:30');
+      setWorkEndTime('17:00');
       setScheduleMode('daily');
       setWorkSchedule(DEFAULT_SCHEDULE);
       setPermissionsJson(getDefaultPermissionsForRole('sale'));
@@ -2982,7 +2982,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {Object.keys(DAY_LABELS).map((dayKey) => {
-                              const dayConfig = workSchedule[dayKey] || { active: false, start: "08:00", end: "17:30" };
+                              const dayConfig = workSchedule[dayKey] || { active: false, start: "08:00", end: "17:00" };
                               return (
                                 <div key={dayKey} style={{
                                   display: 'grid',

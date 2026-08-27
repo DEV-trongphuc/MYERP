@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal } from 'lucide-react';
+import { Plus, Search, Filter, LifeBuoy, AlertCircle, Clock, X, Save, MoreHorizontal, FileText } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { TicketDrawer } from './TicketDrawer';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
@@ -59,7 +59,8 @@ export const TicketsPage: React.FC = () => {
     contact_id: null as number | null,
     description: '',
     related_contacts: [] as string[],
-    related_users: [] as string[]
+    related_users: [] as string[],
+    attachments: [] as { name: string; url: string; size?: number; type?: string }[]
   });
 
   const [now] = useState(() => Date.now());
@@ -172,7 +173,8 @@ export const TicketsPage: React.FC = () => {
           contact_id: null,
           description: '',
           related_contacts: [],
-          related_users: []
+          related_users: [],
+          attachments: []
         });
         setIsBugTicket(true);
       } else {
@@ -183,7 +185,8 @@ export const TicketsPage: React.FC = () => {
           contact_id: null,
           description: '',
           related_contacts: [],
-          related_users: []
+          related_users: [],
+          attachments: []
         });
         setIsBugTicket(false);
       }
@@ -237,7 +240,8 @@ export const TicketsPage: React.FC = () => {
       customer_id: createForm.contact_id,
       description: createForm.description,
       related_contacts: createForm.contact_id ? [String(createForm.contact_id), ...createForm.related_contacts] : createForm.related_contacts,
-      related_users: createForm.related_users
+      related_users: createForm.related_users,
+      attachments: createForm.attachments
     };
     setSaving(true);
     try {
@@ -245,7 +249,7 @@ export const TicketsPage: React.FC = () => {
       const newTicket = r.data.data || { ...payload, id: Date.now(), assignee_name: 'Admin', created_at: new Date().toISOString(), due_date: new Date(Date.now() + 86400000).toISOString() };
       setTickets([newTicket, ...tickets]);
       setShowCreateModal(false);
-      setCreateForm({ subject: '', priority: 'medium', customer_name: '', contact_id: null, description: '', related_contacts: [], related_users: [] });
+      setCreateForm({ subject: '', priority: 'medium', customer_name: '', contact_id: null, description: '', related_contacts: [], related_users: [], attachments: [] });
       addToast('Đã tạo Ticket thành công', 'success');
     } catch (e: any) {
       addToast(e.response?.data?.message || 'Không thể tạo Ticket do lỗi mạng', 'error');
@@ -772,18 +776,60 @@ export const TicketsPage: React.FC = () => {
                           if (url) {
                             setCreateForm(prev => ({
                               ...prev,
-                              description: (prev.description || '') + (prev.description ? '\n\n' : '') + `![${item.label}](${url})`
+                              attachments: [...prev.attachments, {
+                                name: item.label || item.file?.name || 'Tệp đính kèm',
+                                url: url,
+                                size: item.file?.size,
+                                type: item.file?.type
+                              }]
                             }));
                           }
                         } catch (err) {}
                       } else if (item.url) {
                         setCreateForm(prev => ({
                           ...prev,
-                          description: (prev.description || '') + (prev.description ? '\n\n' : '') + `[${item.label}](${item.url})`
+                          attachments: [...prev.attachments, {
+                            name: item.label || 'Tệp đính kèm',
+                            url: item.url
+                          }]
                         }));
                       }
                     }}
                   />
+                  {createForm.attachments.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                      {createForm.attachments.map((att, idx) => {
+                        const isImg = /\.(jpeg|jpg|png|gif|webp|svg)(\?.*)?$/i.test(att.url) || (att.type && att.type.startsWith('image/'));
+                        return (
+                          <div key={idx} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 10px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '8px',
+                            fontSize: '0.8rem',
+                            position: 'relative'
+                          }}>
+                            {isImg ? (
+                              <img src={att.url} alt={att.name} style={{ width: '28px', height: '28px', borderRadius: '4px', objectFit: 'cover' }} />
+                            ) : (
+                              <FileText size={18} style={{ color: 'var(--color-primary)' }} />
+                            )}
+                            <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{att.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm(prev => ({ ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) }))}
+                              style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-danger, #ef4444)', display: 'flex', alignItems: 'center', padding: '2px' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="modal-footer" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
