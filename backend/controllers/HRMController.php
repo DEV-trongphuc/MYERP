@@ -853,6 +853,9 @@ class HRMController {
             $userRole = strtolower($emp['role'] ?? '');
             $isDirector = in_array($userRole, ['director', 'superadmin', 'super_admin'], true);
 
+            $startDateOfMonth = $monthYear . '-01';
+            $endDateOfMonth = date('Y-m-t', strtotime($startDateOfMonth));
+
             if ($isSpecialPeriod) {
                 $actualWorkedDays = $isThang13 ? $workDaysRequired : 0;
                 $paidLeaveDays = 0;
@@ -869,9 +872,6 @@ class HRMController {
                 $waivedDates = [];
                 $checkinsList = [];
             } else {
-                $startDateOfMonth = $monthYear . '-01';
-                $endDateOfMonth = date('Y-m-t', strtotime($startDateOfMonth));
-
                 // 1. Calculate Actual Work Days from check_ins & apply late_early waivers
                 $leStmt = $this->db->prepare("
                     SELECT DATE(start_date) as le_date
