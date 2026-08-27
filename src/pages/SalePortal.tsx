@@ -2490,11 +2490,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           full_name: u.full_name || u.name || u.username || '',
           avatar_url: u.avatar_url || u.avatar || '',
           role: u.role || 'sale'
-        })).filter((u: any) => {
-          if (!u || !u.role) return false;
-          const roleLower = u.role.toLowerCase();
-          return ['admin', 'superadmin', 'super_admin', 'sales', 'sale', 'manager', 'assistant', 'telesale', 'prescreener', 'director', 'staff', 'employee', 'accountant', 'hr', 'sale_admin', 'saleadmin', 'marketing', 'viewer'].includes(roleLower);
-        });
+        }));
         setUsers(team);
       }).catch(() => {});
       api.get('/projects').then(r => setAllowedProjects(r.data.data || r.data || [])).catch(() => {});

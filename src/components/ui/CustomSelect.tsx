@@ -101,15 +101,23 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   }, [options, value, multiple]);
 
   const filtered = React.useMemo(() => {
-    if (!searchable) return options;
-    const searchLower = (search || '').toLowerCase();
+    if (!searchable || !search.trim()) return options;
+    const removeAccents = (str: string) =>
+      (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+    const searchClean = removeAccents(search.trim());
     return options.filter(o => {
       const labelStr = o.label ? String(o.label) : '';
       const sublabelStr = o.sublabel ? String(o.sublabel) : '';
       const translatedLabel = t(labelStr) || '';
       const translatedSublabel = t(sublabelStr) || '';
-      return translatedLabel.toLowerCase().includes(searchLower) ||
-        (o.sublabel && translatedSublabel.toLowerCase().includes(searchLower));
+      return (
+        removeAccents(labelStr).includes(searchClean) ||
+        removeAccents(translatedLabel).includes(searchClean) ||
+        (o.sublabel && (
+          removeAccents(sublabelStr).includes(searchClean) ||
+          removeAccents(translatedSublabel).includes(searchClean)
+        ))
+      );
     });
   }, [options, search, searchable, t]);
 

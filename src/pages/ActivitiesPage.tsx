@@ -122,11 +122,13 @@ export const ActivitiesPage: React.FC = () => {
     api.get('/users?all=1').then(r => {
       const d = r.data.data;
       const list = Array.isArray(d) ? d : (d?.items || []);
-      const team = list.filter((u: any) => {
-        if (!u || !u.role) return false;
-        const roleLower = u.role.toLowerCase();
-        return ['admin', 'superadmin', 'super_admin', 'sales', 'sale', 'manager', 'assistant', 'telesale', 'prescreener', 'director', 'staff', 'employee'].includes(roleLower);
-      });
+      const team = list.map((u: any) => ({
+        ...u,
+        id: u.id,
+        full_name: u.full_name || u.name || u.username || '',
+        avatar_url: u.avatar_url || u.avatar || '',
+        role: u.role || 'sale'
+      }));
       setUsers(team);
     }).catch(() => {});
   }, [user]);

@@ -1971,11 +1971,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, [approverOptions]);
 
   const filteredUsersForParticipants = React.useMemo(() => {
-    const searchLower = (participantsSearch || '').toLowerCase();
+    const removeAccents = (str: string) =>
+      (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+    const searchClean = removeAccents(participantsSearch || '');
     return users
       .filter(u => {
-        return (u.full_name || '').toLowerCase().includes(searchLower) ||
-               (u.role || '').toLowerCase().includes(searchLower);
+        return removeAccents(u.full_name || u.name || '').includes(searchClean) ||
+               removeAccents(u.role || '').includes(searchClean);
       })
       .sort((a, b) => {
         const aChecked = participantIds.includes(Number(a.id)) ? 1 : 0;

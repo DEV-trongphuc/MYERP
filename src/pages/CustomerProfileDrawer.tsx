@@ -3749,11 +3749,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           id: u.id,
           full_name: u.full_name || u.name,
           avatar_url: u.avatar || u.avatar_url
-        })).filter((u: any) => {
-          if (!u || !u.role) return false;
-          const roleLower = u.role.toLowerCase();
-          return ['admin', 'superadmin', 'super_admin', 'sales', 'sale', 'manager', 'assistant', 'telesale', 'prescreener', 'director', 'staff', 'employee'].includes(roleLower);
-        });
+        }));
         setUsers(team);
       }).catch(() => {});
       api.get('/tags').then(r => setAllTags(r.data.data || [])).catch(() => { });
