@@ -1994,6 +1994,29 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       });
   }, [users, participantsSearch, participantIds, formData.user_id]);
 
+  const availableUsersForParticipantDropdown = React.useMemo(() => {
+    const removeAccents = (str: string) =>
+      (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+    const searchClean = removeAccents(participantSearch || '');
+    const primaryUserId = Number(formData.user_id || 0);
+
+    return users
+      .filter((u: any) => {
+        if (primaryUserId && Number(u.id) === primaryUserId) return false;
+        if (!searchClean) return true;
+        return (
+          removeAccents(u.full_name || u.name || '').includes(searchClean) ||
+          removeAccents(u.email || '').includes(searchClean) ||
+          removeAccents(u.role || '').includes(searchClean)
+        );
+      })
+      .sort((a, b) => {
+        const aChecked = participantIds.includes(Number(a.id)) ? 1 : 0;
+        const bChecked = participantIds.includes(Number(b.id)) ? 1 : 0;
+        return bChecked - aChecked;
+      });
+  }, [users, participantSearch, participantIds, formData.user_id]);
+
   const currentHash = React.useMemo(() => {
     const cleanObj = (obj: any) => {
       const clean: any = {};
@@ -5148,17 +5171,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             />
                           </div>
                         </div>
-                        {users
-                          .filter((u: any) => {
-                            if (!participantSearch.trim()) return true;
-                            const query = participantSearch.toLowerCase();
-                            return (
-                              (u.full_name || u.name || '').toLowerCase().includes(query) ||
-                              (u.email || '').toLowerCase().includes(query) ||
-                              (u.role || '').toLowerCase().includes(query)
-                            );
-                          })
-                          .map((u: any) => {
+                        {availableUsersForParticipantDropdown.map((u: any) => {
                             const isSelected = participantIds.includes(Number(u.id));
                             return (
                               <div
@@ -5186,15 +5199,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               </div>
                             );
                           })}
-                        {users.filter((u: any) => {
-                          if (!participantSearch.trim()) return true;
-                          const query = participantSearch.toLowerCase();
-                          return (
-                            (u.full_name || u.name || '').toLowerCase().includes(query) ||
-                            (u.email || '').toLowerCase().includes(query) ||
-                            (u.role || '').toLowerCase().includes(query)
-                          );
-                        }).length === 0 && (
+                        {availableUsersForParticipantDropdown.length === 0 && (
                           <div style={{ textAlign: 'center', padding: '10px 4px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                             {t('Không tìm thấy kết quả')}
                           </div>
