@@ -1572,6 +1572,12 @@ export default function Approvals() {
         created_at: new Date().toISOString()
       });
       navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
+    } else {
+      const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
+      if (autoOpen && pendingList.length === 1 && !selectedTimelineItem) {
+        setSelectedTimelineItem(pendingList[0]);
+        navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
+      }
     }
   }, [location.search, location.state, pendingList, myRequestsList, followingList, allList]);
 
@@ -1635,14 +1641,10 @@ export default function Approvals() {
       const params = new URLSearchParams(location.search || window.location.search);
       const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
       if (autoOpen && !selectedTimelineItem) {
-        if (pList.length > 0) {
+        if (pList.length === 1) {
           setSelectedTimelineItem(pList[0]);
-        } else if (mList.length > 0) {
-          setSelectedTimelineItem(mList[0]);
-        } else if (fList.length > 0) {
-          setSelectedTimelineItem(fList[0]);
         }
-        window.history.replaceState({}, document.title, window.location.pathname);
+        window.history.replaceState({}, document.title, window.location.pathname + (params.get('tab') ? `?tab=${params.get('tab')}` : ''));
       }
     } catch (err: any) {
       console.error('Lỗi tải dữ liệu quy trình:', err);

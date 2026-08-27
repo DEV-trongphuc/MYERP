@@ -1527,7 +1527,8 @@ class HRMController {
         $pending = [];
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role'] ?? '');
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isHrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
 
         $ledTeamIds = [];
         $managedUserIds = [];
@@ -1560,11 +1561,11 @@ class HRMController {
         foreach ($leaves as $l) {
             $shouldShow = false;
             if ($l['status_level_1'] === 'pending') {
-                if ($l['approver_id'] == $userId || in_array((int)$l['user_id'], $managedUserIds, true) || (empty($l['approver_id']) && $isGlobalAdmin)) {
+                if ($l['approver_id'] == $userId || in_array((int)$l['user_id'], $managedUserIds, true) || (empty($l['approver_id']) && $isHrAdmin)) {
                     $shouldShow = true;
                 }
             } else if ($l['status_level_1'] === 'approved' && $l['status_level_2'] === 'pending') {
-                if ($l['approver_id_2'] == $userId || $isGlobalAdmin) {
+                if ($l['approver_id_2'] == $userId || (empty($l['approver_id_2']) && $isGlobalAdmin)) {
                     $shouldShow = true;
                 }
             }
@@ -1607,7 +1608,7 @@ class HRMController {
                     $shouldShow = true;
                 }
             } else if ($a['status_level_1'] === 'approved' && $a['status_level_2'] === 'pending') {
-                if ($a['approver_id_2'] == $userId || $isGlobalAdmin) {
+                if ($a['approver_id_2'] == $userId || (empty($a['approver_id_2']) && $isGlobalAdmin)) {
                     $shouldShow = true;
                 }
             }
@@ -1651,31 +1652,20 @@ class HRMController {
             $lvl2 = $e['status_level_2'] ?? 'none';
             $lvl3 = $e['status_level_3'] ?? 'none';
 
-            if ($isGlobalAdmin) {
-                $shouldShow = true;
-                if ($lvl1 === 'pending') {
+            if ($lvl1 === 'pending') {
+                if ($e['approver_id'] == $userId || in_array((int)$e['created_by'], $managedUserIds, true) || (empty($e['approver_id']) && $isGlobalAdmin)) {
+                    $shouldShow = true;
                     $levelText = !empty($e['approver_id_2']) ? ' - Cấp 1' : '';
-                } elseif ($lvl1 === 'approved' && $lvl2 === 'pending') {
-                    $levelText = ' - Cấp 2';
-                } elseif ($lvl1 === 'approved' && $lvl2 === 'approved' && $lvl3 === 'pending') {
-                    $levelText = ' - Cấp 3';
                 }
-            } else {
-                if ($lvl1 === 'pending') {
-                    if ($e['approver_id'] == $userId || in_array((int)$e['created_by'], $managedUserIds, true)) {
-                        $shouldShow = true;
-                        $levelText = ' - Cấp 1';
-                    }
-                } elseif ($lvl1 === 'approved' && $lvl2 === 'pending') {
-                    if ($e['approver_id_2'] == $userId || in_array($role, ['accountant'], true)) {
-                        $shouldShow = true;
-                        $levelText = ' - Cấp 2';
-                    }
-                } elseif ($lvl1 === 'approved' && $lvl2 === 'approved' && $lvl3 === 'pending') {
-                    if ($e['approver_id_3'] == $userId) {
-                        $shouldShow = true;
-                        $levelText = ' - Cấp 3';
-                    }
+            } elseif ($lvl1 === 'approved' && $lvl2 === 'pending') {
+                if ($e['approver_id_2'] == $userId || (empty($e['approver_id_2']) && (in_array($role, ['accountant'], true) || $isGlobalAdmin))) {
+                    $shouldShow = true;
+                    $levelText = ' - Cấp 2';
+                }
+            } elseif ($lvl1 === 'approved' && $lvl2 === 'approved' && $lvl3 === 'pending') {
+                if ($e['approver_id_3'] == $userId || (empty($e['approver_id_3']) && $isGlobalAdmin)) {
+                    $shouldShow = true;
+                    $levelText = ' - Cấp 3';
                 }
             }
 
@@ -2114,7 +2104,8 @@ class HRMController {
     private function fetchAllApprovals(array $auth): array {
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role'] ?? '');
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'accountant'], true);
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isHrAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
 
         $ledTeamIds = [];
         $managedUserIds = [];
@@ -2134,7 +2125,7 @@ class HRMController {
         $all = [];
 
         // 1. All Leaves
-        if ($isGlobalAdmin) {
+        if ($isHrAdmin) {
             $stmtLeaves = $this->db->prepare("
                 SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
@@ -2298,7 +2289,7 @@ class HRMController {
         }
 
         // 4. All Checkins
-        if ($isGlobalAdmin) {
+        if ($isHrAdmin) {
             $stmtCheckins = $this->db->prepare("
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
                 FROM check_ins c
@@ -2339,7 +2330,7 @@ class HRMController {
         }
 
         // 5. All Bulk Attendance Requests
-        if ($isGlobalAdmin) {
+        if ($isHrAdmin) {
             $stmtBulks = $this->db->prepare("
                 SELECT r.*, u.full_name as employee_name
                 FROM attendance_bulk_requests r

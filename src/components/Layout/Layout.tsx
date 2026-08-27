@@ -1164,7 +1164,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     {/* 6. Phê duyệt Đề xuất & Chi phí */}
                     {pendingExpensesCount > 0 && (
                       <div 
-                        onClick={() => { setIsUnifiedInboxOpen(false); navigate('/approvals?auto_open=1'); }}
+                        onClick={() => { 
+                          setIsUnifiedInboxOpen(false); 
+                          if (pendingExpensesCount === 1) {
+                            navigate('/approvals?tab=pending&auto_open=1');
+                          } else {
+                            navigate('/approvals?tab=pending');
+                          }
+                        }}
                         className="unified-inbox-card"
                         style={{ 
                           '--hover-color': '#10b981',
