@@ -1479,6 +1479,31 @@ export default function Approvals() {
     }).catch(() => {});
   }, []);
 
+  // Event listener for opening approval drawer from global notification clicks
+  useEffect(() => {
+    const handleOpenDrawerEvent = (e: any) => {
+      const { id, type, status } = e.detail || {};
+      if (id) {
+        const numId = Number(id);
+        pendingOpenRef.current = { id: numId, type: type || undefined, status: status || undefined };
+        
+        const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
+        const matched = combined.find(it => it.id === numId && (type ? it.type === type : true)) || combined.find(it => it.id === numId);
+
+        setSelectedTimelineItem(matched || {
+          id: numId,
+          type: (type || 'expense') as any,
+          title: '',
+          description: '',
+          status: status || 'pending',
+          created_at: new Date().toISOString()
+        });
+      }
+    };
+    window.addEventListener('open-approval-drawer', handleOpenDrawerEvent);
+    return () => window.removeEventListener('open-approval-drawer', handleOpenDrawerEvent);
+  }, [pendingList, myRequestsList, followingList, allList]);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search || window.location.search);
     const tabParam = params.get('tab');
@@ -1500,20 +1525,25 @@ export default function Approvals() {
         setBulkMonth(initMonth);
         handleScanMissingDays(initMonth);
       }
-      window.history.replaceState({}, document.title, window.location.pathname);
+      navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
     } else if (openId) {
-      pendingOpenRef.current = { id: Number(openId), type: openType || undefined, status: openStatus || undefined };
-      setSelectedTimelineItem({
-        id: Number(openId),
+      const numId = Number(openId);
+      pendingOpenRef.current = { id: numId, type: openType || undefined, status: openStatus || undefined };
+      
+      const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
+      const matched = combined.find(it => it.id === numId && (openType ? it.type === openType : true)) || combined.find(it => it.id === numId);
+
+      setSelectedTimelineItem(matched || {
+        id: numId,
         type: (openType || 'expense') as any,
         title: '',
         description: '',
         status: openStatus || 'pending',
         created_at: new Date().toISOString()
       });
-      window.history.replaceState({}, document.title, window.location.pathname);
+      navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
     }
-  }, [location.search]);
+  }, [location.search, location.state, pendingList, myRequestsList, followingList, allList]);
 
   useEffect(() => {
     loadData();
@@ -2988,7 +3018,10 @@ export default function Approvals() {
       {selectedTimelineItem && (
         <ApprovalDetailDrawer
           item={selectedTimelineItem}
-          onClose={() => setSelectedTimelineItem(null)}
+          onClose={() => {
+            setSelectedTimelineItem(null);
+            pendingOpenRef.current = null;
+          }}
           users={users}
           t={t}
           onApprove={handleApprove}

@@ -499,14 +499,24 @@ export const Header = ({
         targetLink = `/projects?${urlObj.searchParams.toString()}`;
       }
 
-      // Ticket matching
-      const ticketMatch = targetLink.match(/^\/tickets\/(\d+)$/) || targetLink.match(/\/tickets\?(?:id)=(\d+)/);
-      if (ticketMatch) {
-        urlObj.searchParams.set('id', ticketMatch[1]);
-        targetLink = `/support-tickets?${urlObj.searchParams.toString()}`;
+      // Approval matching
+      if (targetLink.startsWith('/approvals')) {
+        const appUrlObj = new URL(targetLink, window.location.origin);
+        const openId = appUrlObj.searchParams.get('open_id');
+        const openType = appUrlObj.searchParams.get('open_type');
+        const openStatus = appUrlObj.searchParams.get('open_status');
+        if (openId) {
+          window.dispatchEvent(new CustomEvent('open-approval-drawer', {
+            detail: {
+              id: Number(openId),
+              type: openType || undefined,
+              status: openStatus || undefined
+            }
+          }));
+        }
       }
 
-      navigate(targetLink);
+      navigate(targetLink, { state: { timestamp: Date.now() } });
       return;
     }
 
