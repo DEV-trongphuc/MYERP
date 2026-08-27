@@ -259,16 +259,7 @@ function getModulePermissionScope($conn, $auth, $module, $action)
 
     // All roles can read departments and consultants
     if ($module === 'users' && $action === 'read') {
-        if (in_array($role, ['superadmin', 'admin', 'super_admin', 'hr', 'director', 'viewer', 'assistant', 'sale_admin', 'saleadmin', 'marketing'], true)) {
-            return 'all';
-        }
-        if ($role === 'manager') {
-            return 'team';
-        }
-        if (in_array($role, ['accountant', 'sale', 'sales'], true)) {
-            return 'own';
-        }
-        return 'none';
+        return 'all';
     }
 
     // Sale Admin permission rules
@@ -808,6 +799,8 @@ if (!in_array($action, $publicActions)) {
         'get_calendar_stats',
         'get_calendar_day_details',
         'get_consultant_leaves',
+        'get_consultants',
+        'teams',
         'upload_avatar',
         'update_consultant_self_profile',
         'consultant-profile',
