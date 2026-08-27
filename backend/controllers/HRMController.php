@@ -1478,31 +1478,36 @@ class HRMController {
         if ($action === 'unlock') {
             $stmt = $this->db->prepare("
                 UPDATE monthly_payslips mp
-                JOIN users u ON mp.user_id = u.id
-                SET mp.status = 'draft', mp.signature_url = NULL, mp.confirmed_at = NULL 
-                WHERE mp.month_year = ? AND u.tenant_id = ?
-            ");
-            $stmt->execute([$monthYear, $auth['tenant_id']]);
-            respond(200, ['success' => true, 'message' => 'Unlocked successfully']);
-            return;
-        }
-
-        $stmt = $this->db->prepare("
-            UPDATE monthly_payslips mp
-            JOIN users u ON mp.user_id = u.id
-            SET mp.status = 'locked' 
-            WHERE mp.month_year = ? AND u.tenant_id = ?
-        ");
-        $stmt->execute([$monthYear, $auth['tenant_id']]);
-
-        respond(200, ['success' => true]);
+    public function getApprovalsOverview(array $auth): void {
+        respond(200, [
+            'pending' => $this->fetchPendingApprovals($auth),
+            'my_requests' => $this->fetchMyRequests($auth),
+            'following' => $this->fetchFollowingRequests($auth),
+            'all' => $this->fetchAllApprovals($auth)
+        ]);
     }
 
     public function getPendingApprovals(array $auth): void {
+        respond(200, $this->fetchPendingApprovals($auth));
+    }
+
+    public function getMyRequests(array $auth): void {
+        respond(200, $this->fetchMyRequests($auth));
+    }
+
+    public function getFollowingRequests(array $auth): void {
+        respond(200, $this->fetchFollowingRequests($auth));
+    }
+
+    public function getAllApprovals(array $auth): void {
+        respond(200, $this->fetchAllApprovals($auth));
+    }
+
+    private function fetchPendingApprovals(array $auth): array {
         $pending = [];
-        $userId = $auth['user_id'];
-        $role = strtolower($auth['role']);
-        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr']);
+        $userId = (int)$auth['user_id'];
+        $role = strtolower($auth['role'] ?? '');
+        $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true);
 
         $ledTeamIds = [];
         $managedUserIds = [];
@@ -1527,6 +1532,8 @@ class HRMController {
             FROM hrm_leave_requests l
             JOIN users u ON l.user_id = u.id
             WHERE u.tenant_id = ? AND l.status = 'pending'
+            ORDER BY l.created_at DESC
+            LIMIT 200
         ");
         $stmtLeaves->execute([$auth['tenant_id']]);
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
@@ -1568,6 +1575,8 @@ class HRMController {
             FROM hrm_salary_advances a
             JOIN users u ON a.user_id = u.id
             WHERE u.tenant_id = ? AND a.status = 'pending'
+            ORDER BY a.created_at DESC
+            LIMIT 200
         ");
         $stmtAdvances->execute([$auth['tenant_id']]);
         $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
@@ -1609,6 +1618,8 @@ class HRMController {
             FROM expenses e
             JOIN users u ON e.created_by = u.id
             WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL
+            ORDER BY e.created_at DESC
+            LIMIT 200
         ");
         $stmtExpenses->execute([$auth['tenant_id']]);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
@@ -1621,7 +1632,6 @@ class HRMController {
             $lvl3 = $e['status_level_3'] ?? 'none';
 
             if ($isGlobalAdmin) {
-                // Admin/Director có quyền kiểm tra và phê duyệt tất cả đề xuất/chi phí tồn đọng
                 $shouldShow = true;
                 if ($lvl1 === 'pending') {
                     $levelText = !empty($e['approver_id_2']) ? ' - Cấp 1' : '';
@@ -1637,7 +1647,7 @@ class HRMController {
                         $levelText = ' - Cấp 1';
                     }
                 } elseif ($lvl1 === 'approved' && $lvl2 === 'pending') {
-                    if ($e['approver_id_2'] == $userId || in_array($role, ['accountant'])) {
+                    if ($e['approver_id_2'] == $userId || in_array($role, ['accountant'], true)) {
                         $shouldShow = true;
                         $levelText = ' - Cấp 2';
                     }
@@ -1686,17 +1696,18 @@ class HRMController {
         }
 
         // 4. Pending Checkins
-        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr']) || !empty($managedUserIds)) {
+        if (in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true) || !empty($managedUserIds)) {
             $sqlCheck = "SELECT c.id, u.full_name as employee_name, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at
                          FROM check_ins c
                          JOIN users u ON c.user_id = u.id
                          WHERE u.tenant_id = ? AND c.status = 'pending_approval'";
             $pCheck = [$auth['tenant_id']];
-            if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'])) {
+            if (!in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr'], true)) {
                 $placeholders = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $sqlCheck .= " AND c.user_id IN ($placeholders)";
                 $pCheck = array_merge($pCheck, $managedUserIds);
             }
+            $sqlCheck .= " ORDER BY c.id DESC LIMIT 100";
             $stmtCheckins = $this->db->prepare($sqlCheck);
             $stmtCheckins->execute($pCheck);
             $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC);
@@ -1718,6 +1729,8 @@ class HRMController {
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             WHERE u.tenant_id = ? AND r.status IN ('pending_manager', 'pending_hr')
+            ORDER BY r.created_at DESC
+            LIMIT 100
         ");
         $stmtBulks->execute([$auth['tenant_id']]);
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
@@ -1749,15 +1762,14 @@ class HRMController {
             }
         }
 
-        // Sort by created_at DESC
         usort($pending, function($a, $b) {
             return strcmp($b['created_at'], $a['created_at']);
         });
 
-        respond(200, $pending);
+        return $pending;
     }
 
-    public function getMyRequests(array $auth): void {
+    private function fetchMyRequests(array $auth): array {
         $pending = [];
         $userId = (int)$auth['user_id'];
 
@@ -1768,6 +1780,8 @@ class HRMController {
             FROM hrm_leave_requests l
             JOIN users u ON l.user_id = u.id
             WHERE l.user_id = ?
+            ORDER BY l.created_at DESC
+            LIMIT 200
         ");
         $stmtLeaves->execute([$userId]);
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
@@ -1797,6 +1811,8 @@ class HRMController {
             FROM hrm_salary_advances a
             JOIN users u ON a.user_id = u.id
             WHERE a.user_id = ?
+            ORDER BY a.created_at DESC
+            LIMIT 200
         ");
         $stmtAdvances->execute([$userId]);
         $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
@@ -1825,6 +1841,8 @@ class HRMController {
             FROM expenses e
             JOIN users u ON e.created_by = u.id
             WHERE e.created_by = ? AND e.deleted_at IS NULL
+            ORDER BY e.created_at DESC
+            LIMIT 200
         ");
         $stmtExpenses->execute([$userId]);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
@@ -1865,6 +1883,8 @@ class HRMController {
             FROM check_ins c
             JOIN users u ON c.user_id = u.id
             WHERE c.user_id = ? AND c.late_minutes > 0
+            ORDER BY c.id DESC
+            LIMIT 100
         ");
         $stmtCheckins->execute([$userId]);
         $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC);
@@ -1887,6 +1907,8 @@ class HRMController {
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             WHERE r.user_id = ?
+            ORDER BY r.created_at DESC
+            LIMIT 100
         ");
         $stmtBulks->execute([$userId]);
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
@@ -1906,29 +1928,42 @@ class HRMController {
             ];
         }
 
-        // Sort by created_at DESC
         usort($pending, function($a, $b) {
             return strcmp($b['created_at'], $a['created_at']);
         });
 
-        respond(200, $pending);
+        return $pending;
     }
 
-    public function getFollowingRequests(array $auth): void {
+    private function fetchFollowingRequests(array $auth): array {
         $pending = [];
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role'] ?? '');
 
         // 1. Leaves where user is in related_user_ids or user is HR (excluding leaves created by self)
-        $stmtLeaves = $this->db->prepare("
-            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
-                   l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
-            FROM hrm_leave_requests l
-            JOIN users u ON l.user_id = u.id
-            WHERE u.tenant_id = ?
-            ORDER BY l.created_at DESC
-        ");
-        $stmtLeaves->execute([$auth['tenant_id']]);
+        if ($role === 'hr') {
+            $stmtLeaves = $this->db->prepare("
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                       l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
+                FROM hrm_leave_requests l
+                JOIN users u ON l.user_id = u.id
+                WHERE u.tenant_id = ? AND l.user_id != ?
+                ORDER BY l.created_at DESC
+                LIMIT 200
+            ");
+            $stmtLeaves->execute([$auth['tenant_id'], $userId]);
+        } else {
+            $stmtLeaves = $this->db->prepare("
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                       l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
+                FROM hrm_leave_requests l
+                JOIN users u ON l.user_id = u.id
+                WHERE u.tenant_id = ? AND l.user_id != ? AND (l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?)
+                ORDER BY l.created_at DESC
+                LIMIT 200
+            ");
+            $stmtLeaves->execute([$auth['tenant_id'], $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
+        }
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
         foreach ($leaves as $l) {
             $relArr = !empty($l['related_user_ids']) ? (is_array($l['related_user_ids']) ? $l['related_user_ids'] : json_decode($l['related_user_ids'], true)) : [];
@@ -1964,10 +1999,11 @@ class HRMController {
                    a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name
             FROM hrm_salary_advances a
             JOIN users u ON a.user_id = u.id
-            WHERE u.tenant_id = ?
+            WHERE u.tenant_id = ? AND a.user_id != ? AND (a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?)
             ORDER BY a.created_at DESC
+            LIMIT 200
         ");
-        $stmtAdvances->execute([$auth['tenant_id']]);
+        $stmtAdvances->execute([$auth['tenant_id'], $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
         $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
         foreach ($advances as $a) {
             $relArr = !empty($a['related_user_ids']) ? (is_array($a['related_user_ids']) ? $a['related_user_ids'] : json_decode($a['related_user_ids'], true)) : [];
@@ -2002,10 +2038,11 @@ class HRMController {
             SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
             FROM expenses e
             JOIN users u ON e.created_by = u.id
-            WHERE e.tenant_id = ? AND e.deleted_at IS NULL
+            WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.created_by != ? AND (e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)
             ORDER BY e.created_at DESC
+            LIMIT 200
         ");
-        $stmtExpenses->execute([$auth['tenant_id']]);
+        $stmtExpenses->execute([$auth['tenant_id'], $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
         foreach ($expenses as $e) {
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
@@ -2047,15 +2084,14 @@ class HRMController {
             }
         }
 
-        // Sort by created_at DESC
         usort($pending, function($a, $b) {
             return strcmp($b['created_at'], $a['created_at']);
         });
 
-        respond(200, $pending);
+        return $pending;
     }
 
-    public function getAllApprovals(array $auth): void {
+    private function fetchAllApprovals(array $auth): array {
         $userId = (int)$auth['user_id'];
         $role = strtolower($auth['role'] ?? '');
         $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'accountant'], true);
@@ -2078,123 +2114,260 @@ class HRMController {
         $all = [];
 
         // 1. All Leaves
-        $stmtLeaves = $this->db->prepare("
-            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
-                   l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
-            FROM hrm_leave_requests l
-            JOIN users u ON l.user_id = u.id
-            WHERE u.tenant_id = ?
-            ORDER BY l.created_at DESC
-        ");
-        $stmtLeaves->execute([$auth['tenant_id']]);
+        if ($isGlobalAdmin) {
+            $stmtLeaves = $this->db->prepare("
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                       l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
+                FROM hrm_leave_requests l
+                JOIN users u ON l.user_id = u.id
+                WHERE u.tenant_id = ?
+                ORDER BY l.created_at DESC
+                LIMIT 300
+            ");
+            $stmtLeaves->execute([$auth['tenant_id']]);
+        } else {
+            $sqlL = "
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                       l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name
+                FROM hrm_leave_requests l
+                JOIN users u ON l.user_id = u.id
+                WHERE u.tenant_id = ? AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?";
+            $pL = [$auth['tenant_id'], $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            if (!empty($managedUserIds)) {
+                $ph = implode(',', array_fill(0, count($managedUserIds), '?'));
+                $sqlL .= " OR l.user_id IN ($ph)";
+                $pL = array_merge($pL, $managedUserIds);
+            }
+            $sqlL .= ") ORDER BY l.created_at DESC LIMIT 300";
+            $stmtLeaves = $this->db->prepare($sqlL);
+            $stmtLeaves->execute($pL);
+        }
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
         foreach ($leaves as $l) {
             $relArr = !empty($l['related_user_ids']) ? (is_array($l['related_user_ids']) ? $l['related_user_ids'] : json_decode($l['related_user_ids'], true)) : [];
             if (!is_array($relArr)) $relArr = [];
             $relArr = array_map('intval', $relArr);
 
-            $isPermitted = $isGlobalAdmin 
-                || (int)$l['user_id'] === $userId 
-                || (int)($l['approver_id'] ?? 0) === $userId 
-                || (int)($l['approver_id_2'] ?? 0) === $userId 
-                || in_array($userId, $relArr, true) 
-                || in_array((int)$l['user_id'], $managedUserIds, true);
-
-            if ($isPermitted) {
-                $all[] = [
-                    'id' => (int)$l['id'],
-                    'type' => 'leave',
-                    'employee_name' => $l['employee_name'],
-                    'user_id' => (int)$l['user_id'],
-                    'approver_id' => (int)($l['approver_id'] ?? 0),
-                    'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
-                    'related_user_ids' => $relArr,
-                    'title' => self::formatLeaveTitle($l['leave_type']),
-                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
-                    'status' => $l['status'],
-                    'created_at' => $l['created_at']
-                ];
-            }
+            $all[] = [
+                'id' => (int)$l['id'],
+                'type' => 'leave',
+                'employee_name' => $l['employee_name'],
+                'user_id' => (int)$l['user_id'],
+                'approver_id' => (int)($l['approver_id'] ?? 0),
+                'approver_id_2' => (int)($l['approver_id_2'] ?? 0),
+                'related_user_ids' => $relArr,
+                'title' => self::formatLeaveTitle($l['leave_type']),
+                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                'status' => $l['status'],
+                'created_at' => $l['created_at']
+            ];
         }
 
         // 2. All Advances
-        $stmtAdvances = $this->db->prepare("
-            SELECT a.id, a.amount, a.reason, a.status, a.created_at,
-                   a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name
-            FROM hrm_salary_advances a
-            JOIN users u ON a.user_id = u.id
-            WHERE u.tenant_id = ?
-            ORDER BY a.created_at DESC
-        ");
-        $stmtAdvances->execute([$auth['tenant_id']]);
+        if ($isGlobalAdmin) {
+            $stmtAdvances = $this->db->prepare("
+                SELECT a.id, a.amount, a.reason, a.status, a.created_at,
+                       a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name
+                FROM hrm_salary_advances a
+                JOIN users u ON a.user_id = u.id
+                WHERE u.tenant_id = ?
+                ORDER BY a.created_at DESC
+                LIMIT 300
+            ");
+            $stmtAdvances->execute([$auth['tenant_id']]);
+        } else {
+            $sqlA = "
+                SELECT a.id, a.amount, a.reason, a.status, a.created_at,
+                       a.status_level_1, a.status_level_2, a.approver_id, a.approver_id_2, a.user_id, a.related_user_ids, u.full_name as employee_name
+                FROM hrm_salary_advances a
+                JOIN users u ON a.user_id = u.id
+                WHERE u.tenant_id = ? AND (a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?";
+            $pA = [$auth['tenant_id'], $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            if (!empty($managedUserIds)) {
+                $ph = implode(',', array_fill(0, count($managedUserIds), '?'));
+                $sqlA .= " OR a.user_id IN ($ph)";
+                $pA = array_merge($pA, $managedUserIds);
+            }
+            $sqlA .= ") ORDER BY a.created_at DESC LIMIT 300";
+            $stmtAdvances = $this->db->prepare($sqlA);
+            $stmtAdvances->execute($pA);
+        }
         $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
         foreach ($advances as $a) {
             $relArr = !empty($a['related_user_ids']) ? (is_array($a['related_user_ids']) ? $a['related_user_ids'] : json_decode($a['related_user_ids'], true)) : [];
             if (!is_array($relArr)) $relArr = [];
             $relArr = array_map('intval', $relArr);
 
-            $isPermitted = $isGlobalAdmin 
-                || (int)$a['user_id'] === $userId 
-                || (int)($a['approver_id'] ?? 0) === $userId 
-                || (int)($a['approver_id_2'] ?? 0) === $userId 
-                || in_array($userId, $relArr, true) 
-                || in_array((int)$a['user_id'], $managedUserIds, true);
-
-            if ($isPermitted) {
-                $all[] = [
-                    'id' => (int)$a['id'],
-                    'type' => 'advance',
-                    'employee_name' => $a['employee_name'],
-                    'user_id' => (int)$a['user_id'],
-                    'approver_id' => (int)($a['approver_id'] ?? 0),
-                    'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
-                    'related_user_ids' => $relArr,
-                    'title' => 'Đề xuất tạm ứng lương',
-                    'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
-                    'status' => $a['status'],
-                    'created_at' => $a['created_at']
-                ];
-            }
+            $all[] = [
+                'id' => (int)$a['id'],
+                'type' => 'advance',
+                'employee_name' => $a['employee_name'],
+                'user_id' => (int)$a['user_id'],
+                'approver_id' => (int)($a['approver_id'] ?? 0),
+                'approver_id_2' => (int)($a['approver_id_2'] ?? 0),
+                'related_user_ids' => $relArr,
+                'title' => 'Đề xuất tạm ứng lương',
+                'description' => 'Số tiền: ' . number_format($a['amount'], 0, ',', '.') . 'đ. Lý do: "' . $a['reason'] . '"',
+                'status' => $a['status'],
+                'created_at' => $a['created_at']
+            ];
         }
 
         // 3. All Expenses
-        $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
-            FROM expenses e
-            JOIN users u ON e.created_by = u.id
-            WHERE e.tenant_id = ? AND e.deleted_at IS NULL
-            ORDER BY e.created_at DESC
-        ");
-        $stmtExpenses->execute([$auth['tenant_id']]);
+        if ($isGlobalAdmin) {
+            $stmtExpenses = $this->db->prepare("
+                SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
+                FROM expenses e
+                JOIN users u ON e.created_by = u.id
+                WHERE e.tenant_id = ? AND e.deleted_at IS NULL
+                ORDER BY e.created_at DESC
+                LIMIT 300
+            ");
+            $stmtExpenses->execute([$auth['tenant_id']]);
+        } else {
+            $sqlE = "
+                SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
+                FROM expenses e
+                JOIN users u ON e.created_by = u.id
+                WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?";
+            $pE = [$auth['tenant_id'], $userId, $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
+            if (!empty($managedUserIds)) {
+                $ph = implode(',', array_fill(0, count($managedUserIds), '?'));
+                $sqlE .= " OR e.created_by IN ($ph)";
+                $pE = array_merge($pE, $managedUserIds);
+            }
+            $sqlE .= ") ORDER BY e.created_at DESC LIMIT 300";
+            $stmtExpenses = $this->db->prepare($sqlE);
+            $stmtExpenses->execute($pE);
+        }
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
         foreach ($expenses as $e) {
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
             if (!is_array($relArr)) $relArr = [];
             $relArr = array_map('intval', $relArr);
 
-            $isPermitted = $isGlobalAdmin 
-                || (int)$e['user_id'] === $userId 
-                || (int)($e['approver_id'] ?? 0) === $userId 
-                || (int)($e['approver_id_2'] ?? 0) === $userId 
-                || (int)($e['approver_id_3'] ?? 0) === $userId 
-                || in_array($userId, $relArr, true) 
-                || in_array((int)$e['user_id'], $managedUserIds, true);
+            $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
+            $displayTitle = $e['title'];
+            if (!$isZeroAmt && !str_starts_with(mb_strtolower($e['title']), 'đề xuất') && !str_starts_with(mb_strtolower($e['title']), 'đề nghị') && !str_starts_with(mb_strtolower($e['title']), 'yêu cầu')) {
+                $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
+            }
+            
+            $displayDesc = $isZeroAmt 
+                ? ($e['notes'] ?: $e['description'] ?: '')
+                : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
 
-            if ($isPermitted) {
-                $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
-                $displayTitle = $e['title'];
-                if (!$isZeroAmt && !str_starts_with(mb_strtolower($e['title']), 'đề xuất') && !str_starts_with(mb_strtolower($e['title']), 'đề nghị') && !str_starts_with(mb_strtolower($e['title']), 'yêu cầu')) {
-                    $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
-                }
-                
-                $displayDesc = $isZeroAmt 
-                    ? ($e['notes'] ?: $e['description'] ?: '')
-                    : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+            $all[] = [
+                'id' => (int)$e['id'],
+                'type' => 'expense',
+                'employee_name' => $e['employee_name'],
+                'user_id' => (int)$e['user_id'],
+                'approver_id' => (int)($e['approver_id'] ?? 0),
+                'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
+                'approver_id_3' => (int)($e['approver_id_3'] ?? 0),
+                'related_user_ids' => $relArr,
+                'title' => $displayTitle,
+                'description' => $displayDesc,
+                'amount' => (float)$e['amount'],
+                'currency' => 'VND',
+                'category' => $e['category'] ?? 'Vận hành',
+                'date' => $e['date'] ?? null,
+                'notes' => $e['notes'] ?? '',
+                'status' => $e['status'],
+                'created_at' => $e['created_at']
+            ];
+        }
 
-                $all[] = [
-                    'id' => (int)$e['id'],
-                    'type' => 'expense',
-                    'employee_name' => $e['employee_name'],
+        // 4. All Checkins
+        if ($isGlobalAdmin) {
+            $stmtCheckins = $this->db->prepare("
+                SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
+                FROM check_ins c
+                JOIN users u ON c.user_id = u.id
+                WHERE u.tenant_id = ? AND c.late_minutes > 0
+                ORDER BY c.id DESC
+                LIMIT 200
+            ");
+            $stmtCheckins->execute([$auth['tenant_id']]);
+        } else {
+            $sqlC = "
+                SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
+                FROM check_ins c
+                JOIN users u ON c.user_id = u.id
+                WHERE u.tenant_id = ? AND c.late_minutes > 0 AND (c.user_id = ?";
+            $pC = [$auth['tenant_id'], $userId];
+            if (!empty($managedUserIds)) {
+                $ph = implode(',', array_fill(0, count($managedUserIds), '?'));
+                $sqlC .= " OR c.user_id IN ($ph)";
+                $pC = array_merge($pC, $managedUserIds);
+            }
+            $sqlC .= ") ORDER BY c.id DESC LIMIT 200";
+            $stmtCheckins = $this->db->prepare($sqlC);
+            $stmtCheckins->execute($pC);
+        }
+        $checkins = $stmtCheckins->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($checkins as $c) {
+            $all[] = [
+                'id' => (int)$c['id'],
+                'type' => 'checkin',
+                'employee_name' => $c['employee_name'],
+                'user_id' => (int)$c['user_id'],
+                'title' => 'Giải trình đi trễ ngày ' . $c['check_in_date'],
+                'description' => 'Đi trễ ' . $c['late_minutes'] . ' phút (Check-in lúc ' . $c['check_in_time'] . '). Lý do: "' . $c['reason'] . '"',
+                'status' => $c['status'],
+                'created_at' => $c['created_at']
+            ];
+        }
+
+        // 5. All Bulk Attendance Requests
+        if ($isGlobalAdmin) {
+            $stmtBulks = $this->db->prepare("
+                SELECT r.*, u.full_name as employee_name
+                FROM attendance_bulk_requests r
+                JOIN users u ON r.user_id = u.id
+                WHERE u.tenant_id = ?
+                ORDER BY r.created_at DESC
+                LIMIT 200
+            ");
+            $stmtBulks->execute([$auth['tenant_id']]);
+        } else {
+            $sqlB = "
+                SELECT r.*, u.full_name as employee_name
+                FROM attendance_bulk_requests r
+                JOIN users u ON r.user_id = u.id
+                WHERE u.tenant_id = ? AND (r.user_id = ? OR r.manager_id = ? OR r.approved_by = ?";
+            $pB = [$auth['tenant_id'], $userId, $userId, $userId];
+            if (!empty($managedUserIds)) {
+                $ph = implode(',', array_fill(0, count($managedUserIds), '?'));
+                $sqlB .= " OR r.user_id IN ($ph)";
+                $pB = array_merge($pB, $managedUserIds);
+            }
+            $sqlB .= ") ORDER BY r.created_at DESC LIMIT 200";
+            $stmtBulks = $this->db->prepare($sqlB);
+            $stmtBulks->execute($pB);
+        }
+        $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($bulks as $b) {
+            $all[] = [
+                'id' => (int)$b['id'],
+                'type' => 'attendance_bulk',
+                'employee_name' => $b['employee_name'],
+                'user_id' => (int)$b['user_id'],
+                'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
+                'manager_id' => (int)($b['manager_id'] ?? 0),
+                'approved_at' => $b['approved_at'] ?? null,
+                'title' => 'Phiếu cập nhật công gộp tháng ' . $b['month_period'],
+                'description' => 'Giải trình công hàng loạt chu kỳ tháng ' . $b['month_period'],
+                'status' => $b['status'],
+                'created_at' => $b['created_at']
+            ];
+        }
+
+        usort($all, function($a, $b) {
+            return strcmp($b['created_at'], $a['created_at']);
+        });
+
+        return $all;
+    }           'employee_name' => $e['employee_name'],
                     'user_id' => (int)$e['user_id'],
                     'approver_id' => (int)($e['approver_id'] ?? 0),
                     'approver_id_2' => (int)($e['approver_id_2'] ?? 0),

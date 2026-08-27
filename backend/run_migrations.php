@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 233;
+$targetVersion = 234;
 $currentVersion = 186;
 
 // Query current DB version
@@ -1815,9 +1815,45 @@ try {
         $logMsg("Nâng cấp lên phiên bản 233 hoàn tất.", "success");
     }
 
-    // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '233') ON DUPLICATE KEY UPDATE setting_value = '233'");
+    // -------------------------------------------------------------
+    // Migration 234: Add Composite Performance Indexes for Approvals & HR
+    // -------------------------------------------------------------
+    if ($currentVersion < 234) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 234 (Tối ưu hóa chỉ mục SQL cho Quy trình phê duyệt)...", "info");
+        try {
+            $addIndexSafe = function($table, $indexName, $columns) use ($conn, $logMsg) {
+                try {
+                    $chk = $conn->query("SHOW INDEX FROM `$table` WHERE Key_name = '$indexName'");
+                    if ($chk && $chk->num_rows == 0) {
+                        $conn->query("ALTER TABLE `$table` ADD INDEX `$indexName` ($columns)");
+                        $logMsg("Đã tạo chỉ mục $indexName trên bảng $table.", "success");
+                    }
+                } catch (Throwable $e) {}
+            };
 
+            $addIndexSafe('hrm_leave_requests', 'idx_leave_user_status', '`user_id`, `status`');
+            $addIndexSafe('hrm_leave_requests', 'idx_leave_approver1', '`approver_id`, `status`');
+            $addIndexSafe('hrm_leave_requests', 'idx_leave_approver2', '`approver_id_2`, `status`');
+
+            $addIndexSafe('hrm_salary_advances', 'idx_advance_user_status', '`user_id`, `status`');
+            $addIndexSafe('hrm_salary_advances', 'idx_advance_approver1', '`approver_id`, `status`');
+            $addIndexSafe('hrm_salary_advances', 'idx_advance_approver2', '`approver_id_2`, `status`');
+
+            $addIndexSafe('expenses', 'idx_exp_created_by', '`created_by`, `status`');
+            $addIndexSafe('expenses', 'idx_exp_approver1', '`approver_id`, `status`');
+            $addIndexSafe('expenses', 'idx_exp_approver2', '`approver_id_2`, `status`');
+            $addIndexSafe('expenses', 'idx_exp_approver3', '`approver_id_3`, `status`');
+
+            $addIndexSafe('check_ins', 'idx_checkin_user_status', '`user_id`, `status`');
+            $addIndexSafe('attendance_bulk_requests', 'idx_bulk_user_status', '`user_id`, `status`');
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 234: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 234 hoàn tất.", "success");
+    }
+
+    // Update DB version in system_settings
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '234') ON DUPLICATE KEY UPDATE setting_value = '234'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

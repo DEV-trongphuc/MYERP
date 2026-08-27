@@ -830,6 +830,7 @@ switch ($resource) {
                 respond(404, null, 'Route không tồn tại', false);
             }
         }
+        elseif ($resourceId === 'approvals' && $subResource === 'overview' && $method === 'GET') $ctrl->getApprovalsOverview($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'pending' && $method === 'GET') $ctrl->getPendingApprovals($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'my-requests' && $method === 'GET') $ctrl->getMyRequests($auth);
         elseif ($resourceId === 'approvals' && $subResource === 'following' && $method === 'GET') $ctrl->getFollowingRequests($auth);

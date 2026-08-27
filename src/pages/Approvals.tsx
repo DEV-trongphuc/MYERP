@@ -201,6 +201,7 @@ const diffHours = (start: string, end: string) => {
 export interface ApprovalItem {
   id: number;
   type: 'leave' | 'advance' | 'expense' | 'checkin' | 'attendance_bulk';
+  user_id?: number;
   employee_name?: string;
   title: string;
   description: string;
@@ -209,6 +210,16 @@ export interface ApprovalItem {
   updated_at?: string;
   currency?: string;
   amount?: number;
+  approver_id?: number;
+  approver_id_2?: number;
+  approver_id_3?: number;
+  approver_name?: string;
+  status_level_1?: string;
+  status_level_2?: string;
+  status_level_3?: string;
+  manager_id?: number;
+  related_user_ids?: number[];
+  is_following?: boolean;
 }
 
 
@@ -383,6 +394,25 @@ export default function Approvals() {
   // Custom states for timeline details and user listings
   const [users, setUsers] = useState<any[]>([]);
   const [selectedTimelineItem, setSelectedTimelineItem] = useState<ApprovalItem | null>(null);
+
+  // Fast O(1) user lookup maps for optimal table and drawer rendering
+  const usersMap = useMemo(() => {
+    const map = new Map<number, any>();
+    users.forEach(u => {
+      if (u.id) map.set(Number(u.id), u);
+    });
+    return map;
+  }, [users]);
+
+  const usersByNameMap = useMemo(() => {
+    const map = new Map<string, any>();
+    users.forEach(u => {
+      if (u.full_name) map.set(String(u.full_name).toLowerCase().trim(), u);
+      if (u.name) map.set(String(u.name).toLowerCase().trim(), u);
+      if (u.username) map.set(String(u.username).toLowerCase().trim(), u);
+    });
+    return map;
+  }, [users]);
 
   // Creation workflow states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -1545,36 +1575,36 @@ export default function Approvals() {
     }
   }, [location.search, location.state, pendingList, myRequestsList, followingList, allList]);
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
-      const [pendingRes, myRequestsRes, followingRes, allRes] = await Promise.all([
-        fetchAPI('hrm/approvals/pending').catch(err => {
-          console.warn('Pending approvals load error:', err);
-          return { data: [] };
-        }),
-        fetchAPI('hrm/approvals/my-requests').catch(err => {
-          console.warn('My requests load error:', err);
-          return { data: [] };
-        }),
-        fetchAPI('hrm/approvals/following').catch(err => {
-          console.warn('Following approvals load error:', err);
-          return { data: [] };
-        }),
-        fetchAPI('hrm/approvals/all').catch(err => {
-          console.warn('All approvals load error:', err);
-          return { data: [] };
-        })
-      ]);
+      let pList: ApprovalItem[] = [];
+      let mList: ApprovalItem[] = [];
+      let fList: ApprovalItem[] = [];
+      let aList: ApprovalItem[] = [];
 
-      const pList = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
-      const mList = Array.isArray(myRequestsRes?.data) ? myRequestsRes.data : [];
-      const fList = Array.isArray(followingRes?.data) ? followingRes.data : [];
-      const aList = Array.isArray(allRes?.data) ? allRes.data : [];
+      try {
+        const overviewRes = await fetchAPI('hrm/approvals/overview');
+        if (overviewRes && overviewRes.success && overviewRes.data) {
+          pList = Array.isArray(overviewRes.data.pending) ? overviewRes.data.pending : [];
+          mList = Array.isArray(overviewRes.data.my_requests) ? overviewRes.data.my_requests : [];
+          fList = Array.isArray(overviewRes.data.following) ? overviewRes.data.following : [];
+          aList = Array.isArray(overviewRes.data.all) ? overviewRes.data.all : [];
+        } else {
+          throw new Error('Fallback to parallel');
+        }
+      } catch {
+        const [pendingRes, myRequestsRes, followingRes, allRes] = await Promise.all([
+          fetchAPI('hrm/approvals/pending').catch(() => ({ data: [] })),
+          fetchAPI('hrm/approvals/my-requests').catch(() => ({ data: [] })),
+          fetchAPI('hrm/approvals/following').catch(() => ({ data: [] })),
+          fetchAPI('hrm/approvals/all').catch(() => ({ data: [] }))
+        ]);
+        pList = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
+        mList = Array.isArray(myRequestsRes?.data) ? myRequestsRes.data : [];
+        fList = Array.isArray(followingRes?.data) ? followingRes.data : [];
+        aList = Array.isArray(allRes?.data) ? allRes.data : [];
+      }
 
       setPendingList(pList);
       setMyRequestsList(mList);
@@ -1619,7 +1649,18 @@ export default function Approvals() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [location.search, selectedTimelineItem]);
+
+  useEffect(() => {
+    loadData();
+    const handleRefresh = () => loadData(true);
+    window.addEventListener('approval-updated', handleRefresh);
+    window.addEventListener('refresh-approvals', handleRefresh);
+    return () => {
+      window.removeEventListener('approval-updated', handleRefresh);
+      window.removeEventListener('refresh-approvals', handleRefresh);
+    };
+  }, []);
 
   const handleApprove = async (item: ApprovalItem) => {
     try {
@@ -1983,7 +2024,7 @@ export default function Approvals() {
     }
   };
 
-  const renderCurrentApprover = (item: ApprovalItem) => {
+  const renderCurrentApprover = useCallback((item: ApprovalItem) => {
     let approverUser: any = null;
 
     const status1 = (item as any).status_level_1 || 'pending';
@@ -2002,18 +2043,19 @@ export default function Approvals() {
     }
 
     if (targetApproverId && Number(targetApproverId) > 0) {
-      approverUser = users.find(u => Number(u.id) === Number(targetApproverId));
+      approverUser = usersMap.get(Number(targetApproverId));
     }
 
     if (!approverUser && (item as any).approver_name) {
-      approverUser = users.find(u => String(u.full_name) === String((item as any).approver_name) || String(u.name) === String((item as any).approver_name));
+      const nameKey = String((item as any).approver_name).toLowerCase().trim();
+      approverUser = usersByNameMap.get(nameKey);
     }
 
     if (!approverUser) {
       if (item.type === 'checkin' || item.type === 'attendance_bulk') {
-        approverUser = users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương') || u.username === 'phuongntd');
+        approverUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương');
       } else if (item.type === 'expense' && (item as any).title?.toLowerCase().includes('văn phòng phẩm')) {
-        approverUser = users.find(u => u.full_name?.includes('Nguyễn Thị Duy Phương') || u.username === 'phuongntd');
+        approverUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương');
       }
     }
 
@@ -2036,11 +2078,21 @@ export default function Approvals() {
         </span>
       </div>
     );
-  };
+  }, [usersMap, usersByNameMap, t]);
 
-  // Filter logic for main lists
-  const filterList = (list: ApprovalItem[]) => {
-    return list.filter(item => {
+  // Filter logic for main lists (memoized)
+  const currentRawList = useMemo(() => {
+    switch (activeTab) {
+      case 'pending': return pendingList;
+      case 'my_requests': return myRequestsList;
+      case 'following': return followingList;
+      case 'all': return allList;
+      default: return pendingList;
+    }
+  }, [activeTab, pendingList, myRequestsList, followingList, allList]);
+
+  const currentList = useMemo(() => {
+    return currentRawList.filter(item => {
       const matchesSearch = listSearchText === '' ||
         (item.title && item.title.toLowerCase().includes(listSearchText.toLowerCase())) ||
         (item.description && item.description.toLowerCase().includes(listSearchText.toLowerCase()));
@@ -2064,12 +2116,7 @@ export default function Approvals() {
       
       return matchesSearch && matchesCategory && matchesStatus && matchesDate;
     });
-  };
-
-  const filteredPendingList = filterList(pendingList);
-  const filteredMyRequestsList = filterList(myRequestsList);
-  const filteredFollowingList = filterList(followingList);
-  const filteredAllList = filterList(allList);
+  }, [currentRawList, listSearchText, listCategoryFilter, listStatusFilter, dateRange]);
 
   return (
     <div>
@@ -2095,6 +2142,27 @@ export default function Approvals() {
         
         {/* Top Action Bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={() => loadData()}
+            disabled={loading}
+            title={t('Tải lại danh sách')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              height: isMobile ? '36px' : '40px',
+              padding: '0 12px',
+              borderRadius: '10px',
+              fontSize: '0.85rem',
+              fontWeight: 600
+            }}
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            {!isMobile && t('Làm mới')}
+          </button>
           <PeriodFilter
             value={period}
             onChange={(p, r) => {
@@ -2575,13 +2643,6 @@ export default function Approvals() {
           <TableSkeleton rows={5} cols={4} />
         </div>
       ) : (() => {
-        const currentList = activeTab === 'pending'
-          ? filteredPendingList
-          : activeTab === 'my_requests'
-          ? filteredMyRequestsList
-          : activeTab === 'following'
-          ? filteredFollowingList
-          : filteredAllList;
 
         if (currentList.length === 0) {
           const emptyIcon = activeTab === 'pending' ? <ShieldCheck /> : activeTab === 'following' ? <Eye /> : <Clipboard />;
@@ -2644,7 +2705,8 @@ export default function Approvals() {
                         </td>
                         <td style={{ padding: '14px 16px' }}>
                           {(() => {
-                            const creatorUser = users.find(u => String(u.full_name) === String(item.employee_name || user?.name) || String(u.name) === String(item.employee_name || user?.name));
+                            const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
+                            const creatorUser = (item.user_id ? usersMap.get(Number(item.user_id)) : null) || usersByNameMap.get(creatorKey);
                             const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
                             return (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
