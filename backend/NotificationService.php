@@ -1069,6 +1069,46 @@ class NotificationService {
                                     "</p>"
                 ];
 
+            case 'TASK_COMMENT_NEW':
+                $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
+                $authorName = $payload['author_name'] ?? 'Đồng nghiệp';
+                $taskTitle = $payload['task_title'] ?? 'Công việc';
+                $commentText = $payload['comment'] ?? '';
+                $commentTextPlain = strip_tags($commentText);
+                
+                $targetLink = $payload['link'] ?? '/workspace';
+                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "$authorName đã bình luận trong: $taskTitle",
+                    'body' => "$authorName: \"$commentTextPlain\"",
+                    'type' => "comment",
+                    'link' => $targetLink,
+                    'zalo_msg' => "💬 [ BÌNH LUẬN MỚI TRONG CÔNG VIỆC ]\n\n"
+                        . "Người bình luận: $authorName\n"
+                        . "Công việc: $taskTitle\n"
+                        . "Nội dung: \"$commentTextPlain\"\n\n"
+                        . "👉 Xem chi tiết: $fullDirectLink",
+                    'tg_msg' => "💬 <b>[ BÌNH LUẬN MỚI TRONG CÔNG VIỆC ]</b>\n\n"
+                        . "Người bình luận: <b>" . htmlspecialchars($authorName) . "</b>\n"
+                        . "Công việc: <b>" . htmlspecialchars($taskTitle) . "</b>\n"
+                        . "Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
+                        . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
+                    'email_subject' => "[IDEAS ERP] $authorName đã bình luận trong công việc: $taskTitle",
+                    'email_title' => "BÌNH LUẬN MỚI TRONG CÔNG VIỆC",
+                    'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                                    "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " đã bình luận trong công việc</h3>" .
+                                    "  <p style=\"margin: 0 0 8px; color: #64748b; font-size: 13px;\">Công việc: <strong>" . htmlspecialchars($taskTitle) . "</strong></p>" .
+                                    "  <p style=\"margin: 0; color: #334155;\">\"" . htmlspecialchars($commentTextPlain) . "\"</p>" .
+                                    "</div>" .
+                                    "<p style=\"margin-top: 25px; text-align: center;\">" .
+                                    "  <a href=\"{$fullDirectLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP HỆ THỐNG</a>" .
+                                    "</p>"
+                ];
+
             case 'WORKFLOW_TASK_ASSIGNED':
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
                 $taskTitle = $payload['task_title'] ?? 'Nhiệm vụ mới';

@@ -579,24 +579,8 @@ class TicketController {
         $stmt = $this->db->prepare("INSERT INTO ticket_comments (ticket_id, user_id, body, parent_id) VALUES (?, ?, ?, ?)");
         $stmt->execute([$ticketId, $auth['user_id'], $data['body'], $parentId]);
         $newId = $this->db->lastInsertId();
-
-        if ($parentId > 0) {
-            $stmtParent = $this->db->prepare("SELECT user_id FROM ticket_comments WHERE id = ?");
-            $stmtParent->execute([$parentId]);
-            $parentOwnerId = (int)$stmtParent->fetchColumn();
-
-            require_once __DIR__ . '/../NotificationService.php';
-            if ($parentOwnerId > 0 && $parentOwnerId !== (int)$auth['user_id']) {
-                NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
-                    'user_id' => $parentOwnerId,
-                    'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
-                    'comment' => "Đã trả lời bình luận của bạn trong ticket #" . $ticketId,
-                    'link' => "/tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
-                ]);
-            }
-        }
-
-        // Parse mentions in comment body
+        $notifiedUserIds = [(int)$auth['user_id']];
+        $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
         $bodyText = (string)($data['body'] ?? '');
         $mentions = [];
 
@@ -636,14 +620,35 @@ class TicketController {
             }
         }
 
-        // Send mention notifications via NotificationService
+        require_once __DIR__ . '/../NotificationService.php';
+
+        // 1. Send mention notifications first (priority 1)
         if (!empty($mentions)) {
-            require_once __DIR__ . '/../NotificationService.php';
             foreach ($mentions as $mUid => $userRow) {
+                $notifiedUserIds[] = $mUid;
                 NotificationService::send($this->db, $auth['tenant_id'], 'MENTION_TAGGED', [
                     'user_id' => $mUid,
-                    'author_name' => $auth['full_name'] ?? 'Đồng nghiệp',
+                    'recipients' => [$userRow],
+                    'author_name' => $commenterName,
                     'comment' => $bodyText,
+                    'link' => "/tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
+                ]);
+            }
+        }
+
+        // 2. If replying to a parent comment and author was not already notified
+        if ($parentId > 0) {
+            $stmtParent = $this->db->prepare("SELECT user_id FROM ticket_comments WHERE id = ?");
+            $stmtParent->execute([$parentId]);
+            $parentOwnerId = (int)$stmtParent->fetchColumn();
+
+            if ($parentOwnerId > 0 && !in_array($parentOwnerId, $notifiedUserIds, true)) {
+                $notifiedUserIds[] = $parentOwnerId;
+                NotificationService::send($this->db, $auth['tenant_id'], 'TASK_COMMENT_NEW', [
+                    'user_id' => $parentOwnerId,
+                    'author_name' => $commenterName,
+                    'task_title' => "Ticket #$ticketId",
+                    'comment' => "Đã trả lời bình luận của bạn trong ticket #" . $ticketId . ": \"" . mb_substr(strip_tags($bodyText), 0, 120) . "\"",
                     'link' => "/tickets?id=" . $ticketId . "&highlight_comment_id=" . $newId
                 ]);
             }
