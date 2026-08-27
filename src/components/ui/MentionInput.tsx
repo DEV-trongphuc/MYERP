@@ -283,7 +283,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   };
 
   const removeAccents = (str: string) => {
-    return str
+    return (str || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/đ/g, 'd')
@@ -291,22 +291,52 @@ export const MentionInput: React.FC<MentionInputProps> = ({
       .toLowerCase();
   };
 
-  const filteredUsers = users.filter(u => {
-    if (currentUser && u.id === currentUser.id) {
-      return false;
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'accountant': return 'Kế toán';
+      case 'admin':
+      case 'superadmin':
+      case 'super_admin': return 'Quản trị viên';
+      case 'director': return 'Giám đốc';
+      case 'manager': return 'Trưởng phòng';
+      case 'sales':
+      case 'sale': return 'Kinh doanh';
+      case 'hr': return 'Nhân sự';
+      case 'developer': return 'Kỹ thuật';
+      default: return role || 'Thành viên';
     }
+  };
+
+  const filteredUsers = users.filter(u => {
     const name = u.full_name ? String(u.full_name).toLowerCase() : '';
     const role = u.role ? String(u.role).toLowerCase() : '';
+    const username = (u as any).username ? String((u as any).username).toLowerCase() : '';
+    const email = (u as any).email ? String((u as any).email).toLowerCase() : '';
     const cleanSearch = searchQuery.trim().toLowerCase();
     const noAccentSearch = removeAccents(cleanSearch);
     const noAccentName = removeAccents(name);
     const noAccentRole = removeAccents(role);
+    const noAccentUsername = removeAccents(username);
+
+    // Map common role names in Vietnamese
+    let viRole = role;
+    if (role === 'accountant') viRole = 'kế toán ke toan ke toan vien';
+    else if (role === 'admin' || role === 'superadmin' || role === 'super_admin') viRole = 'quản trị viên quan tri vien admin';
+    else if (role === 'director') viRole = 'giám đốc giam doc';
+    else if (role === 'manager') viRole = 'trưởng phòng truong phong quan ly';
+    else if (role === 'sale' || role === 'sales') viRole = 'kinh doanh tư vấn viên sale';
+    else if (role === 'hr') viRole = 'nhân sự nhan su hr';
 
     return (
       name.includes(cleanSearch) ||
       noAccentName.includes(noAccentSearch) ||
       role.includes(cleanSearch) ||
-      noAccentRole.includes(noAccentSearch)
+      noAccentRole.includes(noAccentSearch) ||
+      viRole.includes(cleanSearch) ||
+      viRole.includes(noAccentSearch) ||
+      username.includes(cleanSearch) ||
+      noAccentUsername.includes(noAccentSearch) ||
+      email.includes(cleanSearch)
     );
   });
 
@@ -739,7 +769,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
                     >
                       <Avatar name={fullName} src={u.avatar_url || u.avatar} size={20} />
                       <div style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{fullName}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{roleName}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-light)', padding: '2px 6px', borderRadius: '4px' }}>{getRoleLabel(roleName)}</div>
                     </div>
                   );
                 })
