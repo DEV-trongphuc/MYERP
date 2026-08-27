@@ -9388,37 +9388,19 @@ switch ($action) {
                 $stmtC->close();
             }
 
-            // 6. Expenses count
-            if ($isGlobalAdmin) {
-                $sqlExp = "SELECT COUNT(*) FROM expenses e WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL";
-                $stmtExp = $conn->prepare($sqlExp);
-                $stmtExp->bind_param("i", $tenantId);
-            } else if ($isManager) {
-                $userIds = [$userId];
-                $stmtTeam = $conn->prepare("SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
-                $stmtTeam->bind_param("i", $userId);
-                $stmtTeam->execute();
-                $resTeam = $stmtTeam->get_result();
-                while ($rowTeam = $resTeam->fetch_assoc()) {
-                    $userIds[] = (int)$rowTeam['id'];
-                }
-                $stmtTeam->close();
-
-                $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-                $sqlExp = "SELECT COUNT(*) FROM expenses e WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL AND (e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
-                $stmtExp = $conn->prepare($sqlExp);
-                $allParams = array_merge([$tenantId], $userIds, [$userId, $userId, $userId]);
-                $types = str_repeat("i", count($allParams));
-                $stmtExp->bind_param($types, ...$allParams);
-            } else {
-                // For HR, Accountant, or any designated approver
-                $sqlExp = "SELECT COUNT(*) FROM expenses e WHERE e.tenant_id = ? AND e.status = 'pending' AND e.deleted_at IS NULL AND (e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ?)";
-                $stmtExp = $conn->prepare($sqlExp);
-                $stmtExp->bind_param("iiii", $tenantId, $userId, $userId, $userId);
+            // 6. Expenses / Pending Approvals count (100% synchronized with HRMController)
+            try {
+                require_once __DIR__ . '/controllers/HRMController.php';
+                $pdoInstance = Database::getInstance();
+                $hrmCtrl = new HRMController($pdoInstance);
+                $expensesCount = $hrmCtrl->countPendingApprovals([
+                    'user_id' => $userId,
+                    'role' => $role,
+                    'tenant_id' => $tenantId
+                ]);
+            } catch (Throwable $e) {
+                $expensesCount = 0;
             }
-            $stmtExp->execute();
-            $expensesCount = (int)($stmtExp->get_result()->fetch_row()[0] ?? 0);
-            $stmtExp->close();
         }
 
         // 7. For Sales Pending signatures:

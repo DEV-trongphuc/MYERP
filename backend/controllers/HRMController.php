@@ -1507,6 +1507,19 @@ class HRMController {
         ]);
     }
 
+    public function getApprovalsOverview(array $auth): void {
+        respond(200, [
+            'pending' => $this->fetchPendingApprovals($auth),
+            'my_requests' => $this->fetchMyRequests($auth),
+            'following' => $this->fetchFollowingRequests($auth),
+            'all' => $this->fetchAllApprovals($auth)
+        ]);
+    }
+
+    public function countPendingApprovals(array $auth): int {
+        return count($this->fetchPendingApprovals($auth));
+    }
+
     public function getPendingApprovals(array $auth): void {
         respond(200, $this->fetchPendingApprovals($auth));
     }
