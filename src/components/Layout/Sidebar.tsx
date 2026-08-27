@@ -328,6 +328,18 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           setPendingDepositsCount(0);
         }
 
+        // Fetch pending approvals for ALL roles (so any employee/manager/director/marketing/etc. who is an approver sees their badge count)
+        try {
+          const resApps = await fetchAPI('hrm/approvals/pending');
+          if (resApps && resApps.success && Array.isArray(resApps.data)) {
+            setPendingApprovalsCount(resApps.data.length);
+          } else {
+            setPendingApprovalsCount(0);
+          }
+        } catch {
+          setPendingApprovalsCount(0);
+        }
+
         if (isAdminOrManager) {
           const [resReports, resHeld, resCoop, resSupport, resExpenses] = await Promise.all([
             fetchAPI('get_reports&status=pending'),
@@ -363,25 +375,12 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
             countExpenses = resExpenses.data?.total ?? 0;
           }
 
-          // Fetch pending approvals for admin/manager/assistant
-          try {
-            const resApps = await fetchAPI('hrm/approvals/pending');
-            if (resApps && resApps.success && Array.isArray(resApps.data)) {
-              setPendingApprovalsCount(resApps.data.length);
-            } else {
-              setPendingApprovalsCount(0);
-            }
-          } catch(e) {
-            setPendingApprovalsCount(0);
-          }
-
           setPendingTickets(countReports);
           setHeldLeadsCount(countHeld);
           setPendingCoopCount(countCoop);
           setSupportTicketsCount(countSupport);
           setPendingExpensesCount(countExpenses);
         } else if (role === 'sale' || role === 'sales') {
-          setPendingApprovalsCount(0);
           const resCoop = await fetchAPI('cooperation-slips');
           let countUnsigned = 0;
           if (resCoop.success) {
@@ -422,6 +421,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     window.addEventListener('realtime-update-received', fetchPending);
     window.addEventListener('held-lead-updated', fetchPending);
     window.addEventListener('gatekeeper-updated', fetchPending);
+    window.addEventListener('approval-updated', fetchPending);
+    window.addEventListener('approval-created', fetchPending);
+    window.addEventListener('refresh-approvals', fetchPending);
     return () => {
       clearInterval(interval);
       window.removeEventListener('ticket-resolved', fetchPending);
@@ -431,6 +433,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       window.removeEventListener('realtime-update-received', fetchPending);
       window.removeEventListener('held-lead-updated', fetchPending);
       window.removeEventListener('gatekeeper-updated', fetchPending);
+      window.removeEventListener('approval-updated', fetchPending);
+      window.removeEventListener('approval-created', fetchPending);
+      window.removeEventListener('refresh-approvals', fetchPending);
     };
   }, [user]);
 

@@ -1585,6 +1585,8 @@ export default function Approvals() {
         await api.post(`/check-ins/${item.id}/bulk-approve`, { status: 'approved' });
       }
       toast.success(t('Đã phê duyệt yêu cầu thành công!'));
+      window.dispatchEvent(new CustomEvent('approval-updated'));
+      window.dispatchEvent(new CustomEvent('refresh-approvals'));
       loadData();
     } catch (err: any) {
       toast.error(err?.message || t('Lỗi khi phê duyệt'));
@@ -1626,6 +1628,8 @@ export default function Approvals() {
         await api.post(`/check-ins/${selectedItem.id}/bulk-approve`, { status: 'rejected', admin_note: rejectReason });
       }
       toast.success(t('Đã từ chối yêu cầu thành công!'));
+      window.dispatchEvent(new CustomEvent('approval-updated'));
+      window.dispatchEvent(new CustomEvent('refresh-approvals'));
       setRejectModalOpen(false);
       setSelectedItem(null);
       setSelectedTimelineItem(null);
