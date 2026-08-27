@@ -724,7 +724,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           exit={{ opacity: 0 }}
           onClick={onClose}
           style={{
-            position: 'absolute',
+            position: 'fixed',
             inset: 0,
             zIndex: 2000000005,
             background: 'rgba(0, 0, 0, 0.45)',
@@ -735,21 +735,20 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
         {/* Drawer Sheet Panel */}
         <motion.div
-          initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-          animate={{ y: 0, x: 0, opacity: 1 }}
-          exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-          transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
+          initial={isMobile ? { y: '100%' } : { x: '100%' }}
+          animate={{ y: 0, x: 0 }}
+          exit={isMobile ? { y: '100%' } : { x: '100%' }}
+          transition={{ type: 'spring', damping: 28, stiffness: 280 }}
           onClick={e => e.stopPropagation()}
           style={{
-            position: 'fixed',
-            top: 0,
-            bottom: 0,
-            left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
-            right: 0,
+            width: isMobile ? '100%' : '1100px',
+            maxWidth: '100vw',
+            height: '100vh',
             backgroundColor: 'var(--color-surface)',
-            boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.15)',
+            boxShadow: '-10px 0 30px rgba(0, 0, 0, 0.2)',
             display: 'flex',
             flexDirection: 'column',
+            position: 'relative',
             zIndex: 2000000010,
             overflow: 'hidden'
           }}
