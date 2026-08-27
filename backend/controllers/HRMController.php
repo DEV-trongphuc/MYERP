@@ -1478,6 +1478,26 @@ class HRMController {
         if ($action === 'unlock') {
             $stmt = $this->db->prepare("
                 UPDATE monthly_payslips mp
+                JOIN users u ON mp.user_id = u.id
+                SET mp.status = 'draft', mp.signature_url = NULL, mp.confirmed_at = NULL 
+                WHERE mp.month_year = ? AND u.tenant_id = ?
+            ");
+            $stmt->execute([$monthYear, $auth['tenant_id']]);
+            respond(200, ['success' => true, 'message' => 'Unlocked successfully']);
+            return;
+        }
+
+        $stmt = $this->db->prepare("
+            UPDATE monthly_payslips mp
+            JOIN users u ON mp.user_id = u.id
+            SET mp.status = 'locked' 
+            WHERE mp.month_year = ? AND u.tenant_id = ?
+        ");
+        $stmt->execute([$monthYear, $auth['tenant_id']]);
+
+        respond(200, ['success' => true]);
+    }
+
     public function getApprovalsOverview(array $auth): void {
         respond(200, [
             'pending' => $this->fetchPendingApprovals($auth),
