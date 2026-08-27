@@ -193,9 +193,9 @@ const ConsultantsInner = () => {
 
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const showAllTabs = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin'].includes(userRole || '');
+  const showAllTabs = true;
   const activeTabRaw = queryParams.get('tab') || 'consultants';
-  const activeTab = showAllTabs ? activeTabRaw : 'consultants';
+  const activeTab = activeTabRaw === 'teams' ? 'teams' : 'consultants';
 
   const uploadProgress = useUploadProgress();
   const startUpload = uploadProgress?.startUpload;
@@ -1082,7 +1082,7 @@ const ConsultantsInner = () => {
               >
                 <Plus size={18} />
               </button>
-            ) : activeTab === 'branches' ? null : isWriteAuthorized ? (
+            ) : isWriteAuthorized ? (
               <button 
                 onClick={openAddModal} 
                 className="btn primary"
