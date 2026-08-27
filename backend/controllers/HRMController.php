@@ -1598,7 +1598,7 @@ class HRMController {
 
         // 3. Pending Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.created_by, u.full_name as employee_name, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.status, e.created_at,
+            SELECT e.id, e.created_by, u.full_name as employee_name, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3, e.status_level_1, e.status_level_2, e.status_level_3
             FROM expenses e
             JOIN users u ON e.created_by = u.id
@@ -1669,7 +1669,7 @@ class HRMController {
                     'title' => $displayTitle,
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
-                    'currency' => $e['currency'] ?? 'VND',
+                    'currency' => 'VND',
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
@@ -1815,7 +1815,7 @@ class HRMController {
 
         // 3. My Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, u.full_name as employee_name
+            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, u.full_name as employee_name
             FROM expenses e
             JOIN users u ON e.created_by = u.id
             WHERE e.created_by = ? AND e.deleted_at IS NULL
@@ -1844,7 +1844,7 @@ class HRMController {
                 'title' => $displayTitle,
                 'description' => $displayDesc,
                 'amount' => (float)$e['amount'],
-                'currency' => $e['currency'] ?? 'VND',
+                'currency' => 'VND',
                 'category' => $e['category'] ?? 'Vận hành',
                 'date' => $e['date'] ?? null,
                 'notes' => $e['notes'] ?? '',
@@ -1993,7 +1993,7 @@ class HRMController {
 
         // 3. Expenses where user is in related_user_ids
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
+            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
             FROM expenses e
             JOIN users u ON e.created_by = u.id
             WHERE e.tenant_id = ? AND e.deleted_at IS NULL
@@ -2030,7 +2030,7 @@ class HRMController {
                     'title' => $displayTitle,
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
-                    'currency' => $e['currency'] ?? 'VND',
+                    'currency' => 'VND',
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
@@ -2153,7 +2153,7 @@ class HRMController {
 
         // 3. All Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
+            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.status, e.created_at, e.approver_id, e.approver_id_2, e.approver_id_3, e.created_by as user_id, e.related_user_ids, u.full_name as employee_name
             FROM expenses e
             JOIN users u ON e.created_by = u.id
             WHERE e.tenant_id = ? AND e.deleted_at IS NULL
@@ -2197,7 +2197,7 @@ class HRMController {
                     'title' => $displayTitle,
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
-                    'currency' => $e['currency'] ?? 'VND',
+                    'currency' => 'VND',
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
