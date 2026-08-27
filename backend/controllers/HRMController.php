@@ -2387,31 +2387,6 @@ class HRMController {
         });
 
         return $all;
-    }           'employee_name' => $e['employee_name'],
-                    'user_id' => (int)$e['user_id'],
-                    'approver_id' => (int)($e['approver_id'] ?? 0),
-                    'approver_id_2' => (int)($e['approver_id_2'] ?? 0),
-                    'approver_id_3' => (int)($e['approver_id_3'] ?? 0),
-                    'related_user_ids' => $relArr,
-                    'title' => $displayTitle,
-                    'description' => $displayDesc,
-                    'amount' => (float)$e['amount'],
-                    'currency' => 'VND',
-                    'category' => $e['category'] ?? 'Vận hành',
-                    'date' => $e['date'] ?? null,
-                    'notes' => $e['notes'] ?? '',
-                    'status' => $e['status'],
-                    'created_at' => $e['created_at']
-                ];
-            }
-        }
-
-        // Sort by created_at DESC
-        usort($all, function($a, $b) {
-            return strcmp($b['created_at'], $a['created_at']);
-        });
-
-        respond(200, $all);
     }
 
     public function savePayroll(array $auth): void {
