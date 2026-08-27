@@ -308,6 +308,9 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   };
 
   const filteredUsers = users.filter(u => {
+    if (currentUser && u.id === currentUser.id) {
+      return false;
+    }
     const name = u.full_name ? String(u.full_name).toLowerCase() : '';
     const role = u.role ? String(u.role).toLowerCase() : '';
     const username = (u as any).username ? String((u as any).username).toLowerCase() : '';
