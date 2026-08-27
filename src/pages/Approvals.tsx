@@ -6663,20 +6663,23 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       try {
         if (item.type === 'leave') {
           const res = await fetchAPI('hrm/leaves');
-          const found = res?.data?.find((l: any) => l.id === item.id);
-          if (active) setDetail(found);
+          const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
+          const found = list.find((l: any) => l.id === item.id);
+          if (active && found) setDetail(found);
         } else if (item.type === 'advance') {
           const res = await fetchAPI('hrm/advances');
-          const found = res?.data?.find((a: any) => a.id === item.id);
-          if (active) setDetail(found);
+          const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
+          const found = list.find((a: any) => a.id === item.id);
+          if (active && found) setDetail(found);
         } else if (item.type === 'expense') {
           const res = await api.get(`/expenses/${item.id}`);
           const found = res?.data?.data || res?.data;
           if (active && found) setDetail(found);
         } else if (item.type === 'checkin') {
           const res = await api.get('/check-ins');
-          const found = res?.data?.data?.find((c: any) => c.id === item.id);
-          if (active) setDetail(found);
+          const list = Array.isArray(res?.data?.data) ? res.data.data : (res?.data?.data?.items || res?.data?.items || res?.data || []);
+          const found = Array.isArray(list) ? list.find((c: any) => c.id === item.id) : null;
+          if (active && found) setDetail(found);
         } else if (item.type === 'attendance_bulk') {
           const res = await api.get(`/check-ins/bulk-requests/${item.id}`);
           const bulkData = res?.data?.data || res?.data;
