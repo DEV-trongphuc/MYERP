@@ -284,11 +284,21 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           related_user_ids: relatedUserIds
         };
       } else if (createLeaveType === 'late_early') {
-        const fromStr = `${lateEarlyDateField}T${lateEarlyTimeField}`;
-        const fromDateObj = new Date(fromStr);
-        const toDateObj = new Date(fromDateObj.getTime() + lateEarlyMinutesField * 60 * 1000);
-        const toStr = toDateObj.toISOString().slice(0, 16);
-        const descStr = `[Đăng ký ${lateEarlyTypeField === 'late' ? 'Đi muộn' : 'Về sớm'}] Thời gian: ${lateEarlyTimeField} (${lateEarlyMinutesField} phút). Lý do: ${leaveReasonField}`;
+        const d = lateEarlyDateField ? lateEarlyDateField.split('T')[0] : new Date().toISOString().split('T')[0];
+        const timeVal = lateEarlyTimeField || (lateEarlyTypeField === 'early' ? '16:30' : '08:00');
+        const [sh, sm] = timeVal.split(':').map(Number);
+        const startH = isNaN(sh) ? (lateEarlyTypeField === 'early' ? 16 : 8) : sh;
+        const startM = isNaN(sm) ? 30 : sm;
+        const totalStartMin = startH * 60 + startM;
+        const totalEndMin = totalStartMin + (lateEarlyMinutesField || 30);
+        const endHStr = String(Math.floor(totalEndMin / 60) % 24).padStart(2, '0');
+        const endMStr = String(totalEndMin % 60).padStart(2, '0');
+        const startHStr = String(startH).padStart(2, '0');
+        const startMStr = String(startM).padStart(2, '0');
+
+        const fromStr = `${d} ${startHStr}:${startMStr}:00`;
+        const toStr = `${d} ${endHStr}:${endMStr}:00`;
+        const descStr = `[Đăng ký ${lateEarlyTypeField === 'late' ? 'Đi muộn' : 'Về sớm'}] Thời gian: ${startHStr}:${startMStr} - ${endHStr}:${endMStr} (${lateEarlyMinutesField || 30} phút). Lý do: ${leaveReasonField}`;
         
         payload = {
           leave_type: 'late_early',
@@ -2832,128 +2842,191 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           )}
 
           {/* Form Fields: Đi muộn / Về sớm */}
-          {createLeaveType === 'late_early' && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Loại đăng ký')}
-                  </label>
-                  <CustomSelect
-                    value={lateEarlyTypeField}
-                    onChange={setLateEarlyTypeField}
-                    options={[
-                      { value: 'late', label: t('Đi muộn') },
-                      { value: 'early', label: t('Về sớm') }
-                    ]}
-                    width="100%"
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Số phút đăng ký')}
-                  </label>
-                  {isCustomMinutesMode ? (
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input
-                        type="number"
-                        className="leave-modal-input"
-                        value={lateEarlyMinutesField}
-                        onChange={e => setLateEarlyMinutesField(Number(e.target.value))}
-                        placeholder={t('Nhập số phút...')}
-                        min={1}
-                        max={180}
-                        style={{ flex: 1 }}
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCustomMinutesMode(false);
-                          setLateEarlyMinutesField(30);
-                        }}
-                        style={{
-                          height: '38px', padding: '0 12px', borderRadius: '8px', border: '1px solid var(--color-border)',
-                          fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer', background: 'var(--color-bg-light)', color: 'var(--color-text)',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        {t('Mẫu')}
-                      </button>
-                    </div>
-                  ) : (
+          {createLeaveType === 'late_early' && (() => {
+            const userDefaultIn = (user as any)?.work_start_time ? String((user as any).work_start_time).substring(0, 5) : '08:00';
+            const userDefaultOut = (user as any)?.work_end_time ? String((user as any).work_end_time).substring(0, 5) : '17:00';
+
+            const [sh, sm] = (lateEarlyTimeField || (lateEarlyTypeField === 'early' ? '16:30' : userDefaultIn)).split(':').map(Number);
+            const startH = isNaN(sh) ? 8 : sh;
+            const startM = isNaN(sm) ? 0 : sm;
+            const totalStartMin = startH * 60 + startM;
+            const totalEndMin = totalStartMin + (lateEarlyMinutesField || 30);
+            const endHStr = String(Math.floor(totalEndMin / 60) % 24).padStart(2, '0');
+            const endMStr = String(totalEndMin % 60).padStart(2, '0');
+            const computedEndTime = `${endHStr}:${endMStr}`;
+
+            const handleMinutesChange = (newMin: number) => {
+              setLateEarlyMinutesField(newMin);
+              if (lateEarlyTypeField === 'early') {
+                const [eh, em] = userDefaultOut.split(':').map(Number);
+                const totalOutMin = (isNaN(eh) ? 17 : eh) * 60 + (isNaN(em) ? 0 : em);
+                const earlyStartMin = Math.max(0, totalOutMin - newMin);
+                const ehStr = String(Math.floor(earlyStartMin / 60) % 24).padStart(2, '0');
+                const emStr = String(earlyStartMin % 60).padStart(2, '0');
+                setLateEarlyTimeField(`${ehStr}:${emStr}`);
+              }
+            };
+
+            return (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Loại đăng ký')}
+                    </label>
                     <CustomSelect
-                      value={String(lateEarlyMinutesField)}
-                      onChange={val => {
-                        if (val === 'custom') {
-                          setIsCustomMinutesMode(true);
-                          setLateEarlyMinutesField(30);
-                        } else {
-                          setLateEarlyMinutesField(Number(val));
+                      value={lateEarlyTypeField}
+                      onChange={(val: any) => {
+                        setLateEarlyTypeField(val);
+                        if (val === 'late') {
+                          setLateEarlyTimeField(userDefaultIn);
+                        } else if (val === 'early') {
+                          const [eh, em] = userDefaultOut.split(':').map(Number);
+                          const totalOutMin = (isNaN(eh) ? 17 : eh) * 60 + (isNaN(em) ? 0 : em);
+                          const earlyStartMin = Math.max(0, totalOutMin - (lateEarlyMinutesField || 30));
+                          const ehStr = String(Math.floor(earlyStartMin / 60) % 24).padStart(2, '0');
+                          const emStr = String(earlyStartMin % 60).padStart(2, '0');
+                          setLateEarlyTimeField(`${ehStr}:${emStr}`);
                         }
                       }}
                       options={[
-                        { value: '30', label: t('30 phút') },
-                        { value: '60', label: t('60 phút') },
-                        { value: '90', label: t('90 phút') },
-                        { value: '120', label: t('120 phút') },
-                        { value: '150', label: t('150 phút') },
-                        { value: '180', label: t('180 phút (3 tiếng)') },
-                        { value: 'custom', label: t('Tự nhập số khác...') }
+                        { value: 'late', label: `🚶‍♂️ ${t('Đi muộn')} (${t('Ca sáng')})` },
+                        { value: 'early', label: `🏃‍♂️ ${t('Về sớm')} (${t('Ca chiều')})` }
                       ]}
                       width="100%"
                     />
-                  )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Số phút đăng ký')}
+                    </label>
+                    {isCustomMinutesMode ? (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="number"
+                          className="leave-modal-input"
+                          value={lateEarlyMinutesField}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            handleMinutesChange(val);
+                          }}
+                          placeholder={t('Nhập số phút...')}
+                          min={1}
+                          max={180}
+                          style={{ flex: 1 }}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomMinutesMode(false);
+                            handleMinutesChange(30);
+                          }}
+                          style={{
+                            height: '38px', padding: '0 12px', borderRadius: '8px', border: '1px solid var(--color-border)',
+                            fontSize: '0.725rem', fontWeight: 700, cursor: 'pointer', background: 'var(--color-bg-light)', color: 'var(--color-text)',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {t('Mẫu')}
+                        </button>
+                      </div>
+                    ) : (
+                      <CustomSelect
+                        value={String(lateEarlyMinutesField)}
+                        onChange={(val: any) => {
+                          if (val === 'custom') {
+                            setIsCustomMinutesMode(true);
+                            handleMinutesChange(30);
+                          } else {
+                            handleMinutesChange(Number(val));
+                          }
+                        }}
+                        options={[
+                          { value: '30', label: t('30 phút') },
+                          { value: '60', label: t('60 phút (1 giờ)') },
+                          { value: '90', label: t('90 phút') },
+                          { value: '120', label: t('120 phút (2 giờ)') },
+                          { value: '150', label: t('150 phút (2.5 giờ)') },
+                          { value: '180', label: t('180 phút (3 giờ)') },
+                          { value: 'custom', label: t('Tự nhập số khác...') }
+                        ]}
+                        width="100%"
+                      />
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Ngày đăng ký')}
-                  </label>
-                  <input
-                    type="date"
-                    className="leave-modal-input"
-                    value={lateEarlyDateField}
-                    onChange={e => setLateEarlyDateField(e.target.value)}
-                    required
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Ngày đăng ký')}
+                    </label>
+                    <input
+                      type="date"
+                      className="leave-modal-input"
+                      value={lateEarlyDateField}
+                      onChange={e => setLateEarlyDateField(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {lateEarlyTypeField === 'late' 
+                        ? `${t('Giờ bắt đầu vào ca')} (${t('Quy định')}: ${userDefaultIn})` 
+                        : `${t('Giờ rời công ty')} (${t('Tan ca')}: ${userDefaultOut})`}
+                    </label>
+                    <input
+                      type="time"
+                      className="leave-modal-input"
+                      value={lateEarlyTimeField}
+                      onChange={e => setLateEarlyTimeField(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Giờ dự kiến')}
-                  </label>
-                  <input
-                    type="time"
-                    className="leave-modal-input"
-                    value={lateEarlyTimeField}
-                    onChange={e => setLateEarlyTimeField(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
 
-              {/* Rule 6 Warning Block in UI */}
-              {lateEarlyMinutesField > 180 && (
+                {/* Smart Preview Banner */}
                 <div style={{
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  border: '1px solid rgba(239, 68, 68, 0.15)',
-                  color: '#ef4444',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: lateEarlyTypeField === 'late' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                  border: lateEarlyTypeField === 'late' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(245, 158, 11, 0.25)',
+                  color: lateEarlyTypeField === 'late' ? '#1d4ed8' : '#b45309',
+                  fontSize: '0.8125rem',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
                 }}>
-                  <AlertCircle size={14} />
-                  <span>{t('Thời gian đi muộn/về sớm không được vượt quá 3 tiếng (180 phút). Vui lòng làm đơn xin nghỉ phép!')}</span>
+                  <Clock size={16} />
+                  <span>
+                    {lateEarlyTypeField === 'late'
+                      ? `Ca sáng bắt đầu lúc ${userDefaultIn}. Đăng ký đi muộn ${lateEarlyMinutesField || 30} phút ➔ Dự kiến có mặt lúc ${computedEndTime}.`
+                      : `Ca chiều kết thúc lúc ${userDefaultOut}. Đăng ký về sớm ${lateEarlyMinutesField || 30} phút ➔ Dự kiến rời công ty lúc ${lateEarlyTimeField}.`}
+                  </span>
                 </div>
-              )}
-            </>
-          )}
+
+                {/* Rule 6 Warning Block in UI */}
+                {lateEarlyMinutesField > 180 && (
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.15)',
+                    color: '#ef4444',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <AlertCircle size={15} />
+                    <span>{t('Không được đi muộn/về sớm quá 3 tiếng (180 phút). Vui lòng làm đơn xin nghỉ phép!')}</span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Form Fields: Tăng ca */}
           {createLeaveType === 'overtime' && (
