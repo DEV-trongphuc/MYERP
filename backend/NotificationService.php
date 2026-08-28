@@ -276,12 +276,16 @@ class NotificationService {
 
             case 'ATTENDANCE_UPDATE':
                 $recipients = self::getAdminsAndManagers($db, $tenantId, $payload['team_id'] ?? null);
+                $isBulk = !empty($payload['is_bulk']);
+                $bulkLink = $isBulk && !empty($payload['ref_id']) 
+                    ? "/approvals?open_id=" . $payload['ref_id'] . "&open_type=attendance_bulk" 
+                    : "/attendance?view=calendar&date=" . $today;
                 return [
                     'recipients' => $recipients,
                     'title' => "Yêu cầu cập nhật công",
                     'body' => "Nhân viên " . $userName . " vừa gửi Yêu cầu cập nhật công bổ sung ngày " . $today . " lúc " . substr($time, 0, 5) . " với lý do: \"" . $reason . "\"",
                     'type' => "attendance_update",
-                    'link' => "/attendance?view=calendar&date=" . $today,
+                    'link' => $bulkLink,
                     'zalo_msg' => "🔄 [ YÊU CẦU CẬP NHẬT CÔNG ]\n\n"
                         . "Nhân viên $userName vừa gửi Yêu cầu cập nhật công ngày $today:\n"
                         . "  • Tên NV: $userName\n"
@@ -872,12 +876,15 @@ class NotificationService {
                     $recipients = self::getApproversForEvent($db, $tenantId, 'leave', $submitterId);
                 }
                 $leaveDate = $payload['leave_date'] ?? $today;
+                $leaveLink = !empty($payload['ref_id']) 
+                    ? "/approvals?open_id=" . $payload['ref_id'] . "&open_type=leave" 
+                    : "/attendance";
                 return [
                     'recipients' => $recipients,
                     'title' => "Đơn xin nghỉ phép mới",
                     'body' => "Nhân viên " . $userName . " đã gửi đơn xin nghỉ phép ngày " . $leaveDate . " với lý do: \"" . $reason . "\"",
                     'type' => "leave",
-                    'link' => "/attendance",
+                    'link' => $leaveLink,
                     'zalo_msg' => "🏖️ [ ĐƠN XIN NGHỈ PHÉP MỚI ]\n\n"
                         . "Nhân viên $userName vừa gửi đơn xin nghỉ phép:\n"
                         . "  • Ngày nghỉ: $leaveDate\n"

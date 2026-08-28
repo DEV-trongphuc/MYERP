@@ -213,7 +213,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
 
   // Chặn ra ca trước khi ca sáng bắt đầu
   const isBlockedEarlyCheckOut = isCheckOutMode && isBeforeMorningStart;
-  // Chặn vào ca sau khi đã quá giờ tan ca hôm nay
+  // Chặn vào ca sau khi đã quá giờ tan ca hôm nay (yêu cầu tạo phiếu giải trình / bổ sung)
   const isBlockedLateCheckIn = !isCheckOutMode && (!todayCheckIn || todayCheckIn.status === 'rejected') && isAfterShiftEnd;
 
   const checkIsLate = () => {
@@ -409,7 +409,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       const video = videoRef.current;
       if (video.readyState >= 2 && video.videoWidth > 0) {
         let detected = false;
-        let detectionConfidence = 35; // progress jump per tick
+        const detectionConfidence = 3.4; // ~3.0s (30 ticks * 100ms) for smooth 3-2-1 countdown
 
         // 1. Native FaceDetector API (Chrome / Edge / Android) -> ultra fast (15ms)
         if ('FaceDetector' in window) {
@@ -418,7 +418,6 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             const faces = await detector.detect(video);
             if (faces && faces.length > 0) {
               detected = true;
-              detectionConfidence = 40;
             }
           } catch (e) {}
         }
@@ -438,7 +437,6 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             }
             if (skinPixelCount > (data.length / 4) * 0.12) {
               detected = true;
-              detectionConfidence = 35;
             }
           } catch (e) {}
         }
@@ -448,7 +446,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             const next = prev + detectionConfidence;
             if (next >= 100 && !autoCapturedRef.current) {
               autoCapturedRef.current = true;
-              setScanStatusText(t('Đã phát hiện khuôn mặt! Đang tự động chụp...'));
+              setScanStatusText(t('Đã nhận diện! Đang chụp ảnh...'));
               
               setTimeout(async () => {
                 const snap = await takeSnapshotDirect();
@@ -465,18 +463,24 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
               }, 60);
               return 100;
             }
-            setScanStatusText(t('Đã tìm thấy khuôn mặt... Giữ yên!'));
+            if (next >= 68) {
+              setScanStatusText(t('Giữ yên khuôn mặt... (1s)'));
+            } else if (next >= 34) {
+              setScanStatusText(t('Giữ yên khuôn mặt... (2s)'));
+            } else {
+              setScanStatusText(t('Giữ yên khuôn mặt... (3s)'));
+            }
             return next;
           });
         } else {
-          setFaceScanProgress(prev => Math.max(0, prev - 15));
+          setFaceScanProgress(prev => Math.max(0, prev - 6));
           setScanStatusText(t('Đưa khuôn mặt vào hình bầu dục...'));
         }
       }
       isDetecting = false;
     };
 
-    intervalId = setInterval(detectFaceFrame, 140);
+    intervalId = setInterval(detectFaceFrame, 100);
 
     return () => {
       clearInterval(intervalId);
@@ -975,8 +979,33 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                           border: faceScanProgress > 60 ? '2px dashed #10b981' : '2px dashed rgba(255,255,255,0.4)',
                           boxShadow: faceScanProgress > 60 ? '0 0 20px rgba(16, 185, 129, 0.3)' : 'none',
                           pointerEvents: 'none',
-                          transition: 'all 0.3s ease'
-                        }} />
+                          transition: 'all 0.3s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {/* 3-2-1 Countdown Indicator */}
+                          {faceScanProgress > 5 && faceScanProgress < 100 && (
+                            <div style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              background: 'rgba(16, 185, 129, 0.85)',
+                              backdropFilter: 'blur(8px)',
+                              color: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1.5rem',
+                              fontWeight: 900,
+                              boxShadow: '0 0 24px rgba(16, 185, 129, 0.8)',
+                              border: '2px solid rgba(255, 255, 255, 0.6)',
+                              zIndex: 30
+                            }}>
+                              {faceScanProgress >= 68 ? '1' : faceScanProgress >= 34 ? '2' : '3'}
+                            </div>
+                          )}
+                        </div>
                       </>
                     )}
                   </>

@@ -1112,7 +1112,9 @@ class CheckInController {
                 NotificationService::send($this->db, 1, 'ATTENDANCE_UPDATE', [
                     'user_id' => $targetUid,
                     'user_name' => $userName,
-                    'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày)"
+                    'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày)",
+                    'ref_id' => $requestId,
+                    'is_bulk' => true
                 ]);
 
                 // Notify related persons
@@ -1123,7 +1125,9 @@ class CheckInController {
                             NotificationService::send($this->db, 1, 'ATTENDANCE_UPDATE', [
                                 'user_id' => $relUid,
                                 'user_name' => $userName,
-                                'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày) (Bạn được gắn là Người liên quan)"
+                                'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày) (Bạn được gắn là Người liên quan)",
+                                'ref_id' => $requestId,
+                                'is_bulk' => true
                             ]);
                         }
                     }
@@ -1509,4 +1513,22 @@ class CheckInController {
             }
         }
     }
+
+    public function show(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT c.*, u.full_name as employee_name, u.email as employee_email
+            FROM check_ins c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.id = ? AND u.tenant_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$id, $auth['tenant_id'] ?? 1]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy dữ liệu chấm công', false);
+            return;
+        }
+        respond(200, $row);
+    }
 }
+

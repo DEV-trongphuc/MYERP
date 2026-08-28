@@ -1407,11 +1407,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Ủy nhiệm chi / Chuyển khoản:</span>
                         <div 
-                          onClick={() => window.open(viewItem.refund_image_url.startsWith('http') ? viewItem.refund_image_url : `${import.meta.env.VITE_API_URL || '/backend'}${viewItem.refund_image_url}`, '_blank')}
+                          onClick={() => {
+                            const imgLink = viewItem.refund_image_url.startsWith('http') ? viewItem.refund_image_url : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${viewItem.refund_image_url.replace(/^\/?(backend\/)?/, '')}`;
+                            window.open(imgLink, '_blank');
+                          }}
                           style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
                         >
                           <img 
-                            src={viewItem.refund_image_url.startsWith('http') ? viewItem.refund_image_url : `${import.meta.env.VITE_API_URL || '/backend'}${viewItem.refund_image_url}`} 
+                            src={viewItem.refund_image_url.startsWith('http') ? viewItem.refund_image_url : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${viewItem.refund_image_url.replace(/^\/?(backend\/)?/, '')}`} 
                             alt="UNC" 
                             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
                           />
@@ -1452,7 +1455,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         <Loader2 size={24} className="spin text-primary" />
                       ) : refundImgUrl ? (
                         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                          <img src={refundImgUrl.startsWith('http') ? refundImgUrl : `${import.meta.env.VITE_API_URL || '/backend'}${refundImgUrl}`} alt="Refund proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img 
+                            src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
+                            alt="Refund proof" 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          />
                           <button 
                             style={{
                               position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0

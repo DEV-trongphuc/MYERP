@@ -142,6 +142,7 @@ class HRMController {
     // --- LEAVE REQUESTS ---
 
     public function indexLeaves(array $auth): void {
+        $userId = (int)$auth['user_id'];
         if ($this->isAdmin($auth)) {
             $stmt = $this->db->prepare("
                 SELECT l.*, u.full_name as employee_name
@@ -156,12 +157,46 @@ class HRMController {
                 SELECT l.*, u.full_name as employee_name
                 FROM hrm_leave_requests l
                 JOIN users u ON l.user_id = u.id
-                WHERE l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ?
+                WHERE l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?
                 ORDER BY l.created_at DESC
             ");
-            $stmt->execute([$auth['user_id'], $auth['user_id'], $auth['user_id'], '%"'.$auth['user_id'].'"%']);
+            $stmt->execute([$userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
         }
         respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    public function showLeave(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT l.*, u.full_name as employee_name, u.email as employee_email
+            FROM hrm_leave_requests l
+            JOIN users u ON l.user_id = u.id
+            WHERE l.id = ? AND u.tenant_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy đơn xin nghỉ phép', false);
+            return;
+        }
+
+        $userId = (int)$auth['user_id'];
+        $relArr = !empty($row['related_user_ids']) ? (is_array($row['related_user_ids']) ? $row['related_user_ids'] : json_decode($row['related_user_ids'], true)) : [];
+        if (!is_array($relArr)) $relArr = [];
+        $relArr = array_map('intval', $relArr);
+
+        $hasPermission = $this->isAdmin($auth) ||
+            (int)$row['user_id'] === $userId ||
+            (int)$row['approver_id'] === $userId ||
+            (int)($row['approver_id_2'] ?? 0) === $userId ||
+            in_array($userId, $relArr, true);
+
+        if (!$hasPermission) {
+            respond(403, null, 'Bạn không có quyền xem đơn này', false);
+            return;
+        }
+
+        respond(200, $row);
     }
 
     public function createLeave(array $auth): void {
@@ -564,6 +599,7 @@ class HRMController {
     // --- SALARY ADVANCES ---
 
     public function indexAdvances(array $auth): void {
+        $userId = (int)$auth['user_id'];
         if ($this->isAdmin($auth)) {
             $stmt = $this->db->prepare("
                 SELECT a.*, u.full_name as employee_name
@@ -578,12 +614,46 @@ class HRMController {
                 SELECT a.*, u.full_name as employee_name
                 FROM hrm_salary_advances a
                 JOIN users u ON a.user_id = u.id
-                WHERE a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ?
+                WHERE a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?
                 ORDER BY a.created_at DESC
             ");
-            $stmt->execute([$auth['user_id'], $auth['user_id'], $auth['user_id'], '%"'.$auth['user_id'].'"%']);
+            $stmt->execute([$userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
         }
         respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    public function showAdvance(array $auth, int $id): void {
+        $stmt = $this->db->prepare("
+            SELECT a.*, u.full_name as employee_name, u.email as employee_email
+            FROM hrm_salary_advances a
+            JOIN users u ON a.user_id = u.id
+            WHERE a.id = ? AND u.tenant_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy đề nghị tạm ứng', false);
+            return;
+        }
+
+        $userId = (int)$auth['user_id'];
+        $relArr = !empty($row['related_user_ids']) ? (is_array($row['related_user_ids']) ? $row['related_user_ids'] : json_decode($row['related_user_ids'], true)) : [];
+        if (!is_array($relArr)) $relArr = [];
+        $relArr = array_map('intval', $relArr);
+
+        $hasPermission = $this->isAdmin($auth) ||
+            (int)$row['user_id'] === $userId ||
+            (int)$row['approver_id'] === $userId ||
+            (int)($row['approver_id_2'] ?? 0) === $userId ||
+            in_array($userId, $relArr, true);
+
+        if (!$hasPermission) {
+            respond(403, null, 'Bạn không có quyền xem đề xuất này', false);
+            return;
+        }
+
+        respond(200, $row);
     }
 
     public function createAdvance(array $auth): void {

@@ -449,11 +449,16 @@ require_once __DIR__ . '/controllers/WorkflowTaskTemplateController.php';
 require_once __DIR__ . '/controllers/PostController.php';
 
 // ── Parse route ───────────────────────────────────────────────
-$requestUri = strtok($_SERVER['REQUEST_URI'], '?');
-// Auto-detect base path: works for /ideas, /backend, /crm, /CRM/backend, /index.php
-$requestUri = preg_replace('#^.*/(backend|ideas|crm)(/index\.php)?#i', '', $requestUri);
-$requestUri = preg_replace('#^/index\.php#i', '', $requestUri);
-$path       = trim($requestUri, '/');
+$rawAction = $_GET['action'] ?? '';
+if (!empty($rawAction)) {
+    $path = trim(urldecode($rawAction), '/');
+} else {
+    $requestUri = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
+    // Auto-detect base path: works for /ideas, /backend, /crm, /CRM/backend, /index.php
+    $requestUri = preg_replace('#^.*/(backend|ideas|crm)(/index\.php)?#i', '', $requestUri);
+    $requestUri = preg_replace('#^/index\.php#i', '', $requestUri);
+    $path       = trim(urldecode($requestUri), '/');
+}
 $segments   = array_values(array_filter(explode('/', $path)));
 
 $method        = $_SERVER['REQUEST_METHOD'];
@@ -805,12 +810,25 @@ switch ($resource) {
         elseif ($resourceId === 'leaves' && $subResource && ($segments[3] ?? '') === 'comments' && $method === 'GET') $ctrl->getLeaveComments($auth, (int)$subResource);
         elseif ($resourceId === 'leaves' && $subResource && ($segments[3] ?? '') === 'comments' && $method === 'POST') $ctrl->addLeaveComment($auth, (int)$subResource);
         elseif ($resourceId === 'advances' && $subResource && ($segments[3] ?? '') === 'comments' && $method === 'GET') $ctrl->getAdvanceComments($auth, (int)$subResource);
-        elseif ($resourceId === 'advances' && $subResource && ($segments[3] ?? '') === 'comments' && $method === 'POST') $ctrl->addAdvanceComment($auth, (int)$subResource);
-        elseif ($resourceId === 'leaves' && $method === 'GET') $ctrl->indexLeaves($auth);
+        elseif ($resourceId === 'leaves' && $subResource && is_numeric($subResource) && $method === 'GET') $ctrl->showLeave($auth, (int)$subResource);
+        elseif ($resourceId === 'leaves' && $method === 'GET') {
+            if (!empty($_GET['id']) && is_numeric($_GET['id'])) {
+                $ctrl->showLeave($auth, (int)$_GET['id']);
+            } else {
+                $ctrl->indexLeaves($auth);
+            }
+        }
         elseif ($resourceId === 'leaves' && $method === 'POST') $ctrl->createLeave($auth);
         elseif ($resourceId === 'leaves' && $method === 'PUT') $ctrl->approveLeave($auth);
         elseif ($resourceId === 'leaves' && $method === 'DELETE' && $subResource) $ctrl->deleteLeave($auth, (int)$subResource);
-        elseif ($resourceId === 'advances' && $method === 'GET') $ctrl->indexAdvances($auth);
+        elseif ($resourceId === 'advances' && $subResource && is_numeric($subResource) && $method === 'GET') $ctrl->showAdvance($auth, (int)$subResource);
+        elseif ($resourceId === 'advances' && $method === 'GET') {
+            if (!empty($_GET['id']) && is_numeric($_GET['id'])) {
+                $ctrl->showAdvance($auth, (int)$_GET['id']);
+            } else {
+                $ctrl->indexAdvances($auth);
+            }
+        }
         elseif ($resourceId === 'advances' && $method === 'POST') $ctrl->createAdvance($auth);
         elseif ($resourceId === 'advances' && $method === 'PUT') $ctrl->approveAdvance($auth);
         elseif ($resourceId === 'advances' && $method === 'DELETE' && $subResource) $ctrl->deleteAdvance($auth, (int)$subResource);
@@ -1287,6 +1305,7 @@ switch ($resource) {
             $ctrl->addCheckinComments($auth, (int)$resourceId);
         } else {
             if     (!$resourceId && $method === 'GET')    $ctrl->index($auth);
+            elseif ($resourceId && is_numeric($resourceId) && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
             elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
             elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
             elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);

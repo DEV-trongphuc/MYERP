@@ -90,9 +90,29 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
     if (item.action === 'CREATE') {
       actionLabel = t('Tạo phiếu chi đề xuất');
       actionColor = '#2563eb';
+    } else if (item.action === 'REFUND_CONFIRM') {
+      actionLabel = t('Xác nhận đã thanh toán & đính kèm chứng từ/UNC');
+      actionColor = '#10b981';
+    } else if (item.action === 'UPDATE_ATTACHMENT') {
+      actionLabel = t('Cập nhật tài liệu / chứng từ đính kèm');
+      actionColor = '#8b5cf6';
     } else if (item.action === 'UPDATE') {
-      actionLabel = t('Cập nhật nội dung chi');
-      actionColor = '#f59e0b';
+      try {
+        const parsed = JSON.parse(item.new_data || '{}');
+        if (parsed.is_refunded || parsed.refund_image_url) {
+          actionLabel = t('Xác nhận đã thanh toán & đính kèm chứng từ/UNC');
+          actionColor = '#10b981';
+        } else if (parsed.image_url && Object.keys(parsed).length <= 2) {
+          actionLabel = t('Cập nhật tài liệu / chứng từ đính kèm');
+          actionColor = '#8b5cf6';
+        } else {
+          actionLabel = t('Cập nhật nội dung chi');
+          actionColor = '#f59e0b';
+        }
+      } catch (e) {
+        actionLabel = t('Cập nhật nội dung chi');
+        actionColor = '#f59e0b';
+      }
     } else if (item.action === 'APPROVE') {
       let statusText = t('phê duyệt');
       try {

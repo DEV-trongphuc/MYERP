@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Intercept OOP controller routes and bridge them to index.php
-$action = $_GET['action'] ?? '';
+$action = urldecode($_GET['action'] ?? '');
 
 // Self-healing check for actions passing query parameters using '?' instead of '&'
 if (strpos($action, '?') !== false) {

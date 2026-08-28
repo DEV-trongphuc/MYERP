@@ -1513,8 +1513,8 @@ export default function Approvals() {
   useEffect(() => {
     const handleOpenDrawerEvent = (e: any) => {
       const { id, type, status } = e.detail || {};
-      if (id) {
-        const numId = Number(id);
+      const numId = Number(id);
+      if (id && !isNaN(numId) && numId > 0) {
         pendingOpenRef.current = { id: numId, type: type || undefined, status: status || undefined };
         
         const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
@@ -1576,7 +1576,7 @@ export default function Approvals() {
         setShowCreateModal(true);
       }
       navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
-    } else if (openId) {
+    } else if (openId && !isNaN(Number(openId)) && Number(openId) > 0) {
       const numId = Number(openId);
       pendingOpenRef.current = { id: numId, type: openType || undefined, status: openStatus || undefined };
       
@@ -6929,31 +6929,77 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   useEffect(() => {
     let active = true;
     const fetchDetail = async () => {
+      if (!item || !item.id || item.id <= 0) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         if (item.type === 'leave') {
-          const res = await fetchAPI('hrm/leaves');
-          const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
-          const found = list.find((l: any) => l.id === item.id);
-          if (active && found) setDetail(found);
+          try {
+            const res = await api.get(`/hrm/leaves?id=${item.id}`);
+            const found = res?.data?.data || res?.data;
+            if (active && found && found.id) {
+              setDetail(found);
+              return;
+            }
+          } catch (err) {}
+          const listRes = await fetchAPI('hrm/leaves');
+          const list = Array.isArray(listRes?.data) ? listRes.data : (listRes?.data?.items || []);
+          const foundInList = list.find((l: any) => l.id === item.id);
+          if (active && foundInList) setDetail(foundInList);
         } else if (item.type === 'advance') {
-          const res = await fetchAPI('hrm/advances');
-          const list = Array.isArray(res?.data) ? res.data : (res?.data?.items || []);
-          const found = list.find((a: any) => a.id === item.id);
-          if (active && found) setDetail(found);
+          try {
+            const res = await api.get(`/hrm/advances?id=${item.id}`);
+            const found = res?.data?.data || res?.data;
+            if (active && found && found.id) {
+              setDetail(found);
+              return;
+            }
+          } catch (err) {}
+          const listRes = await fetchAPI('hrm/advances');
+          const list = Array.isArray(listRes?.data) ? listRes.data : (listRes?.data?.items || []);
+          const foundInList = list.find((a: any) => a.id === item.id);
+          if (active && foundInList) setDetail(foundInList);
         } else if (item.type === 'expense') {
           const res = await api.get(`/expenses/${item.id}`);
           const found = res?.data?.data || res?.data;
           if (active && found) setDetail(found);
-        } else if (item.type === 'checkin') {
-          const res = await api.get('/check-ins');
-          const list = Array.isArray(res?.data?.data) ? res.data.data : (res?.data?.data?.items || res?.data?.items || res?.data || []);
-          const found = Array.isArray(list) ? list.find((c: any) => c.id === item.id) : null;
-          if (active && found) setDetail(found);
-        } else if (item.type === 'attendance_bulk') {
-          const res = await api.get(`/check-ins/bulk-requests/${item.id}`);
-          const bulkData = res?.data?.data || res?.data;
-          if (active && bulkData) setDetail(bulkData);
+        } else if (item.type === 'checkin' || item.type === 'attendance_bulk') {
+          if (item.type === 'attendance_bulk') {
+            try {
+              const res = await api.get(`/check-ins/bulk-requests/${item.id}`);
+              const bulkData = res?.data?.data || res?.data;
+              if (active && bulkData && (bulkData.id || bulkData.details)) {
+                setDetail(bulkData);
+                return;
+              }
+            } catch (err) {}
+          } else {
+            try {
+              const res = await api.get(`/check-ins/${item.id}`);
+              const found = res?.data?.data || res?.data;
+              if (active && found && found.id) {
+                setDetail(found);
+                return;
+              }
+            } catch (err) {}
+          }
+          // Secondary fallback for cross-type requests
+          try {
+            const bulkRes = await api.get(`/check-ins/bulk-requests/${item.id}`);
+            const bulkData = bulkRes?.data?.data || bulkRes?.data;
+            if (active && bulkData && (bulkData.id || bulkData.details)) {
+              setDetail(bulkData);
+              return;
+            }
+          } catch (err) {}
+          try {
+            const listRes = await api.get('/check-ins');
+            const list = Array.isArray(listRes?.data?.data) ? listRes.data.data : (listRes?.data?.data?.items || listRes?.data?.items || listRes?.data || []);
+            const foundInList = Array.isArray(list) ? list.find((c: any) => c.id === item.id) : null;
+            if (active && foundInList) setDetail(foundInList);
+          } catch (err) {}
         }
       } catch (e) {
         console.error(e);
@@ -7534,14 +7580,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       .trim();
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', textAlign: 'left' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '1rem' : '1.25rem', textAlign: 'left' }}>
         
         {/* Proposal Title Header */}
-        <div style={{ padding: '0.5rem 0.25rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', lineHeight: 1.3 }}>
+        <div style={{ padding: isMobile ? '0.25rem 0' : '0.5rem 0.25rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <h2 style={{ fontSize: isMobile ? '1.05rem' : '1.35rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', lineHeight: isMobile ? 1.35 : 1.3 }}>
             {cleanHeaderTitle}
           </h2>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: isMobile ? '8px' : '12px', alignItems: 'center', fontSize: isMobile ? '0.725rem' : '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
             <span>
               {t('Ngày lập đề xuất')}: <strong style={{ color: 'var(--color-text)' }}>{new Date(detail?.created_at || item.created_at).toLocaleString('vi-VN')}</strong>
             </span>
@@ -7552,8 +7598,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           </div>
         </div>
 
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '10px' : '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: isMobile ? '12px' : '16px', padding: isMobile ? '1rem' : '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+          <div style={{ fontSize: isMobile ? '0.68rem' : '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
             {t('Thông tin chi tiết đề xuất')}
           </div>
 
@@ -7569,9 +7615,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const periodLabel = isWFH ? t('Thời gian làm việc từ xa') : (isOT ? t('Thời gian tăng ca') : (isLateEarly ? t('Thời gian áp dụng') : (isBusinessTrip ? t('Thời gian công tác') : t('Thời gian nghỉ'))));
 
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{typeLabel}</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{typeLabel}</label>
                   <CustomSelect
                     value={detail?.leave_type || 'annual'}
                     onChange={() => {}}
@@ -7590,33 +7636,33 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     width="100%"
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{durationLabel}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{durationLabel}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={`${detail?.total_days || 1} ngày`}
                     disabled
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{periodLabel}</label>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{periodLabel}</label>
+                  <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', alignItems: 'center' }}>
                     <input
                       type="text"
                       className="form-input"
                       value={detail?.start_date ? new Date(detail.start_date).toLocaleDateString('vi-VN') : ''}
                       disabled
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                     />
-                    <span style={{ color: 'var(--color-text-muted)' }}>➔</span>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>➔</span>
                     <input
                       type="text"
                       className="form-input"
                       value={detail?.end_date ? new Date(detail.end_date).toLocaleDateString('vi-VN') : ''}
                       disabled
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                     />
                   </div>
                 </div>
@@ -7625,23 +7671,25 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           })()}
 
           {item.type === 'advance' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền tạm ứng')}</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền tạm ứng')}</label>
                 <input
                   type="text"
                   className="form-input"
                   value={formatApprovalCurrency(detail?.amount || 0, detail?.currency || item?.currency || 'VND')}
                   disabled
+                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày đề nghị')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày đề nghị')}</label>
                 <input
                   type="text"
                   className="form-input"
                   value={detail?.request_date ? new Date(detail.request_date).toLocaleDateString('vi-VN') : ''}
                   disabled
+                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                 />
               </div>
             </div>
@@ -7649,65 +7697,70 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
           {item.type === 'expense' && (
             isZeroCostWorkflow ? (
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại đề xuất')}</label>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại đề xuất')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={cleanHeaderTitle || t('Đề xuất hành chính')}
                     disabled
-                    style={{ fontWeight: 700, color: 'var(--color-primary)' }}
+                    style={{ fontWeight: 700, color: 'var(--color-primary)', fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Bộ phận / Phòng ban')}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Bộ phận / Phòng ban')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={departmentVal || detail?.department || creatorUser?.department || '—'}
                     disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
                 {positionVal && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: isMobile ? 'span 1' : 'span 2' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Vị trí người tạo')}</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: isMobile ? 'span 1' : 'span 2' }}>
+                    <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Vị trí người tạo')}</label>
                     <input
                       type="text"
                       className="form-input"
                       value={positionVal}
                       disabled
+                      style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                     />
                   </div>
                 )}
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={formatApprovalCurrency(detail?.amount ?? (item as any)?.amount ?? 0, detail?.currency || (item as any)?.currency || 'VND')}
                     disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Danh mục chi')}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Danh mục chi')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={detail?.category || (item as any)?.category || 'Vận hành'}
                     disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày chứng từ')}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày chứng từ')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={detail?.date ? new Date(detail.date).toLocaleDateString('vi-VN') : ((item as any)?.date ? new Date((item as any).date).toLocaleDateString('vi-VN') : new Date(detail?.created_at || item.created_at).toLocaleDateString('vi-VN'))}
                     disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
               </div>
@@ -7715,84 +7768,89 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           )}
 
           {item.type === 'checkin' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày giải trình')}</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày giải trình')}</label>
                 <input
                   type="text"
                   className="form-input"
                   value={detail?.check_in_date || ''}
                   disabled
+                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Giờ ghi nhận')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Giờ ghi nhận')}</label>
                 <input
                   type="text"
                   className="form-input"
                   value={detail?.check_in_time || ''}
                   disabled
+                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Thời gian đi trễ (phút)')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Thời gian đi trễ (phút)')}</label>
                 <input
                   type="text"
                   className="form-input"
                   value={`${detail?.late_minutes || 0} phút`}
                   disabled
+                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                 />
               </div>
             </div>
           )}
 
           {item.type === 'attendance_bulk' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Chu kỳ tháng')}</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Chu kỳ tháng')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={detail?.month_period || '—'}
                     disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Tổng số ngày bổ sung')}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Tổng số ngày bổ sung')}</label>
                   <input
                     type="text"
                     className="form-input"
                     value={`${detail?.details?.length || 0} ${t('ngày')}`}
                     disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
               </div>
 
               {detail?.details && detail.details.length > 0 && (
-                <div style={{ marginTop: '6px', border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <div style={{ marginTop: '4px', border: '1px solid var(--color-border-light)', borderRadius: '10px', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8rem' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
-                        <th style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Ngày')}</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Giờ vào đề xuất')}</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Giờ ra đề xuất')}</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Lý do')}</th>
+                        <th style={{ padding: isMobile ? '6px 8px' : '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: isMobile ? '0.68rem' : '0.75rem', whiteSpace: 'nowrap' }}>{t('Ngày')}</th>
+                        <th style={{ padding: isMobile ? '6px 8px' : '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: isMobile ? '0.68rem' : '0.75rem', whiteSpace: 'nowrap' }}>{t('Giờ vào đề xuất')}</th>
+                        <th style={{ padding: isMobile ? '6px 8px' : '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: isMobile ? '0.68rem' : '0.75rem', whiteSpace: 'nowrap' }}>{t('Giờ ra đề xuất')}</th>
+                        <th style={{ padding: isMobile ? '6px 8px' : '8px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: isMobile ? '0.68rem' : '0.75rem' }}>{t('Lý do')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {detail.details.map((d: any, dIdx: number) => (
                         <tr key={d.id || dIdx} style={{ borderBottom: dIdx === detail.details.length - 1 ? 'none' : '1px solid var(--color-border-light)', background: dIdx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--color-text)' }}>
+                          <td style={{ padding: isMobile ? '6px 8px' : '8px 12px', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
                             {d.check_in_date ? new Date(d.check_in_date).toLocaleDateString('vi-VN') : '—'}
                           </td>
-                          <td style={{ padding: '8px 12px', color: '#059669', fontWeight: 700 }}>
+                          <td style={{ padding: isMobile ? '6px 8px' : '8px 12px', color: '#059669', fontWeight: 700, whiteSpace: 'nowrap' }}>
                             {d.suggested_check_in ? String(d.suggested_check_in).substring(0, 5) : '08:30'}
                           </td>
-                          <td style={{ padding: '8px 12px', color: '#2563eb', fontWeight: 700 }}>
+                          <td style={{ padding: isMobile ? '6px 8px' : '8px 12px', color: '#2563eb', fontWeight: 700, whiteSpace: 'nowrap' }}>
                             {d.suggested_check_out ? String(d.suggested_check_out).substring(0, 5) : '17:00'}
                           </td>
-                          <td style={{ padding: '8px 12px', color: 'var(--color-text-muted)' }}>
+                          <td style={{ padding: isMobile ? '6px 8px' : '8px 12px', color: 'var(--color-text-muted)' }}>
                             {d.reason || t('Bổ sung công')}
                           </td>
                         </tr>
@@ -8233,7 +8291,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         
         {/* Drawer Header */}
         <div style={{
-          padding: '1.25rem 1.5rem',
+          padding: isMobile ? '0.625rem 0.875rem' : '1.25rem 1.5rem',
           borderBottom: '1px solid var(--color-border-light)',
           display: 'flex',
           alignItems: 'center',
@@ -8242,37 +8300,49 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           zIndex: 100,
           position: 'sticky',
           top: 0,
-          flexShrink: 0
+          flexShrink: 0,
+          gap: '8px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '10px', minWidth: 0, flex: 1 }}>
             <img 
               src="/LOGO.jpg" 
               alt="IDEAS LOGO" 
               style={{ 
-                height: '32px', 
-                width: '32px', 
-                borderRadius: '8px', 
+                height: isMobile ? '22px' : '32px', 
+                width: isMobile ? '22px' : '32px', 
+                borderRadius: '6px', 
                 border: '1px solid var(--color-border-light)',
-                objectFit: 'cover'
+                objectFit: 'cover',
+                flexShrink: 0
               }} 
             />
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)' }}>
-              IDEAS - {t('Quy trình')} #{item.id}
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: isMobile ? '0.78rem' : '1.1rem', 
+              fontWeight: 800, 
+              textTransform: 'uppercase', 
+              color: 'var(--color-text)', 
+              lineHeight: 1.25,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              IDEAS - {t('Quy trình')} <span style={{ color: 'var(--color-primary)' }}>#{item.id}</span>
             </h3>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: isMobile ? '5px' : '8px', alignItems: 'center', flexShrink: 0 }}>
             {isMyTurnToApprove() && (
               <>
                  <button
                   onClick={() => onReject(item)}
                   style={{
-                    height: '36px',
-                    padding: '0 16px',
-                    fontSize: '0.8rem',
+                    height: isMobile ? '30px' : '36px',
+                    padding: isMobile ? '0 10px' : '0 16px',
+                    fontSize: isMobile ? '0.725rem' : '0.8rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    borderRadius: '8px',
+                    gap: '4px',
+                    borderRadius: '7px',
                     background: '#b91c1c',
                     border: 'none',
                     color: '#ffffff',
@@ -8291,7 +8361,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  <XCircle size={14} />
+                  <XCircle size={isMobile ? 12 : 14} />
                   {t('Từ chối')}
                 </button>
                 <button
@@ -8300,13 +8370,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     onClose();
                   }}
                   style={{
-                    height: '36px',
-                    padding: '0 18px',
-                    fontSize: '0.8rem',
+                    height: isMobile ? '30px' : '36px',
+                    padding: isMobile ? '0 12px' : '0 18px',
+                    fontSize: isMobile ? '0.725rem' : '0.8rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    borderRadius: '8px',
+                    gap: '4px',
+                    borderRadius: '7px',
                     background: '#10b981',
                     border: 'none',
                     color: '#ffffff',
@@ -8325,7 +8395,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  <CheckCircle2 size={14} />
+                  <CheckCircle2 size={isMobile ? 12 : 14} />
                   {t('Phê duyệt')}
                 </button>
               </>
@@ -8338,23 +8408,23 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 className="btn secondary hover-lift"
                 style={{
-                  height: '36px',
-                  padding: '0 12px',
+                  height: isMobile ? '30px' : '36px',
+                  padding: isMobile ? '0 8px' : '0 12px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  borderRadius: '8px',
+                  gap: '4px',
+                  borderRadius: '7px',
                   background: 'var(--color-bg)',
                   border: '1px solid var(--color-border)',
                   color: 'var(--color-primary)',
                   fontWeight: 700,
-                  fontSize: '0.8rem',
+                  fontSize: isMobile ? '0.725rem' : '0.8rem',
                   cursor: 'pointer'
                 }}
                 title={t('Chỉnh sửa đề xuất')}
               >
-                <Pencil size={14} />
-                <span>{t('Chỉnh sửa')}</span>
+                <Pencil size={isMobile ? 12 : 14} />
+                <span>{t('Sửa')}</span>
               </button>
             )}
 
@@ -8365,17 +8435,17 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 className="btn secondary hover-lift"
                 style={{
-                  height: '36px',
-                  width: '36px',
+                  height: isMobile ? '30px' : '36px',
+                  width: isMobile ? '30px' : '36px',
                   padding: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: '8px'
+                  borderRadius: '7px'
                 }}
                 title={t('Nhân bản đề xuất')}
               >
-                <Copy size={16} />
+                <Copy size={isMobile ? 14 : 16} />
               </button>
             )}
             <button 
@@ -8384,18 +8454,18 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               style={{
                 background: 'var(--color-bg)',
                 border: '1px solid var(--color-border)',
-                padding: '8px',
-                borderRadius: '8px',
+                padding: isMobile ? '5px' : '8px',
+                borderRadius: '7px',
                 cursor: 'pointer',
                 color: 'var(--color-text-muted)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                height: '36px',
-                width: '36px'
+                height: isMobile ? '30px' : '36px',
+                width: isMobile ? '30px' : '36px'
               }}
             >
-              <X size={18} />
+              <X size={isMobile ? 15 : 18} />
             </button>
           </div>
         </div>

@@ -543,10 +543,11 @@ export const Header = ({
         const openId = appUrlObj.searchParams.get('open_id');
         const openType = appUrlObj.searchParams.get('open_type');
         const openStatus = appUrlObj.searchParams.get('open_status');
-        if (openId) {
+        const numOpenId = Number(openId);
+        if (openId && !isNaN(numOpenId) && numOpenId > 0) {
           window.dispatchEvent(new CustomEvent('open-approval-drawer', {
             detail: {
-              id: Number(openId),
+              id: numOpenId,
               type: openType || undefined,
               status: openStatus || undefined
             }

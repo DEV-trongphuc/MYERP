@@ -48,7 +48,7 @@ export const hideSplashScreen = (force: boolean = false) => {
   }
 
   const elapsed = Date.now() - splashStartTime;
-  const MIN_SPLASH_DURATION = 2000; // Minimum 2.0 seconds as requested
+  const MIN_SPLASH_DURATION = 3000; // Minimum 3.0 seconds as requested
   const remaining = Math.max(0, MIN_SPLASH_DURATION - elapsed);
 
   if (hideTimer) clearTimeout(hideTimer);
@@ -68,9 +68,9 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Safety fallback timeout (4s) in case of unexpected network failure
+// Safety fallback timeout (6s) in case of unexpected network failure
 setTimeout(() => {
   if (typeof (window as any).hideSplashScreen === 'function') {
     (window as any).hideSplashScreen();
   }
-}, 4000);
+}, 6000);

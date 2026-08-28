@@ -1100,8 +1100,8 @@ class FinanceController
             'status_level_3',
             'approval_status'
         ];
-        $isAdminOrDirector = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true);
-        if ($isAdminOrDirector) {
+        $canUpdateRefund = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], true);
+        if ($canUpdateRefund) {
             $fields[] = 'refund_image_url';
         }
         $sets = [];
@@ -1112,7 +1112,7 @@ class FinanceController
                 $params[] = $data[$f];
             }
         }
-        if ($isAdminOrDirector && array_key_exists('is_refunded', $data)) {
+        if ($canUpdateRefund && array_key_exists('is_refunded', $data)) {
             $sets[] = "is_refunded=?";
             $params[] = $data['is_refunded'] ? 1 : 0;
             if ($data['is_refunded']) {
@@ -1134,7 +1134,8 @@ class FinanceController
                 $sqlCheck .= " AND created_by=?";
                 $cp[] = $auth['user_id'];
             } else if ($auth['role'] === 'manager') {
-                $sqlCheck .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $sqlCheck .= " AND (created_by = ? OR approver_id = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+                $cp[] = $auth['user_id'];
                 $cp[] = $auth['user_id'];
                 $cp[] = $auth['user_id'];
             }
@@ -1185,7 +1186,20 @@ class FinanceController
                 }
             }
 
-            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'expense', $id, json_encode($data));
+            if (!empty($data['is_refunded']) || !empty($data['refund_image_url'])) {
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REFUND_CONFIRM', 'expense', $id, json_encode([
+                    'is_refunded' => $data['is_refunded'] ?? 1,
+                    'refund_image_url' => $data['refund_image_url'] ?? '',
+                    'title' => $row['title'] ?? ''
+                ]));
+            } elseif (!empty($data['image_url']) && count(array_filter($data, fn($v) => $v !== null && $v !== '')) <= 2) {
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE_ATTACHMENT', 'expense', $id, json_encode([
+                    'image_url' => $data['image_url'] ?? '',
+                    'title' => $row['title'] ?? ''
+                ]));
+            } else {
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'UPDATE', 'expense', $id, json_encode($data));
+            }
             
             // If modified by someone other than the creator, insert a system notification and send email
             if (isset($row['created_by']) && (int)$row['created_by'] !== (int)$auth['user_id']) {
