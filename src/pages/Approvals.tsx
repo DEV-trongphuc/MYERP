@@ -1012,13 +1012,23 @@ export default function Approvals() {
           return;
         }
         const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
-        const startTimeStr = `${d}T${otStart}`;
-        const fromDateObj = new Date(startTimeStr);
-        const toDateObj = new Date(fromDateObj.getTime() + lateEarlyMinutes * 60000);
-        const formattedFrom = startTimeStr;
-        const formattedTo = toDateObj.toISOString().replace('Z', '').substring(0, 16);
+        const timeVal = otStart || (lateEarlyType === 'early' ? '16:30' : '08:30');
+        const [sh, sm] = timeVal.split(':').map(Number);
+        const startH = isNaN(sh) ? (lateEarlyType === 'early' ? 16 : 8) : sh;
+        const startM = isNaN(sm) ? 30 : sm;
+        const totalStartMin = startH * 60 + startM;
+        const totalEndMin = totalStartMin + (lateEarlyMinutes || 30);
+        const endH = Math.floor(totalEndMin / 60) % 24;
+        const endM = totalEndMin % 60;
+        const endHStr = String(endH).padStart(2, '0');
+        const endMStr = String(endM).padStart(2, '0');
+        const startHStr = String(startH).padStart(2, '0');
+        const startMStr = String(startM).padStart(2, '0');
 
-        const descStr = `[${lateEarlyType === 'late' ? 'Đăng ký Đi muộn' : 'Đăng ký Về sớm'}] Thời gian: ${otStart} (${lateEarlyMinutes} phút). Lý do: ${leaveReason}`;
+        const formattedFrom = `${d} ${startHStr}:${startMStr}:00`;
+        const formattedTo = `${d} ${endHStr}:${endMStr}:00`;
+
+        const descStr = `[${lateEarlyType === 'late' ? 'Đăng ký Đi muộn' : 'Đăng ký Về sớm'}] Thời gian: ${startHStr}:${startMStr} (${lateEarlyMinutes || 30} phút). Lý do: ${leaveReason}`;
 
         await fetchAPI('hrm/leaves', {
           method: 'POST',
@@ -4260,7 +4270,14 @@ export default function Approvals() {
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại đăng ký')}</label>
                                 <CustomSelect
                                   value={lateEarlyType}
-                                  onChange={(val: any) => setLateEarlyType(val)}
+                                  onChange={(val: any) => {
+                                    setLateEarlyType(val);
+                                    if (val === 'late' && (otStart === '17:00' || otStart === '16:30')) {
+                                      setOtStart('08:30');
+                                    } else if (val === 'early' && (otStart === '08:00' || otStart === '08:30' || otStart === '17:00')) {
+                                      setOtStart('16:30');
+                                    }
+                                  }}
                                   options={[
                                     { value: 'late', label: t('Đi muộn') },
                                     { value: 'early', label: t('Về sớm') }

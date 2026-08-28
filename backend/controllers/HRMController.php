@@ -210,8 +210,10 @@ class HRMController {
             return;
         }
 
-        if ($endDate < $startDate) {
-            respond(400, null, 'Ngày kết thúc nghỉ phép không thể nhỏ hơn ngày bắt đầu.', false);
+        $startTs = strtotime($startDate);
+        $endTs = strtotime($endDate);
+        if ($startTs !== false && $endTs !== false && $endTs < $startTs) {
+            respond(400, null, 'Thời gian kết thúc không thể nhỏ hơn thời gian bắt đầu.', false);
             return;
         }
 
