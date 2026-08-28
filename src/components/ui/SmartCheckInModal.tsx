@@ -584,6 +584,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
         setIsSuccessScreen(true);
 
         onCheckInSuccess();
+        window.dispatchEvent(new CustomEvent('checkin-status-changed'));
+        window.dispatchEvent(new CustomEvent('attendance-updated'));
+        window.dispatchEvent(new CustomEvent('refresh-attendance'));
 
         // Auto close modal after 1s
         setTimeout(() => {

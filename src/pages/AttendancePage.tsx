@@ -721,7 +721,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   }, [viewMode, currentMonth, currentYear, filterUser, filterStatus]);
 
   useEffect(() => {
-    const handleContactUpdated = () => {
+    const handleDataRefresh = () => {
       fetchCheckInsList();
       if (viewMode === 'calendar') {
         fetchCalendarCheckIns();
@@ -730,12 +730,24 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       } else if ((viewMode as string) === 'bulk_requests') {
         fetchBulkRequests();
       }
+      fetchLeaves();
     };
-    window.addEventListener('contact-updated', handleContactUpdated);
+
+    const eventNames = [
+      'checkin-status-changed',
+      'attendance-updated',
+      'checkin-updated',
+      'contact-updated',
+      'approval-updated',
+      'hrm-leave-updated',
+      'refresh-attendance'
+    ];
+
+    eventNames.forEach(ev => window.addEventListener(ev, handleDataRefresh));
     return () => {
-      window.removeEventListener('contact-updated', handleContactUpdated);
+      eventNames.forEach(ev => window.removeEventListener(ev, handleDataRefresh));
     };
-  }, [viewMode, currentMonth, currentYear, filterUser, filterStatus]);
+  }, [viewMode, currentMonth, currentYear, filterUser, filterStatus, period, customRange]);
 
   const fetchRegistrations = async () => {
     if (!canApproveShifts) return;
