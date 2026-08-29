@@ -1223,22 +1223,66 @@ class ContactController {
             }
         }
 
-        $note = $b['note'] ?? "Khách hàng đã được chuyển trạng thái.";
-        $extraLog = [];
-        if ($targetLeadStatus !== 'active') $extraLog[] = "Trạng thái: " . strtoupper($targetLeadStatus);
-        if ($nextAction) $extraLog[] = "Next Action: " . $nextAction;
-        if ($nextFollowupDate) $extraLog[] = "Follow-up: " . $nextFollowupDate;
-        if ($expectedIntake) $extraLog[] = "Kỳ intake: " . $expectedIntake;
-        if ($leadTemp) $extraLog[] = "Độ nóng: " . strtoupper($leadTemp);
-        if ($nurtureReason) $extraLog[] = "Lý do nuôi dưỡng: " . $nurtureReason;
-        if ($lostReason) $extraLog[] = "Lý do lost: " . $lostReason;
-        
-        $fullNote = $note . (!empty($extraLog) ? (" (" . implode(" | ", $extraLog) . ")") : "");
+        $currStageName = !empty($b['from_stage_name']) ? trim($b['from_stage_name']) : '';
+        if (empty($currStageName) && $currStageId > 0) {
+            $sOld = $this->db->prepare("SELECT name FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $sOld->execute([$currStageId, $auth['tenant_id']]);
+            $currStageName = $sOld->fetchColumn() ?: '';
+        }
+        $newStageName = !empty($b['to_stage_name']) ? trim($b['to_stage_name']) : ($targetStageData['name'] ?? $newStatus);
 
-        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Cập nhật Pipeline', $fullNote, 'contact', $id);
+        // Build clear, informative log title and note
+        if ($targetLeadStatus === 'nurture') {
+            $subject = "Chuyển trạng thái: 🕒 Nurture (Nuôi dưỡng)";
+        } elseif ($targetLeadStatus === 'lost') {
+            $subject = "Chuyển trạng thái: 🚫 Lost (Không tiếp tục)";
+        } elseif (!empty($currStageName) && $currStageName !== $newStageName) {
+            $subject = "Chuyển Pipeline: {$currStageName} ➔ {$newStageName}";
+        } else {
+            $subject = "Chuyển Pipeline sang: {$newStageName}";
+        }
+
+        $extraLog = [];
+        if (!empty($currStageName) && $currStageName !== $newStageName) {
+            $extraLog[] = "Giai đoạn: {$currStageName} ➔ {$newStageName}";
+        } else {
+            $extraLog[] = "Giai đoạn: {$newStageName}";
+        }
+        if ($targetLeadStatus !== 'active') {
+            $extraLog[] = "Trạng thái: " . strtoupper($targetLeadStatus);
+        }
+        if ($leadTemp) {
+            $tempMap = ['hot' => '🔥 Nóng (HOT)', 'warm' => '🌤️ Ấm (WARM)', 'cold' => '❄️ Lạnh (COLD)'];
+            $extraLog[] = "Độ nóng: " . ($tempMap[strtolower($leadTemp)] ?? strtoupper($leadTemp));
+        }
+        if ($nextAction) {
+            $extraLog[] = "Hành động tiếp theo: " . $nextAction;
+        }
+        if ($nextFollowupDate) {
+            $extraLog[] = "Hẹn Follow-up: " . $nextFollowupDate;
+        }
+        if ($expectedIntake) {
+            $extraLog[] = "Kỳ intake: " . $expectedIntake;
+        }
+        if ($nurtureReason) {
+            $extraLog[] = "Lý do nuôi dưỡng: " . $nurtureReason;
+        }
+        if ($lostReason) {
+            $extraLog[] = "Lý do lost: " . $lostReason;
+        }
+
+        $userNote = !empty($b['note']) ? trim($b['note']) : '';
+        if ($userNote) {
+            $fullNote = $userNote . (!empty($extraLog) ? ("\n(" . implode(" | ", $extraLog) . ")") : "");
+        } else {
+            $fullNote = implode(" | ", $extraLog);
+        }
+
+        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $subject, $fullNote, 'contact', $id);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([
             'stage_id' => $stageId,
-            'stage_name' => $targetStageData['name'],
+            'stage_name' => $newStageName,
+            'from_stage_name' => $currStageName,
             'pipeline_status' => $newStatus,
             'lead_status' => $targetLeadStatus,
             'note' => $fullNote

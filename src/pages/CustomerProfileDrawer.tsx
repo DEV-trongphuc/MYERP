@@ -13065,7 +13065,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           expected_intake: pipelineModal.expectedIntake || null,
                           nurture_reason: pipelineModal.leadStatus === 'nurture' ? pipelineModal.nurtureReason : null,
                           lost_reason: pipelineModal.leadStatus === 'lost' ? pipelineModal.lostReason : null,
-                          note: note || `Chuyển giai đoạn sang ${targetLabel}`
+                          from_stage_name: formData.stage_name || '',
+                          to_stage_name: targetLabel,
+                          note: note || ''
                         });
 
                         await fetchData(activeTab || 'timeline', true);
