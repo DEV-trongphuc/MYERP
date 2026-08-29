@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 239;
+$targetVersion = 240;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2419,8 +2419,34 @@ try {
         $logMsg("Nâng cấp lên phiên bản 239 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 240: BỔ SUNG INDEXES CHO DISTRIBUTION_LOGS, DATA_REPORTS VÀ AUDIT_LOGS
+    // ==========================================
+    if ($currentVersion < 240 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 240: Thêm Indexes cho distribution_logs, data_reports, audit_logs...", "info");
+        try {
+            $addIdx = function($conn, $tbl, $idx, $cols) use ($logMsg) {
+                try {
+                    $chk = $conn->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$tbl' AND INDEX_NAME = '$idx'");
+                    if ($chk && (int)$chk->fetch_row()[0] === 0) {
+                        $conn->query("ALTER TABLE `$tbl` ADD INDEX `$idx` ($cols)");
+                        $logMsg("Đã tối ưu index `$idx` trên bảng `$tbl`.", "success");
+                    }
+                } catch (Throwable $e) {}
+            };
+            $addIdx($conn, 'distribution_logs', 'idx_dl_lead_assign', '`lead_id`, `assigned_to`');
+            $addIdx($conn, 'data_reports', 'idx_dr_lead_consultant', '`lead_id`, `consultant_id`');
+            $addIdx($conn, 'audit_logs', 'idx_al_res_act', '`resource`, `resource_id`, `action`');
+
+            $logMsg("Đã hoàn tất cấu hình Indexes phiên bản 240.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 240: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 240 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '239') ON DUPLICATE KEY UPDATE setting_value = '239'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '240') ON DUPLICATE KEY UPDATE setting_value = '240'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

@@ -611,59 +611,58 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   useEffect(() => {
     const loadMetadata = async () => {
       try {
-        const projPromise = api.get('/projects?bypass_roster=1').catch(() => null);
-        const stagePromise = api.get('/pipeline-stages').catch(() => null);
-        const campaignPromise = api.get('/marketing-campaigns').catch(() => null);
+        const isManagerOrAdmin = user && ['manager', 'admin', 'superadmin', 'director'].includes(user.role);
         
-        let teamsRes: any = null;
-        let usersRes: any = null;
-        
-        if (user && ['manager', 'admin', 'superadmin'].includes(user.role)) {
-          teamsRes = await api.get('/teams').catch(() => null);
-        }
-        
-        const [projRes, stageRes, campaignRes] = await Promise.all([projPromise, stagePromise, campaignPromise]);
-        
-        if (projRes) {
-          const d = projRes.data.data;
+        const [
+          projResult,
+          stageResult,
+          campaignResult,
+          teamsResult,
+          usersResult,
+          settingsResult
+        ] = await Promise.allSettled([
+          api.get('/projects?bypass_roster=1'),
+          api.get('/pipeline-stages'),
+          api.get('/marketing-campaigns'),
+          isManagerOrAdmin ? api.get('/teams') : Promise.resolve(null),
+          api.get('/users?all=1'),
+          api.get('/api.php?action=get_settings')
+        ]);
+
+        if (projResult.status === 'fulfilled' && projResult.value) {
+          const d = projResult.value.data?.data;
           setProjects(Array.isArray(d) ? d : (d?.items || []));
         }
-        if (stageRes) {
-          const d = stageRes.data.data;
+        if (stageResult.status === 'fulfilled' && stageResult.value) {
+          const d = stageResult.value.data?.data;
           setPipelineStages(Array.isArray(d) ? d : (d?.items || []));
         }
-        if (campaignRes) {
-          const d = campaignRes.data.data;
+        if (campaignResult.status === 'fulfilled' && campaignResult.value) {
+          const d = campaignResult.value.data?.data;
           setCampaigns(Array.isArray(d) ? d : (d?.items || []));
         }
-        
-        let loadedTeams: any[] = [];
-        if (teamsRes) {
-          loadedTeams = teamsRes.data.data || teamsRes.data || [];
-          setTeams(loadedTeams);
+        if (teamsResult.status === 'fulfilled' && teamsResult.value) {
+          const d = teamsResult.value.data?.data || teamsResult.value.data || [];
+          setTeams(Array.isArray(d) ? d : []);
         }
-        
-        if (user) {
-          usersRes = await api.get('/users?all=1').catch(() => null);
-          if (usersRes) {
-            const d = usersRes.data.data;
-            const list = Array.isArray(d) ? d : (d?.items || []);
-            setUsers(list);
-          }
+        if (usersResult.status === 'fulfilled' && usersResult.value) {
+          const d = usersResult.value.data?.data;
+          const list = Array.isArray(d) ? d : (d?.items || []);
+          setUsers(list);
         }
-        // Load lead scoring rules and decay days from settings
-        const settingsRes = await api.get('/api.php?action=get_settings').catch(() => null);
-        if (settingsRes && settingsRes.data?.success && settingsRes.data?.data) {
-          if (settingsRes.data.data.lead_scoring_rules) {
-            try {
-              const parsed = JSON.parse(settingsRes.data.data.lead_scoring_rules);
-              setScoringRules(parsed);
-            } catch(e) {}
-          }
-          if (settingsRes.data.data.temperature_decay_days) {
-            const parsedDays = parseInt(settingsRes.data.data.temperature_decay_days, 10);
-            if (!isNaN(parsedDays) && parsedDays > 0) {
-              setDecayDays(parsedDays);
+        if (settingsResult.status === 'fulfilled' && settingsResult.value) {
+          const sData = settingsResult.value.data?.data;
+          if (settingsResult.value.data?.success && sData) {
+            if (sData.lead_scoring_rules) {
+              try {
+                setScoringRules(JSON.parse(sData.lead_scoring_rules));
+              } catch(e) {}
+            }
+            if (sData.temperature_decay_days) {
+              const parsedDays = parseInt(sData.temperature_decay_days, 10);
+              if (!isNaN(parsedDays) && parsedDays > 0) {
+                setDecayDays(parsedDays);
+              }
             }
           }
         }

@@ -220,23 +220,27 @@ class ContactController {
 
         $stmt = $this->db->prepare("
             SELECT c.*, 
-                   COALESCE(
-                       (
-                           SELECT MIN(created_at)
-                           FROM audit_logs
-                           WHERE resource = 'contact'
-                             AND resource_id = c.id
-                             AND action = 'MOVE_STAGE'
-                             AND new_data LIKE '%pipeline_status%hoc_vien%'
-                       ),
-                       (
-                           SELECT MIN(dm.created_at)
-                           FROM deposit_milestones dm
-                           JOIN deposits dep ON dm.deposit_id = dep.id
-                           WHERE dep.contact_id = c.id
-                       ),
-                       c.created_at
-                   ) as closed_date,
+                   CASE 
+                       WHEN c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.status = 'customer' THEN
+                           COALESCE(
+                               (
+                                   SELECT MIN(created_at)
+                                   FROM audit_logs
+                                   WHERE resource = 'contact'
+                                     AND resource_id = c.id
+                                     AND action = 'MOVE_STAGE'
+                                     AND (new_data LIKE '%enrolled%' OR new_data LIKE '%hoc_vien%')
+                               ),
+                               (
+                                   SELECT MIN(dm.created_at)
+                                   FROM deposit_milestones dm
+                                   JOIN deposits dep ON dm.deposit_id = dep.id
+                                   WHERE dep.contact_id = c.id
+                               ),
+                               c.created_at
+                           )
+                       ELSE c.created_at
+                   END as closed_date,
                    CASE 
                        WHEN comp.deleted_at IS NOT NULL THEN CONCAT(comp.name, ' (Đã xóa)')
                        ELSE comp.name 
@@ -250,16 +254,13 @@ class ContactController {
                    r.round_name,
                    dl.id as log_id,
                    l.id as lead_id,
-                    dr.status as report_status,
-                    dr.id as report_id,
-                    dr.reason as report_reason,
-                    (
-                        SELECT body FROM (
-                            SELECT body, created_at, entity_id as cid FROM notes WHERE entity_type = 'contact'
-                            UNION ALL
-                            SELECT COALESCE(body, subject) as body, created_at, related_id as cid FROM activities WHERE related_type = 'contact'
-                        ) t WHERE t.cid = c.id ORDER BY t.created_at DESC LIMIT 1
-                    ) as last_interaction
+                   dr.status as report_status,
+                   dr.id as report_id,
+                   dr.reason as report_reason,
+                   COALESCE(
+                       (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id AND n.deleted_at IS NULL ORDER BY n.id DESC LIMIT 1),
+                       (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
+                   ) as last_interaction
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id

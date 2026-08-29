@@ -497,31 +497,62 @@ export const DealsPage: React.FC = () => {
 
 
   useEffect(() => {
-    fetchProjects();
-    fetchCampaigns();
-    fetchSources();
-    fetchStages();
-  }, [pipelineView]);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [pipelineView, teams]);
-
-  useEffect(() => {
-    const fetchGlobalSettings = async () => {
+    const loadDealsMetadata = async () => {
       try {
-        const res = await api.get('/api.php?action=get_settings');
-        if (res.data && res.data.success && res.data.data) {
-          const d = res.data.data;
+        const currentUser = useAuthStore.getState().user;
+        const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
+        const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
+        const isSale = currentUser && (currentUser.role === 'sale' || currentUser.role === 'sales');
+
+        const [
+          projResult,
+          campResult,
+          srcResult,
+          stageResult,
+          userResult,
+          settingResult
+        ] = await Promise.allSettled([
+          api.get(`/projects${bypassProj}`),
+          api.get('/marketing-campaigns'),
+          api.get('api.php?action=get_unique_sources'),
+          api.get('/pipeline-stages'),
+          !isSale ? api.get('/users') : Promise.resolve(null),
+          api.get('/api.php?action=get_settings')
+        ]);
+
+        if (projResult.status === 'fulfilled' && projResult.value) {
+          setProjects(projResult.value.data?.data || []);
+        }
+        if (campResult.status === 'fulfilled' && campResult.value) {
+          setCampaigns(campResult.value.data?.data?.items || campResult.value.data?.data || []);
+        }
+        if (srcResult.status === 'fulfilled' && srcResult.value?.data?.success) {
+          setSources(srcResult.value.data.data || []);
+        }
+        if (stageResult.status === 'fulfilled' && stageResult.value) {
+          const stagesData = stageResult.value.data?.data || [];
+          const sorted = [...stagesData].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+          setStages(sorted);
+        }
+        if (userResult.status === 'fulfilled' && userResult.value) {
+          let list = userResult.value.data?.data || [];
+          const teamId = getEffectiveTeamId();
+          if (currentUser?.role === 'manager' && teamId) {
+            list = list.filter((u: any) => String(u.team_id) === String(teamId));
+          }
+          setAllUsers(list);
+        }
+        if (settingResult.status === 'fulfilled' && settingResult.value?.data?.success && settingResult.value.data.data) {
+          const d = settingResult.value.data.data;
           setAllowPipelineBackward(d.allow_pipeline_backward === '1' || d.allow_pipeline_backward === 1);
           setAllowPipelineSkip(d.allow_pipeline_skip === '1' || d.allow_pipeline_skip === 1);
         }
       } catch (err) {
-        console.error("Error fetching settings:", err);
+        console.error("Error loading Deals metadata:", err);
       }
     };
-    fetchGlobalSettings();
-  }, []);
+    loadDealsMetadata();
+  }, [pipelineView, teams]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
