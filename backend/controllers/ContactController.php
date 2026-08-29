@@ -731,7 +731,9 @@ class ContactController {
             'phone2', 'dob', 'citizen_id', 'passport', 'district', 'company', 'tax_code', 'budget',
             'demand_type', 'property_type', 'bedroom_count', 'preferred_location',
             'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform',
-            'form_name', 'zalo_phone', 'facebook_link'
+            'form_name', 'zalo_phone', 'facebook_link',
+            'lead_status', 'lead_temperature', 'next_action', 'next_followup_date',
+            'expected_decision_date', 'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id'
         ];
         $sets = []; $params = [];
         
@@ -1041,19 +1043,60 @@ class ContactController {
         $b = getBody();
         if (empty($b['stage_id'])) respond(422, null, 'stage_id là bắt buộc', false);
         
-        $sStage = $this->db->prepare("SELECT id FROM pipeline_stages WHERE id=? AND tenant_id=?");
-        $sStage->execute([(int)$b['stage_id'], $auth['tenant_id']]);
-        if (!$sStage->fetch()) respond(404, null, 'Giai đoạn không hợp lệ', false);
+        $stageParam = trim((string)$b['stage_id']);
+        $sStage = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
+        $sStage->execute([$stageParam, $stageParam, $auth['tenant_id']]);
+        $targetStageData = $sStage->fetch();
+        if (!$targetStageData) {
+            $sStageByName = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
+            $sStageByName->execute([$stageParam, $auth['tenant_id']]);
+            $targetStageData = $sStageByName->fetch();
+        }
+        if (!$targetStageData) {
+            $targetStageData = [
+                'id' => is_numeric($stageParam) ? (int)$stageParam : 0,
+                'name' => $stageParam,
+                'system_slug' => $stageParam
+            ];
+        }
 
-        $stageId = (int)$b['stage_id'];
-        $newStatus = $this->getSlugFromStageId($stageId, $auth['tenant_id']);
+        $stageId = (int)$targetStageData['id'];
+        $newStatus = $targetStageData['system_slug'] ?: (is_numeric($stageParam) ? $this->getSlugFromStageId($stageId, $auth['tenant_id']) : $stageParam);
 
         // Check current status for CAPI/Timer trigger
-        $stmtC = $this->db->prepare("SELECT pipeline_status, owner_id, full_name, ttl1_completed FROM contacts WHERE id = ? AND tenant_id = ?");
+        $stmtC = $this->db->prepare("SELECT pipeline_status, stage_id, owner_id, full_name, ttl1_completed, lead_status FROM contacts WHERE id = ? AND tenant_id = ?");
         $stmtC->execute([$id, $auth['tenant_id']]);
         $currentContact = $stmtC->fetch();
+        if (!$currentContact) respond(404, null, 'Không tìm thấy liên hệ', false);
+
         $currStatus = $currentContact['pipeline_status'] ?? 'chua_xac_dinh';
+        $currStageId = (int)($currentContact['stage_id'] ?? 0);
         $currTtl1 = (int)($currentContact['ttl1_completed'] ?? 0);
+
+        // Advanced fields
+        $targetLeadStatus = $b['lead_status'] ?? ($currentContact['lead_status'] ?: 'active');
+        $nextAction = array_key_exists('next_action', $b) ? trim((string)$b['next_action']) : null;
+        $nextFollowupDate = array_key_exists('next_followup_date', $b) ? ($b['next_followup_date'] ?: null) : null;
+        $expectedDecisionDate = array_key_exists('expected_decision_date', $b) ? ($b['expected_decision_date'] ?: null) : null;
+        $expectedIntake = array_key_exists('expected_intake', $b) ? trim((string)$b['expected_intake']) : null;
+        $leadTemp = array_key_exists('lead_temperature', $b) ? trim((string)$b['lead_temperature']) : null;
+        $nurtureReason = array_key_exists('nurture_reason', $b) ? trim((string)$b['nurture_reason']) : null;
+        $lostReason = array_key_exists('lost_reason', $b) ? trim((string)$b['lost_reason']) : null;
+        $lostStageId = null;
+
+        if ($targetLeadStatus === 'nurture') {
+            if (empty($nextFollowupDate)) {
+                respond(422, null, 'Vui lòng chọn ngày follow-up tiếp theo khi chuyển sang trạng thái Nuôi dưỡng (Nurture)', false);
+            }
+            if (empty($nurtureReason)) {
+                respond(422, null, 'Vui lòng nhập lý do chuyển vào trạng thái Nuôi dưỡng (Nurture Reason)', false);
+            }
+        } elseif ($targetLeadStatus === 'lost') {
+            if (empty($lostReason)) {
+                respond(422, null, 'Vui lòng chọn hoặc nhập lý do mất Lead (Lost Reason)', false);
+            }
+            $lostStageId = $currStageId ?: $stageId;
+        }
 
         // Fetch pipeline status hierarchy dynamically from system_settings
         $stmtHierarchy = $this->db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy'");
@@ -1066,7 +1109,7 @@ class ContactController {
         }
 
         if (empty($hierarchyList)) {
-            $hierarchyList = ['chua_xac_dinh', 'quan_tam', 'dong_y_gap', 'da_gap', 'booking', 'dat_coc', 'dong_deal'];
+            $hierarchyList = ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
         }
 
         $statusHierarchy = [];
@@ -1081,65 +1124,78 @@ class ContactController {
         $allowSkip = (int)$this->getSetting('allow_pipeline_skip', '0') === 1;
 
         $stmtWonSetting = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-        $dealWonSetting = $stmtWonSetting ? $stmtWonSetting->fetchColumn() : 'dat_coc';
-        if (empty($dealWonSetting)) $dealWonSetting = 'dat_coc';
+        $dealWonSetting = $stmtWonSetting ? $stmtWonSetting->fetchColumn() : 'deposit_tuition_payment';
+        if (empty($dealWonSetting)) $dealWonSetting = 'deposit_tuition_payment';
 
         $isFromDeposit = strpos(strtolower($currStatus), 'coc') !== false || strpos(strtolower($currStatus), 'deposit') !== false || $currStatus === 'dat_coc' || $currStatus === $dealWonSetting;
-        $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong';
+        $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'enrolled') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong';
         $isCancellation = $isFromDeposit && !$isToSuccess;
 
         // Enforce forward-only
-        if ($newIdx < $currIdx) {
+        if ($newIdx < $currIdx && $targetLeadStatus === 'active') {
             if (!$isCancellation && !$allowBackward) {
                 respond(400, null, "Không được phép chuyển lùi trạng thái từ '$currStatus' về '$newStatus'", false);
             }
         }
         // Enforce no skipping stages
-        if ($newIdx > $currIdx + 1 && !$allowSkip) {
+        if ($newIdx > $currIdx + 1 && $targetLeadStatus === 'active' && !$allowSkip) {
             respond(400, null, "Không được phép nhảy cóc trạng thái từ '$currStatus' sang '$newStatus' (Phải đi tuần tự)", false);
         }
 
-        // Check TTL1 completion removed as requested
-        // if ($newIdx >= 2) {
-        //     if ($currTtl1 !== 1) {
-        //         respond(400, null, 'Trước khi sang giai đoạn Đồng ý gặp, bạn bắt buộc phải điền đầy đủ thông tin Form TTL1', false);
-        //     }
-        // }
+        $sets = ["stage_id=?", "pipeline_status=?", "lead_status=?"];
+        $params = [$stageId, $newStatus, $targetLeadStatus];
 
-        $sql = "UPDATE contacts SET stage_id=?, pipeline_status=? WHERE id=? AND tenant_id=?";
-        $p = [$stageId, $newStatus, $id, $auth['tenant_id']];
+        if ($nextAction !== null) { $sets[] = "next_action=?"; $params[] = $nextAction; }
+        if ($nextFollowupDate !== null) { $sets[] = "next_followup_date=?"; $params[] = $nextFollowupDate; }
+        if ($expectedDecisionDate !== null) { $sets[] = "expected_decision_date=?"; $params[] = $expectedDecisionDate; }
+        if ($expectedIntake !== null) { $sets[] = "expected_intake=?"; $params[] = $expectedIntake; }
+        if ($leadTemp !== null) { $sets[] = "lead_temperature=?"; $params[] = $leadTemp; }
+        if ($nurtureReason !== null) { $sets[] = "nurture_reason=?"; $params[] = $nurtureReason; }
+        if ($lostReason !== null) { $sets[] = "lost_reason=?"; $params[] = $lostReason; }
+        if ($lostStageId !== null) { $sets[] = "lost_stage_id=?"; $params[] = $lostStageId; }
+
+        $sql = "UPDATE contacts SET " . implode(', ', $sets) . " WHERE id=? AND tenant_id=?";
+        $params[] = $id;
+        $params[] = $auth['tenant_id'];
+
         if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
             $sql .= ' AND (owner_id=? OR id IN (
                 SELECT contact_id FROM cooperation_slips 
                 WHERE JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE "{}" END), JSON_QUOTE(CAST(? AS CHAR)))
             ))';
-            $p[] = $auth['user_id'];
-            $p[] = $auth['user_id'];
+            $params[] = $auth['user_id'];
+            $params[] = $auth['user_id'];
         }
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($p);
-        if (!$stmt->rowCount()) respond(403, null, 'Bạn không có quyền di chuyển liên hệ này', false);
-
-        // CUSTOMER_UPDATE notification disabled per user request
+        $stmt->execute($params);
+        if (!$stmt->rowCount()) {
+            // If row count is 0, check if contact exists and unchanged
+            $chkStill = $this->db->prepare("SELECT id FROM contacts WHERE id=? AND tenant_id=?");
+            $chkStill->execute([$id, $auth['tenant_id']]);
+            if (!$chkStill->fetch()) {
+                respond(403, null, 'Bạn không có quyền di chuyển liên hệ này', false);
+            }
+        }
 
         // Trigger CAPI / Security timer updates on status change
         if ($newStatus !== $currStatus) {
             require_once __DIR__ . '/../config/CapiHelper.php';
             
-            // Load CAPI triggers mapping from settings dynamically
             $capiTriggersRaw = $this->getSetting('capi_event_triggers', '');
             $capiMap = [];
             if (!empty($capiTriggersRaw)) {
                 $capiMap = json_decode($capiTriggersRaw, true) ?: [];
             }
             
-            // Fallback mapping if not configured in settings
             if (empty($capiMap)) {
                 $capiMap = [
                     'dong_y_gap' => 'Schedule',
                     'da_gap' => 'Schedule',
+                    'proposal_sent' => 'Schedule',
                     'not_lead' => 'BAD',
-                    'dat_coc' => 'Purchase'
+                    'dat_coc' => 'Purchase',
+                    'deposit_tuition_payment' => 'Purchase',
+                    'enrolled' => 'Purchase'
                 ];
             }
             
@@ -1156,20 +1212,38 @@ class ContactController {
             require_once __DIR__ . '/../config/WorkflowHelper.php';
             WorkflowHelper::triggerTasks($this->db, $auth['tenant_id'], $id, $stageId, $auth['user_id']);
 
-            // Withdraw from databank and terminate other parallel contacts if deal won status is reached
+            // Lock winning contact
             $stmtWon = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'deal_won_status' LIMIT 1");
-            $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'dat_coc';
-            if (empty($dealWonStatus)) $dealWonStatus = 'dat_coc';
+            $dealWonStatus = $stmtWon ? $stmtWon->fetchColumn() : 'enrolled';
+            if (empty($dealWonStatus)) $dealWonStatus = 'enrolled';
 
-            if ($newStatus === $dealWonStatus) {
+            if ($newStatus === $dealWonStatus || $newStatus === 'enrolled') {
                 require_once __DIR__ . '/../config/ParallelHelper.php';
                 ParallelHelper::lockPersonForWinningContact($this->db, (int)$id);
             }
         }
 
         $note = $b['note'] ?? "Khách hàng đã được chuyển trạng thái.";
-        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Cập nhật Pipeline', $note, 'contact', $id);
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode(['stage_id' => $stageId, 'pipeline_status' => $newStatus, 'note' => $note]));
+        $extraLog = [];
+        if ($targetLeadStatus !== 'active') $extraLog[] = "Trạng thái: " . strtoupper($targetLeadStatus);
+        if ($nextAction) $extraLog[] = "Next Action: " . $nextAction;
+        if ($nextFollowupDate) $extraLog[] = "Follow-up: " . $nextFollowupDate;
+        if ($expectedIntake) $extraLog[] = "Kỳ intake: " . $expectedIntake;
+        if ($leadTemp) $extraLog[] = "Độ nóng: " . strtoupper($leadTemp);
+        if ($nurtureReason) $extraLog[] = "Lý do nuôi dưỡng: " . $nurtureReason;
+        if ($lostReason) $extraLog[] = "Lý do lost: " . $lostReason;
+        
+        $fullNote = $note . (!empty($extraLog) ? (" (" . implode(" | ", $extraLog) . ")") : "");
+
+        logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', 'Cập nhật Pipeline', $fullNote, 'contact', $id);
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([
+            'stage_id' => $stageId,
+            'stage_name' => $targetStageData['name'],
+            'pipeline_status' => $newStatus,
+            'lead_status' => $targetLeadStatus,
+            'note' => $fullNote
+        ], JSON_UNESCAPED_UNICODE));
+
         respond(200, null, 'Đã cập nhật stage thành công');
     }
 

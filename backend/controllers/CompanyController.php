@@ -373,12 +373,19 @@ class CompanyController {
         $b = getBody();
         if (empty($b['stage_id'])) respond(422, null, 'stage_id là bắt buộc', false);
         
-        $sStage = $this->db->prepare("SELECT id FROM pipeline_stages WHERE id=? AND tenant_id=?");
-        $sStage->execute([(int)$b['stage_id'], $auth['tenant_id']]);
-        if (!$sStage->fetch()) respond(404, null, 'Giai đoạn không hợp lệ', false);
+        $stageParam = trim((string)$b['stage_id']);
+        $sStage = $this->db->prepare("SELECT id FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
+        $sStage->execute([$stageParam, $stageParam, $auth['tenant_id']]);
+        $stageRow = $sStage->fetch();
+        if (!$stageRow) {
+            $sStageByName = $this->db->prepare("SELECT id FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
+            $sStageByName->execute([$stageParam, $auth['tenant_id']]);
+            $stageRow = $sStageByName->fetch();
+        }
+        $targetStageId = $stageRow ? (int)$stageRow['id'] : (is_numeric($stageParam) ? (int)$stageParam : 0);
 
         $sql = "UPDATE companies SET stage_id=? WHERE id=? AND tenant_id=?";
-        $p = [$b['stage_id'], $id, $auth['tenant_id']];
+        $p = [$targetStageId, $id, $auth['tenant_id']];
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);

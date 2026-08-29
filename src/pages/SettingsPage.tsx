@@ -624,6 +624,27 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
 
+          {activeModal.type === 'pipeline' && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Customer Milestone (Định nghĩa)</label>
+                <textarea className="form-input" placeholder="Định nghĩa hoặc cột mốc của khách hàng tại giai đoạn này..." value={genericForm.definition || ''} onChange={e => setGenericForm({ ...genericForm, definition: e.target.value })} style={{ minHeight: '60px' }} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mục tiêu Tư vấn viên</label>
+                <input className="form-input" placeholder="Mục tiêu cốt lõi cần đạt..." value={genericForm.target_goal || ''} onChange={e => setGenericForm({ ...genericForm, target_goal: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Exit Criteria (Tiêu chuẩn đầu ra để chuyển tiếp)</label>
+                <textarea className="form-input" placeholder="Điều kiện bắt buộc cần đạt để chuyển sang stage tiếp theo..." value={genericForm.exit_criteria || ''} onChange={e => setGenericForm({ ...genericForm, exit_criteria: e.target.value })} style={{ minHeight: '60px' }} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Sales Action chính / Checklist khuyến nghị</label>
+                <textarea className="form-input" placeholder="Hướng dẫn hoặc checklist các hành động chính..." value={genericForm.sales_actions || ''} onChange={e => setGenericForm({ ...genericForm, sales_actions: e.target.value })} style={{ minHeight: '60px' }} />
+              </div>
+            </>
+          )}
+
           {activeModal.type === 'field' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

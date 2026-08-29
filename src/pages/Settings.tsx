@@ -403,21 +403,41 @@ const SettingsInner = () => {
   const [capiStuckAlertThresholdHours, setCapiStuckAlertThresholdHours] = useState<number>(24);
 
   const [pipelineStatusHierarchy, setPipelineStatusHierarchy] = useState<string[]>([
-    'chua_xac_dinh', 'quan_tam', 'dong_y_gap', 'da_gap', 'booking', 'dat_coc', 'dong_deal'
+    'new_lead',
+    'contact_attempted',
+    'connected',
+    'needed',
+    'discovery_completed',
+    'program_matched',
+    'proposal_sent',
+    'evaluation_objection',
+    'application_started',
+    'application_completed',
+    'admission_approved',
+    'offer_accepted',
+    'deposit_tuition_payment',
+    'enrolled'
   ]);
   const [pipelineStatusLabels, setPipelineStatusLabels] = useState<Record<string, string>>({
-    chua_xac_dinh: 'Chưa xác định',
-    quan_tam: 'Quan tâm',
-    dong_y_gap: 'Đồng ý gặp',
-    da_gap: 'Đã gặp',
-    booking: 'Booking',
-    dat_coc: 'Đặt cọc',
-    dong_deal: 'Đóng deal'
+    new_lead: '01 – New Lead',
+    contact_attempted: '02 – Contact Attempted',
+    connected: '03 – Connected',
+    needed: '04 – Needed',
+    discovery_completed: '05 – Discovery Completed',
+    program_matched: '06 – Program Matched',
+    proposal_sent: '07 – Proposal Sent',
+    evaluation_objection: '08 – Evaluation / Objection',
+    application_started: '09 – Application Started',
+    application_completed: '10 – Application Completed',
+    admission_approved: '11 – Admission Approved',
+    offer_accepted: '12 – Offer / Scholarship Accepted',
+    deposit_tuition_payment: '13 – Deposit / Tuition Payment',
+    enrolled: '14 – Enrolled'
   });
-  const [dealOpportunityStatus, setDealOpportunityStatus] = useState<string>('booking');
-  const [dealWonStatus, setDealWonStatus] = useState<string>('dong_deal');
-  const [saleAdminLeadVisibilityStage, setSaleAdminLeadVisibilityStage] = useState<string>('nop_ho_so');
-  const [accountantLeadVisibilityStage, setAccountantLeadVisibilityStage] = useState<string>('dong_le_phi_ho_so');
+  const [dealOpportunityStatus, setDealOpportunityStatus] = useState<string>('application_started');
+  const [dealWonStatus, setDealWonStatus] = useState<string>('enrolled');
+  const [saleAdminLeadVisibilityStage, setSaleAdminLeadVisibilityStage] = useState<string>('application_started');
+  const [accountantLeadVisibilityStage, setAccountantLeadVisibilityStage] = useState<string>('deposit_tuition_payment');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // States

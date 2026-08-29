@@ -50,15 +50,27 @@ class DealController {
         $maxIdx = $this->db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM pipeline_stages WHERE tenant_id=?");
         $maxIdx->execute([$auth['tenant_id']]);
         $nextIdx = (int)$maxIdx->fetchColumn();
-        $this->db->prepare("INSERT INTO pipeline_stages (tenant_id,name,color,order_index,is_won,is_lost) VALUES (?,?,?,?,?,?)")
-            ->execute([$auth['tenant_id'], $b['name'], $b['color']??'#6366f1', $nextIdx, $b['is_won']??0, $b['is_lost']??0]);
+        $this->db->prepare("INSERT INTO pipeline_stages (tenant_id,name,color,order_index,is_won,is_lost,system_slug,definition,target_goal,sales_actions,exit_criteria) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+            ->execute([
+                $auth['tenant_id'],
+                $b['name'],
+                $b['color'] ?? '#6366f1',
+                $nextIdx,
+                $b['is_won'] ?? 0,
+                $b['is_lost'] ?? 0,
+                $b['system_slug'] ?? null,
+                $b['definition'] ?? null,
+                $b['target_goal'] ?? null,
+                $b['sales_actions'] ?? null,
+                $b['exit_criteria'] ?? null
+            ]);
         respond(201, ['id' => (int)$this->db->lastInsertId()], 'Stage đã tạo thành công');
     }
 
     public function updateStage(array $auth, int $id): void {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý pipeline', false);
         $b = getBody();
-        $fields = ['name','color','order_index','is_won','is_lost'];
+        $fields = ['name','color','order_index','is_won','is_lost','system_slug','definition','target_goal','sales_actions','exit_criteria'];
         $sets=[]; $params=[];
         foreach ($fields as $f) { if (array_key_exists($f,$b)) { $sets[]="$f=?"; $params[]=$b[$f]; } }
         if (!$sets) respond(422, null, 'Không có dữ liệu', false);
@@ -303,15 +315,24 @@ class DealController {
             $old = $stmt->fetchColumn();
             if ($old === false) respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
 
-            $sStage = $this->db->prepare("SELECT is_won, is_lost FROM pipeline_stages WHERE id=? AND tenant_id=?");
-            $sStage->execute([(int)$b['stage_id'], $auth['tenant_id']]);
+            $stageParam = trim((string)$b['stage_id']);
+            $sStage = $this->db->prepare("SELECT id, is_won, is_lost FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
+            $sStage->execute([$stageParam, $stageParam, $auth['tenant_id']]);
             $stageInfo = $sStage->fetch();
-            if (!$stageInfo) respond(404, null, 'Giai đoạn không hợp lệ', false);
+            if (!$stageInfo) {
+                $sStageByName = $this->db->prepare("SELECT id, is_won, is_lost FROM pipeline_stages WHERE name=? AND tenant_id=? LIMIT 1");
+                $sStageByName->execute([$stageParam, $auth['tenant_id']]);
+                $stageInfo = $sStageByName->fetch();
+            }
+            if (!$stageInfo) {
+                $stageInfo = ['id' => is_numeric($stageParam) ? (int)$stageParam : 0, 'is_won' => 0, 'is_lost' => 0];
+            }
             
+            $targetStageId = (int)$stageInfo['id'];
             $setActualDate = ($stageInfo['is_won'] || $stageInfo['is_lost']) ? ", actual_close_date=CURDATE()" : ", actual_close_date=NULL";
 
             $sql = "UPDATE deals SET stage_id=? $setActualDate WHERE id=? AND tenant_id=?";
-            $p = [$b['stage_id'], $id, $auth['tenant_id']];
+            $p = [$targetStageId, $id, $auth['tenant_id']];
             $update = $this->db->prepare($sql);
             $update->execute($p);
 

@@ -46,9 +46,9 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
     title: 'KHÁCH HÀNG',
     items: [
-      { name: 'Học viên', href: '/students', icon: GraduationCap, hideForRoles: ['hr'] },
       { name: 'Tiềm năng', href: '/contacts', icon: Users, hideForRoles: ['hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
       { name: 'Pipeline', href: '/deals', icon: TrendingUp, hideForRoles: ['hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
+      { name: 'Học viên', href: '/students', icon: GraduationCap, hideForRoles: ['hr'] },
       { name: 'Nhật ký Data', href: '/data', icon: Database, hideForRoles: ['sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
       { name: 'Đối soát công bằng', href: '/fair-share', icon: Scale, hideForRoles: ['sale', 'sales', 'viewer', 'hr', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
       { name: 'AI Pre-screener', href: '/gatekeeper', icon: Filter, badgeKey: 'gatekeeper', hideForRoles: ['manager', 'assistant', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
@@ -130,14 +130,14 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
   sale: [
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Tiềm năng', href: '/contacts', icon: Users },
-    { name: 'Giao dịch', href: '/deals', icon: TrendingUp },
+    { name: 'Pipeline', href: '/deals', icon: TrendingUp },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   sales: [
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
     { name: 'Tiềm năng', href: '/contacts', icon: Users },
-    { name: 'Giao dịch', href: '/deals', icon: TrendingUp },
+    { name: 'Pipeline', href: '/deals', icon: TrendingUp },
     { name: 'Học viên', href: '/students', icon: GraduationCap },
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],

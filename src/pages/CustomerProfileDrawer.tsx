@@ -146,10 +146,161 @@ const buildTasks = (c: any): any[] => {
 /* ─── Helpers ────────────────────────────────────────────────── */
 // Fallback statuses used when pipeline-stages API has no data or in DEV_MODE
 const DEFAULT_PIPELINE_STAGES = [
-  { id: 'lead', name: 'Lead mới', color: '#3b82f6', order_index: 0 },
-  { id: 'qualified', name: 'Đủ điều kiện', color: '#f59e0b', order_index: 1 },
-  { id: 'customer', name: 'Khách hàng', color: '#10b981', order_index: 2 },
-  { id: 'churned', name: 'Đã rời bỏ', color: '#ef4444', order_index: 3 },
+  {
+    id: 'new_lead',
+    name: '01 – New Lead',
+    system_slug: 'new_lead',
+    color: '#3b82f6',
+    order_index: 1,
+    definition: 'Lead vừa được ghi nhận trên CRM; chưa có hoạt động tư vấn thực tế.',
+    target_goal: 'Thiết lập liên hệ đầu tiên.',
+    sales_actions: 'Kiểm tra Lead trùng; nguồn Lead; chương trình quan tâm; phân công TVV; liên hệ lần đầu.',
+    exit_criteria: 'Đã thực hiện ít nhất 01 hoạt động liên hệ hợp lệ → Contact Attempted.'
+  },
+  {
+    id: 'contact_attempted',
+    name: '02 – Contact Attempted',
+    system_slug: 'contact_attempted',
+    color: '#6366f1',
+    order_index: 2,
+    definition: 'TVV đã gọi/gửi Zalo/email nhưng chưa có trao đổi hai chiều.',
+    target_goal: 'Thiết lập được tương tác hai chiều.',
+    sales_actions: 'Follow-up theo cadence; đa kênh; ghi nhận đầy đủ lịch sử tương tác.',
+    exit_criteria: 'Khách phản hồi hoặc có cuộc trao đổi trực tiếp → Connected.'
+  },
+  {
+    id: 'connected',
+    name: '03 – Connected',
+    system_slug: 'connected',
+    color: '#8b5cf6',
+    order_index: 3,
+    definition: 'Đã có trao đổi hai chiều nhưng chưa đủ dữ liệu để xác định mức độ phù hợp.',
+    target_goal: 'Qualification sơ bộ.',
+    sales_actions: 'Thu thập chương trình quan tâm, học vấn, kinh nghiệm, chức vụ/lĩnh vực, mục tiêu và thời điểm dự kiến nhập học.',
+    exit_criteria: 'Khách đáp ứng điều kiện sơ bộ của ít nhất 01 chương trình → Needed.'
+  },
+  {
+    id: 'needed',
+    name: '04 – Needed',
+    system_slug: 'needed',
+    color: '#a855f7',
+    order_index: 4,
+    definition: 'Khách được xác định có khả năng phù hợp với chương trình IDEAS đang tuyển sinh.',
+    target_goal: 'Xác nhận mức độ phù hợp và mở Discovery.',
+    sales_actions: 'Đánh giá Academic Fit, Professional Fit, Program Fit, Timeline, Motivation và Financial indication.',
+    exit_criteria: 'Đủ dữ liệu nền tảng và khách đồng ý trao đổi sâu hơn → Discovery Completed.'
+  },
+  {
+    id: 'discovery_completed',
+    name: '05 – Discovery Completed',
+    system_slug: 'discovery_completed',
+    color: '#d946ef',
+    order_index: 5,
+    definition: 'TVV đã hiểu mục tiêu, pain point, động lực, rào cản và tiêu chí ra quyết định của khách.',
+    target_goal: 'Hiểu nhu cầu thật để đưa ra khuyến nghị chính xác.',
+    sales_actions: 'Làm rõ Goal – Pain – Motivation – Constraint – Decision Criteria – Decision Timeline.',
+    exit_criteria: 'Đủ cơ sở đưa ra khuyến nghị chương trình cụ thể → Program Matched.'
+  },
+  {
+    id: 'program_matched',
+    name: '06 – Program Matched',
+    system_slug: 'program_matched',
+    color: '#ec4899',
+    order_index: 6,
+    definition: 'Đã xác định chương trình/phương án học phù hợp nhất với hồ sơ và mục tiêu khách.',
+    target_goal: 'Chuyển từ giới thiệu nhiều lựa chọn sang tư vấn giải pháp phù hợp.',
+    sales_actions: 'Trình bày lý do khuyến nghị; dùng Program One-page, Brochure, Curriculum, Learning Journey, Comparison nếu cần.',
+    exit_criteria: 'Khách xác nhận chương trình phù hợp và đồng ý xem đề xuất chi tiết → Proposal Sent.'
+  },
+  {
+    id: 'proposal_sent',
+    name: '07 – Proposal Sent',
+    system_slug: 'proposal_sent',
+    color: '#f43f5e',
+    order_index: 7,
+    definition: 'Khách đã nhận đề xuất tuyển sinh chính thức, gồm chương trình, học phí, chính sách, intake và next step.',
+    target_goal: 'Đưa khách sang trạng thái cân nhắc đăng ký thực tế.',
+    sales_actions: 'Gửi proposal cá nhân hóa; giải thích giá trị; học phí; scholarship; payment plan; deadline; CTA.',
+    exit_criteria: 'Khách bắt đầu đánh giá, đặt câu hỏi chuyên sâu, so sánh hoặc cân nhắc điều kiện → Evaluation / Objection.'
+  },
+  {
+    id: 'evaluation_objection',
+    name: '08 – Evaluation / Objection',
+    system_slug: 'evaluation_objection',
+    color: '#f97316',
+    order_index: 8,
+    definition: 'Khách đang đánh giá nghiêm túc và có các băn khoăn về giá, recognition, thời gian, chất lượng, hình thức học…',
+    target_goal: 'Xử lý đúng rào cản và giảm rủi ro cảm nhận.',
+    sales_actions: 'Xác định đúng objection; chỉ gửi proof/tài liệu phù hợp; follow-up theo vấn đề cụ thể.',
+    exit_criteria: 'Khách thể hiện ý định nộp hồ sơ hoặc bắt đầu cung cấp hồ sơ → Application Started.'
+  },
+  {
+    id: 'application_started',
+    name: '09 – Application Started',
+    system_slug: 'application_started',
+    color: '#f59e0b',
+    order_index: 9,
+    definition: 'Khách bắt đầu gửi CV, bằng, bảng điểm, passport hoặc điền form.',
+    target_goal: 'Giảm friction để hoàn thiện hồ sơ nhanh.',
+    sales_actions: 'Gửi Application Checklist; hướng dẫn hồ sơ; deadline; nhắc tài liệu còn thiếu; hỗ trợ form.',
+    exit_criteria: 'Đủ bộ hồ sơ để chuyển xét tuyển → Application Completed.'
+  },
+  {
+    id: 'application_completed',
+    name: '10 – Application Completed',
+    system_slug: 'application_completed',
+    color: '#eab308',
+    order_index: 10,
+    definition: 'Hồ sơ đã đầy đủ và được chuyển sang quy trình xét tuyển.',
+    target_goal: 'Theo dõi xét tuyển và duy trì commitment.',
+    sales_actions: 'Kiểm tra; submit admission; chuẩn bị interview nếu có; cập nhật tiến độ cho khách.',
+    exit_criteria: 'Trường/đơn vị có thẩm quyền xác nhận đủ điều kiện → Admission Approved.'
+  },
+  {
+    id: 'admission_approved',
+    name: '11 – Admission Approved',
+    system_slug: 'admission_approved',
+    color: '#84cc16',
+    order_index: 11,
+    definition: 'Khách đã được xác nhận đủ điều kiện nhập học/nhận Acceptance hoặc Conditional Acceptance.',
+    target_goal: 'Chuyển tâm lý từ “đang đăng ký” sang “đã được nhận”.',
+    sales_actions: 'Gửi/giải thích kết quả admission; điều kiện còn lại; deadline; next step.',
+    exit_criteria: 'Khách xác nhận chấp nhận offer/scholarship/điều kiện nhập học → Offer Accepted.'
+  },
+  {
+    id: 'offer_accepted',
+    name: '12 – Offer / Scholarship Accepted',
+    system_slug: 'offer_accepted',
+    color: '#22c55e',
+    order_index: 12,
+    definition: 'Khách đã xác nhận đồng ý chương trình, học phí, scholarship, intake và các điều kiện liên quan.',
+    target_goal: 'Tạo commitment rõ ràng trước bước tài chính.',
+    sales_actions: 'Xác nhận bằng email/Zalo/form/hợp đồng; chốt payment plan; cung cấp hướng dẫn thanh toán.',
+    exit_criteria: 'Khách thực hiện giao dịch tài chính theo chính sách → Deposit / Tuition Payment.'
+  },
+  {
+    id: 'deposit_tuition_payment',
+    name: '13 – Deposit / Tuition Payment',
+    system_slug: 'deposit_tuition_payment',
+    color: '#10b981',
+    order_index: 13,
+    definition: 'Khách đã phát sinh Application Fee/Deposit/Registration Fee/Tuition theo quy định.',
+    target_goal: 'Hoàn tất nghĩa vụ tài chính để kích hoạt nhập học.',
+    sales_actions: 'Theo dõi khoản thu; xác nhận chứng từ; nhắc phần còn lại; phối hợp Kế toán/Admissions.',
+    exit_criteria: 'Hoàn tất hồ sơ + nghĩa vụ tài chính + điều kiện kích hoạt intake → Enrolled.'
+  },
+  {
+    id: 'enrolled',
+    name: '14 – Enrolled',
+    system_slug: 'enrolled',
+    color: '#06b6d4',
+    order_index: 14,
+    is_won: 1,
+    definition: 'Khách chính thức trở thành học viên và được xác nhận trong intake.',
+    target_goal: 'Handover sạch từ Sales sang Student Experience/Academic.',
+    sales_actions: 'Bàn giao chương trình, intake, payment plan, scholarship, cam kết đặc biệt, quyền lợi, lưu ý học vụ và người phụ trách tiếp theo.',
+    exit_criteria: 'Kết thúc Pipeline tuyển sinh; chuyển sang Student Journey / Onboarding.'
+  }
 ];
 // Keep for pipelineModal label lookups
 const CONTACT_STATUSES = DEFAULT_PIPELINE_STAGES.map(s => ({ id: s.id, label: s.name, color: s.color }));
@@ -1885,8 +2036,36 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [allowedCampaigns, setAllowedCampaigns] = useState<any[]>([]);
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
   const [allowedTeams, setAllowedTeams] = useState<any[]>([]);
-  const [pipelineModal, setPipelineModal] = useState<{ isOpen: boolean; targetId: string; targetLabel: string; note: string }>({ isOpen: false, targetId: '', targetLabel: '', note: '' });
   const [users, setUsers] = useState<any[]>([]);
+  const [pipelineModal, setPipelineModal] = useState<{
+    isOpen: boolean;
+    targetId: string;
+    targetLabel: string;
+    note: string;
+    leadStatus: 'active' | 'nurture' | 'lost';
+    leadTemperature: string;
+    nextAction: string;
+    nextFollowupDate: string;
+    expectedDecisionDate: string;
+    expectedIntake: string;
+    nurtureReason: string;
+    lostReason: string;
+    exitCriteriaConfirmed: boolean;
+  }>({
+    isOpen: false,
+    targetId: '',
+    targetLabel: '',
+    note: '',
+    leadStatus: 'active',
+    leadTemperature: 'warm',
+    nextAction: '',
+    nextFollowupDate: '',
+    expectedDecisionDate: '',
+    expectedIntake: '',
+    nurtureReason: '',
+    lostReason: '',
+    exitCriteriaConfirmed: false
+  });
 
   useEffect(() => {
     if (showDealModal && users.length > 0) {
@@ -1912,14 +2091,44 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [showScrollArrows, setShowScrollArrows] = useState(false);
   const pipelineContainerRef = useRef<HTMLDivElement>(null);
 
+  const LEGACY_STAGE_MAPPING: Record<string, string> = {
+    'chua_xac_dinh': 'new_lead',
+    'lead': 'new_lead',
+    'bo_theo_doi': 'new_lead',
+    'not_lead': 'new_lead',
+    'co_nhu_cau': 'needed',
+    'dang_tu_van': 'discovery_completed',
+    'quan_tam': 'connected',
+    'dong_y_gap': 'needed',
+    'da_gap': 'discovery_completed',
+    'booking': 'program_matched',
+    'nop_ho_so': 'application_started',
+    'dat_coc': 'deposit_tuition_payment',
+    'dong_le_phi_ho_so': 'deposit_tuition_payment',
+    'dong_deal': 'enrolled',
+    'hoc_vien': 'enrolled',
+    'pending': 'contact_attempted'
+  };
+
   const getStageFromVal = (val: any) => {
-    if (!val) return null;
+    if (!val) return pipelineStages[0] || DEFAULT_PIPELINE_STAGES[0];
     const searchVal = String(val).trim().toLowerCase();
-    return pipelineStages.find(s => 
+    const exact = pipelineStages.find(s => 
       String(s.id).toLowerCase() === searchVal ||
-      String(s.system_slug).toLowerCase() === searchVal ||
+      String(s.system_slug || '').toLowerCase() === searchVal ||
       String(s.name).toLowerCase() === searchVal
     );
+    if (exact) return exact;
+
+    const mappedSlug = LEGACY_STAGE_MAPPING[searchVal];
+    if (mappedSlug) {
+      const mapped = pipelineStages.find(s => 
+        String(s.id).toLowerCase() === mappedSlug ||
+        String(s.system_slug || '').toLowerCase() === mappedSlug
+      );
+      if (mapped) return mapped;
+    }
+    return pipelineStages[0] || DEFAULT_PIPELINE_STAGES[0];
   };
 
   const checkScrollable = () => {
@@ -3248,7 +3457,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       try {
         if (stages.length === 0) {
           const stagesRes = await api.get('/pipeline-stages');
-          setStages(stagesRes.data.data?.items || stagesRes.data.data || []);
+          const fetched = stagesRes.data.data?.items || stagesRes.data.data || [];
+          setStages(fetched);
+          if (Array.isArray(fetched) && (fetched.length >= 10 || fetched.some((s: any) => s.system_slug === 'new_lead'))) {
+            setPipelineStages(fetched);
+          }
         }
       } catch (err) {}
 
@@ -3806,18 +4019,33 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               try {
                 const hierarchy = JSON.parse(res.data.pipeline_status_hierarchy);
                 const labels = JSON.parse(res.data.pipeline_status_labels);
-                if (Array.isArray(hierarchy) && hierarchy.length > 0) {
-                  const mappedStages = hierarchy.map((slug: string, idx: number) => ({
-                    id: slug,
-                    name: labels[slug] || slug,
-                    color: slug === 'bo_theo_doi' ? '#64748b' : slug === 'hoc_vien' ? '#ec4899' : slug === 'dong_le_phi_ho_so' ? '#10b981' : slug === 'co_nhu_cau' || slug === 'dang_tu_van' || slug === 'nop_ho_so' ? '#f59e0b' : '#3b82f6',
-                    order_index: idx
-                  }));
+                const isNew14Stages = Array.isArray(hierarchy) && (hierarchy.includes('new_lead') || hierarchy.length >= 10);
+                if (isNew14Stages) {
+                  const mappedStages = hierarchy.map((slug: string, idx: number) => {
+                    const defaultStage = DEFAULT_PIPELINE_STAGES.find(s => s.id === slug || s.system_slug === slug);
+                    return {
+                      id: slug,
+                      name: labels[slug] || defaultStage?.name || slug,
+                      system_slug: slug,
+                      color: defaultStage?.color || '#3b82f6',
+                      order_index: idx,
+                      definition: defaultStage?.definition || '',
+                      target_goal: defaultStage?.target_goal || '',
+                      sales_actions: defaultStage?.sales_actions || '',
+                      exit_criteria: defaultStage?.exit_criteria || ''
+                    };
+                  });
                   setPipelineStages(mappedStages);
+                } else {
+                  // Always prioritize the standardized 14 IDEAS Pipeline Stages
+                  setPipelineStages(DEFAULT_PIPELINE_STAGES);
                 }
               } catch (e) {
                 console.error('Failed to parse pipeline stages from settings', e);
+                setPipelineStages(DEFAULT_PIPELINE_STAGES);
               }
+            } else {
+              setPipelineStages(DEFAULT_PIPELINE_STAGES);
             }
             if (res.data.lead_scoring_rules) {
               try {
@@ -5147,7 +5375,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   if (typeof document === 'undefined') return null;
 
-  const handleStageTransition = (targetId: string, targetName: string) => {
+  const handleStageTransition = (targetId: string, targetName: string, initialLeadStatus: 'active' | 'nurture' | 'lost' = 'active') => {
     const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
     const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
     const safeIndex = currentIdx === -1 ? 0 : currentIdx;
@@ -5170,94 +5398,220 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const isToSuccess = targetStageObj?.name?.toLowerCase()?.includes('hợp đồng') || targetStageObj?.name?.toLowerCase()?.includes('won') || targetStageObj?.name?.toLowerCase()?.includes('thành công') || targetStageObj?.is_won;
     const isCancellation = isFromDeposit && !isToSuccess;
 
-    if (isBackward && !isCancellation && !allowPipelineBackward) {
+    if (isBackward && !isCancellation && !allowPipelineBackward && initialLeadStatus === 'active') {
       addToast("Không thể di chuyển ngược giai đoạn trên Pipeline.", "error");
       return;
     }
 
-    if (formData.pipeline_status === 'hoc_vien' && isBackward) {
+    if (formData.pipeline_status === 'hoc_vien' && isBackward && initialLeadStatus === 'active') {
       addToast("Không thể chuyển lùi giai đoạn khi học viên đã nhập học chính thức.", "error");
       return;
     }
 
     const isForwardSkip = (targetIdx !== -1 && targetIdx > safeIndex + 1);
-    if (isForwardSkip && !allowPipelineSkip) {
+    if (isForwardSkip && !allowPipelineSkip && initialLeadStatus === 'active') {
       addToast("Không được phép nhảy cóc giai đoạn. Tiến trình chuyển giai đoạn phải đi tuần tự từng bước.", "error");
       return;
     }
 
     // Check interaction guardrail: if transitioning to 'churned' or 'hoc_vien' (Đã rời bỏ/Đóng), must have at least 1 activity
-    if ((targetId === 'churned' || targetId === 'hoc_vien') && drawerActivities.length === 0) {
+    if ((targetId === 'churned' || targetId === 'hoc_vien') && drawerActivities.length === 0 && initialLeadStatus === 'active') {
       addToast('Chặn đóng deal: Khách hàng chưa từng có tương tác nào! Vui lòng tạo ghi chú cuộc gọi, email hoặc hoạt động trước.', 'error');
       return;
     }
     
-    setPipelineModal({ isOpen: true, targetId, targetLabel: targetName, note: '' });
+    const getTomorrowStr = () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(9, 0, 0, 0);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+    };
+
+    setPipelineModal({
+      isOpen: true,
+      targetId,
+      targetLabel: targetName,
+      note: '',
+      leadStatus: initialLeadStatus,
+      leadTemperature: formData.lead_temperature || formData.temperature || 'warm',
+      nextAction: formData.next_action || contact.next_action || '',
+      nextFollowupDate: initialLeadStatus === 'nurture' ? (formData.next_followup_date || contact.next_followup_date || getTomorrowStr()) : '',
+      expectedDecisionDate: formData.expected_decision_date || contact.expected_decision_date || '',
+      expectedIntake: formData.expected_intake || contact.expected_intake || '',
+      nurtureReason: formData.nurture_reason || contact.nurture_reason || '',
+      lostReason: formData.lost_reason || contact.lost_reason || '',
+      exitCriteriaConfirmed: false
+    });
   };
 
+  const currentActiveStage = getStageFromVal(formData.pipeline_status || 'new_lead');
+  const isCurrentlyNurture = formData.lead_status === 'nurture';
+  const isCurrentlyLost = formData.lead_status === 'lost';
+
   const pipelineStepperBar = (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border-light)', overflow: 'hidden', width: '100%', flexShrink: 0 }}>
-      {!isMobileOrTablet && showScrollArrows && (
-        <button className="btn outline sm" style={{ padding: '4px', height: 26, width: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '50%', position: 'absolute', left: '0.75rem', zIndex: 10, background: 'var(--color-surface)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} onClick={() => pipelineContainerRef.current?.scrollBy({ left: -250, behavior: 'smooth' })}>
-          <ChevronLeft size={14} />
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0, borderBottom: '1px solid var(--color-border-light)' }}>
+      {/* Alert Banner when lead is Nurture or Lost */}
+      {isCurrentlyNurture && (
+        <div style={{ padding: '8px 1.5rem', background: 'rgba(245, 158, 11, 0.12)', borderBottom: '1px solid rgba(245, 158, 11, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '0.825rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 700 }}>
+            <Clock size={16} />
+            <span>ĐANG TRONG LUỒNG NUÔI DƯỠNG (NURTURE)</span>
+            {formData.next_followup_date && (
+              <span style={{ fontWeight: 600, color: 'var(--color-text)', background: 'var(--color-surface)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                Hẹn follow-up: {new Date(formData.next_followup_date).toLocaleDateString('vi-VN')} {new Date(formData.next_followup_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {formData.nurture_reason && (
+              <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>({formData.nurture_reason})</span>
+            )}
+          </div>
+          <button 
+            className="btn xs" 
+            style={{ background: '#f59e0b', color: '#fff', fontWeight: 700, borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            onClick={() => handleStageTransition(currentActiveStage?.id || 'new_lead', currentActiveStage?.name || 'Pipeline', 'active')}
+          >
+            <RefreshCw size={12} /> Kích hoạt lại (Active)
+          </button>
+        </div>
       )}
 
-      <div ref={pipelineContainerRef} id="pipeline-scroll-container" className="no-scrollbar" style={{ display: 'flex', padding: isMobileOrTablet ? '0.625rem 1rem' : (showScrollArrows ? '0.625rem 3rem' : '0.625rem 1.5rem'), gap: '12px', overflowX: 'auto', flex: 1, scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none', position: 'relative', justifyContent: showScrollArrows ? 'flex-start' : 'center' }}>
-        <style dangerouslySetInnerHTML={{ __html: `#pipeline-scroll-container::-webkit-scrollbar { display: none; }` }} />
-        {(() => {
-          const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
-          const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
-          const safeIndex = currentIdx === -1 ? 0 : currentIdx;
-          const isHocVien = formData.pipeline_status === 'hoc_vien';
+      {isCurrentlyLost && (
+        <div style={{ padding: '8px 1.5rem', background: 'rgba(239, 68, 68, 0.12)', borderBottom: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '0.825rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c', fontWeight: 700 }}>
+            <Ban size={16} />
+            <span>ĐÃ CHUYỂN MẤT LEAD (LOST)</span>
+            {formData.lost_reason && (
+              <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>• Lý do: {formData.lost_reason}</span>
+            )}
+          </div>
+          <button 
+            className="btn xs" 
+            style={{ background: '#ef4444', color: '#fff', fontWeight: 700, borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            onClick={() => handleStageTransition(currentActiveStage?.id || 'new_lead', currentActiveStage?.name || 'Pipeline', 'active')}
+          >
+            <RotateCcw size={12} /> Mở lại Lead (Active)
+          </button>
+        </div>
+      )}
 
-          return pipelineStages.map((st, i) => {
-            const isCurrent = i === safeIndex;
-            const isBackward = i < safeIndex;
-            const isPrecedingOfHocVien = isHocVien && isBackward;
-            const stColor = overridePurpleColor(st.color);
-            return (
-              <div
-                key={st.id}
-                onClick={() => {
-                  if (isCurrent || isPrecedingOfHocVien) return;
-                  handleStageTransition(String(st.id), st.name);
-                }}
-                style={{
-                  flex: '1 0 auto', minWidth: '135px', position: 'relative', height: '32px', 
-                  cursor: (isCurrent || isPrecedingOfHocVien) ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', transition: 'all 0.3s',
-                  opacity: isPrecedingOfHocVien ? 0.6 : (isBackward ? 0.75 : 1)
-                }}
-              >
+      {/* Main Stepper Row with Out-of-Pipeline Action Buttons on Left & 14 Stages */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: 'var(--color-surface)', overflow: 'hidden', width: '100%' }}>
+        {/* Quick Out-of-Pipeline Action Buttons on LEFT: Nurture & Lost */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, paddingLeft: isMobileOrTablet ? '0.75rem' : '1.25rem', paddingRight: '10px', borderRight: '1px solid var(--color-border-light)', zIndex: 11, background: 'var(--color-surface)' }}>
+          <button
+            type="button"
+            onClick={() => handleStageTransition(currentActiveStage?.id || 'new_lead', currentActiveStage?.name || 'Giai đoạn hiện tại', 'nurture')}
+            title="Chuyển sang luồng Nuôi dưỡng (Tạm hoãn / Hẹn sau)"
+            style={{
+              height: '32px',
+              padding: '0 12px',
+              borderRadius: '10px',
+              border: `1.5px ${isCurrentlyNurture ? 'solid' : 'dashed'} #f59e0b`,
+              background: isCurrentlyNurture ? 'rgba(245, 158, 11, 0.2)' : 'rgba(245, 158, 11, 0.08)',
+              color: '#d97706',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Clock size={13} /> Nurture
+          </button>
 
+          <button
+            type="button"
+            onClick={() => handleStageTransition(currentActiveStage?.id || 'new_lead', currentActiveStage?.name || 'Giai đoạn hiện tại', 'lost')}
+            title="Chuyển sang Mất Lead (Bỏ theo dõi / Không tiếp tục)"
+            style={{
+              height: '32px',
+              padding: '0 12px',
+              borderRadius: '10px',
+              border: `1.5px ${isCurrentlyLost ? 'solid' : 'dashed'} #ef4444`,
+              background: isCurrentlyLost ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.08)',
+              color: '#dc2626',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Ban size={13} /> Lost
+          </button>
+        </div>
 
-                <div style={{
-                  position: 'relative', zIndex: 2, flex: 1,
-                  background: isCurrent ? 'var(--color-primary)' : (isPrecedingOfHocVien ? '#f1f5f9' : (isBackward ? 'rgba(163, 20, 34, 0.03)' : 'var(--color-surface)')),
-                  color: isCurrent ? '#fff' : (isPrecedingOfHocVien ? '#94a3b8' : (isBackward ? 'rgba(163, 20, 34, 0.65)' : 'var(--color-text-muted)')),
-                  border: isCurrent ? '2px solid var(--color-primary)' : (isPrecedingOfHocVien ? '1px solid #cbd5e1' : (isBackward ? '1px solid rgba(163, 20, 34, 0.25)' : '1px solid var(--color-border-light)')),
-                  padding: '4px 10px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                  whiteSpace: 'nowrap',
-                  boxShadow: isCurrent ? '0 4px 12px rgba(189, 29, 45, 0.2)' : 'none',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  pointerEvents: isPrecedingOfHocVien ? 'none' : 'auto'
-                }}>
-                  {isCurrent && <UserCheck size={12} />}
-                  {st.name}
+        {!isMobileOrTablet && showScrollArrows && (
+          <button className="btn outline sm" style={{ padding: '4px', height: 26, width: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '50%', position: 'absolute', left: '195px', zIndex: 12, background: 'var(--color-surface)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} onClick={() => pipelineContainerRef.current?.scrollBy({ left: -250, behavior: 'smooth' })}>
+            <ChevronLeft size={14} />
+          </button>
+        )}
+
+        <div ref={pipelineContainerRef} id="pipeline-scroll-container" className="no-scrollbar" style={{ display: 'flex', padding: isMobileOrTablet ? '0.625rem 0.75rem' : (showScrollArrows ? '0.625rem 3rem' : '0.625rem 1.25rem'), gap: '10px', overflowX: 'auto', flex: 1, scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none', position: 'relative', alignItems: 'center' }}>
+          <style dangerouslySetInnerHTML={{ __html: `#pipeline-scroll-container::-webkit-scrollbar { display: none; }` }} />
+          {(() => {
+            const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+            const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
+            const safeIndex = currentIdx === -1 ? 0 : currentIdx;
+            const isHocVien = formData.pipeline_status === 'hoc_vien';
+
+            return pipelineStages.map((st, i) => {
+              const isCurrent = i === safeIndex && !isCurrentlyNurture && !isCurrentlyLost;
+              const isBackward = i < safeIndex;
+              const isPrecedingOfHocVien = isHocVien && isBackward;
+              const stColor = overridePurpleColor(st.color);
+              return (
+                <div
+                  key={st.id}
+                  onClick={() => {
+                    if (isCurrent || isPrecedingOfHocVien) return;
+                    handleStageTransition(String(st.id), st.name, 'active');
+                  }}
+                  style={{
+                    flex: '1 0 auto', minWidth: '135px', position: 'relative', height: '32px', 
+                    cursor: (isCurrent || isPrecedingOfHocVien) ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', transition: 'all 0.3s',
+                    opacity: isPrecedingOfHocVien ? 0.6 : (isBackward ? 0.75 : 1)
+                  }}
+                >
+                  <div style={{
+                    position: 'relative', zIndex: 2, flex: 1,
+                    background: isCurrent ? 'var(--color-primary)' : (isPrecedingOfHocVien ? '#f1f5f9' : (isBackward ? 'rgba(163, 20, 34, 0.03)' : 'var(--color-surface)')),
+                    color: isCurrent ? '#fff' : (isPrecedingOfHocVien ? '#94a3b8' : (isBackward ? 'rgba(163, 20, 34, 0.65)' : 'var(--color-text-muted)')),
+                    border: isCurrent ? '2px solid var(--color-primary)' : (isPrecedingOfHocVien ? '1px solid #cbd5e1' : (isBackward ? '1px solid rgba(163, 20, 34, 0.25)' : '1px solid var(--color-border-light)')),
+                    padding: '4px 10px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    whiteSpace: 'nowrap',
+                    boxShadow: isCurrent ? '0 4px 12px rgba(189, 29, 45, 0.2)' : 'none',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    pointerEvents: isPrecedingOfHocVien ? 'none' : 'auto'
+                  }}>
+                    {isCurrent && <UserCheck size={12} />}
+                    {st.name}
+                  </div>
                 </div>
-              </div>
-            );
-          });
-        })()}
-      </div>
+              );
+            });
+          })()}
+        </div>
 
-      {!isMobileOrTablet && showScrollArrows && (
-        <button className="btn outline sm" style={{ padding: '4px', height: 26, width: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '50%', position: 'absolute', right: '0.75rem', zIndex: 10, background: 'var(--color-surface)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} onClick={() => pipelineContainerRef.current?.scrollBy({ left: 250, behavior: 'smooth' })}>
-          <ChevronRight size={14} />
-        </button>
-      )}
+        {!isMobileOrTablet && showScrollArrows && (
+          <button className="btn outline sm" style={{ padding: '4px', height: 26, width: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: '50%', position: 'absolute', right: '0.75rem', zIndex: 10, background: 'var(--color-surface)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} onClick={() => pipelineContainerRef.current?.scrollBy({ left: 250, behavior: 'smooth' })}>
+            <ChevronRight size={14} />
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -12296,195 +12650,462 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       </AnimatePresence>
 
       <AnimatePresence>
-        {pipelineModal.isOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1000020, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
-              onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              style={{ position: 'relative', background: 'var(--color-surface)', width: '90%', maxWidth: '550px', borderRadius: 'var(--radius-md)', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
-            >
-              <h3 style={{ fontWeight: 700, fontSize: '1.125rem', marginBottom: '0.25rem' }}>Cập nhật trạng thái Pipeline</h3>
-              <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
-                Từ <strong>{getStageFromVal(formData.pipeline_status || 'chua_xac_dinh')?.name || pipelineStages[0]?.name || 'Bước 1'}</strong>
-                <span style={{ margin: '0 4px' }}>→</span>
-                <strong style={{ color: pipelineStages.find(x => String(x.id) === pipelineModal.targetId)?.color || 'var(--color-primary)' }}>{pipelineModal.targetLabel}</strong>
-              </p>
+        {pipelineModal.isOpen && (() => {
+          const currentStage = getStageFromVal(formData.pipeline_status || 'new_lead');
+          const targetStage = pipelineStages.find(x => String(x.id) === String(pipelineModal.targetId) || x.system_slug === pipelineModal.targetId) || {
+            name: pipelineModal.targetLabel,
+            color: 'var(--color-primary)',
+            definition: '',
+            target_goal: '',
+            sales_actions: '',
+            exit_criteria: ''
+          };
+          const targetColor = overridePurpleColor(targetStage.color || 'var(--color-primary)');
+          const currentColor = overridePurpleColor(currentStage?.color || 'var(--color-text-muted)');
 
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label className="form-label">Ghi chú Audit Trail (Không bắt buộc)</label>
-                <textarea
-                  className="form-input"
-                  placeholder="Nhập ghi chú lý do chuyển bước (nếu có)..."
-                  value={pipelineModal.note || ''}
-                  onChange={e => setPipelineModal({ ...pipelineModal, note: e.target.value })}
-                  style={{ minHeight: '120px', padding: '12px 16px', lineHeight: 1.5, resize: 'vertical' }}
-                  autoFocus
-                />
-              </div>
+          const standardNurtureReasons = [
+            'Chưa sẵn sàng tài chính / Cần thời gian chuẩn bị ngân sách',
+            'Kỳ nhập học mong muốn còn xa (Intake sau)',
+            'Bận việc cá nhân / Gia đình / Công tác',
+            'Đang học dở văn bằng khác / Dự án hiện tại',
+            'Cần thêm thời gian ôn luyện / Thi chứng chỉ tiếng Anh',
+            'Chờ ý kiến của gia đình / Cơ quan tài trợ',
+            'Khác (nhập chi tiết bên dưới)'
+          ];
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                <button className="btn outline" onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })}>Hủy</button>
-                <button
-                  className="btn primary"
-                  disabled={isSubmitting}
-                  onClick={async () => {
-                    if (isSubmitting) return;
-                    setIsSubmitting(true);
-                    
-                    const targetId = pipelineModal.targetId;   // string, e.g. 'chua_xac_dinh' or 'dong_y_gap'
-                    const targetLabel = pipelineModal.targetLabel;
-                    const note = pipelineModal.note;
-                    
-                    if (targetId === 'dong_le_phi_ho_so' || targetId === 'hoc_vien') {
-                      setDepositProjectId('');
-                      setDepositUnitCode('');
-                      const defaultPrice = String(formData.expected_revenue || contact?.expected_revenue || '');
-                      setDepositPrice(defaultPrice);
-                      setDepositExpectedCommission('');
-                      setCommissionType('amount');
-                      setCommissionPercent('');
-                      const milestoneName = targetId === 'dong_le_phi_ho_so' 
-                        ? 'Đợt 1 - Đóng lệ phí hồ sơ' 
-                        : (targetId === 'hoc_vien' ? 'Đợt 1 - Học phí' : 'Đợt 1 - Cọc giữ chỗ');
-                      setDepositMilestones([{ name: milestoneName, amount: '', expected_pay_date: '' }]);
-                      setPipelineModal({ isOpen: false, targetId: '', targetLabel: '', note: '' });
-                      setPendingPipelineTransition({ targetId, targetLabel, note });
-                      useUIStore.getState().setShowPOS({
-                        ...(contact || formData),
-                        _targetPipelineStatus: targetId
-                      });
-                      setIsSubmitting(false);
-                      return;
-                    }
-                    
-                    if (coopEligibleStatuses.includes(targetId)) {
-                      try {
-                        const docsRes = await api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`);
-                        const currentCloudFiles = docsRes.data.data?.items || [];
-                        const coopFiles = coopSlip?.attachment_url ? coopSlip.attachment_url.split(',') : [];
-                        
-                        const missingFiles: string[] = [];
-                        if (coopDefaultFiles && coopDefaultFiles.length > 0) {
-                          for (const mandatoryFile of coopDefaultFiles) {
-                            const cleanKeyword = mandatoryFile.split('.')[0].toLowerCase().trim();
-                            if (!cleanKeyword) continue;
-                            
-                            let hasFile = currentCloudFiles.some((f: any) => {
-                              const lower = f.name.toLowerCase();
-                              if (cleanKeyword === 'unc' || cleanKeyword === 'uy nhiem chi' || cleanKeyword === 'ủy nhiệm chi') {
-                                return lower.includes('unc') || lower.includes('uy nhiem chi') || lower.includes('ủy nhiệm chi');
-                              }
-                              return lower.includes(cleanKeyword);
-                            });
-                            
-                            if (!hasFile) {
-                              hasFile = coopFiles.some((f: string) => {
-                                const filename = f.split('/').pop() || '';
-                                const lower = filename.toLowerCase();
+          const standardLostReasons = [
+            'Học phí cao / Không đủ khả năng tài chính',
+            'Đã chọn trường khác / Chương trình khác',
+            'Không đạt điều kiện học thuật / Đầu vào',
+            'Thay đổi kế hoạch học tập / Không còn nhu cầu',
+            'Không liên lạc được / Sai số điện thoại / Thuê bao',
+            'Trùng data / Lead thử nghiệm / Lead rác',
+            'Khác (nhập chi tiết bên dưới)'
+          ];
+
+          const quickActions = [
+            'Gửi proposal tuyển sinh cá nhân hóa',
+            'Gửi checklist hồ sơ & hướng dẫn xét tuyển',
+            'Gọi điện tư vấn chuyên sâu & giải đáp thắc mắc',
+            'Chốt kế hoạch đóng phí & hướng dẫn thanh toán',
+            'Hẹn lịch phỏng vấn tuyển sinh / Test đầu vào',
+            'Nhắc hạn bổ sung giấy tờ còn thiếu'
+          ];
+
+          return (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000020, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobileOrTablet ? '0.75rem' : '1.5rem' }}>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
+                onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                style={{
+                  position: 'relative',
+                  background: 'var(--color-surface)',
+                  width: '100%',
+                  maxWidth: '560px',
+                  maxHeight: '85vh',
+                  borderRadius: '16px',
+                  boxShadow: '0 20px 40px -10px rgba(0,0,0,0.3)',
+                  border: '1px solid var(--color-border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  zIndex: 2
+                }}
+              >
+                {/* Header */}
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-alt)' }}>
+                  <div>
+                    {pipelineModal.leadStatus === 'nurture' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', padding: '4px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#d97706' }}>
+                          <Clock size={16} />
+                        </span>
+                        <h3 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>
+                          Chuyển sang Nuôi dưỡng (Nurture)
+                        </h3>
+                      </div>
+                    ) : pipelineModal.leadStatus === 'lost' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ display: 'inline-flex', padding: '4px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626' }}>
+                          <Ban size={16} />
+                        </span>
+                        <h3 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, color: 'var(--color-text)' }}>
+                          Đánh dấu Mất Lead (Lost)
+                        </h3>
+                      </div>
+                    ) : (
+                      <div>
+                        <h3 style={{ fontWeight: 800, fontSize: '1.05rem', margin: '0 0 4px 0', color: 'var(--color-text)' }}>
+                          Chuyển giai đoạn Pipeline
+                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem' }}>
+                          <span style={{ padding: '1px 6px', borderRadius: '4px', background: 'var(--color-bg)', color: 'var(--color-text-muted)', fontWeight: 600, border: '1px solid var(--color-border)' }}>
+                            {currentStage?.name || 'Hiện tại'}
+                          </span>
+                          <span style={{ color: 'var(--color-text-muted)' }}>→</span>
+                          <span style={{ padding: '1px 8px', borderRadius: '4px', background: `${targetColor}18`, color: targetColor, fontWeight: 700, border: `1px solid ${targetColor}40` }}>
+                            {targetStage.name}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '6px', borderRadius: '8px' }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Body Content Scrollable */}
+                <div style={{ padding: '1.25rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }} className="custom-scrollbar">
+                  
+                  {/* Nurture Mode */}
+                  {pipelineModal.leadStatus === 'nurture' && (
+                    <>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
+                          Ngày hẹn chăm sóc lại <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          className="form-input"
+                          value={pipelineModal.nextFollowupDate ? pipelineModal.nextFollowupDate.replace(' ', 'T').slice(0, 16) : ''}
+                          onChange={e => setPipelineModal({ ...pipelineModal, nextFollowupDate: e.target.value.replace('T', ' ') })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
+                          Lý do nuôi dưỡng <span style={{ color: '#ef4444' }}>*</span>
+                        </label>
+                        <select
+                          className="form-input"
+                          value={pipelineModal.nurtureReason || ''}
+                          onChange={e => setPipelineModal({ ...pipelineModal, nurtureReason: e.target.value })}
+                        >
+                          <option value="">-- Chọn lý do nuôi dưỡng --</option>
+                          {standardNurtureReasons.map((r, i) => (
+                            <option key={i} value={r}>{r}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Lost Mode */}
+                  {pipelineModal.leadStatus === 'lost' && (
+                    <div>
+                      <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
+                        Lý do mất lead <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        className="form-input"
+                        value={pipelineModal.lostReason || ''}
+                        onChange={e => setPipelineModal({ ...pipelineModal, lostReason: e.target.value })}
+                      >
+                        <option value="">-- Chọn lý do mất Lead --</option>
+                        {standardLostReasons.map((r, i) => (
+                          <option key={i} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Active Transition Mode */}
+                  {pipelineModal.leadStatus === 'active' && (
+                    <>
+                      {/* Compact Exit Criteria Card */}
+                      {targetStage.exit_criteria && (
+                        <div style={{ 
+                          background: 'rgba(16, 185, 129, 0.08)', 
+                          border: '1px solid rgba(16, 185, 129, 0.25)', 
+                          borderRadius: '8px', 
+                          padding: '8px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontSize: '0.8125rem'
+                        }}>
+                          <CheckCircle2 size={15} style={{ color: '#10b981', flexShrink: 0 }} />
+                          <div>
+                            <strong style={{ color: '#065f46' }}>Tiêu chuẩn chuyển bước: </strong>
+                            <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{targetStage.exit_criteria}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Toggle Follow-up Switch */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--color-bg-alt)', borderRadius: '8px', border: '1px solid var(--color-border-light)' }}>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                            Hẹn lịch Follow-up tiếp theo
+                          </span>
+                          <label style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px', cursor: 'pointer', margin: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(pipelineModal.nextFollowupDate)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() + 1);
+                                  d.setHours(9, 0, 0, 0);
+                                  const yyyy = d.getFullYear();
+                                  const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                  const dd = String(d.getDate()).padStart(2, '0');
+                                  const hh = String(d.getHours()).padStart(2, '0');
+                                  const min = String(d.getMinutes()).padStart(2, '0');
+                                  setPipelineModal({ ...pipelineModal, nextFollowupDate: `${yyyy}-${mm}-${dd} ${hh}:${min}` });
+                                } else {
+                                  setPipelineModal({ ...pipelineModal, nextFollowupDate: '' });
+                                }
+                              }}
+                              style={{ opacity: 0, width: 0, height: 0 }}
+                            />
+                            <span style={{
+                              position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                              backgroundColor: pipelineModal.nextFollowupDate ? 'var(--color-primary)' : '#cbd5e1',
+                              borderRadius: '20px',
+                              transition: '0.2s'
+                            }}>
+                              <span style={{
+                                position: 'absolute', content: '""', height: '14px', width: '14px',
+                                left: pipelineModal.nextFollowupDate ? '19px' : '3px', bottom: '3px',
+                                backgroundColor: 'white',
+                                borderRadius: '50%',
+                                transition: '0.2s',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                              }} />
+                            </span>
+                          </label>
+                        </div>
+
+                        {Boolean(pipelineModal.nextFollowupDate) && (
+                          <input
+                            type="datetime-local"
+                            className="form-input"
+                            value={pipelineModal.nextFollowupDate.replace(' ', 'T').slice(0, 16)}
+                            onChange={e => setPipelineModal({ ...pipelineModal, nextFollowupDate: e.target.value.replace('T', ' ') })}
+                            style={{ fontSize: '0.85rem' }}
+                          />
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Note / Audit Trail (Always Available) */}
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>Ghi chú trao đổi</label>
+                    <textarea
+                      className="form-input"
+                      placeholder="Nhập ghi chú ngắn gọn về phản hồi khách hàng, lý do chuyển bước..."
+                      rows={3}
+                      value={pipelineModal.note || ''}
+                      onChange={e => setPipelineModal({ ...pipelineModal, note: e.target.value })}
+                      style={{ padding: '8px 10px', lineHeight: 1.5, resize: 'vertical' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Footer Controls */}
+                <div style={{ padding: '0.875rem 1.25rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', gap: '0.625rem', background: 'var(--color-bg-alt)' }}>
+                  <button className="btn outline" onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })} disabled={isSubmitting}>
+                    Hủy
+                  </button>
+                  <button
+                    className="btn primary"
+                    style={{
+                      background: pipelineModal.leadStatus === 'nurture' ? '#f59e0b' : pipelineModal.leadStatus === 'lost' ? '#ef4444' : undefined,
+                      borderColor: pipelineModal.leadStatus === 'nurture' ? '#f59e0b' : pipelineModal.leadStatus === 'lost' ? '#ef4444' : undefined
+                    }}
+                    disabled={isSubmitting}
+                    onClick={async () => {
+                      if (isSubmitting) return;
+
+                      // Validation checks
+                      if (pipelineModal.leadStatus === 'nurture') {
+                        if (!pipelineModal.nextFollowupDate) {
+                          addToast('Vui lòng chọn ngày follow-up tiếp theo khi chuyển sang Nurture', 'warning');
+                          return;
+                        }
+                        if (!pipelineModal.nurtureReason) {
+                          addToast('Vui lòng chọn lý do nuôi dưỡng (Nurture Reason)', 'warning');
+                          return;
+                        }
+                      }
+                      if (pipelineModal.leadStatus === 'lost' && !pipelineModal.lostReason) {
+                        addToast('Vui lòng chọn lý do mất Lead (Lost Reason)', 'warning');
+                        return;
+                      }
+
+                      setIsSubmitting(true);
+                      const targetId = pipelineModal.targetId;
+                      const targetLabel = pipelineModal.targetLabel;
+                      const note = pipelineModal.note;
+
+                      // Check Deposit / POS trigger for payment stages
+                      if (targetId === 'dong_le_phi_ho_so' || targetId === 'deposit_tuition_payment' || targetId === 'hoc_vien' || targetId === 'enrolled') {
+                        if (targetId === 'dong_le_phi_ho_so' || targetId === 'deposit_tuition_payment') {
+                          setDepositProjectId('');
+                          setDepositUnitCode('');
+                          const defaultPrice = String(formData.expected_revenue || contact?.expected_revenue || '');
+                          setDepositPrice(defaultPrice);
+                          setDepositExpectedCommission('');
+                          setCommissionType('amount');
+                          setCommissionPercent('');
+                          const milestoneName = targetId === 'dong_le_phi_ho_so' 
+                            ? 'Đợt 1 - Đóng lệ phí hồ sơ' 
+                            : 'Đợt 1 - Học phí / Cọc giữ chỗ';
+                          setDepositMilestones([{ name: milestoneName, amount: '', expected_pay_date: '' }]);
+                          setPipelineModal({ ...pipelineModal, isOpen: false });
+                          setPendingPipelineTransition({ targetId, targetLabel, note });
+                          useUIStore.getState().setShowPOS({
+                            ...(contact || formData),
+                            _targetPipelineStatus: targetId
+                          });
+                          setIsSubmitting(false);
+                          return;
+                        }
+                      }
+
+                      // Check Coop required documents if applicable
+                      if (coopEligibleStatuses.includes(targetId)) {
+                        try {
+                          const docsRes = await api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`);
+                          const currentCloudFiles = docsRes.data.data?.items || [];
+                          const coopFiles = coopSlip?.attachment_url ? coopSlip.attachment_url.split(',') : [];
+                          
+                          const missingFiles: string[] = [];
+                          if (coopDefaultFiles && coopDefaultFiles.length > 0) {
+                            for (const mandatoryFile of coopDefaultFiles) {
+                              const cleanKeyword = mandatoryFile.split('.')[0].toLowerCase().trim();
+                              if (!cleanKeyword) continue;
+                              
+                              let hasFile = currentCloudFiles.some((f: any) => {
+                                const lower = f.name.toLowerCase();
                                 if (cleanKeyword === 'unc' || cleanKeyword === 'uy nhiem chi' || cleanKeyword === 'ủy nhiệm chi') {
                                   return lower.includes('unc') || lower.includes('uy nhiem chi') || lower.includes('ủy nhiệm chi');
                                 }
                                 return lower.includes(cleanKeyword);
                               });
-                            }
-                            
-                            if (!hasFile) {
-                              missingFiles.push(mandatoryFile);
+                              
+                              if (!hasFile) {
+                                hasFile = coopFiles.some((f: string) => {
+                                  const filename = f.split('/').pop() || '';
+                                  const lower = filename.toLowerCase();
+                                  if (cleanKeyword === 'unc' || cleanKeyword === 'uy nhiem chi' || cleanKeyword === 'ủy nhiệm chi') {
+                                    return lower.includes('unc') || lower.includes('uy nhiem chi') || lower.includes('ủy nhiệm chi');
+                                  }
+                                  return lower.includes(cleanKeyword);
+                                });
+                              }
+                              
+                              if (!hasFile) {
+                                missingFiles.push(mandatoryFile);
+                              }
                             }
                           }
-                        }
-                        
-                        if (missingFiles.length > 0) {
-                          setPipelineModal({ isOpen: false, targetId: '', targetLabel: '', note: '' });
-                          setRequiredDocsUploadModal({
-                            isOpen: true,
-                            missingFiles,
-                            targetId,
-                            targetLabel,
-                            note,
-                            uploadedFiles: {},
-                            isUploading: {}
-                          });
+                          
+                          if (missingFiles.length > 0) {
+                            setPipelineModal({ ...pipelineModal, isOpen: false });
+                            setRequiredDocsUploadModal({
+                              isOpen: true,
+                              missingFiles,
+                              targetId,
+                              targetLabel,
+                              note,
+                              uploadedFiles: {},
+                              isUploading: {}
+                            });
+                            return;
+                          }
+                        } catch (err) {
+                          addToast('Lỗi khi kiểm tra tài liệu bắt buộc hợp tác.', 'error');
                           return;
+                        } finally {
+                          setIsSubmitting(false);
                         }
-                      } catch (err) {
-                        addToast('Lỗi khi kiểm tra tài liệu bắt buộc hợp tác.', 'error');
-                        return;
+                      }
+
+                      try {
+                        setPipelineModal({ ...pipelineModal, isOpen: false });
+
+                        let calculatedStatus = 'lead';
+                        if (targetId === 'enrolled' || targetId === 'hoc_vien') {
+                          calculatedStatus = 'customer';
+                        } else if (targetId === 'not_lead' || pipelineModal.leadStatus === 'lost') {
+                          calculatedStatus = 'churned';
+                        } else if (targetId === 'new_lead' || targetId === 'chua_xac_dinh') {
+                          calculatedStatus = 'lead';
+                        } else {
+                          calculatedStatus = 'qualified';
+                        }
+
+                        // Optimistically update UI
+                        const updatedFields: any = {
+                          pipeline_status: targetId,
+                          status: calculatedStatus,
+                          lead_status: pipelineModal.leadStatus,
+                          lead_temperature: pipelineModal.leadTemperature,
+                          next_action: pipelineModal.nextAction,
+                          next_followup_date: pipelineModal.nextFollowupDate || null,
+                          expected_decision_date: pipelineModal.expectedDecisionDate || null,
+                          expected_intake: pipelineModal.expectedIntake || null,
+                          nurture_reason: pipelineModal.leadStatus === 'nurture' ? pipelineModal.nurtureReason : null,
+                          lost_reason: pipelineModal.leadStatus === 'lost' ? pipelineModal.lostReason : null,
+                          ttl1_completed: formData.ttl1_completed,
+                          ttl1_data: formData.ttl1_data
+                        };
+
+                        setFormData((prev: any) => ({ ...prev, ...updatedFields }));
+
+                        // Persist to backend via move-stage or contacts update
+                        await api.put(`/contacts/${contact.id}/move-stage`, {
+                          stage_id: targetStage?.id || targetId,
+                          pipeline_status: targetId,
+                          lead_status: pipelineModal.leadStatus,
+                          lead_temperature: pipelineModal.leadTemperature,
+                          next_action: pipelineModal.nextAction,
+                          next_followup_date: pipelineModal.nextFollowupDate || null,
+                          expected_decision_date: pipelineModal.expectedDecisionDate || null,
+                          expected_intake: pipelineModal.expectedIntake || null,
+                          nurture_reason: pipelineModal.leadStatus === 'nurture' ? pipelineModal.nurtureReason : null,
+                          lost_reason: pipelineModal.leadStatus === 'lost' ? pipelineModal.lostReason : null,
+                          note: note || `Chuyển giai đoạn sang ${targetLabel}`
+                        });
+
+                        await fetchData(activeTab || 'timeline', true);
+                        addToast(`Đã chuyển Pipeline thành công sang "${targetLabel}"`, 'success');
+                        if (targetId === 'enrolled' || targetId === 'hoc_vien') {
+                          triggerFullConfetti();
+                        }
+                        onUpdate?.({ ...formData, ...updatedFields });
+                        window.dispatchEvent(new CustomEvent('contact-updated'));
+                      } catch (e: any) {
+                        // Rollback optimistic update
+                        setFormData((prev: any) => ({ 
+                          ...prev, 
+                          pipeline_status: contact.pipeline_status, 
+                          status: contact.status 
+                        }));
+                        addToast(e?.response?.data?.message || 'Lỗi khi cập nhật Pipeline', 'error');
                       } finally {
                         setIsSubmitting(false);
                       }
-                    }
-                    
-                    try {
-                      setPipelineModal({ isOpen: false, targetId: '', targetLabel: '', note: '' });
-
-                      // Map selected pipeline stage slug to the macro status enum
-                      let calculatedStatus = 'lead';
-                      if (targetId === 'hoc_vien') {
-                        calculatedStatus = 'customer';
-                      } else if (targetId === 'not_lead') {
-                        calculatedStatus = 'churned';
-                      } else if (targetId === 'chua_xac_dinh') {
-                        calculatedStatus = 'lead';
-                      } else {
-                        calculatedStatus = 'qualified';
-                      }
-
-                      // Optimistically update UI
-                      setFormData((prev: any) => ({ 
-                        ...prev, 
-                        pipeline_status: targetId, 
-                        status: calculatedStatus 
-                      }));
-
-                      // Persist status change
-                      await api.put(`/contacts/${contact.id}`, { 
-                        pipeline_status: targetId, 
-                        status: calculatedStatus,
-                        ttl1_completed: formData.ttl1_completed,
-                        ttl1_data: formData.ttl1_data
-                      });
-                      // Log status transition in activities (Nhật ký tương tác)
-                      await api.post('/activities', {
-                        type: 'note',
-                        subject: `Chuyển trạng thái Pipeline → ${targetLabel}`,
-                        body: note || null,
-                        status: 'done',
-                        related_type: 'contact',
-                        related_id: contact.id,
-                        contact_id: contact.id,
-                        user_id: currentUser?.id,
-                        due_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                        done_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
-                      });
-                      fetchData();
-                      addToast(`Đã cập nhật Pipeline thành ${targetLabel}`, 'success');
-                      onUpdate?.({ ...formData, pipeline_status: targetId, status: calculatedStatus });
-                      window.dispatchEvent(new CustomEvent('contact-updated'));
-                    } catch (e: any) {
-                      // Rollback optimistic update
-                      setFormData((prev: any) => ({ 
-                        ...prev, 
-                        pipeline_status: contact.pipeline_status, 
-                        status: contact.status 
-                      }));
-                      addToast(e?.response?.data?.message || 'Lỗi khi cập nhật Pipeline', 'error');
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-
-                >
-                  {isSubmitting ? 'Đang lưu...' : 'Lưu cập nhật'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+                    }}
+                  >
+                    {isSubmitting ? 'Đang lưu...' : 'Xác nhận Chuyển Bước'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       <AnimatePresence>

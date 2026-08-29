@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 236;
+$targetVersion = 237;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2025,8 +2025,292 @@ try {
         $logMsg("Nâng cấp lên phiên bản 236 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 237: CHUẨN HÓA 14 STAGES PIPELINE TUYỂN SINH IDEAS & CẤU TRÚC CRM
+    // ==========================================
+    if ($currentVersion < 237 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 237: Chuẩn hóa 14 Stages Pipeline Tuyển sinh IDEAS & Cấu trúc CRM...", "info");
+        try {
+            // 1. Thêm các cột cho pipeline_stages
+            $psCols = [
+                "definition" => "TEXT DEFAULT NULL COMMENT 'Định nghĩa / Milestone khách hàng'",
+                "target_goal" => "TEXT DEFAULT NULL COMMENT 'Mục tiêu giai đoạn'",
+                "sales_actions" => "TEXT DEFAULT NULL COMMENT 'Sales Action chính / Checklist'",
+                "exit_criteria" => "TEXT DEFAULT NULL COMMENT 'Tiêu chuẩn đầu ra (Exit Criteria)'"
+            ];
+            foreach ($psCols as $colName => $colDef) {
+                $chk = $conn->query("SHOW COLUMNS FROM pipeline_stages LIKE '$colName'");
+                if ($chk && $chk->num_rows === 0) {
+                    $conn->query("ALTER TABLE pipeline_stages ADD COLUMN `$colName` $colDef");
+                    $logMsg("Đã thêm cột `$colName` vào bảng `pipeline_stages`.", "info");
+                }
+            }
+
+            // 2. Thêm các cột cho contacts
+            $cCols = [
+                "lead_status" => "ENUM('active','nurture','lost') NOT NULL DEFAULT 'active' COMMENT 'Trạng thái Lead: Active, Nurture, Lost'",
+                "lead_temperature" => "VARCHAR(50) DEFAULT 'warm' COMMENT 'Độ nóng Lead: hot, warm, low_intent, nurture'",
+                "next_action" => "VARCHAR(255) DEFAULT NULL COMMENT 'Hành động tiếp theo'",
+                "next_followup_date" => "DATETIME DEFAULT NULL COMMENT 'Ngày follow-up tiếp theo'",
+                "expected_decision_date" => "DATE DEFAULT NULL COMMENT 'Ngày dự kiến khách ra quyết định'",
+                "expected_intake" => "VARCHAR(100) DEFAULT NULL COMMENT 'Kỳ nhập học dự kiến'",
+                "nurture_reason" => "TEXT DEFAULT NULL COMMENT 'Lý do nuôi dưỡng (Nurture Reason)'",
+                "lost_reason" => "TEXT DEFAULT NULL COMMENT 'Lý do mất Lead (Lost Reason)'",
+                "lost_stage_id" => "INT(11) DEFAULT NULL COMMENT 'Stage tại thời điểm mất Lead'"
+            ];
+            foreach ($cCols as $colName => $colDef) {
+                $chk = $conn->query("SHOW COLUMNS FROM contacts LIKE '$colName'");
+                if ($chk && $chk->num_rows === 0) {
+                    $conn->query("ALTER TABLE contacts ADD COLUMN `$colName` $colDef");
+                    $logMsg("Đã thêm cột `$colName` vào bảng `contacts`.", "info");
+                }
+            }
+
+            // 3. Thêm các cột cho deals
+            $dCols = [
+                "next_action" => "VARCHAR(255) DEFAULT NULL COMMENT 'Hành động tiếp theo'",
+                "next_followup_date" => "DATETIME DEFAULT NULL COMMENT 'Ngày follow-up tiếp theo'",
+                "expected_intake" => "VARCHAR(100) DEFAULT NULL COMMENT 'Kỳ nhập học dự kiến'",
+                "nurture_reason" => "TEXT DEFAULT NULL COMMENT 'Lý do nuôi dưỡng'",
+                "lost_stage_id" => "INT(11) DEFAULT NULL COMMENT 'Stage tại thời điểm mất Deal'"
+            ];
+            foreach ($dCols as $colName => $colDef) {
+                $chk = $conn->query("SHOW COLUMNS FROM deals LIKE '$colName'");
+                if ($chk && $chk->num_rows === 0) {
+                    $conn->query("ALTER TABLE deals ADD COLUMN `$colName` $colDef");
+                    $logMsg("Đã thêm cột `$colName` vào bảng `deals`.", "info");
+                }
+            }
+
+            // 4. Danh sách 14 Stages chuẩn IDEAS Admissions Pipeline
+            $standardStages = [
+                [
+                    'name' => '01 – New Lead',
+                    'slug' => 'new_lead',
+                    'color' => '#3b82f6',
+                    'order' => 1,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Lead vừa được ghi nhận trên CRM; chưa có hoạt động tư vấn thực tế.',
+                    'target_goal' => 'Thiết lập liên hệ đầu tiên.',
+                    'sales_actions' => 'Kiểm tra Lead trùng; nguồn Lead; chương trình quan tâm; phân công TVV; liên hệ lần đầu.',
+                    'exit_criteria' => 'Đã thực hiện ít nhất 01 hoạt động liên hệ hợp lệ → Contact Attempted.'
+                ],
+                [
+                    'name' => '02 – Contact Attempted',
+                    'slug' => 'contact_attempted',
+                    'color' => '#6366f1',
+                    'order' => 2,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'TVV đã gọi/gửi Zalo/email nhưng chưa có trao đổi hai chiều.',
+                    'target_goal' => 'Thiết lập được tương tác hai chiều.',
+                    'sales_actions' => 'Follow-up theo cadence; đa kênh; ghi nhận đầy đủ lịch sử tương tác.',
+                    'exit_criteria' => 'Khách phản hồi hoặc có cuộc trao đổi trực tiếp → Connected.'
+                ],
+                [
+                    'name' => '03 – Connected',
+                    'slug' => 'connected',
+                    'color' => '#8b5cf6',
+                    'order' => 3,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Đã có trao đổi hai chiều nhưng chưa đủ dữ liệu để xác định mức độ phù hợp.',
+                    'target_goal' => 'Qualification sơ bộ.',
+                    'sales_actions' => 'Thu thập chương trình quan tâm, học vấn, kinh nghiệm, chức vụ/lĩnh vực, mục tiêu và thời điểm dự kiến nhập học.',
+                    'exit_criteria' => 'Khách đáp ứng điều kiện sơ bộ của ít nhất 01 chương trình → Needed.'
+                ],
+                [
+                    'name' => '04 – Needed',
+                    'slug' => 'needed',
+                    'color' => '#a855f7',
+                    'order' => 4,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách được xác định có khả năng phù hợp với chương trình IDEAS đang tuyển sinh.',
+                    'target_goal' => 'Xác nhận mức độ phù hợp và mở Discovery.',
+                    'sales_actions' => 'Đánh giá Academic Fit, Professional Fit, Program Fit, Timeline, Motivation và Financial indication.',
+                    'exit_criteria' => 'Đủ dữ liệu nền tảng và khách đồng ý trao đổi sâu hơn → Discovery Completed.'
+                ],
+                [
+                    'name' => '05 – Discovery Completed',
+                    'slug' => 'discovery_completed',
+                    'color' => '#d946ef',
+                    'order' => 5,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'TVV đã hiểu mục tiêu, pain point, động lực, rào cản và tiêu chí ra quyết định của khách.',
+                    'target_goal' => 'Hiểu nhu cầu thật để đưa ra khuyến nghị chính xác.',
+                    'sales_actions' => 'Làm rõ Goal – Pain – Motivation – Constraint – Decision Criteria – Decision Timeline.',
+                    'exit_criteria' => 'Đủ cơ sở đưa ra khuyến nghị chương trình cụ thể → Program Matched.'
+                ],
+                [
+                    'name' => '06 – Program Matched',
+                    'slug' => 'program_matched',
+                    'color' => '#ec4899',
+                    'order' => 6,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Đã xác định chương trình/phương án học phù hợp nhất với hồ sơ và mục tiêu khách.',
+                    'target_goal' => 'Chuyển từ giới thiệu nhiều lựa chọn sang tư vấn giải pháp phù hợp.',
+                    'sales_actions' => 'Trình bày lý do khuyến nghị; dùng Program One-page, Brochure, Curriculum, Learning Journey, Comparison nếu cần.',
+                    'exit_criteria' => 'Khách xác nhận chương trình phù hợp và đồng ý xem đề xuất chi tiết → Proposal Sent.'
+                ],
+                [
+                    'name' => '07 – Proposal Sent',
+                    'slug' => 'proposal_sent',
+                    'color' => '#f43f5e',
+                    'order' => 7,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách đã nhận đề xuất tuyển sinh chính thức, gồm chương trình, học phí, chính sách, intake và next step.',
+                    'target_goal' => 'Đưa khách sang trạng thái cân nhắc đăng ký thực tế.',
+                    'sales_actions' => 'Gửi proposal cá nhân hóa; giải thích giá trị; học phí; scholarship; payment plan; deadline; CTA.',
+                    'exit_criteria' => 'Khách bắt đầu đánh giá, đặt câu hỏi chuyên sâu, so sánh hoặc cân nhắc điều kiện → Evaluation / Objection.'
+                ],
+                [
+                    'name' => '08 – Evaluation / Objection',
+                    'slug' => 'evaluation_objection',
+                    'color' => '#f97316',
+                    'order' => 8,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách đang đánh giá nghiêm túc và có các băn khoăn về giá, recognition, thời gian, chất lượng, hình thức học…',
+                    'target_goal' => 'Xử lý đúng rào cản và giảm rủi ro cảm nhận.',
+                    'sales_actions' => 'Xác định đúng objection; chỉ gửi proof/tài liệu phù hợp; follow-up theo vấn đề cụ thể.',
+                    'exit_criteria' => 'Khách thể hiện ý định nộp hồ sơ hoặc bắt đầu cung cấp hồ sơ → Application Started.'
+                ],
+                [
+                    'name' => '09 – Application Started',
+                    'slug' => 'application_started',
+                    'color' => '#f59e0b',
+                    'order' => 9,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách bắt đầu gửi CV, bằng, bảng điểm, passport hoặc điền form.',
+                    'target_goal' => 'Giảm friction để hoàn thiện hồ sơ nhanh.',
+                    'sales_actions' => 'Gửi Application Checklist; hướng dẫn hồ sơ; deadline; nhắc tài liệu còn thiếu; hỗ trợ form.',
+                    'exit_criteria' => 'Đủ bộ hồ sơ để chuyển xét tuyển → Application Completed.'
+                ],
+                [
+                    'name' => '10 – Application Completed',
+                    'slug' => 'application_completed',
+                    'color' => '#eab308',
+                    'order' => 10,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Hồ sơ đã đầy đủ và được chuyển sang quy trình xét tuyển.',
+                    'target_goal' => 'Theo dõi xét tuyển và duy trì commitment.',
+                    'sales_actions' => 'Kiểm tra; submit admission; chuẩn bị interview nếu có; cập nhật tiến độ cho khách.',
+                    'exit_criteria' => 'Trường/đơn vị có thẩm quyền xác nhận đủ điều kiện → Admission Approved.'
+                ],
+                [
+                    'name' => '11 – Admission Approved',
+                    'slug' => 'admission_approved',
+                    'color' => '#84cc16',
+                    'order' => 11,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách đã được xác nhận đủ điều kiện nhập học/nhận Acceptance hoặc Conditional Acceptance.',
+                    'target_goal' => 'Chuyển tâm lý từ “đang đăng ký” sang “đã được nhận”.',
+                    'sales_actions' => 'Gửi/giải thích kết quả admission; điều kiện còn lại; deadline; next step.',
+                    'exit_criteria' => 'Khách xác nhận chấp nhận offer/scholarship/điều kiện nhập học → Offer Accepted.'
+                ],
+                [
+                    'name' => '12 – Offer / Scholarship Accepted',
+                    'slug' => 'offer_accepted',
+                    'color' => '#22c55e',
+                    'order' => 12,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách đã xác nhận đồng ý chương trình, học phí, scholarship, intake và các điều kiện liên quan.',
+                    'target_goal' => 'Tạo commitment rõ ràng trước bước tài chính.',
+                    'sales_actions' => 'Xác nhận bằng email/Zalo/form/hợp đồng; chốt payment plan; cung cấp hướng dẫn thanh toán.',
+                    'exit_criteria' => 'Khách thực hiện giao dịch tài chính theo chính sách → Deposit / Tuition Payment.'
+                ],
+                [
+                    'name' => '13 – Deposit / Tuition Payment',
+                    'slug' => 'deposit_tuition_payment',
+                    'color' => '#10b981',
+                    'order' => 13,
+                    'is_won' => 0,
+                    'is_lost' => 0,
+                    'definition' => 'Khách đã phát sinh Application Fee/Deposit/Registration Fee/Tuition theo quy định.',
+                    'target_goal' => 'Hoàn tất nghĩa vụ tài chính để kích hoạt nhập học.',
+                    'sales_actions' => 'Theo dõi khoản thu; xác nhận chứng từ; nhắc phần còn lại; phối hợp Kế toán/Admissions.',
+                    'exit_criteria' => 'Hoàn tất hồ sơ + nghĩa vụ tài chính + điều kiện kích hoạt intake → Enrolled.'
+                ],
+                [
+                    'name' => '14 – Enrolled',
+                    'slug' => 'enrolled',
+                    'color' => '#06b6d4',
+                    'order' => 14,
+                    'is_won' => 1,
+                    'is_lost' => 0,
+                    'definition' => 'Khách chính thức trở thành học viên và được xác nhận trong intake.',
+                    'target_goal' => 'Handover sạch từ Sales sang Student Experience/Academic.',
+                    'sales_actions' => 'Bàn giao chương trình, intake, payment plan, scholarship, cam kết đặc biệt, quyền lợi, lưu ý học vụ và người phụ trách tiếp theo.',
+                    'exit_criteria' => 'Kết thúc Pipeline tuyển sinh; chuyển sang Student Journey / Onboarding.'
+                ]
+            ];
+
+            // Lấy danh sách tenant_id
+            $tenants = [];
+            $tRes = $conn->query("SELECT id FROM tenants");
+            if ($tRes && $tRes->num_rows > 0) {
+                while ($tr = $tRes->fetch_assoc()) {
+                    $tenants[] = (int)$tr['id'];
+                }
+            }
+            if (empty($tenants)) {
+                $tenants = [1];
+            }
+
+            foreach ($tenants as $tid) {
+                foreach ($standardStages as $st) {
+                    $chkStage = $conn->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND system_slug = ? LIMIT 1");
+                    $chkStage->bind_param("is", $tid, $st['slug']);
+                    $chkStage->execute();
+                    $res = $chkStage->get_result();
+                    if ($res && $row = $res->fetch_assoc()) {
+                        $stageId = (int)$row['id'];
+                        $upStmt = $conn->prepare("UPDATE pipeline_stages SET name = ?, color = ?, order_index = ?, is_won = ?, is_lost = ?, definition = ?, target_goal = ?, sales_actions = ?, exit_criteria = ? WHERE id = ?");
+                        $upStmt->bind_param("ssiiissssi", $st['name'], $st['color'], $st['order'], $st['is_won'], $st['is_lost'], $st['definition'], $st['target_goal'], $st['sales_actions'], $st['exit_criteria'], $stageId);
+                        $upStmt->execute();
+                        $upStmt->close();
+                    } else {
+                        $inStmt = $conn->prepare("INSERT INTO pipeline_stages (tenant_id, name, color, order_index, is_won, is_lost, system_slug, definition, target_goal, sales_actions, exit_criteria) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        $inStmt->bind_param("issiiisssss", $tid, $st['name'], $st['color'], $st['order'], $st['is_won'], $st['is_lost'], $st['slug'], $st['definition'], $st['target_goal'], $st['sales_actions'], $st['exit_criteria']);
+                        $inStmt->execute();
+                        $inStmt->close();
+                    }
+                    $chkStage->close();
+                }
+            }
+            $logMsg("Đã cập nhật/nạp thành công 14 Stages Pipeline Tuyển sinh IDEAS cho các Tenants.", "success");
+
+            // Cập nhật cấu hình pipeline_status_hierarchy trong system_settings
+            $slugList = array_map(function($x) { return $x['slug']; }, $standardStages);
+            $hierarchyJson = json_encode($slugList, JSON_UNESCAPED_UNICODE);
+            $labelsMap = [];
+            foreach ($standardStages as $s) {
+                $labelsMap[$s['slug']] = $s['name'];
+            }
+            $labelsJson = json_encode($labelsMap, JSON_UNESCAPED_UNICODE);
+
+            $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('pipeline_status_hierarchy', '" . $conn->real_escape_string($hierarchyJson) . "') ON DUPLICATE KEY UPDATE setting_value = '" . $conn->real_escape_string($hierarchyJson) . "'");
+            $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('pipeline_status_labels', '" . $conn->real_escape_string($labelsJson) . "') ON DUPLICATE KEY UPDATE setting_value = '" . $conn->real_escape_string($labelsJson) . "'");
+
+            $logMsg("Đã cập nhật cấu hình State Machine và Labels trong system_settings.", "success");
+
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 237: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 237 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '236') ON DUPLICATE KEY UPDATE setting_value = '236'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '237') ON DUPLICATE KEY UPDATE setting_value = '237'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

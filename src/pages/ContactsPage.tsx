@@ -1434,10 +1434,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         ...(pipelineStages.length > 0 
                           ? pipelineStages.map(s => ({ value: String(s.id), label: s.name }))
                           : [
-                              { value: 'lead', label: 'Lead mới' },
-                              { value: 'qualified', label: 'Đủ điều kiện' },
-                              { value: 'customer', label: 'Học viên VIP' },
-                              { value: 'churned', label: 'Đã rời' }
+                              { value: 'new_lead', label: '01 – New Lead' },
+                              { value: 'contact_attempted', label: '02 – Contact Attempted' },
+                              { value: 'connected', label: '03 – Connected' },
+                              { value: 'needed', label: '04 – Needed' },
+                              { value: 'discovery_completed', label: '05 – Discovery Completed' },
+                              { value: 'program_matched', label: '06 – Program Matched' },
+                              { value: 'proposal_sent', label: '07 – Proposal Sent' },
+                              { value: 'evaluation_objection', label: '08 – Evaluation / Objection' },
+                              { value: 'application_started', label: '09 – Application Started' },
+                              { value: 'application_completed', label: '10 – Application Completed' },
+                              { value: 'admission_approved', label: '11 – Admission Approved' },
+                              { value: 'offer_accepted', label: '12 – Offer / Scholarship Accepted' },
+                              { value: 'deposit_tuition_payment', label: '13 – Deposit / Tuition Payment' },
+                              { value: 'enrolled', label: '14 – Enrolled' }
                             ]
                         )
                       ]}

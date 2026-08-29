@@ -1863,14 +1863,31 @@ export const DealsPage: React.FC = () => {
                         : (fromIndex !== -1 && toIndex !== -1 && fromIndex > toIndex + 1)
                         ? stages.slice(toIndex + 1, fromIndex).map(s => s.name)
                         : [];
+                      const toStageObj = stages.find(s => s.id === transitionModal.toStage);
                       return (
                         <>
-                          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.5rem' }}>Cập nhật Pipeline</h3>
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.5rem' }}>Cập nhật Pipeline Deal</h3>
                           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
                             Từ <strong>{stages.find(s => s.id === transitionModal.fromStage)?.name}</strong> 
                             {' '}➔{' '}
-                            <strong style={{ color: stages.find(s => s.id === transitionModal.toStage)?.color }}>{stages.find(s => s.id === transitionModal.toStage)?.name}</strong>
+                            <strong style={{ color: toStageObj?.color || 'var(--color-primary)' }}>{toStageObj?.name}</strong>
                           </p>
+
+                          {(toStageObj?.definition || toStageObj?.exit_criteria) && (
+                            <div style={{ background: 'var(--color-bg-alt)', border: '1px solid var(--color-border-light)', borderRadius: '10px', padding: '10px 14px', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {toStageObj.definition && (
+                                <div style={{ fontSize: '0.8125rem' }}>
+                                  <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>📌 Milestone: </span>
+                                  <span style={{ color: 'var(--color-text-muted)' }}>{toStageObj.definition}</span>
+                                </div>
+                              )}
+                              {toStageObj.exit_criteria && (
+                                <div style={{ fontSize: '0.8125rem', color: '#059669', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                                  <strong>✅ Exit Criteria: </strong>{toStageObj.exit_criteria}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           {skipped.length > 0 && (
                             <div style={{

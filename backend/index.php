@@ -234,7 +234,7 @@ function logActivity(PDO $db, $tid, $uid, string $action, ?string $resource = nu
 
 function logInteraction(PDO $db, $tid, $uid, string $type, string $subject, ?string $body = null, ?string $relType = null, $relId = null): void {
     // Timeline logging (Visible to users in Interaction History)
-    $cid = ($relType === 'contact') ? $relId : null;
+    $cid = ($relType === 'contact') ? (int)$relId : null;
     
     // If it's a deal/invoice/etc, try to find the contact_id if cid is not set
     if (!$cid && $relType && $relId) {
@@ -246,16 +246,37 @@ function logInteraction(PDO $db, $tid, $uid, string $type, string $subject, ?str
         
         if ($table) {
             $s = $db->prepare("SELECT contact_id FROM $table WHERE id = ?");
-            $s->execute([$relId]);
-            $cid = $s->fetchColumn() ?: null;
+            $s->execute([(int)$relId]);
+            $cid = (int)$s->fetchColumn() ?: null;
         }
     }
 
-    $stmt = $db->prepare("
-        INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, status, priority, due_date, done_at, related_type, related_id)
-        VALUES (?, ?, ?, ?, ?, ?, 'done', 'medium', NOW(), NOW(), ?, ?)
-    ");
-    $stmt->execute([$tid, $uid, $uid, $type, $subject, $body, $relType, $relId]);
+    try {
+        $stmt = $db->prepare("
+            INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, status, priority, due_date, done_at, related_type, related_id, contact_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'done', 'medium', NOW(), NOW(), ?, ?, ?)
+        ");
+        $stmt->execute([$tid, $uid, $uid, $type, $subject, $body, $relType, $relId, $cid]);
+    } catch (Exception $e) {
+        $stmt = $db->prepare("
+            INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, status, priority, due_date, done_at, related_type, related_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'done', 'medium', NOW(), NOW(), ?, ?)
+        ");
+        $stmt->execute([$tid, $uid, $uid, $type, $subject, $body, $relType, $relId]);
+    }
+
+    // Also write to notes table if related to contact so both tabs display seamlessly
+    if ($cid || ($relType === 'contact' && $relId)) {
+        $targetContactId = $cid ?: (int)$relId;
+        try {
+            $stmtNote = $db->prepare("
+                INSERT INTO notes (tenant_id, user_id, entity_type, entity_id, body, note_type, created_at, updated_at)
+                VALUES (?, ?, 'contact', ?, ?, 'pipeline_stage_change', NOW(), NOW())
+            ");
+            $noteBody = "[$subject] " . ($body ?: '');
+            $stmtNote->execute([$tid, $uid, $targetContactId, $noteBody]);
+        } catch (Exception $e) {}
+    }
 }
 
 function getCustomFields(PDO $db, int $tenant_id, int $entity_id, string $entity_type): array {
@@ -643,7 +664,7 @@ switch ($resource) {
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
-        elseif ($resourceId  && $subResource === 'stage' && $method === 'PATCH') $ctrl->moveStage($auth, (int)$resourceId);
+        elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'release-databank' && $method === 'POST') $ctrl->releaseDatabank($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'collaborators' && $method === 'GET') $ctrl->getCollaborators($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
