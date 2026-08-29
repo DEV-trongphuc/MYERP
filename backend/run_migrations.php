@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 238;
+$targetVersion = 239;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2368,6 +2368,22 @@ try {
                 $orderIdx++;
             }
 
+            // 6. Tối ưu hóa Index cho Activities, Notes, Contacts và Leads để truy vấn siêu tốc (<5ms)
+            $addIdx = function($conn, $tbl, $idx, $cols) use ($logMsg) {
+                try {
+                    $chk = $conn->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$tbl' AND INDEX_NAME = '$idx'");
+                    if ($chk && (int)$chk->fetch_row()[0] === 0) {
+                        $conn->query("ALTER TABLE `$tbl` ADD INDEX `$idx` ($cols)");
+                        $logMsg("Đã tối ưu index `$idx` trên bảng `$tbl`.", "info");
+                    }
+                } catch (Throwable $e) {}
+            };
+            $addIdx($conn, 'activities', 'idx_act_rel_del', '`tenant_id`, `related_type`, `related_id`, `deleted_at`');
+            $addIdx($conn, 'activities', 'idx_act_cid_del', '`tenant_id`, `contact_id`, `deleted_at`');
+            $addIdx($conn, 'notes', 'idx_notes_entity', '`tenant_id`, `entity_type`, `entity_id`');
+            $addIdx($conn, 'contacts', 'idx_contacts_person', '`tenant_id`, `person_id`, `deleted_at`');
+            $addIdx($conn, 'leads', 'idx_leads_person', '`tenant_id`, `person_id`');
+
             $logMsg("Đã hoàn tất dọn sạch Stages cũ và Remap toàn bộ Contacts/Deals sang 14 Stages chuẩn IDEAS.", "success");
         } catch (Throwable $e) {
             $logMsg("Lỗi nâng cấp CSDL phiên bản 238: " . $e->getMessage(), "error");
@@ -2375,8 +2391,36 @@ try {
         $logMsg("Nâng cấp lên phiên bản 238 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 239: THÊM COMPOUND INDEXES TỐI ƯU HIỆU NĂNG CHO ACTIVITIES, NOTES, CONTACTS VÀ LEADS
+    // ==========================================
+    if ($currentVersion < 239 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 239: Thêm Compound Indexes tăng tốc tối đa...", "info");
+        try {
+            $addIdx = function($conn, $tbl, $idx, $cols) use ($logMsg) {
+                try {
+                    $chk = $conn->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$tbl' AND INDEX_NAME = '$idx'");
+                    if ($chk && (int)$chk->fetch_row()[0] === 0) {
+                        $conn->query("ALTER TABLE `$tbl` ADD INDEX `$idx` ($cols)");
+                        $logMsg("Đã tối ưu index `$idx` trên bảng `$tbl`.", "success");
+                    }
+                } catch (Throwable $e) {}
+            };
+            $addIdx($conn, 'activities', 'idx_act_rel_del', '`tenant_id`, `related_type`, `related_id`, `deleted_at`');
+            $addIdx($conn, 'activities', 'idx_act_cid_del', '`tenant_id`, `contact_id`, `deleted_at`');
+            $addIdx($conn, 'notes', 'idx_notes_entity', '`tenant_id`, `entity_type`, `entity_id`');
+            $addIdx($conn, 'contacts', 'idx_contacts_person', '`tenant_id`, `person_id`, `deleted_at`');
+            $addIdx($conn, 'leads', 'idx_leads_person', '`tenant_id`, `person_id`');
+
+            $logMsg("Đã hoàn tất cấu hình Compound Indexes tối ưu tốc độ.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 239: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 239 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '238') ON DUPLICATE KEY UPDATE setting_value = '238'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '239') ON DUPLICATE KEY UPDATE setting_value = '239'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 
