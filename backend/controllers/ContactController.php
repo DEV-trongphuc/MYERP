@@ -258,7 +258,7 @@ class ContactController {
                    dr.id as report_id,
                    dr.reason as report_reason,
                    COALESCE(
-                       (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id AND n.deleted_at IS NULL ORDER BY n.id DESC LIMIT 1),
+                       (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
                        (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
                    ) as last_interaction
              FROM contacts c
