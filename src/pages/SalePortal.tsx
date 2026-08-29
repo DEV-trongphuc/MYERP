@@ -5640,7 +5640,42 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <span>{t('Tất cả')}</span>
             </div>
 
-            {/* Overdue Pill */}
+            {/* Assigned to me Pill (Tôi thực hiện) */}
+            <div 
+              onClick={() => {
+                if (wsTaskFilter === 'assigned_to_me') {
+                  setWsTaskFilter('all');
+                } else {
+                  setWsTaskFilter('assigned_to_me');
+                  setWsStatus('planned');
+                  setWsDatePreset('all');
+                }
+                if (!wsTeamId) setWsTeamId('all_teams_bypass');
+              }}
+              style={{
+                padding: isMobile ? '4px 10px' : '5px 12px',
+                borderRadius: '20px',
+                border: wsTaskFilter === 'assigned_to_me' ? '1.5px solid #2563eb' : '1px solid var(--color-border)',
+                background: wsTaskFilter === 'assigned_to_me' ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
+                color: '#2563eb',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: isMobile ? '0.725rem' : '0.78rem',
+                fontWeight: 700,
+                flexShrink: 0,
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <User size={isMobile ? 12 : 13} />
+              <span>{t('Tôi thực hiện')}</span>
+              <span style={{ background: '#2563eb', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                {workspaceStats.assignedToMe || 0}
+              </span>
+            </div>
+
+            {/* Overdue Pill (Quá hạn) */}
             <div 
               onClick={() => {
                 if (wsDatePreset === 'overdue') {
@@ -5675,7 +5710,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               </span>
             </div>
 
-            {/* Due Today Pill */}
+            {/* Due Today Pill (Đến hạn) */}
             <div 
               onClick={() => {
                 if (wsDatePreset === 'today') {
@@ -5710,7 +5745,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               </span>
             </div>
 
-            {/* Waiting Approval Pill */}
+            {/* Waiting Approval Pill (Chờ tôi duyệt) */}
             <div 
               onClick={() => {
                 if (wsTaskFilter === 'approve_by_me') {
@@ -5742,41 +5777,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <span>{t('Chờ tôi duyệt')}</span>
               <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
                 {workspaceStats.pendingApproval}
-              </span>
-            </div>
-
-            {/* Assigned to me Pill */}
-            <div 
-              onClick={() => {
-                if (wsTaskFilter === 'assigned_to_me') {
-                  setWsTaskFilter('all');
-                } else {
-                  setWsTaskFilter('assigned_to_me');
-                  setWsStatus('planned');
-                  setWsDatePreset('all');
-                }
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsTaskFilter === 'assigned_to_me' ? '1.5px solid #2563eb' : '1px solid var(--color-border)',
-                background: wsTaskFilter === 'assigned_to_me' ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
-                color: '#2563eb',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <User size={isMobile ? 12 : 13} />
-              <span>{t('Tôi thực hiện')}</span>
-              <span style={{ background: '#2563eb', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
-                {workspaceStats.assignedToMe || 0}
               </span>
             </div>
 
@@ -7275,10 +7275,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   }}
                   options={[
                     { value: 'all', label: t('Tất cả công việc') },
+                    { value: 'assigned_to_me', label: t('Tôi thực hiện'), badge: { count: workspaceStats.assignedToMe || 0, color: '#2563eb' } },
                     { value: 'overdue', label: t('Công việc Quá hạn'), badge: { count: workspaceStats.overdue, color: 'var(--color-danger)' } },
                     { value: 'today', label: t('Công việc Đến hạn hôm nay'), badge: { count: workspaceStats.dueToday, color: 'var(--color-warning)' } },
                     { value: 'approve_by_me', label: t('Chờ tôi duyệt'), badge: { count: workspaceStats.pendingApproval, color: '#8b5cf6' } },
-                    { value: 'assigned_to_me', label: t('Tôi thực hiện'), badge: { count: workspaceStats.assignedToMe || 0, color: '#2563eb' } },
                     { value: 'collaborator', label: t('Tôi liên quan'), badge: { count: workspaceStats.collaborator || 0, color: '#475569' } }
                   ]}
                   width="100%"
