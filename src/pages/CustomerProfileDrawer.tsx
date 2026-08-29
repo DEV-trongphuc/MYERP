@@ -3459,8 +3459,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           const stagesRes = await api.get('/pipeline-stages');
           const fetched = stagesRes.data.data?.items || stagesRes.data.data || [];
           setStages(fetched);
-          if (Array.isArray(fetched) && (fetched.length >= 10 || fetched.some((s: any) => s.system_slug === 'new_lead'))) {
-            setPipelineStages(fetched);
+          const standard14Slugs = [
+            'new_lead', 'contact_attempted', 'connected', 'needed', 
+            'discovery_completed', 'program_matched', 'proposal_sent', 
+            'evaluation_objection', 'application_started', 'application_completed', 
+            'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'
+          ];
+          const clean14 = Array.isArray(fetched)
+            ? fetched.filter((s: any) => standard14Slugs.includes(s.system_slug))
+            : [];
+          if (clean14.length === 14) {
+            clean14.sort((a: any, b: any) => standard14Slugs.indexOf(a.system_slug) - standard14Slugs.indexOf(b.system_slug));
+            setPipelineStages(clean14);
+          } else {
+            setPipelineStages(DEFAULT_PIPELINE_STAGES);
           }
         }
       } catch (err) {}

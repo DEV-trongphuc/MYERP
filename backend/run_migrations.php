@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 237;
+$targetVersion = 238;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2309,8 +2309,74 @@ try {
         $logMsg("Nâng cấp lên phiên bản 237 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 238: DỌN SẠCH STAGES CŨ & REMAP TOÀN BỘ CONTACTS / DEALS SANG 14 STAGES CHUẨN
+    // ==========================================
+    if ($currentVersion < 238 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 238: Dọn sạch Stages cũ & Remap sang 14 Stages chuẩn IDEAS...", "info");
+        try {
+            // 1. Chuyển đổi trạng thái contacts cũ sang 14 slugs chuẩn
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'new_lead' WHERE `pipeline_status` IN ('chua_xac_dinh', 'lead_moi', 'new', 'moi') OR `pipeline_status` IS NULL");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'contact_attempted' WHERE `pipeline_status` IN ('dang_tu_van', 'contacted', 'lien_he')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'needed' WHERE `pipeline_status` IN ('co_nhu_cau', 'qualified', 'nhu_cau')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'proposal_sent' WHERE `pipeline_status` IN ('gui_bao_gia', 'de_xuat_bao_gia', 'proposal', 'bao_gia')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'application_started' WHERE `pipeline_status` IN ('nop_ho_so', 'ho_so')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'application_completed' WHERE `pipeline_status` IN ('dong_le_phi_ho_so', 'phong_van', 'xet_tuyen')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'deposit_tuition_payment' WHERE `pipeline_status` IN ('dat_coc', 'deposit', 'coc')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'enrolled' WHERE `pipeline_status` IN ('hoc_vien', 'thanh_cong', 'dong_deal', 'won')");
+            $conn->query("UPDATE `contacts` SET `pipeline_status` = 'new_lead', `lead_status` = 'lost', `lost_reason` = 'Bỏ theo dõi' WHERE `pipeline_status` IN ('bo_theo_doi', 'not_lead', 'that_bai', 'lost')");
+
+            // 2. Đồng bộ stage_id của contacts sang id tương ứng của 14 stages chuẩn
+            $conn->query("
+                UPDATE `contacts` c
+                INNER JOIN `pipeline_stages` ps ON ps.system_slug = c.pipeline_status AND ps.tenant_id = c.tenant_id
+                SET c.stage_id = ps.id
+            ");
+
+            // 3. Cập nhật stage_id cho deals nếu trỏ vào stage cũ
+            $conn->query("
+                UPDATE `deals` d
+                INNER JOIN `contacts` c ON d.contact_id = c.id
+                SET d.stage_id = c.stage_id
+                WHERE d.stage_id NOT IN (
+                    SELECT id FROM `pipeline_stages` 
+                    WHERE system_slug IN ('new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled')
+                )
+            ");
+
+            // 4. Xóa bỏ hoàn toàn các stages cũ không còn sử dụng trong pipeline_stages
+            $conn->query("
+                DELETE FROM `pipeline_stages` 
+                WHERE system_slug NOT IN (
+                    'new_lead', 'contact_attempted', 'connected', 'needed', 
+                    'discovery_completed', 'program_matched', 'proposal_sent', 
+                    'evaluation_objection', 'application_started', 'application_completed', 
+                    'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'
+                ) OR system_slug IS NULL
+            ");
+
+            // 5. Đánh số lại order_index 1..14
+            $standardSlugs = [
+                'new_lead', 'contact_attempted', 'connected', 'needed', 
+                'discovery_completed', 'program_matched', 'proposal_sent', 
+                'evaluation_objection', 'application_started', 'application_completed', 
+                'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'
+            ];
+            $orderIdx = 1;
+            foreach ($standardSlugs as $slug) {
+                $conn->query("UPDATE `pipeline_stages` SET `order_index` = $orderIdx WHERE `system_slug` = '$slug'");
+                $orderIdx++;
+            }
+
+            $logMsg("Đã hoàn tất dọn sạch Stages cũ và Remap toàn bộ Contacts/Deals sang 14 Stages chuẩn IDEAS.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 238: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 238 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '237') ON DUPLICATE KEY UPDATE setting_value = '237'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '238') ON DUPLICATE KEY UPDATE setting_value = '238'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

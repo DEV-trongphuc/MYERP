@@ -1993,9 +1993,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                         {columns.find(col => col.id === 'status')?.visible && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
-                            {c.report_status === 'approved' || c.report_status === 'approved_no_comp' ? (
+                            {c.is_error_ticket ? (
                               <span 
-                                className="badge" 
+                                className="badge danger"
                                 style={{ 
                                   backgroundColor: 'rgba(239, 68, 68, 0.1)', 
                                   color: 'var(--color-danger)', 
@@ -2004,13 +2004,35 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               >
                                 Ticket lỗi
                               </span>
+                            ) : c.lead_status === 'nurture' ? (
+                              <span 
+                                className="badge" 
+                                style={{ 
+                                  backgroundColor: 'rgba(245, 158, 11, 0.12)', 
+                                  color: '#d97706', 
+                                  border: '1px solid rgba(245, 158, 11, 0.3)'
+                                }}
+                              >
+                                🕒 Nurture
+                              </span>
+                            ) : c.lead_status === 'lost' ? (
+                              <span 
+                                className="badge" 
+                                style={{ 
+                                  backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                  color: '#dc2626', 
+                                  border: '1px solid rgba(239, 68, 68, 0.3)'
+                                }}
+                              >
+                                🚫 Lost
+                              </span>
                             ) : c.stage_name ? (
                               <span 
                                 className="badge" 
                                 style={{ 
-                                  backgroundColor: `${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}1a`, 
-                                  color: c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || 'var(--color-primary)'), 
-                                  border: `1px solid ${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}33`
+                                  backgroundColor: `${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}1a`, 
+                                  color: c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#0891b2' : (c.stage_color || 'var(--color-primary)'), 
+                                  border: `1px solid ${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}33`
                                 }}
                               >
                                 {c.stage_name}
@@ -2408,39 +2430,69 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 >
                                   Ticket lỗi
                                 </span>
-                              ) : c.stage_name ? (
-                                <span 
-                                  className="badge" 
-                                  style={{ 
-                                    borderRadius: '8px', 
-                                    padding: '4px 8px', 
-                                    fontSize: '0.72rem', 
-                                    fontWeight: 700,
-                                    backgroundColor: `${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}1a`, 
-                                    color: c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || 'var(--color-primary)'), 
-                                    border: `1px solid ${c.pipeline_status === 'hoc_vien' || c.stage_name === 'Học viên' ? '#ec4899' : (c.stage_color || '#3b82f6')}33`
-                                  }}
-                                >
-                                  {c.stage_name}
-                                </span>
-                              ) : (
-                                <span 
-                                  className={`badge ${STATUS_CLASS[c.status] || 'info'}`} 
-                                  style={{ 
-                                    borderRadius: '8px', 
-                                    padding: '4px 8px', 
-                                    fontSize: '0.72rem', 
-                                    fontWeight: 700,
-                                    ...(c.status === 'customer' ? {
-                                      backgroundColor: 'rgba(236, 72, 153, 0.1)',
-                                      color: '#ec4899',
-                                      border: '1px solid rgba(236, 72, 153, 0.2)'
-                                    } : {})
-                                  }}
-                                >
-                                  {STATUS_LABEL[c.status] || c.status}
-                                </span>
-                              )}
+                              ) : c.lead_status === 'nurture' ? (
+                                  <span 
+                                    className="badge" 
+                                    style={{ 
+                                      borderRadius: '8px', 
+                                      padding: '4px 8px', 
+                                      fontSize: '0.72rem', 
+                                      fontWeight: 700,
+                                      backgroundColor: 'rgba(245, 158, 11, 0.12)', 
+                                      color: '#d97706', 
+                                      border: '1px solid rgba(245, 158, 11, 0.3)'
+                                    }}
+                                  >
+                                    🕒 Nurture
+                                  </span>
+                                ) : c.lead_status === 'lost' ? (
+                                  <span 
+                                    className="badge" 
+                                    style={{ 
+                                      borderRadius: '8px', 
+                                      padding: '4px 8px', 
+                                      fontSize: '0.72rem', 
+                                      fontWeight: 700,
+                                      backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                      color: '#dc2626', 
+                                      border: '1px solid rgba(239, 68, 68, 0.3)'
+                                    }}
+                                  >
+                                    🚫 Lost
+                                  </span>
+                                ) : c.stage_name ? (
+                                  <span 
+                                    className="badge" 
+                                    style={{ 
+                                      borderRadius: '8px', 
+                                      padding: '4px 8px', 
+                                      fontSize: '0.72rem', 
+                                      fontWeight: 700,
+                                      backgroundColor: `${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}1a`, 
+                                      color: c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#0891b2' : (c.stage_color || 'var(--color-primary)'), 
+                                      border: `1px solid ${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}33`
+                                    }}
+                                  >
+                                    {c.stage_name}
+                                  </span>
+                                ) : (
+                                  <span 
+                                    className={`badge ${STATUS_CLASS[c.status] || 'info'}`} 
+                                    style={{ 
+                                      borderRadius: '8px', 
+                                      padding: '4px 8px', 
+                                      fontSize: '0.72rem', 
+                                      fontWeight: 700,
+                                      ...(c.status === 'customer' ? {
+                                        backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                                        color: '#ec4899',
+                                        border: '1px solid rgba(236, 72, 153, 0.2)'
+                                      } : {})
+                                    }}
+                                  >
+                                    {STATUS_LABEL[c.status] || c.status}
+                                  </span>
+                                )}
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Đánh giá:</span>
                                 <span style={{ 
