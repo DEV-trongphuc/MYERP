@@ -193,6 +193,14 @@ if ($action === 'batch_update') {
             $fields = [];
             $params = [];
 
+            if (isset($up['phone'])) {
+                $fields[] = "phone = ?";
+                $params[] = $up['phone'];
+            }
+            if (isset($up['email'])) {
+                $fields[] = "email = ?";
+                $params[] = $up['email'];
+            }
             if (isset($up['owner_id'])) {
                 $fields[] = "owner_id = ?";
                 $params[] = $up['owner_id'];
