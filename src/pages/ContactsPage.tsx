@@ -903,7 +903,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   padding: '6px 14px'
                 }}
               >
-                🎓 Học viên chính thức
+                Học viên chính thức
               </button>
               <button
                 type="button"
@@ -919,7 +919,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   padding: '6px 14px'
                 }}
               >
-                💳 Lệ phí hồ sơ
+                Lệ phí hồ sơ
               </button>
               <button
                 type="button"
@@ -935,7 +935,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   padding: '6px 14px'
                 }}
               >
-                📑 Nộp hồ sơ
+                Nộp hồ sơ
               </button>
             </div>
           )}
