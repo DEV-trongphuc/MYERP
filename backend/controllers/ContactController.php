@@ -38,19 +38,19 @@ class ContactController {
         $params = [$tid];
         $role = strtolower($auth['role'] ?? '');
         if ($role === 'sale_admin' || $role === 'saleadmin') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug = 'nop_ho_so' LIMIT 1");
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
             $minOrderIndex = $stmtStage->fetchColumn();
             if ($minOrderIndex === false) {
-                $minOrderIndex = 3;
+                $minOrderIndex = 9;
             }
             $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.order_index >= " . (int)$minOrderIndex . ")";
         } elseif ($role === 'accountant') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug = 'nop_ho_so' LIMIT 1");
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'application_started', 'dong_le_phi_ho_so', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
             $minOrderIndex = $stmtStage->fetchColumn();
             if ($minOrderIndex === false) {
-                $minOrderIndex = 4;
+                $minOrderIndex = 9;
             }
             $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.order_index >= " . (int)$minOrderIndex . ")";
         }
@@ -190,7 +190,7 @@ class ContactController {
                 if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
                     // Bypass c.status = 'customer' for candidate stages
                 } else {
-                    $where[] = "c.status = 'customer'";
+                    $where[] = "(c.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
                 }
                 break;
             case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
@@ -200,15 +200,22 @@ class ContactController {
         }
 
         if ($segment === 'customer' && $studentSubTab !== '') {
-            $slugMap = [
-                'le_phi' => 'dong_le_phi_ho_so',
-                'nop_ho_so' => 'nop_ho_so',
-                'chinh_thuc' => 'hoc_vien'
-            ];
-            $targetSlug = $slugMap[$studentSubTab] ?? '';
-            if ($targetSlug !== '') {
-                $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug = ?)";
-                $params[] = $targetSlug;
+            if ($studentSubTab === 'le_phi') {
+                $where[] = "(
+                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so'))
+                    OR c.pipeline_status IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so')
+                )";
+            } elseif ($studentSubTab === 'nop_ho_so') {
+                $where[] = "(
+                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
+                    OR c.pipeline_status IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so')
+                )";
+            } elseif ($studentSubTab === 'chinh_thuc') {
+                $where[] = "(
+                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1))
+                    OR c.pipeline_status IN ('enrolled', 'hoc_vien')
+                    OR c.status = 'customer'
+                )";
             }
         }
 
@@ -621,7 +628,7 @@ class ContactController {
         }
 
         if (empty($hierarchyList)) {
-            $hierarchyList = ['bo_theo_doi', 'chua_xac_dinh', 'co_nhu_cau', 'dang_tu_van', 'nop_ho_so', 'dong_le_phi_ho_so', 'hoc_vien', 'pending'];
+            $hierarchyList = ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
         }
 
         $statusHierarchy = [];

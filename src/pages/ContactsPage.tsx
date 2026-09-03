@@ -887,6 +887,58 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               </span>
             </div>
           </div>
+          {segment === 'customer' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className={`btn ${studentSubTab === 'chinh_thuc' ? 'primary' : 'outline'} sm`}
+                onClick={() => {
+                  setSearchParams({ tab: 'chinh_thuc' });
+                  setPage(1);
+                }}
+                style={{
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: studentSubTab === 'chinh_thuc' ? 700 : 500,
+                  padding: '6px 14px'
+                }}
+              >
+                🎓 Học viên chính thức
+              </button>
+              <button
+                type="button"
+                className={`btn ${studentSubTab === 'le_phi' ? 'primary' : 'outline'} sm`}
+                onClick={() => {
+                  setSearchParams({ tab: 'le_phi' });
+                  setPage(1);
+                }}
+                style={{
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: studentSubTab === 'le_phi' ? 700 : 500,
+                  padding: '6px 14px'
+                }}
+              >
+                💳 Lệ phí hồ sơ
+              </button>
+              <button
+                type="button"
+                className={`btn ${studentSubTab === 'nop_ho_so' ? 'primary' : 'outline'} sm`}
+                onClick={() => {
+                  setSearchParams({ tab: 'nop_ho_so' });
+                  setPage(1);
+                }}
+                style={{
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: studentSubTab === 'nop_ho_so' ? 700 : 500,
+                  padding: '6px 14px'
+                }}
+              >
+                📑 Nộp hồ sơ
+              </button>
+            </div>
+          )}
         </div>
         
         {/* Render export buttons only if not on mobile */}

@@ -2419,13 +2419,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       String(s.name).toLowerCase() === currentStatus
     );
     const targetStage = pipelineStages.find(s => 
+      String(s.id).toLowerCase() === 'deposit_tuition_payment' ||
+      String(s.system_slug).toLowerCase() === 'deposit_tuition_payment' ||
       String(s.id).toLowerCase() === 'dong_le_phi_ho_so' ||
       String(s.system_slug).toLowerCase() === 'dong_le_phi_ho_so' ||
       String(s.name).toLowerCase() === 'dong_le_phi_ho_so'
     );
 
     if (!currentStage || !targetStage) {
-      return currentStatus === 'dong_le_phi_ho_so' || currentStatus === 'hoc_vien';
+      return currentStatus === 'deposit_tuition_payment' || currentStatus === 'dong_le_phi_ho_so' || currentStatus === 'hoc_vien' || currentStatus === 'enrolled';
     }
     return currentStage.order_index >= targetStage.order_index;
   }, [formData.pipeline_status, contact?.pipeline_status, pipelineStages]);
@@ -5224,7 +5226,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const isReleaseBlocked = (() => {
     const currentStatus = contact?.pipeline_status || 'chua_xac_dinh';
-    const blockedStatuses = ['thanh_cong', 'dong_le_phi_ho_so', 'hoc_vien', ...(coopEligibleStatuses || [])];
+    const blockedStatuses = ['thanh_cong', 'deposit_tuition_payment', 'dong_le_phi_ho_so', 'hoc_vien', 'enrolled', ...(coopEligibleStatuses || [])];
     return blockedStatuses.includes(currentStatus);
   })();
 

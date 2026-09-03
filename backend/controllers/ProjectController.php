@@ -882,17 +882,23 @@ class ProjectController {
 
         $resHier = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pipeline_status_hierarchy' LIMIT 1");
         $hierJson = $resHier ? $resHier->fetchColumn() : null;
-        $hierarchy = $hierJson ? json_decode($hierJson, true) : ['bo_theo_doi', 'chua_xac_dinh', 'co_nhu_cau', 'dang_tu_van', 'nop_ho_so', 'dong_le_phi_ho_so', 'hoc_vien', 'pending'];
+        $hierarchy = $hierJson ? json_decode($hierJson, true) : ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
         if (!is_array($hierarchy)) {
-            $hierarchy = ['bo_theo_doi', 'chua_xac_dinh', 'co_nhu_cau', 'dang_tu_van', 'nop_ho_so', 'dong_le_phi_ho_so', 'hoc_vien', 'pending'];
+            $hierarchy = ['new_lead', 'contact_attempted', 'connected', 'needed', 'discovery_completed', 'program_matched', 'proposal_sent', 'evaluation_objection', 'application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 'enrolled'];
         }
 
         // Find opportunity stages from $oppStatus onwards in hierarchy
         $oppIdx = array_search($oppStatus, $hierarchy);
         if ($oppIdx === false) {
-            $oppIdx = array_search('dong_le_phi_ho_so', $hierarchy);
+            $oppIdx = array_search('deposit_tuition_payment', $hierarchy);
             if ($oppIdx === false) {
-                $oppIdx = 0;
+                $oppIdx = array_search('dong_le_phi_ho_so', $hierarchy);
+                if ($oppIdx === false) {
+                    $oppIdx = array_search('application_started', $hierarchy);
+                    if ($oppIdx === false) {
+                        $oppIdx = 0;
+                    }
+                }
             }
         }
         $oppStages = array_slice($hierarchy, $oppIdx);

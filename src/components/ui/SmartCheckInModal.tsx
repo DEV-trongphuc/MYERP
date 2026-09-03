@@ -443,7 +443,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
 
         if (detected) {
           setFaceScanProgress(prev => {
-            const next = prev + detectionConfidence;
+            const next = Math.min(100, Number((prev + detectionConfidence).toFixed(1)));
             if (next >= 100 && !autoCapturedRef.current) {
               autoCapturedRef.current = true;
               setScanStatusText(t('Đã nhận diện! Đang chụp ảnh...'));
@@ -463,17 +463,13 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
               }, 60);
               return 100;
             }
-            if (next >= 68) {
-              setScanStatusText(t('Giữ yên khuôn mặt... (1s)'));
-            } else if (next >= 34) {
-              setScanStatusText(t('Giữ yên khuôn mặt... (2s)'));
-            } else {
-              setScanStatusText(t('Giữ yên khuôn mặt... (3s)'));
-            }
+            const remainingSecs = next >= 68 ? 1 : next >= 34 ? 2 : 3;
+            const pct = Math.min(99, Math.round(next));
+            setScanStatusText(`${t('Giữ yên khuôn mặt...')} (${remainingSecs}s • ${pct}%)`);
             return next;
           });
         } else {
-          setFaceScanProgress(prev => Math.max(0, prev - 6));
+          setFaceScanProgress(prev => Math.max(0, Number((prev - 6).toFixed(1))));
           setScanStatusText(t('Đưa khuôn mặt vào hình bầu dục...'));
         }
       }
@@ -1056,9 +1052,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
               }}>
                 <Sparkles size={13} className={faceScanProgress > 60 ? 'spin' : ''} />
                 <span>
-                  {faceScanProgress > 0 && faceScanProgress < 100
-                    ? `${scanStatusText} (${faceScanProgress}%)`
-                    : scanStatusText}
+                  {scanStatusText || t('Vui lòng đưa khuôn mặt vào khung hình...')}
                 </span>
               </div>
             )}

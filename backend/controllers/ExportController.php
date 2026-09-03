@@ -138,7 +138,7 @@ class ExportController {
                     if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
                         // Candidate stages
                     } else {
-                        $where[] = "t.status = 'customer'";
+                        $where[] = "(t.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND (ps2.system_slug IN ('enrolled', 'hoc_vien') OR ps2.is_won = 1)) OR t.pipeline_status IN ('enrolled', 'hoc_vien'))";
                     }
                     break;
                 case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = t.id AND d.deleted_at IS NULL)"; break;
@@ -148,15 +148,22 @@ class ExportController {
             }
 
             if ($segment === 'customer' && $studentSubTab !== '') {
-                $slugMap = [
-                    'le_phi' => 'dong_le_phi_ho_so',
-                    'nop_ho_so' => 'nop_ho_so',
-                    'chinh_thuc' => 'hoc_vien'
-                ];
-                $targetSlug = $slugMap[$studentSubTab] ?? '';
-                if ($targetSlug !== '') {
-                    $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug = ?)";
-                    $params[] = $targetSlug;
+                if ($studentSubTab === 'le_phi') {
+                    $where[] = "(
+                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so'))
+                        OR t.pipeline_status IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so')
+                    )";
+                } elseif ($studentSubTab === 'nop_ho_so') {
+                    $where[] = "(
+                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
+                        OR t.pipeline_status IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so')
+                    )";
+                } elseif ($studentSubTab === 'chinh_thuc') {
+                    $where[] = "(
+                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND (ps2.system_slug IN ('enrolled', 'hoc_vien') OR ps2.is_won = 1))
+                        OR t.pipeline_status IN ('enrolled', 'hoc_vien')
+                        OR t.status = 'customer'
+                    )";
                 }
             }
 
