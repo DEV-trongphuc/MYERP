@@ -358,7 +358,7 @@ const resolveAttachmentUrl = (url: string | null | undefined): string => {
 const TABS = [
   { id: 'info', label: 'Thông tin chung', icon: <User size={16} /> },
   { id: 'timeline', label: 'Tương tác', icon: <History size={16} /> },
-  { id: 'learning', label: 'Học tập', icon: <BookOpen size={16} /> },
+  { id: 'learning', label: 'Học tập & Học vụ', icon: <BookOpen size={16} /> },
   { id: 'tags', label: 'Phân loại', icon: <TagIcon size={16} /> },
   { id: 'tasks', label: 'Công việc', icon: <CheckSquare size={16} /> },
   { id: 'docs', label: 'Hồ sơ & Tài liệu', icon: <Paperclip size={16} /> },
@@ -2317,8 +2317,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [currentUser, formData.owner_id, contact?.owner_id, contact?.team_id, formData.team_id, formData.collaborator_ids, contact?.collaborator_ids, coopSlip]);
 
   const isStudent = useMemo(() => {
-    return String(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh') === 'hoc_vien';
-  }, [formData.pipeline_status, contact?.pipeline_status]);
+    const status = String(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh').trim().toLowerCase();
+    const stageId = String(formData.stage_id || contact?.stage_id || '');
+    const currentStage = pipelineStages.find(s => 
+      String(s.id) === stageId ||
+      String(s.id).toLowerCase() === status ||
+      String(s.system_slug || '').toLowerCase() === status ||
+      String(s.name || '').toLowerCase() === status
+    );
+    const isEnrolledStage = status === 'enrolled' || status === 'hoc_vien' || currentStage?.system_slug === 'enrolled' || currentStage?.system_slug === 'hoc_vien' || Boolean(currentStage?.is_won);
+    const isCustomerStatus = String(formData.status || contact?.status || '').toLowerCase() === 'customer';
+    return isEnrolledStage || isCustomerStatus;
+  }, [formData.pipeline_status, contact?.pipeline_status, formData.stage_id, contact?.stage_id, formData.status, contact?.status, pipelineStages]);
 
   const referrerOptions = useMemo(() => {
     const list = companiesList.map(c => ({
@@ -2412,25 +2422,37 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const isAtLeastDongLePhiHoSo = useMemo(() => {
     const currentStatus = String(formData.pipeline_status || contact?.pipeline_status || 'chua_xac_dinh').trim().toLowerCase();
+    const currentStageId = String(formData.stage_id || contact?.stage_id || '');
     
+    // If deals or deposits already exist for this contact, always allow viewing payments
+    if (deals && deals.length > 0) return true;
+
     const currentStage = pipelineStages.find(s => 
+      String(s.id) === currentStageId ||
       String(s.id).toLowerCase() === currentStatus ||
-      String(s.system_slug).toLowerCase() === currentStatus ||
-      String(s.name).toLowerCase() === currentStatus
+      String(s.system_slug || '').toLowerCase() === currentStatus ||
+      String(s.name || '').toLowerCase() === currentStatus
     );
     const targetStage = pipelineStages.find(s => 
+      String(s.system_slug || '').toLowerCase() === 'deposit_tuition_payment' ||
       String(s.id).toLowerCase() === 'deposit_tuition_payment' ||
-      String(s.system_slug).toLowerCase() === 'deposit_tuition_payment' ||
-      String(s.id).toLowerCase() === 'dong_le_phi_ho_so' ||
-      String(s.system_slug).toLowerCase() === 'dong_le_phi_ho_so' ||
-      String(s.name).toLowerCase() === 'dong_le_phi_ho_so'
+      String(s.system_slug || '').toLowerCase() === 'dong_le_phi_ho_so'
     );
 
     if (!currentStage || !targetStage) {
-      return currentStatus === 'deposit_tuition_payment' || currentStatus === 'dong_le_phi_ho_so' || currentStatus === 'hoc_vien' || currentStatus === 'enrolled';
+      return ['deposit_tuition_payment', 'dong_le_phi_ho_so', 'hoc_vien', 'enrolled', 'application_completed'].includes(currentStatus);
     }
-    return currentStage.order_index >= targetStage.order_index;
-  }, [formData.pipeline_status, contact?.pipeline_status, pipelineStages]);
+    return currentStage.order_index >= targetStage.order_index || currentStage.system_slug === 'application_completed' || currentStage.system_slug === 'dong_le_phi_ho_so';
+  }, [formData.pipeline_status, contact?.pipeline_status, formData.stage_id, contact?.stage_id, pipelineStages, deals]);
+
+  useEffect(() => {
+    if (activeTab === 'deals' && !isAtLeastDongLePhiHoSo) {
+      setActiveTab(isMobileOrTablet ? '' : 'info');
+    }
+    if (activeTab === 'learning' && !isStudent) {
+      setActiveTab(isMobileOrTablet ? '' : 'info');
+    }
+  }, [activeTab, isAtLeastDongLePhiHoSo, isStudent, isMobileOrTablet]);
   const isAdmin = currentUser?.role && ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'manager'].includes(currentUser.role);
   const isViewer = currentUser?.role === 'viewer';
   const isMainOwnerOrManagerAdmin = useMemo(() => {
@@ -6708,7 +6730,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   tabs: ['info', 'timeline', 'tags', 'tasks', 'scoring']
                                 },
                                 {
-                                  title: 'Học tập',
+                                  title: 'Học tập & Học vụ',
                                   tabs: ['learning']
                                 },
                                 {
@@ -6727,6 +6749,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   .filter((tab): tab is any => {
                                     if (!tab) return false;
                                     if (tab.id === 'learning' && !isStudent) return false;
+                                    if (tab.id === 'deals' && !isAtLeastDongLePhiHoSo) return false;
                                     return isOwnerOrAdmin || (tab.id !== 'quotes' && tab.id !== 'expenses');
                                   });
                                 if (allowedTabs.length === 0) return null;
@@ -6814,7 +6837,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   tabs: ['info', 'timeline', 'tags', 'tasks', 'scoring']
                                 },
                                 {
-                                  title: 'Học tập',
+                                  title: 'Học tập & Học vụ',
                                   tabs: ['learning']
                                 },
                                 {
@@ -6833,6 +6856,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   .filter((tab): tab is any => {
                                     if (!tab) return false;
                                     if (tab.id === 'learning' && !isStudent) return false;
+                                    if (tab.id === 'deals' && !isAtLeastDongLePhiHoSo) return false;
                                     return isOwnerOrAdmin || (tab.id !== 'quotes' && tab.id !== 'expenses');
                                   });
                                 if (allowedTabs.length === 0) return null;
