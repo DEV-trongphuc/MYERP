@@ -5,7 +5,7 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target
+  CheckCircle2, XCircle, Camera, Target, Shield
 } from 'lucide-react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
@@ -5208,6 +5208,45 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Personal Task Privacy Notice */}
+                {(() => {
+                  const currentUid = Number(currentUser?.id || (currentUser as any)?.user_id || 0);
+                  const taskUid = Number(formData.user_id || 0);
+                  const taskCreatedBy = Number(formData.created_by || task.created_by || currentUid);
+                  const tagsStr = String(formData.tags || '');
+                  const isPersonalTag = tagsStr.includes('ca_nhan') || tagsStr.includes('personal');
+
+                  let isPersonal = isPersonalTag;
+                  if (!isPersonal && taskUid > 0 && taskUid === taskCreatedBy) {
+                    const pIds = getParticipantIds(formData.participant_ids).filter(id => Number(id) !== taskUid);
+                    const hasOtherParticipants = pIds.length > 0;
+                    const hasApprover = Number(formData.approver_id || 0) > 0 && Number(formData.approver_id) !== taskUid;
+                    const hasRelEntity = (Number(formData.related_id || 0) > 0 && formData.related_type !== 'personal') || Number(formData.contact_id || 0) > 0;
+                    isPersonal = !hasOtherParticipants && !hasApprover && !hasRelEntity;
+                  }
+
+                  if (isPersonal) {
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        background: 'rgba(99, 102, 241, 0.08)',
+                        border: '1px solid rgba(99, 102, 241, 0.22)',
+                        marginTop: '4px'
+                      }}>
+                        <Shield size={15} color="#4f46e5" style={{ flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.76rem', color: '#4338ca', lineHeight: 1.4 }}>
+                          <strong>{t('Công việc cá nhân:')}</strong> {t('Chỉ bạn và Admin thấy (Leader, Giám đốc không thể xem).')}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
 

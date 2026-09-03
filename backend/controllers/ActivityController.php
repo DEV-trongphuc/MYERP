@@ -174,41 +174,102 @@ class ActivityController {
         return null;
     }
 
+    public function isPersonalTask(array $activity): bool {
+        $userId = (int)($activity['user_id'] ?? 0);
+        $createdBy = (int)($activity['created_by'] ?? 0);
+
+        // Explicit tag check
+        $tags = (string)($activity['tags'] ?? '');
+        if (str_contains($tags, 'ca_nhan') || str_contains($tags, 'personal')) {
+            return true;
+        }
+
+        // Must have user_id and created_by as the same person
+        if ($userId <= 0 || $createdBy <= 0 || $userId !== $createdBy) {
+            return false;
+        }
+
+        // Must have NO participants (or only self)
+        $participantIds = trim((string)($activity['participant_ids'] ?? ''));
+        if (!empty($participantIds)) {
+            $pIds = array_filter(array_map('intval', explode(',', $participantIds)));
+            foreach ($pIds as $pid) {
+                if ($pid !== $userId) {
+                    return false;
+                }
+            }
+        }
+
+        // Must have NO approver (or approver is self)
+        $approverId = (int)($activity['approver_id'] ?? 0);
+        if ($approverId > 0 && $approverId !== $userId) {
+            return false;
+        }
+
+        // Must NOT be attached to shared entities (contact, deal, project, company, campaign)
+        $contactId = (int)($activity['contact_id'] ?? 0);
+        if ($contactId > 0) {
+            return false;
+        }
+
+        $relType = trim((string)($activity['related_type'] ?? ''));
+        $relId = (int)($activity['related_id'] ?? 0);
+        if (!empty($relType) && $relType !== 'personal' && $relId > 0) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function hasAccess(array $auth, array $activity): bool {
-        if (in_array($auth['role'], ['super_admin', 'superadmin', 'director', 'admin'], true)) {
+        $userId = (int)$auth['user_id'];
+        $role = strtolower($auth['role'] ?? '');
+
+        // Check if this is a personal task
+        if ($this->isPersonalTask($activity)) {
+            $ownerId = (int)($activity['user_id'] ?? ($activity['created_by'] ?? 0));
+            // Only the owner and system admins (admin, super_admin, superadmin) can access
+            if ($ownerId === $userId || in_array($role, ['super_admin', 'superadmin', 'admin'], true)) {
+                return true;
+            }
+            // Leader (manager), director, and anyone else CANNOT access
+            return false;
+        }
+
+        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin'], true)) {
             return true;
         }
 
         // 1. Check Creator/Assignee
-        if ((int)$activity['user_id'] === (int)$auth['user_id']) {
+        if ((int)$activity['user_id'] === $userId) {
             return true;
         }
-        if (isset($activity['created_by']) && (int)$activity['created_by'] === (int)$auth['user_id']) {
+        if (isset($activity['created_by']) && (int)$activity['created_by'] === $userId) {
             return true;
         }
         
         // 2. Check Approver
-        if (isset($activity['approver_id']) && (int)$activity['approver_id'] === (int)$auth['user_id']) {
+        if (isset($activity['approver_id']) && (int)$activity['approver_id'] === $userId) {
             return true;
         }
         
         // 3. Check Participant
         if (isset($activity['participant_ids'])) {
             $pIds = array_filter(array_map('intval', explode(',', $activity['participant_ids'])));
-            if (in_array((int)$auth['user_id'], $pIds, true)) {
+            if (in_array($userId, $pIds, true)) {
                 return true;
             }
         }
 
         // 4. Check Team Manager access to team member tasks
-        if ($auth['role'] === 'manager') {
+        if ($role === 'manager') {
             if (!empty($activity['user_id'])) {
                 $stmt = $this->db->prepare("
                     SELECT 1 FROM users u 
                     JOIN teams t ON u.team_id = t.id 
-                    WHERE u.id = ? AND FIND_IN_SET(?, CONCAT(t.leader_id, CHAR(44), COALESCE(t.co_leader_ids, t.leader_id)))
+                    WHERE u.id = ? AND FIND_IN_SET(?, CONCAT(t.leader_id, CHAR(44), COALESCE(t.co_leader_ids, leader_id)))
                 ");
-                $stmt->execute([(int)$activity['user_id'], $auth['user_id']]);
+                $stmt->execute([(int)$activity['user_id'], $userId]);
                 if ($stmt->fetch()) {
                     return true;
                 }
@@ -314,7 +375,13 @@ class ActivityController {
                 OR a.created_by = ?
                 OR a.approver_id = ?
                 OR FIND_IN_SET(?, a.participant_ids)
-                OR a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
+                OR (
+                    a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
+                    AND NOT (
+                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CAST(a.user_id AS CHAR)) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                        OR (a.tags LIKE \'%ca_nhan%\' OR a.tags LIKE \'%personal%\')
+                    )
+                )
                 OR (a.related_type = \'contact\' AND EXISTS (
                     SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (ct.owner_id = ? OR ct.owner_id IN (
                         SELECT id FROM users WHERE team_id IN (
@@ -341,7 +408,16 @@ class ActivityController {
                 OR (a.related_type = \'campaign\' AND EXISTS (
                     SELECT 1 FROM marketing_campaigns mc WHERE mc.id = a.related_id AND (FIND_IN_SET(?, mc.user_ids) OR FIND_IN_SET(?, mc.manager_ids) OR mc.created_by = ?)
                 ))
-                OR (a.tags LIKE \'internal_%\' AND (a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id))))) OR a.body LIKE \'%"scope":"global"%\'))
+                OR (a.tags LIKE \'internal_%\' AND (
+                    (
+                        a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
+                        AND NOT (
+                            (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CAST(a.user_id AS CHAR)) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                            OR (a.tags LIKE \'%ca_nhan%\' OR a.tags LIKE \'%personal%\')
+                        )
+                    )
+                    OR a.body LIKE \'%"scope":"global"%\'
+                ))
             )';
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
@@ -359,7 +435,19 @@ class ActivityController {
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
-        } else if (!in_array($auth['role'], ['super_admin', 'superadmin', 'director', 'admin'], true)) {
+        } else if ($auth['role'] === 'director') {
+            $where[] = '(
+                NOT (
+                    (
+                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CAST(a.user_id AS CHAR)) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                        OR (a.tags LIKE \'%ca_nhan%\' OR a.tags LIKE \'%personal%\')
+                    )
+                    AND a.user_id != ? AND a.created_by != ?
+                )
+            )';
+            $params[] = $auth['user_id'];
+            $params[] = $auth['user_id'];
+        } else if (!in_array($auth['role'], ['super_admin', 'superadmin', 'admin'], true)) {
             $where[] = '(
                 a.user_id = ? 
                 OR a.created_by = ?
@@ -1502,9 +1590,14 @@ class ActivityController {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền xóa hoạt động', false);
 
         // Fetch related entity before deleting
-        $stmtAct = $this->db->prepare("SELECT related_type, related_id FROM activities WHERE id = ? AND tenant_id = ?");
+        $stmtAct = $this->db->prepare("SELECT * FROM activities WHERE id = ? AND tenant_id = ?");
         $stmtAct->execute([$id, $auth['tenant_id']]);
         $actRow = $stmtAct->fetch(PDO::FETCH_ASSOC);
+        if (!$actRow) respond(404, null, 'Không tìm thấy hoạt động', false);
+
+        if (!$this->hasAccess($auth, $actRow)) {
+            respond(403, null, 'Bạn không có quyền xóa hoạt động này', false);
+        }
 
         $sql = "UPDATE activities SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
