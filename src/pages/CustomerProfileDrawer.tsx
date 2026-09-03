@@ -8268,7 +8268,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         </div>
                       </div>
 
-                      <div className="card-panel" style={{ borderTop: '4px solid var(--color-primary)' }}>
+                      <div className="card-panel">
                         <h4 className="panel-title">Phân loại & Trạng thái Sales</h4>
                         <div className="grid grid-2">
                           <div className="form-group">
@@ -8656,7 +8656,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         </div>
                       </div>
 
-                      <div className="card-panel" style={{ borderTop: '4px solid #3b82f6', marginTop: '2rem' }}>
+                      <div className="card-panel" style={{ marginTop: '2rem' }}>
                         <h4 className="panel-title">Chiến dịch & Chỉ số MKT</h4>
                         <div className="grid grid-2">
                           <div className="form-group">
