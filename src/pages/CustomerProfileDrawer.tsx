@@ -7697,7 +7697,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           style={{ 
                             background: '#fefce8', 
                             border: '1px solid #fef08a',
-                            borderLeft: '4px solid #eab308',
                             color: '#713f12', 
                             borderRadius: '8px',
                             padding: '16px',
