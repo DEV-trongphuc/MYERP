@@ -23,6 +23,7 @@ import { useUIStore } from '../store/uiStore';
 import { useUploadProgress } from '../contexts/UploadProgressContext';
 import { PasteDropzoneArea } from '../components/ui/PasteDropzoneArea';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
@@ -2815,12 +2816,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Hạn hoàn thành')}</span>
-                      <input
-                        type="date"
-                        className="form-input"
-                        style={{ fontSize: '0.8rem', padding: '6px 10px', height: '36px', borderRadius: '8px', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                      <VietnameseDateInput
                         value={newSubDeadline}
-                        onChange={(e) => setNewSubDeadline(e.target.value)}
+                        onChange={(isoDate) => setNewSubDeadline(isoDate)}
+                        style={{ height: '36px' }}
                       />
                     </div>
                   </div>
@@ -2965,14 +2964,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                       autoFocus
                                       style={{ fontSize: '0.82rem', padding: '4px 8px', height: '32px', borderRadius: '6px', flex: 1 }}
                                     />
-                                    <input
-                                      type="date"
-                                      className="form-input"
-                                      value={editingChecklistDeadline}
-                                      onChange={(e) => setEditingChecklistDeadline(e.target.value)}
-                                      onClick={(e) => e.stopPropagation()}
-                                      style={{ fontSize: '0.8rem', padding: '4px 6px', height: '32px', borderRadius: '6px', width: '130px', flexShrink: 0 }}
-                                    />
+                                    <div style={{ width: '130px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                                      <VietnameseDateInput
+                                        value={editingChecklistDeadline}
+                                        onChange={(isoDate) => setEditingChecklistDeadline(isoDate)}
+                                        style={{ height: '32px' }}
+                                        inputStyle={{ height: '32px', fontSize: '0.8rem', padding: '4px 6px' }}
+                                      />
+                                    </div>
                                     <button
                                       type="button"
                                       className="btn primary sm"
@@ -5298,14 +5297,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 <label style={cardLabelStyle}>
                   {t('Hạn hoàn thành')}
                 </label>
-                <input
-                  type="date"
-                  className="form-input"
+                <VietnameseDateInput
                   value={formData.due_date ? formData.due_date.substring(0, 10) : ''}
-                  onChange={(e) => {
-                    handleUpdateField('due_date', e.target.value ? (e.target.value + ' 23:59:59') : null);
+                  onChange={(isoDate) => {
+                    handleUpdateField('due_date', isoDate ? (isoDate + ' 23:59:59') : null);
                   }}
-                  style={{ fontSize: '0.8rem', padding: '6px 10px', height: '36px', borderRadius: '8px', border: '1px solid var(--color-border)' }}
+                  style={{ height: '36px' }}
                 />
               </div>
             </div>
