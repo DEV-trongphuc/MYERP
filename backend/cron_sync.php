@@ -1366,10 +1366,15 @@ if (!function_exists('recallInactiveLeads')) {
                     $newStatus = 'pending';
                     $logMsg = "Thu hồi từ Sale {$oldConsultantName}. Đã vượt quá giới hạn chia {$maxAttempts} lần cho Sale này. Chờ phân bổ lại vào ngày mai ({$nextAttemptDate}).";
                 } else {
-                    $upLead = $conn->prepare("UPDATE leads SET assigned_to = ?, last_interaction_date = NOW(), is_accepted = 0 WHERE id = ?");
+                    $upLead = $conn->prepare("UPDATE leads SET assigned_to = ?, last_interaction_date = NOW(), is_accepted = 1, accepted_at = NOW() WHERE id = ?");
                     $upLead->bind_param("ii", $newConsultantId, $leadId);
                     $upLead->execute();
                     $upLead->close();
+
+                    if ($newConsultantId > 0) {
+                        require_once __DIR__ . '/webhook_logic.php';
+                        ensurePersonAndContact($conn, $leadId);
+                    }
                     
                     $compSuffix = ($assignResult && $assignResult['is_compensation']) ? ' (Bù lượt)' : '';
                     $logMsg = "Tái phân bổ tự động do Sale {$oldConsultantName} không tiếp nhận.{$compSuffix}";

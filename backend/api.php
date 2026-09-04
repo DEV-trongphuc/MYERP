@@ -11291,10 +11291,15 @@ switch ($action) {
             $note = $lead['note'] . $adminNote;
 
             // 2. Update Lead Table
-            $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), target_round_id = ?, ai_screener_status = 'passed' WHERE id = ?");
-            $updLead->bind_param("isii", $assignedConsultantId, $note, $targetRoundId, $lead_id);
+            $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), target_round_id = ?, ai_screener_status = 'passed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
+            $updLead->bind_param("isiiiii", $assignedConsultantId, $note, $targetRoundId, $assignedConsultantId, $assignedConsultantId, $lead_id);
             $updLead->execute();
             $updLead->close();
+
+            if ($assignedConsultantId > 0) {
+                require_once __DIR__ . '/webhook_logic.php';
+                ensurePersonAndContact($conn, $lead_id);
+            }
 
             // 3. Log Distribution (Clean up pending logs and insert approved log)
             $logMsg = $message . " (Admin phê duyệt)";
@@ -11523,10 +11528,15 @@ switch ($action) {
                 $adminNote = "\n[Xác nhận dưới chuẩn - Fallback]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
                 $note = $lead['note'] . $adminNote;
 
-                $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed' WHERE id = ?");
-                $upd->bind_param("iisi", $targetRoundId, $assignedConsultantId, $note, $lead_id);
+                $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
+                $upd->bind_param("iisiiii", $targetRoundId, $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $lead_id);
                 $upd->execute();
                 $upd->close();
+
+                if ($assignedConsultantId > 0) {
+                    require_once __DIR__ . '/webhook_logic.php';
+                    ensurePersonAndContact($conn, $lead_id);
+                }
 
                 $logMsg = $message . " (Admin xác nhận dưới chuẩn & Fallback)";
                 $delStmt = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval'");
@@ -16728,9 +16738,14 @@ switch ($action) {
             $stmtU1->execute();
 
             // Update leads
-            $stmtU2 = $conn->prepare("UPDATE leads SET assigned_to = ? WHERE id = ?");
+            $stmtU2 = $conn->prepare("UPDATE leads SET assigned_to = ?, is_accepted = 1, accepted_at = IFNULL(accepted_at, NOW()) WHERE id = ?");
             $stmtU2->bind_param("ii", $new_consultant_id, $lead_id);
             $stmtU2->execute();
+
+            if ($new_consultant_id > 0) {
+                require_once __DIR__ . '/webhook_logic.php';
+                ensurePersonAndContact($conn, $lead_id);
+            }
 
             if ($compensate_old_sale && $old_consultant_id) {
                 // Check if the consultant is enrolled in the round
@@ -18813,10 +18828,13 @@ switch ($action) {
             $leadId = $lRow ? (int)$lRow['id'] : null;
 
             if ($leadId > 0) {
-                $stmtLeadClaim = $conn->prepare("UPDATE leads SET assigned_to = ?, last_assigned_at = NOW() WHERE id = ?");
+                $stmtLeadClaim = $conn->prepare("UPDATE leads SET assigned_to = ?, last_assigned_at = NOW(), is_accepted = 1, accepted_at = IFNULL(accepted_at, NOW()) WHERE id = ?");
                 $stmtLeadClaim->bind_param("ii", $saleConsultantId, $leadId);
                 $stmtLeadClaim->execute();
                 $stmtLeadClaim->close();
+
+                require_once __DIR__ . '/webhook_logic.php';
+                ensurePersonAndContact($conn, $leadId);
             }
 
             logDistribution($conn, $leadId, $saleConsultantId, null, 'databank_claim', 'Sale tự nhận từ Kho chung (Databank)', false);

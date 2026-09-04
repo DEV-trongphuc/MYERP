@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 240;
+$targetVersion = 241;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2445,8 +2445,39 @@ try {
         $logMsg("Nâng cấp lên phiên bản 240 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 241: TỰ ĐỘNG TIẾP NHẬN TẤT CẢ LEAD ĐÃ GIAO (IS_ACCEPTED = 1) VÀ ĐỒNG BỘ CONTACTS
+    // ==========================================
+    if ($currentVersion < 241 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 241: Tự động tiếp nhận toàn bộ lead đã bàn giao...", "info");
+        try {
+            // 1. Tắt cơ chế bắt buộc bấm tiếp nhận
+            $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('require_lead_claim', '0') ON DUPLICATE KEY UPDATE setting_value = '0'");
+            
+            // 2. Chuyển toàn bộ lead đã được bàn giao (assigned_to > 0) thành đã tiếp nhận
+            $updRes = $conn->query("UPDATE leads SET is_accepted = 1, accepted_at = COALESCE(accepted_at, NOW()) WHERE assigned_to > 0 AND is_accepted = 0");
+            $affectedLeads = $conn->affected_rows;
+            $logMsg("Đã tự động tiếp nhận {$affectedLeads} khách hàng tiềm năng đã được phân bổ cho Sale.", "success");
+
+            // 3. Đảm bảo toàn bộ lead đã giao có liên kết bảng contacts
+            $conn->query("
+                INSERT IGNORE INTO contacts (tenant_id, name, phone, lead_id, assigned_to, created_at, updated_at)
+                SELECT l.tenant_id, l.name, l.phone, l.id, l.assigned_to, l.created_at, NOW()
+                FROM leads l
+                LEFT JOIN contacts c ON c.lead_id = l.id
+                WHERE l.assigned_to > 0 AND c.id IS NULL
+            ");
+            $syncedContacts = $conn->affected_rows;
+            $logMsg("Đã đồng bộ {$syncedContacts} danh bạ liên hệ mới từ các lead đã bàn giao.", "success");
+
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 241: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 241 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '240') ON DUPLICATE KEY UPDATE setting_value = '240'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '241') ON DUPLICATE KEY UPDATE setting_value = '241'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

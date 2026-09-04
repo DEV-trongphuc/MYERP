@@ -318,13 +318,13 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
     $conn->begin_transaction();
     try {
         $leadStatus = 'active';
-        $updLead = $conn->prepare("UPDATE leads SET status = ?, assigned_to = ?, ai_screener_status = ?, ai_evaluation = ?, ai_prompt_tokens = ?, ai_completion_tokens = ?, ai_total_tokens = ? WHERE id = ?");
+        $updLead = $conn->prepare("UPDATE leads SET status = ?, assigned_to = ?, ai_screener_status = ?, ai_evaluation = ?, ai_prompt_tokens = ?, ai_completion_tokens = ?, ai_total_tokens = ?, is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
         $aiStatus = $aiScreenerResult['status'];
         $aiEval = $aiScreenerResult['reason'];
         $promptT = isset($aiScreenerResult['prompt_tokens']) ? (int) $aiScreenerResult['prompt_tokens'] : 0;
         $completionT = isset($aiScreenerResult['completion_tokens']) ? (int) $aiScreenerResult['completion_tokens'] : 0;
         $totalT = isset($aiScreenerResult['total_tokens']) ? (int) $aiScreenerResult['total_tokens'] : 0;
-        $updLead->bind_param("sisssiii", $leadStatus, $assignedConsultantId, $aiStatus, $aiEval, $promptT, $completionT, $totalT, $leadId);
+        $updLead->bind_param("sisssiiiii", $leadStatus, $assignedConsultantId, $aiStatus, $aiEval, $promptT, $completionT, $totalT, $assignedConsultantId, $assignedConsultantId, $leadId);
         $updLead->execute();
         $updLead->close();
 
@@ -353,6 +353,11 @@ function distributeLeadAfterAI($conn, $leadId, $targetRoundId, $aiScreenerResult
         } else {
             logDistribution($conn, $leadId, $assignedConsultantId, $targetRoundId, $status, $message, false);
         }
+
+        if ($assignedConsultantId > 0) {
+            ensurePersonAndContact($conn, $leadId);
+        }
+
         $conn->commit();
 
         // Đồng bộ live Sheet ngược về

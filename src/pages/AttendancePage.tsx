@@ -397,6 +397,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [currentYear, setCurrentYear] = useState<number>(() => new Date().getFullYear());
   const [calendarCheckIns, setCalendarCheckIns] = useState<any[]>([]);
   const [calendarShifts, setCalendarShifts] = useState<any[]>([]);
+  const [calendarLeaves, setCalendarLeaves] = useState<any[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
 
 
@@ -704,9 +705,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         if (res.data && res.data.check_ins) {
           setCalendarCheckIns(res.data.check_ins || []);
           setCalendarShifts(res.data.shifts || []);
+          setCalendarLeaves(res.data.leaves || []);
         } else {
           setCalendarCheckIns(res.data || []);
           setCalendarShifts([]);
+          setCalendarLeaves([]);
         }
       }
 
@@ -985,6 +988,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const nightShiftsCount = useMemo(() => shiftList.filter((s: any) => s.shift_type === 'night').length, [shiftList]);
   const weekendShiftsCount = useMemo(() => shiftList.filter((s: any) => s.shift_type === 'weekend').length, [shiftList]);
   const holidayShiftsCount = useMemo(() => shiftList.filter((s: any) => s.shift_type === 'holiday').length, [shiftList]);
+  const overtimeShiftsCount = useMemo(() => shiftList.filter((s: any) => s.shift_type === 'overtime').length, [shiftList]);
   const totalShiftsCount = shiftList.length;
 
   const renderCalendarView = () => {
@@ -1034,6 +1038,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const getCellShifts = (dateStr: string) => {
       if (!dateStr) return [];
       return calendarShifts.filter(s => s.shift_date === dateStr);
+    };
+
+    const getCellLeaves = (dateStr: string) => {
+      if (!dateStr) return [];
+      return calendarLeaves.filter(l => l.start_date_only <= dateStr && l.end_date_only >= dateStr);
     };
 
     return (
@@ -1335,6 +1344,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           {cells.map((cell, idx) => {
             const dayCheckIns = getCellData(cell.dateStr);
             const dayShifts = getCellShifts(cell.dateStr) || [];
+            const dayLeaves = getCellLeaves(cell.dateStr) || [];
             const isWeekend = (idx % 7 === 5 || idx % 7 === 6);
             const isHoliday = cell.dateStr && (
               dayShifts.some(s => s.shift_type === 'holiday') ||
@@ -1553,7 +1563,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         )
                       )}
 
-                      {/* 2. Render Shift Registrations */}
+                      {/* 2. Render Shift Registrations & Overtime */}
                       {dayShifts.length > 0 && (
                         filterUser === 'all' ? (
                           <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '4px', paddingLeft: '4px' }}>
@@ -1561,6 +1571,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               const nights = dayShifts.filter(s => s.shift_type === 'night');
                               const weekends = dayShifts.filter(s => s.shift_type === 'weekend');
                               const holidays = dayShifts.filter(s => s.shift_type === 'holiday');
+                              const overtimes = dayShifts.filter(s => s.shift_type === 'overtime');
                               return (
                                 <>
                                   {nights.length > 0 && (
@@ -1587,6 +1598,14 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                       <Zap size={11} /> {holidays.length}
                                     </span>
                                   )}
+                                  {overtimes.length > 0 && (
+                                    <span 
+                                      style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                      title={t('Tăng ca (OT): ') + overtimes.map(o => `${o.user_name} (${o.start_time || ''}-${o.end_time || ''})`).join(', ')}
+                                    >
+                                      <Zap size={11} /> {overtimes.length}
+                                    </span>
+                                  )}
                                 </>
                               );
                             })()}
@@ -1611,9 +1630,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 border = 'rgba(239, 68, 68, 0.2)';
                                 text = '#ef4444';
                                 ShiftIcon = Zap;
+                              } else if (s.shift_type === 'overtime') {
+                                const timeRange = s.start_time && s.end_time ? `${s.start_time}-${s.end_time}` : '';
+                                label = isMobile ? (timeRange ? `OT ${timeRange}` : t('Tăng ca')) : `${t('Tăng ca')} ${timeRange ? `(${timeRange})` : ''}`;
+                                bg = 'rgba(139, 92, 246, 0.08)';
+                                border = 'rgba(139, 92, 246, 0.28)';
+                                text = '#8b5cf6';
+                                ShiftIcon = Zap;
                               }
 
-                              const isAppr = Number(s.approved) === 1;
+                              const isAppr = Number(s.approved) === 1 || s.status === 'approved';
 
                               return (
                                 <div key={`${s.shift_type}-${s.id}`} style={{
@@ -1628,7 +1654,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                   color: text,
                                   fontWeight: 600
                                 }} title={`${label} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '50px' : '85px' }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '70px' : '110px' }}>
                                     <ShiftIcon size={isMobile ? 8 : 10} />
                                     {label}
                                   </span>
@@ -1640,6 +1666,45 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             })}
                           </div>
                         )
+                      )}
+
+                      {/* 3. Render Leaves (Nghỉ phép, WFH) */}
+                      {dayLeaves.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
+                          {dayLeaves.map(lv => {
+                            const isAppr = Number(lv.approved) === 1 || lv.status === 'approved';
+                            const isWFH = lv.leave_type === 'remote_work';
+                            const lvLabel = isWFH 
+                              ? (isMobile ? t('WFH') : t('Làm từ xa (WFH)'))
+                              : (isMobile ? t('Nghỉ phép') : t('Nghỉ phép'));
+                            const lvColor = isWFH ? '#10b981' : '#f43f5e';
+                            const lvBg = isWFH ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)';
+                            const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)';
+
+                            return (
+                              <div key={`lv-${lv.id}`} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                fontSize: isMobile ? '0.625rem' : '0.68rem',
+                                padding: isMobile ? '2px 4px' : '3px 6px',
+                                borderRadius: '6px',
+                                border: '1px solid ' + lvBorder,
+                                backgroundColor: lvBg,
+                                color: lvColor,
+                                fontWeight: 600
+                              }} title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '70px' : '110px' }}>
+                                  {isWFH ? <MapPin size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
+                                  {lvLabel}
+                                </span>
+                                <span style={{ fontSize: isMobile ? '0.58rem' : '0.625rem', opacity: 0.8, fontWeight: 800 }}>
+                                  {isAppr ? '✓' : '?'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
 
 
@@ -3475,7 +3540,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             gap: '12px',
             borderTop: '1px solid var(--color-border-light)',
             paddingTop: '1.25rem',
-            marginTop: '0.5rem'
+            marginTop: '0.5rem',
+            paddingBottom: isMobile ? 'calc(env(safe-area-inset-bottom, 16px) + 24px)' : '0'
           }}>
             <button
               type="button"
@@ -3865,9 +3931,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
               {totalShiftsCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ca')}</span>
             </div>
-            <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
+            <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <span>{t('Đêm')}: <strong style={{ color: '#8b5cf6' }}>{nightShiftsCount}</strong></span>
               <span>{t('Tuần')}: <strong style={{ color: '#d97706' }}>{weekendShiftsCount}</strong></span>
+              {overtimeShiftsCount > 0 && (
+                <span>{t('OT')}: <strong style={{ color: '#a855f7' }}>{overtimeShiftsCount}</strong></span>
+              )}
             </div>
           </div>
         </div>
@@ -5234,7 +5303,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                              {row.shift_type === 'holiday'
+                              {row.shift_type === 'overtime'
+                                ? `⚡ ${t('Tăng ca (OT)')} (${row.start_time || '17:00'} - ${row.end_time || '19:00'})${row.total_days ? ` • ${row.total_days} công OT` : ''}`
+                                : row.shift_type === 'holiday'
                                 ? `🎉 ${t('Trực lễ')} ${row.holiday_name ? `(${row.holiday_name})` : ''}`
                                 : row.shift_type === 'weekend'
                                 ? `📅 ${t('Trực cuối tuần')}`
@@ -5245,11 +5316,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: '20px',
-                              backgroundColor: Number(row.approved) === 1 ? 'var(--color-success-light)' : 'var(--color-warning-light)',
-                              color: Number(row.approved) === 1 ? 'var(--color-success)' : 'var(--color-warning)',
+                              backgroundColor: (Number(row.approved) === 1 || row.status === 'approved') ? 'var(--color-success-light)' : 'var(--color-warning-light)',
+                              color: (Number(row.approved) === 1 || row.status === 'approved') ? 'var(--color-success)' : 'var(--color-warning)',
                               whiteSpace: 'nowrap'
                             }}>
-                              {Number(row.approved) === 1 ? t('Đã duyệt') : t('Chờ duyệt')}
+                              {(Number(row.approved) === 1 || row.status === 'approved') ? t('Đã duyệt') : t('Chờ duyệt')}
                             </span>
                           </div>
                         </div>

@@ -1043,13 +1043,18 @@ if ($eventName === 'user_send_text' || $eventName === 'message.text.received') {
                     $note = $lead['note'] . $adminNote;
 
                     // Update Lead Table
-                    $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'passed' WHERE id = ?");
+                    $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'passed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
                     if (!$updLead) {
                         throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
                     }
-                    $updLead->bind_param("isi", $assignedConsultantId, $note, $leadId);
+                    $updLead->bind_param("isiiii", $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $leadId);
                     $updLead->execute();
                     $updLead->close();
+
+                    if ($assignedConsultantId > 0) {
+                        require_once __DIR__ . '/webhook_logic.php';
+                        ensurePersonAndContact($conn, $leadId);
+                    }
 
                     // Log Distribution (Delete pending_approval logs and insert new log)
                     $logMsg = $message . " (Admin phê duyệt qua Zalo)";
@@ -1270,13 +1275,18 @@ if ($eventName === 'user_send_text' || $eventName === 'message.text.received') {
                         $adminNote = "\n[Xác nhận dưới chuẩn Zalo Bot - Fallback]: " . $reason . " | Admin: " . $adminName . " | Lúc: " . date('d/m/Y H:i:s');
                         $note = $lead['note'] . $adminNote;
 
-                        $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed' WHERE id = ?");
+                        $upd = $conn->prepare("UPDATE leads SET status = 'active', target_round_id = ?, assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'failed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
                         if (!$upd) {
                             throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
                         }
-                        $upd->bind_param("iisi", $targetRoundId, $assignedConsultantId, $note, $leadId);
+                        $upd->bind_param("iisiiii", $targetRoundId, $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $leadId);
                         $upd->execute();
                         $upd->close();
+
+                        if ($assignedConsultantId > 0) {
+                            require_once __DIR__ . '/webhook_logic.php';
+                            ensurePersonAndContact($conn, $leadId);
+                        }
 
                         $logMsg = $message . " (Admin xác nhận dưới chuẩn & Fallback qua Zalo)";
                         $delStmt = $conn->prepare("DELETE FROM distribution_logs WHERE lead_id = ? AND status = 'pending_approval'");

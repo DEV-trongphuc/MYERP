@@ -1478,14 +1478,9 @@ function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, 
         $note = empty(trim($note ?? '')) ? $sourceUpdateNote : $note . "\n" . $sourceUpdateNote;
     }
 
-    // Get claim setting
-    $requireClaim = 0;
-    $reqRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'require_lead_claim' LIMIT 1");
-    if ($reqRes && $rRow = $reqRes->fetch_assoc()) {
-        $requireClaim = (int)$rRow['setting_value'];
-    }
-    $isAcceptedVal = ($assignedConsultantId > 0 && $requireClaim === 0) ? 1 : 0;
-    $acceptedAtVal = ($assignedConsultantId > 0 && $requireClaim === 0) ? $dateVal : null;
+    // Giao là giao luôn vào tiềm năng, tự động tiếp nhận khi có người nhận
+    $isAcceptedVal = ($assignedConsultantId > 0) ? 1 : 0;
+    $acceptedAtVal = ($assignedConsultantId > 0) ? ($dateVal ?: date('Y-m-d H:i:s')) : null;
 
     $stmt = $conn->prepare("INSERT INTO leads (phone, email, name, source, type, note, last_interaction_date, assigned_to, connection_id, is_accepted, accepted_at) 
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1496,11 +1491,11 @@ function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, 
                                 type = VALUES(type),
                                 note = IF(TRIM(VALUES(note)) = '', note, IF(IFNULL(note, '') = '', VALUES(note), CONCAT(note, '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ']\n', VALUES(note)))),
                                 last_interaction_date = VALUES(last_interaction_date),
-                                is_accepted = IF(assigned_to IS NULL OR assigned_to = 0, VALUES(is_accepted), is_accepted),
-                                accepted_at = IF(assigned_to IS NULL OR assigned_to = 0, VALUES(accepted_at), accepted_at),
-                                assigned_to = IF(assigned_to IS NULL OR assigned_to = 0, VALUES(assigned_to), assigned_to),
+                                is_accepted = IF(VALUES(assigned_to) IS NOT NULL AND VALUES(assigned_to) > 0, 1, is_accepted),
+                                accepted_at = IF(VALUES(assigned_to) IS NOT NULL AND VALUES(assigned_to) > 0, IFNULL(accepted_at, VALUES(accepted_at)), accepted_at),
+                                assigned_to = IF(VALUES(assigned_to) IS NOT NULL AND VALUES(assigned_to) > 0, VALUES(assigned_to), assigned_to),
                                 connection_id = IF(VALUES(connection_id) IS NOT NULL, VALUES(connection_id), connection_id)");
-    $stmt->bind_param("sssssssiisi", $phone, $email, $name, $source, $type, $note, $dateVal, $assignedConsultantId, $connectionId, $isAcceptedVal, $acceptedAtVal);
+    $stmt->bind_param("sssssssiiss", $phone, $email, $name, $source, $type, $note, $dateVal, $assignedConsultantId, $connectionId, $isAcceptedVal, $acceptedAtVal);
     $stmt->execute();
     $id = $stmt->insert_id;
     $stmt->close();
@@ -1710,14 +1705,9 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
             $existingContactId = getContactIdByPhoneOrEmail($conn, $phone, $email);
             $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
 
-            // Get claim setting
-            $requireClaim = 0;
-            $reqRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'require_lead_claim' LIMIT 1");
-            if ($reqRes && $rRow = $reqRes->fetch_assoc()) {
-                $requireClaim = (int)$rRow['setting_value'];
-            }
-            $isAcceptedVal = ($requireClaim === 0) ? 1 : 0;
-            $acceptedAtVal = ($requireClaim === 0) ? $dateVal : null;
+            // Giao là giao luôn vào tiềm năng, tự động tiếp nhận khi có người nhận
+            $isAcceptedVal = ($assignedConsultantId > 0) ? 1 : 0;
+            $acceptedAtVal = ($assignedConsultantId > 0) ? ($dateVal ?: date('Y-m-d H:i:s')) : null;
 
             if ($isBeforeHoSo) {
                 // Trước bước hồ sơ -> Được phép đổi Sale mới
@@ -4228,15 +4218,9 @@ if (!function_exists('redistributePendingLeads')) {
                         }
                     }
                     
-                    // Get claim setting
-                    $requireClaim = 0; // Default off (0)
-                    $reqRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'require_lead_claim' LIMIT 1");
-                    if ($reqRes && $rRow = $reqRes->fetch_assoc()) {
-                        $requireClaim = (int)$rRow['setting_value'];
-                    }
-
-                    $isAcceptedVal = ($requireClaim === 0) ? 1 : 0;
-                    $acceptedAtSql = ($requireClaim === 0) ? "NOW()" : "NULL";
+                    // Giao là giao luôn vào tiềm năng, tự động tiếp nhận khi có người nhận
+                    $isAcceptedVal = ($newConsultantId > 0) ? 1 : 0;
+                    $acceptedAtSql = ($newConsultantId > 0) ? "NOW()" : "NULL";
 
                     // Update lead
                     $upLead = $conn->prepare("UPDATE leads SET assigned_to = ?, status = 'active', next_attempt_date = NULL, last_interaction_date = NOW(), is_accepted = ?, accepted_at = " . $acceptedAtSql . " WHERE id = ?");

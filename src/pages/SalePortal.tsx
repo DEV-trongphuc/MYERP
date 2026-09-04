@@ -5172,164 +5172,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               )}
             </div>
 
-        {/* Pending Leads Section */}
-        {(() => {
-          if (effectiveRole !== 'sale') return null; // Admin / Manager do not receive or accept lead offers
-          const pendingLeads = (data.leads || []).filter((l: any) => {
-            if (Number(l.is_accepted)) return false;
-            if (dismissedLeadIds.includes(Number(l.lead_id || l.id))) return false;
-            const status = String(l.status || l.distribution_status || '').toLowerCase();
-            if (status === 'pending_work_hours' || status === 'pending_approval' || status === 'silent' || status === 'duplicate') {
-              return false;
-            }
-            return true;
-          });
-          if (pendingLeads.length === 0) return null;
-          return (
-            <div 
-              style={{
-                background: 'linear-gradient(135deg, rgba(163, 20, 34, 0.03) 0%, rgba(163, 20, 34, 0.08) 100%)',
-                border: '1px solid rgba(163, 20, 34, 0.15)',
-                borderRadius: '16px',
-                padding: '1.25rem',
-                marginBottom: '1rem',
-                animation: 'pulseGlow 2s infinite alternate'
-              }}
-            >
-              <style>{`
-                @keyframes pulseGlow {
-                  0% { box-shadow: 0 4px 6px -1px rgba(163, 20, 34, 0.05), 0 2px 4px -1px rgba(163, 20, 34, 0.03); }
-                  100% { box-shadow: 0 10px 15px -3px rgba(163, 20, 34, 0.15), 0 4px 6px -2px rgba(163, 20, 34, 0.05); }
-                }
-                @keyframes pulseDot {
-                  0% { transform: scale(0.9); opacity: 0.6; }
-                  100% { transform: scale(1.1); opacity: 1; }
-                }
-                .pulsing-dot-red {
-                  width: 8px;
-                  height: 8px;
-                  border-radius: 50%;
-                  background-color: var(--color-primary);
-                  display: inline-block;
-                  animation: pulseDot 0.8s infinite alternate;
-                }
-              `}</style>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-                <span className="pulsing-dot-red" />
-                {t('DATA MỚI ĐANG CHỜ TIẾN NHẬN')} ({pendingLeads.length})
-              </h3>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-                {pendingLeads.map((lead: any) => {
-                  const leadRecallMins = Number(lead.lead_recall_minutes) || Number(sysSettings?.lead_response_timeout_minutes) || 2;
-                  const limitMs = leadRecallMins * 60 * 1000;
-                  const isOverdue = leadRecallMins > 0 && (Date.now() - parseServerDate(lead.received_at || lead.last_interaction_date).getTime()) >= limitMs;
 
-                  return (
-                    <div 
-                      key={lead.log_id} 
-                      style={{
-                        background: 'var(--color-surface)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: '12px',
-                        padding: '1rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        gap: '0.75rem',
-                        boxShadow: 'var(--shadow-sm)',
-                        position: 'relative'
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                          <Avatar name={lead.lead_name || 'K'} size={32} />
-                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)' }}>
-                            {lead.lead_name || t('Khách hàng mới')}
-                          </span>
-                        </div>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text-light)', fontWeight: 600 }}>
-                          SĐT: {(() => {
-                            const phone = lead.phone || '';
-                            if (!phone) return '—';
-                            if (phone.length < 6) return '***';
-                            return phone.slice(0, 4) + '***' + phone.slice(-3);
-                          })()}
-                        </p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '4px 0 0 0' }}>
-                          <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '12px', background: '#ffe3e8', color: '#8a0f1b', fontWeight: 700 }}>
-                            {lead.round_name || t('Bàn giao')}
-                          </span>
-                        </div>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          Nguồn: {lead.source || 'Facebook CAPI'}
-                        </p>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed var(--color-border-light)', paddingTop: '0.5rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
-                            {t('Chia lúc:')} {lead.received_at ? parseServerDate(lead.received_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                          </span>
-                          {leadRecallMins > 0 && (
-                            <span style={{ fontSize: '0.72rem', color: isOverdue ? 'var(--color-danger)' : '#f59e0b', fontWeight: 700, marginTop: '2px' }}>
-                              {isOverdue ? t('Quá hạn tiếp nhận') : (
-                                <LeadRecallTimer
-                                  lastInteractionDate={lead.last_interaction_date}
-                                  receivedAt={lead.received_at}
-                                  leadRecallMinutes={leadRecallMins}
-                                  t={t}
-                                />
-                              )}
-                            </span>
-                          )}
-                        </div>
-
-                        {isOverdue ? (
-                          <button 
-                            onClick={() => setDismissedLeadIds(prev => [...prev, Number(lead.lead_id || lead.id)])}
-                            className="btn outline danger sm hover-lift"
-                            style={{
-                              height: '32px',
-                              borderRadius: '8px',
-                              fontWeight: 700,
-                              padding: '0 14px',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer',
-                              border: '1px solid var(--color-danger)',
-                              color: 'var(--color-danger)',
-                              background: 'transparent'
-                            }}
-                          >
-                            {t('Xóa')}
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => handleAcceptLead(lead.lead_id)} 
-                            className="btn primary sm hover-lift"
-                            style={{
-                              height: '32px',
-                              borderRadius: '8px',
-                              fontWeight: 700,
-                              padding: '0 14px',
-                              background: 'var(--color-primary)',
-                              color: '#fff',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer',
-                              border: 'none'
-                            }}
-                          >
-                            {t('Tiếp nhận')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
 
 
 
@@ -9171,22 +9014,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         </div>
                       </div>
 
-                      {((effectiveRole === 'sale' && !Number(lead.is_accepted)) || lead.report_status || (isAllowedToReport &&
+                      {(lead.report_status || (isAllowedToReport &&
                         (!data.below_standard_fallback_round_ids || !data.below_standard_fallback_round_ids.includes(Number(lead.round_id))) &&
                         (!data.below_standard_fallback_round_id || Number(lead.round_id) !== Number(data.below_standard_fallback_round_id)))) && (
                           <div onClick={e => e.stopPropagation()} style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.5rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
-                            {effectiveRole === 'sale' && !Number(lead.is_accepted) && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <LeadRecallTimer
-                                  lastInteractionDate={lead.last_interaction_date}
-                                  leadRecallMinutes={Number(lead.lead_recall_minutes) || 0}
-                                  t={t}
-                                />
-                                <button onClick={() => handleAcceptLead(lead.lead_id)} className="btn sm primary" style={{ height: 30, padding: '0 10px' }}>
-                                  {t('Tiếp nhận')}
-                                </button>
-                              </div>
-                            )}
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {lead.report_status === 'pending' && (
@@ -9261,28 +9092,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                 {lead.lead_name || t('Chưa cập nhật')}
                               </span>
                             </div>
-
-                            {effectiveRole === 'sale' && !Number(lead.is_accepted) && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
-                                <LeadRecallTimer
-                                  lastInteractionDate={lead.last_interaction_date}
-                                  leadRecallMinutes={Number(lead.lead_recall_minutes) || 0}
-                                  t={t}
-                                />
-                                <button onClick={() => handleAcceptLead(lead.lead_id)} className="btn sm primary" style={{ height: 30 }}>
-                                  {t('Tiếp nhận')}
-                                </button>
-                              </div>
-                            )}
-
-                            {effectiveRole === 'sale' && Number(lead.is_accepted) === 1 && Number(lead.lead_recall_minutes) > 0 && (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: '12px',
-                                background: '#e6f4ea', color: '#137333', fontSize: '0.725rem', fontWeight: 700
-                              }}>
-                                <CheckCircle2 size={12} /> {t('Đã tiếp nhận')}
-                              </span>
-                            )}
                           </div>
                         </td>
 

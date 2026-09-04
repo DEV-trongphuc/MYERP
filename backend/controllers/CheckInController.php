@@ -171,8 +171,11 @@ class CheckInController {
 
         if (isset($_GET['include_shifts']) && $_GET['include_shifts'] == '1') {
             $shifts = [];
+            $leaves = [];
             $userIdFilter = null;
-            if (isset($_GET['user_id']) && !empty($_GET['user_id']) && $_GET['user_id'] !== 'all') {
+            if (!$isManager) {
+                $userIdFilter = (int)$auth['user_id'];
+            } else if (isset($_GET['user_id']) && !empty($_GET['user_id']) && $_GET['user_id'] !== 'all') {
                 $userIdFilter = (int)$_GET['user_id'];
             }
 
@@ -222,6 +225,51 @@ class CheckInController {
                 $stmtHoliday->execute($holidayParams);
                 $shifts = array_merge($shifts, $stmtHoliday->fetchAll(PDO::FETCH_ASSOC) ?: []);
 
+                // 4. Overtime shifts (from hrm_leave_requests where leave_type = 'overtime')
+                try {
+                    $otSql = "SELECT 'overtime' as shift_type, r.id, r.user_id, DATE(r.start_date) as shift_date, 
+                                     IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved, 
+                                     r.status, r.created_at, u.full_name as user_name, '' as holiday_name, 
+                                     u.avatar_url as user_avatar, u.email as user_email,
+                                     TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
+                                     TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
+                                     r.total_days, r.reason
+                              FROM hrm_leave_requests r 
+                              JOIN users u ON r.user_id = u.id 
+                              WHERE r.leave_type = 'overtime' AND r.status != 'rejected' AND YEAR(r.start_date) = ? AND MONTH(r.start_date) = ?";
+                    $otParams = [$year, $month];
+                    if ($userIdFilter !== null) {
+                        $otSql .= " AND r.user_id = ?";
+                        $otParams[] = $userIdFilter;
+                    }
+                    $stmtOt = $this->db->prepare($otSql);
+                    $stmtOt->execute($otParams);
+                    $shifts = array_merge($shifts, $stmtOt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+
+                    // 5. Other leaves (annual, sick, unpaid, remote_work, late_early)
+                    $lvSql = "SELECT r.id, r.user_id, r.leave_type, r.start_date, r.end_date, 
+                                     DATE(r.start_date) as start_date_only, DATE(r.end_date) as end_date_only,
+                                     TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
+                                     TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
+                                     r.total_days, r.unpaid_days, r.reason, r.status, r.created_at,
+                                     IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved,
+                                     u.full_name as user_name, u.avatar_url as user_avatar, u.email as user_email
+                              FROM hrm_leave_requests r 
+                              JOIN users u ON r.user_id = u.id 
+                              WHERE r.leave_type != 'overtime' AND r.status != 'rejected' 
+                                AND (YEAR(r.start_date) = ? AND MONTH(r.start_date) = ? OR YEAR(r.end_date) = ? AND MONTH(r.end_date) = ?)";
+                    $lvParams = [$year, $month, $year, $month];
+                    if ($userIdFilter !== null) {
+                        $lvSql .= " AND r.user_id = ?";
+                        $lvParams[] = $userIdFilter;
+                    }
+                    $stmtLv = $this->db->prepare($lvSql);
+                    $stmtLv->execute($lvParams);
+                    $leaves = $stmtLv->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (\Throwable $eOt) {
+                    error_log('Error querying overtime/leaves in CheckInController: ' . $eOt->getMessage());
+                }
+
             } else if (isset($_GET['from']) && !empty($_GET['from']) && isset($_GET['to']) && !empty($_GET['to'])) {
                 $from = $_GET['from'];
                 $to = $_GET['to'];
@@ -267,11 +315,57 @@ class CheckInController {
                 $stmtHoliday = $this->db->prepare($holidaySql);
                 $stmtHoliday->execute($holidayParams);
                 $shifts = array_merge($shifts, $stmtHoliday->fetchAll(PDO::FETCH_ASSOC) ?: []);
+
+                // 4. Overtime shifts
+                try {
+                    $otSql = "SELECT 'overtime' as shift_type, r.id, r.user_id, DATE(r.start_date) as shift_date, 
+                                     IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved, 
+                                     r.status, r.created_at, u.full_name as user_name, '' as holiday_name, 
+                                     u.avatar_url as user_avatar, u.email as user_email,
+                                     TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
+                                     TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
+                                     r.total_days, r.reason
+                              FROM hrm_leave_requests r 
+                              JOIN users u ON r.user_id = u.id 
+                              WHERE r.leave_type = 'overtime' AND r.status != 'rejected' AND DATE(r.start_date) BETWEEN ? AND ?";
+                    $otParams = [$from, $to];
+                    if ($userIdFilter !== null) {
+                        $otSql .= " AND r.user_id = ?";
+                        $otParams[] = $userIdFilter;
+                    }
+                    $stmtOt = $this->db->prepare($otSql);
+                    $stmtOt->execute($otParams);
+                    $shifts = array_merge($shifts, $stmtOt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+
+                    // 5. Other leaves
+                    $lvSql = "SELECT r.id, r.user_id, r.leave_type, r.start_date, r.end_date, 
+                                     DATE(r.start_date) as start_date_only, DATE(r.end_date) as end_date_only,
+                                     TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
+                                     TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
+                                     r.total_days, r.unpaid_days, r.reason, r.status, r.created_at,
+                                     IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved,
+                                     u.full_name as user_name, u.avatar_url as user_avatar, u.email as user_email
+                              FROM hrm_leave_requests r 
+                              JOIN users u ON r.user_id = u.id 
+                              WHERE r.leave_type != 'overtime' AND r.status != 'rejected' 
+                                AND (DATE(r.start_date) <= ? AND DATE(r.end_date) >= ?)";
+                    $lvParams = [$to, $from];
+                    if ($userIdFilter !== null) {
+                        $lvSql .= " AND r.user_id = ?";
+                        $lvParams[] = $userIdFilter;
+                    }
+                    $stmtLv = $this->db->prepare($lvSql);
+                    $stmtLv->execute($lvParams);
+                    $leaves = $stmtLv->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (\Throwable $eOt) {
+                    error_log('Error querying overtime/leaves in CheckInController: ' . $eOt->getMessage());
+                }
             }
 
             respond(200, [
                 'check_ins' => $rows,
-                'shifts' => $shifts
+                'shifts' => $shifts,
+                'leaves' => $leaves
             ], 'Lấy danh sách check-in và trực ca thành công');
         }
 

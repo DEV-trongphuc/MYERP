@@ -281,7 +281,6 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   const [pendingExpensesCount, setPendingExpensesCount] = useState(0);
   const [pendingCoopCount, setPendingCoopCount] = useState(0);
   const [undoneTasksCount, setUndoneTasksCount] = useState(0);
-  const [pendingLeadsCount, setPendingLeadsCount] = useState(0);
   const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
@@ -293,7 +292,6 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       try {
         const role = user.role as string;
         const isAdminOrManager = role === 'admin' || role === 'superadmin' || role === 'super_admin' || role === 'manager' || role === 'director';
-        setPendingLeadsCount(0);
 
         // Fetch undone tasks for all roles
         const resTasks = await fetchAPI('activities&status=planned&limit=200&type=task,meeting');
@@ -392,23 +390,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           }
           setPendingCoopCount(countUnsigned);
 
-          // Fetch pending leads for Sales
-          try {
-            const resSalePortal = await fetchAPI('get_sale_portal_data');
-            if (resSalePortal && resSalePortal.success && Array.isArray(resSalePortal.leads)) {
-              const pendingAcceptLeads = resSalePortal.leads.filter((l: any) => {
-                if (Number(l.is_accepted)) return false;
-                const status = String(l.status || l.distribution_status || '').toLowerCase();
-                if (status === 'pending_work_hours' || status === 'pending_approval' || status === 'silent' || status === 'duplicate') {
-                  return false;
-                }
-                return true;
-              }).length;
-              setPendingLeadsCount(pendingAcceptLeads);
-            }
-          } catch {
-            setPendingLeadsCount(0);
-          }
+
         }
       } catch { /* silent */ }
     };
@@ -727,7 +709,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                   </span>
                 )}
                  {group.items.map(({ name, href, icon: Icon, end, badgeKey }) => {
-                   const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? (undoneTasksCount + pendingLeadsCount) : 0;
+                   const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? undoneTasksCount : 0;
                    const isAccountant = String(user?.role).toLowerCase() === 'accountant';
                    const effectiveHref = (name === 'Lịch trình' && isAccountant) ? '/data?view=calendar' : href;
                    const checkIsActive = (locationPath: string, locationSearch: string, itemHref: string) => {

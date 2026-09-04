@@ -9,7 +9,7 @@ import {
   Search, Trash2, Paperclip, Send, AlertTriangle, Users, CreditCard, ShoppingCart, Award,
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
-  UserPlus, Check, MoreHorizontal, Filter
+  UserPlus, Check, MoreHorizontal, Filter, Zap
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -2938,6 +2938,85 @@ export default function Approvals() {
         const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
         const displayRole = creatorUser?.role ? (creatorUser.role === 'sales' ? 'Phòng Kinh doanh' : creatorUser.role === 'accountant' ? 'Phòng Kế toán' : creatorUser.role) : 'Nhân viên';
         
+        const formatApprovalDescription = (desc: string) => {
+          if (!desc) return <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>—</span>;
+
+          const timeMatch = desc.match(/Thời gian:\s*([0-9\-\:\s]+)\s*->\s*([0-9\-\:\s]+)(?:\s*\(([^)]+)\))?/i);
+          const otCalcMatch = desc.match(/\(([^)]*(?:giờ|công|OT)[^)]*)\)/i);
+          const otCalcInfo = otCalcMatch ? otCalcMatch[1] : null;
+
+          let cleanReason = '';
+          const lastReasonIdx = desc.lastIndexOf('Lý do:');
+          if (lastReasonIdx !== -1) {
+            cleanReason = desc.substring(lastReasonIdx + 6).trim().replace(/^["'\s]+|["'\s]+$/g, '');
+          }
+
+          if (timeMatch) {
+            const fromTime = timeMatch[1].trim();
+            const toTime = timeMatch[2].trim();
+            const duration = timeMatch[3] || '';
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: 'rgba(59, 130, 246, 0.08)',
+                    color: '#2563eb',
+                    fontWeight: 700,
+                    fontSize: '0.78rem'
+                  }}>
+                    <Clock size={12} /> {fromTime} → {toTime}
+                  </span>
+                  {(otCalcInfo || duration) && (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(139, 92, 246, 0.08)',
+                      color: '#8b5cf6',
+                      fontWeight: 700,
+                      fontSize: '0.78rem'
+                    }}>
+                      <Zap size={12} /> {otCalcInfo || duration}
+                    </span>
+                  )}
+                </div>
+                {cleanReason && (
+                  <div style={{
+                    marginTop: '2px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    background: 'var(--color-bg)',
+                    border: '1px solid var(--color-border-light)',
+                    fontSize: '0.825rem',
+                    color: 'var(--color-text)',
+                    lineHeight: 1.45
+                  }}>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', marginRight: '6px' }}>
+                      {t('Lý do')}:
+                    </span>
+                    {cleanReason}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          const cleanedText = desc.replace(/Lý do:\s*"?\[.*?\]\s*/i, 'Lý do: ').replace(/^"/, '').replace(/"$/, '');
+          return (
+            <span style={{ fontSize: '0.85rem', color: 'var(--color-text)', lineHeight: 1.5, fontWeight: 500 }}>
+              {cleanedText}
+            </span>
+          );
+        };
+
         return (
           <div 
             style={{
@@ -2952,7 +3031,7 @@ export default function Approvals() {
               alignItems: 'center',
               justifyContent: 'center',
               zIndex: 999999,
-              padding: '1.5rem'
+              padding: isMobile ? '12px' : '1.5rem'
             }}
             onClick={() => setApproveConfirmOpen(false)}
           >
@@ -2967,7 +3046,8 @@ export default function Approvals() {
                 overflow: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
-                position: 'relative'
+                position: 'relative',
+                maxHeight: isMobile ? '90vh' : '85vh'
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -2995,12 +3075,12 @@ export default function Approvals() {
               </button>
 
               {/* Modal Body */}
-              <div style={{ padding: '2rem' }}>
+              <div style={{ padding: isMobile ? '1.25rem 1.25rem 1rem 1.25rem' : '2rem', overflowY: 'auto' }}>
                 <h3 style={{
-                  fontSize: '1.2rem',
+                  fontSize: isMobile ? '1.05rem' : '1.2rem',
                   fontWeight: 800,
                   color: 'var(--color-text)',
-                  marginBottom: '1.5rem',
+                  marginBottom: isMobile ? '1rem' : '1.5rem',
                   lineHeight: 1.3
                 }}>
                   {t('Chi tiết & Xác nhận phê duyệt')}
@@ -3015,7 +3095,7 @@ export default function Approvals() {
                   padding: '12px 16px',
                   borderRadius: '14px',
                   border: '1px solid var(--color-border-light)',
-                  marginBottom: '1.25rem'
+                  marginBottom: isMobile ? '1rem' : '1.25rem'
                 }}>
                   <Avatar src={avatarUrl} name={itemToApprove.employee_name} size={44} />
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -3046,12 +3126,10 @@ export default function Approvals() {
                     borderRadius: '12px',
                     marginTop: '4px'
                   }}>
-                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
                       {t('Chi tiết yêu cầu')}
                     </label>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--color-text)', lineHeight: 1.5, fontWeight: 500 }}>
-                      {itemToApprove.description || '—'}
-                    </span>
+                    {formatApprovalDescription(itemToApprove.description || '')}
                   </div>
                 </div>
               </div>
@@ -3059,12 +3137,13 @@ export default function Approvals() {
               {/* Modal Footer */}
               <div style={{
                 background: 'var(--color-bg)',
-                padding: '1.25rem 2rem',
+                padding: isMobile ? '1rem 1.25rem calc(env(safe-area-inset-bottom, 20px) + 20px) 1.25rem' : '1.25rem 2rem',
                 borderTop: '1px solid var(--color-border-light)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: '12px'
+                gap: '12px',
+                flexShrink: 0
               }}>
                 <button 
                   onClick={() => {

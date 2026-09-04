@@ -264,28 +264,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [uncontactedCount, setUncontactedCount] = useState(() => {
     return Number(sessionStorage.getItem('sale-uncontacted-count')) || 0;
   });
-  const [pendingLeadsCount, setPendingLeadsCount] = useState(0);
   const [initialMetadataLoaded, setInitialMetadataLoaded] = useState(false);
-
-  useEffect(() => {
-    if (isSale) {
-      fetchAPI('get_sale_portal_data').then(res => {
-        if (res && res.success && Array.isArray(res.leads)) {
-          const count = res.leads.filter((l: any) => {
-            if (Number(l.is_accepted)) return false;
-            const status = String(l.status || l.distribution_status || '').toLowerCase();
-            if (status === 'pending_work_hours' || status === 'pending_approval' || status === 'silent' || status === 'duplicate') {
-              return false;
-            }
-            return true;
-          }).length;
-          setPendingLeadsCount(count);
-        }
-      }).catch((err) => {
-        console.error("Error loading pending leads banner:", err);
-      });
-    }
-  }, [isSale]);
 
   useEffect(() => {
     const handleUncontactedCountChanged = (e: Event) => {
@@ -1148,40 +1127,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         )}
       </div>
 
-      {isSale && pendingLeadsCount > 0 && (
-        <div 
-          onClick={() => navigate('/workspace')}
-          style={{
-            background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-            border: '1px solid #fca5a5',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px -1px rgba(220, 38, 38, 0.05), 0 2px 4px -1px rgba(220, 38, 38, 0.03)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ background: '#ef4444', color: '#fff', borderRadius: '50%', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertCircle size={16} />
-            </div>
-            <div>
-              <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: '#991b1b' }}>
-                Bạn có {pendingLeadsCount} khách hàng mới chưa tiếp nhận!
-              </p>
-              <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#b91c1c' }}>
-                Vui lòng vào Bàn làm việc để bấm "Tiếp nhận" ngay trước khi hết giờ và bị hệ thống thu hồi.
-              </p>
-            </div>
-          </div>
-          <button className="btn danger sm" style={{ height: 32, borderRadius: 8, fontSize: '0.8rem', padding: '0 12px' }}>
-            Đi tới Bàn làm việc
-          </button>
-        </div>
-      )}
+
 
 
 
