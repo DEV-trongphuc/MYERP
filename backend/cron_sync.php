@@ -3330,13 +3330,13 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                 $chkCheckin->close();
                                 
                                 if (!$alreadyCheckedIn) {
-                                    $msg = "ĐÃ ĐẾN GIỜ CHẤM CÔNG (Ca $workStart)";
+                                    $msg = "Đã sắp đến giờ vào ca làm việc (Ca $workStart). Vui lòng chuẩn bị chấm công đúng giờ nhé!";
                                     $userTenantId = (int)($user['tenant_id'] ?? 1);
                                     
                                     // 1. Send Web In-App Notification Bell (Isolated)
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'bell')) {
                                         try {
-                                            $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, '⏰ ĐÃ ĐẾN GIỜ CHẤM CÔNG', ?, 'attendance_reminder', '/attendance')");
+                                            $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, '⏰ SẮP ĐẾN GIỜ CHẤM CÔNG', ?, 'attendance_reminder', '/attendance')");
                                             if ($insNotif) {
                                                 $insNotif->bind_param("iis", $userId, $userTenantId, $msg);
                                                 $insNotif->execute();
@@ -3375,8 +3375,8 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'email')) {
                                         try {
                                             if (!empty($user['email']) && function_exists('sendEmailNotification')) {
-                                                $emailSubject = "⏰ ĐÃ ĐẾN GIỜ CHẤM CÔNG [Ca $workStart]";
-                                                $emailTitle = "NHẮC NHỞ CHẤM CÔNG";
+                                                $emailSubject = "⏰ [IDEAS ERP] Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
+                                                $emailTitle = "NHẮC NHỞ CHẤM CÔNG VÀO CA";
                                                 $emailContent = "Chào <strong>" . htmlspecialchars($user['full_name']) . "</strong>,<br/><br/>Hệ thống nhắc nhở bạn sắp đến giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>). Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công đúng giờ.";
                                                 sendEmailNotification($user['email'], $emailSubject, $emailTitle, $emailContent, '', false);
                                             }
@@ -3754,8 +3754,133 @@ function sendCheckOutMissingReminders($conn) {
     $stmt->close();
 }
 
+/**
+ * Ca chiều: Nhắc nhở nhân viên ĐÚNG NGAY GIỜ kết thúc ca làm việc (Chấm công Ra ca)
+ * Kích hoạt ngay khi thời gian hiện tại vừa chạm giờ kết thúc ca (work_end) của nhân viên
+ */
 function sendCheckOutReminders($conn) {
-    sendCheckOutMissingReminders($conn);
+    $todayStr = date('Y-m-d');
+    $nowTimestamp = time();
+
+    // 1. Load global settings
+    $resSettings = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('global_work_end_time', 'global_work_schedule', 'require_checkout', 'attendance_notification_enabled')");
+    $settings = [];
+    if ($resSettings) {
+        while ($r = $resSettings->fetch_assoc()) {
+            $settings[$r['setting_key']] = $r['setting_value'];
+        }
+    }
+
+    // If require_checkout is explicitly disabled or attendance notification is disabled, skip
+    if (isset($settings['require_checkout']) && (int)$settings['require_checkout'] === 0) return;
+    if (isset($settings['attendance_notification_enabled']) && (int)$settings['attendance_notification_enabled'] === 0) return;
+
+    $globalWorkEnd = !empty($settings['global_work_end_time']) ? substr($settings['global_work_end_time'], 0, 5) : '17:00';
+    $globalWorkSchedule = $settings['global_work_schedule'] ?? '';
+
+    // 2. Query users who checked in today but haven't checked out yet
+    $sql = "
+        SELECT u.id, u.tenant_id, u.full_name, u.email, u.zalo_chat_id, u.telegram_chat_id, u.role,
+               u.use_custom_work_hours, u.work_end_time, u.work_schedule, u.vacation_mode,
+               u.leave_start, u.leave_end,
+               c.check_in_time
+        FROM check_ins c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.check_in_date = ? AND c.check_in_time IS NOT NULL AND c.check_out_time IS NULL AND u.status = 'active'
+    ";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) return;
+    $stmt->bind_param("s", $todayStr);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if (!$res) {
+        $stmt->close();
+        return;
+    }
+
+    require_once __DIR__ . '/NotificationService.php';
+    require_once __DIR__ . '/config.php';
+    $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+    ]);
+
+    while ($user = $res->fetch_assoc()) {
+        $userId = (int)$user['id'];
+        $tenantId = (int)($user['tenant_id'] ?? 1);
+
+        // Exemption check: ONLY Director is exempt from check-in/check-out reminders
+        if (in_array(strtolower($user['role'] ?? ''), ['director'], true)) continue;
+
+        // Skip if user is in vacation mode or on leave
+        if (!empty($user['vacation_mode']) && (int)$user['vacation_mode'] === 1) continue;
+        if (!empty($user['leave_start']) && !empty($user['leave_end'])) {
+            if ($todayStr >= $user['leave_start'] && $todayStr <= $user['leave_end']) continue;
+        }
+
+        // Check if user has approved or pending leave in hrm_leave_requests today (excluding late_early waiver)
+        $stmtLeaveOut = $conn->prepare("SELECT id FROM hrm_leave_requests WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ? AND leave_type NOT IN ('late_early', 'overtime') LIMIT 1");
+        if ($stmtLeaveOut) {
+            $stmtLeaveOut->bind_param("iss", $userId, $todayStr, $todayStr);
+            $stmtLeaveOut->execute();
+            $hasLeaveOut = (bool)$stmtLeaveOut->get_result()->fetch_assoc();
+            $stmtLeaveOut->close();
+            if ($hasLeaveOut) continue;
+        }
+
+        // Effective work end time
+        $workEnd = ($user['use_custom_work_hours'] == 1 && !empty($user['work_end_time'])) ? substr($user['work_end_time'], 0, 5) : $globalWorkEnd;
+        $userSchedule = ($user['use_custom_work_hours'] == 1 && !empty($user['work_schedule'])) ? $user['work_schedule'] : $globalWorkSchedule;
+        if (!empty($userSchedule)) {
+            $parsedSched = json_decode($userSchedule, true);
+            $dayOfWeek = (int)date('N');
+            if (is_array($parsedSched) && isset($parsedSched[$dayOfWeek])) {
+                $todaySched = $parsedSched[$dayOfWeek];
+                if (!empty($todaySched['end_afternoon'])) {
+                    $workEnd = substr($todaySched['end_afternoon'], 0, 5);
+                } elseif (isset($todaySched['start_afternoon']) && empty($todaySched['start_afternoon']) && !empty($todaySched['end'])) {
+                    $workEnd = substr($todaySched['end'], 0, 5);
+                }
+            }
+        }
+
+        // Trigger time: right at workEnd (within a 15-minute window before the late missing reminder triggers)
+        $workEndTimestamp = strtotime("$todayStr $workEnd");
+        if ($workEndTimestamp === false) continue;
+
+        // Trigger right at shift end: $nowTimestamp >= $workEndTimestamp && $nowTimestamp < ($workEndTimestamp + 15 * 60)
+        if ($nowTimestamp < $workEndTimestamp || $nowTimestamp >= ($workEndTimestamp + 15 * 60)) {
+            continue;
+        }
+
+        // Check if on-time reminder already sent today
+        $chk = $conn->prepare("SELECT id FROM sent_notifications WHERE user_id = ? AND notify_type = 'checkout_reminder' AND notify_date = ? LIMIT 1");
+        if ($chk) {
+            $chk->bind_param("is", $userId, $todayStr);
+            $chk->execute();
+            $hasSent = (bool)$chk->get_result()->fetch_assoc();
+            $chk->close();
+            if ($hasSent) continue;
+        }
+
+        // Dispatch on-time check-out reminder via NotificationService (In-App Bell, Zalo, Telegram, Email)
+        NotificationService::send($pdo, $tenantId, 'CHECKOUT_REMINDER', [
+            'recipients' => [$user],
+            'user_name' => $user['full_name'],
+            'work_end' => $workEnd
+        ]);
+
+        $ins = $conn->prepare("INSERT IGNORE INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, 'checkout_reminder', ?)");
+        if ($ins) {
+            $ins->bind_param("is", $userId, $todayStr);
+            $ins->execute();
+            $ins->close();
+        }
+
+        logSync("Sent on-time Check-Out reminder (right at $workEnd) to: {$user['full_name']} (User ID: {$userId})");
+    }
+    $stmt->close();
 }
 
 function sendScheduledAttendanceReports($conn) {

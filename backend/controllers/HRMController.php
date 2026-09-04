@@ -257,17 +257,37 @@ class HRMController {
         }
         $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
+        $leaveType = $b['leave_type'];
+        $otType = null;
+        $otRate = null;
+        $reason = $b['reason'] ?? '';
+        if ($leaveType === 'overtime') {
+            $otType = (!empty($b['ot_type']) && in_array($b['ot_type'], ['compensatory', 'salary'], true)) ? $b['ot_type'] : 'salary';
+            $otRate = !empty($b['ot_rate']) ? (float)$b['ot_rate'] : 1.5;
+            if ($otRate <= 0) $otRate = 1.5;
+
+            $rateText = ($otRate == 1.0) ? 'Loại 1.0x (1:1)' : "Loại {$otRate}x";
+            $tag = ($otType === 'compensatory') 
+                ? "[Hình thức: Lấy OT bù (Nghỉ bù) | Hệ số {$rateText}]" 
+                : "[Hình thức: Tính vào lương OT | Hệ số {$rateText}]";
+            if (strpos($reason, '[Hình thức:') === false) {
+                $reason = trim($tag . ' ' . $reason);
+            }
+        }
+
         $stmt = $this->db->prepare("
-            INSERT INTO hrm_leave_requests (user_id, leave_type, start_date, end_date, total_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, related_user_ids)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'pending', ?, ?)
+            INSERT INTO hrm_leave_requests (user_id, leave_type, ot_type, ot_rate, start_date, end_date, total_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, related_user_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'pending', ?, ?)
         ");
         $stmt->execute([
             $auth['user_id'],
-            $b['leave_type'],
+            $leaveType,
+            $otType,
+            $otRate,
             $startDate,
             $endDate,
             (float)($b['total_days'] ?? 1.0),
-            $b['reason'] ?? '',
+            $reason,
             $approverId,
             $approverId2,
             $approverId2 ? 'pending' : 'none',
@@ -430,6 +450,27 @@ class HRMController {
             $type = $leaveRow['leave_type'];
             $userId = (int)$leaveRow['user_id'];
             
+            // Khi đơn OT lấy nghỉ bù được duyệt hoàn tất -> tự động cộng vào quỹ nghỉ bù của nhân sự theo hệ số
+            if ($type === 'overtime') {
+                if (($leaveRow['ot_type'] ?? '') === 'compensatory' && ($leaveRow['status'] ?? '') !== 'approved') {
+                    $otRate = (float)($leaveRow['ot_rate'] ?? 1.0);
+                    if ($otRate <= 0) $otRate = 1.0;
+                    $compDays = round((float)$leaveRow['total_days'] * $otRate, 2);
+                    if ($compDays > 0) {
+                        $updCompStmt = $this->db->prepare("
+                            INSERT INTO hrm_profiles (user_id, joined_date, compensatory_leave_total)
+                            VALUES (?, CURDATE(), ?)
+                            ON DUPLICATE KEY UPDATE compensatory_leave_total = compensatory_leave_total + VALUES(compensatory_leave_total)
+                        ");
+                        $updCompStmt->execute([$userId, $compDays]);
+
+                        $compLog = " [Đã tự động cộng +{$compDays} ngày vào quỹ nghỉ bù (Hệ số {$otRate}x)]";
+                        $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?) WHERE id = ?");
+                        $updReason->execute([$compLog, (int)$leaveRow['id']]);
+                    }
+                }
+            }
+
             if ($type === 'annual' || $type === 'compensatory') {
                 $profStmt = $this->db->prepare("SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used FROM hrm_profiles WHERE user_id = ? LIMIT 1");
                 $profStmt->execute([$userId]);
@@ -1279,17 +1320,20 @@ class HRMController {
             $overtimeSalary = 0.0;
             if (!$isSpecialPeriod) {
                 $otStmt = $this->db->prepare("
-                    SELECT SUM(total_days) as ot_days
+                    SELECT SUM(total_days) as ot_days,
+                           SUM(total_days * COALESCE(ot_rate, 1.5)) as weighted_ot_days
                     FROM hrm_leave_requests
                     WHERE user_id = ? AND status = 'approved' AND leave_type = 'overtime'
+                      AND (ot_type = 'salary' OR ot_type IS NULL OR ot_type = '')
                       AND DATE_FORMAT(start_date, '%Y-%m') = ?
                 ");
                 $otStmt->execute([$userId, $monthYear]);
                 $otRow = $otStmt->fetch(PDO::FETCH_ASSOC);
                 $overtimeDays = (float)($otRow['ot_days'] ?? 0);
+                $weightedOtDays = (float)($otRow['weighted_ot_days'] ?? 0);
 
-                // Overtime salary: (deal_salary / work_days_required) * overtime_days * 1.5
-                $overtimeSalary = ($workDaysRequired > 0) ? (($baseSalary / $workDaysRequired) * $overtimeDays * 1.5) : 0;
+                // Overtime salary: (deal_salary / work_days_required) * weighted_ot_days (nhân theo hệ số ot_rate 1.0 hoặc 1.5)
+                $overtimeSalary = ($workDaysRequired > 0) ? (($baseSalary / $workDaysRequired) * $weightedOtDays) : 0;
             }
 
             // 6c. Diligence calculation (Disabled as per user request)

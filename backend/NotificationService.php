@@ -692,7 +692,7 @@ class NotificationService {
                 $workEnd = !empty($payload['work_end']) ? $payload['work_end'] : '';
                 if (empty($workEnd)) {
                     $stmtWe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1");
-                    $workEnd = substr((string)($stmtWe ? $stmtWe->fetchColumn() : ''), 0, 5);
+                    $workEnd = substr((string)($stmtWe ? $stmtWe->fetchColumn() : ''), 0, 5) ?: '17:00';
                 }
                 $timeTextEnd = !empty($workEnd) ? " ($workEnd)" : "";
                 $name = $payload['user_name'] ?? ($recipients[0]['full_name'] ?? 'bạn');
@@ -701,22 +701,43 @@ class NotificationService {
                 $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
                 $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
+                if ($eventType === 'CHECKOUT_REMINDER') {
+                    return [
+                        'recipients' => $recipients,
+                        'title' => "⏰ Nhắc nhở chấm công Ra ca{$timeTextEnd}",
+                        'body' => "Đã đến giờ tan làm / kết thúc ca{$timeTextEnd}. Bạn vui lòng thực hiện chấm công ra ca trước khi về nhé!",
+                        'type' => "attendance",
+                        'link' => "/attendance",
+                        'zalo_msg' => "⏰ [ NHẮC NHỞ CHẤM CÔNG RA CA ]\n\nXin chào $name,\nĐã đến giờ kết thúc ca làm việc (tan làm){$timeTextEnd}. Vui lòng đăng nhập MYERP để thực hiện chấm công ra ca nhé!\n👉 $loginAttendanceLink",
+                        'tg_msg' => "⏰ <b>[ NHẮC NHỞ CHẤM CÔNG RA CA ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã đến giờ tan làm / kết thúc ca làm việc" . (!empty($workEnd) ? " (<code>$workEnd</code>)" : "") . ". Vui lòng đăng nhập MYERP để thực hiện chấm công ra ca nhé!\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công Ra ca</b></a>",
+                        'email_subject' => "[IDEAS ERP] ⏰ Nhắc nhở chấm công Ra ca (tan làm [Ca $workEnd])",
+                        'email_title' => "NHẮC NHỞ CHẤM CÔNG RA CA",
+                        'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                                        "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Nhắc nhở chấm công Ra ca</h3>" .
+                                        "  <p style=\"margin: 0; color: #334155;\">Chào <strong>" . htmlspecialchars($name) . "</strong>, hệ thống thông báo đã đến giờ tan làm / kết thúc ca làm việc" . (!empty($workEnd) ? " (<strong>$workEnd</strong>)" : "") . ". Vui lòng đăng nhập hệ thống MYERP để thực hiện chấm công ra ca trước khi ra về nhé.</p>" .
+                                        "</div>" .
+                                        "<p style=\"margin-top: 25px; text-align: center;\">" .
+                                        "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG RA CA</a>" .
+                                        "</p>"
+                    ];
+                }
+
                 return [
                     'recipients' => $recipients,
-                    'title' => "🌆 Nhắc nhở: Bạn chưa chấm công ra hôm nay!",
-                    'body' => "Đã đến giờ kết thúc ca{$timeTextEnd}. Bạn vui lòng chấm công ra ca hôm nay nhé!",
+                    'title' => "🌆 CẢNH BÁO: Bạn chưa chấm công ra hôm nay!",
+                    'body' => "Đã quá 15 phút sau giờ tan làm / kết thúc ca{$timeTextEnd} nhưng bạn chưa thực hiện chấm công ra ca hôm nay. Vui lòng chấm công ngay nhé!",
                     'type' => "attendance",
                     'link' => "/attendance",
-                    'zalo_msg' => "🌆 [ NHẮC NHỞ CHẤM CÔNG RA CA ]\n\nXin chào $name,\nĐã đến giờ kết thúc ca làm việc{$timeTextEnd} nhưng bạn chưa thực hiện chấm công ra ca hôm nay.\n👉 Đăng nhập MYERP để chấm công ra ca:\n$loginAttendanceLink",
-                    'tg_msg' => "🌆 <b>[ NHẮC NHỞ CHẤM CÔNG RA CA ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã đến giờ kết thúc ca làm việc" . (!empty($workEnd) ? " (<code>$workEnd</code>)" : "") . " nhưng bạn chưa thực hiện chấm công ra ca hôm nay.\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công Ra ca</b></a>",
-                    'email_subject' => "[IDEAS ERP] Nhắc nhở: Đến giờ chấm công ra ca hôm nay",
-                    'email_title' => "NHẮC NHỞ CHẤM CÔNG",
-                    'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
-                                    "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Nhắc nhở chấm công ra ca</h3>" .
-                                    "  <p style=\"margin: 0; color: #334155;\">Chào <strong>" . htmlspecialchars($name) . "</strong>, hệ thống ghi nhận đã đến giờ kết thúc ca làm việc" . (!empty($workEnd) ? " (<strong>$workEnd</strong>)" : "") . " nhưng bạn chưa thực hiện chấm công ra ca hôm nay.</p>" .
+                    'zalo_msg' => "🌆 [ CẢNH BÁO QUÊN CHẤM CÔNG RA CA ]\n\nXin chào $name,\nĐã quá 15 phút sau giờ tan làm{$timeTextEnd} nhưng hệ thống chưa ghi nhận bạn thực hiện chấm công ra ca hôm nay.\n👉 Đăng nhập MYERP để chấm công ngay:\n$loginAttendanceLink",
+                    'tg_msg' => "🌆 <b>[ CẢNH BÁO QUÊN CHẤM CÔNG RA CA ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã quá 15 phút sau giờ tan làm" . (!empty($workEnd) ? " (<code>$workEnd</code>)" : "") . " nhưng hệ thống chưa ghi nhận bạn chấm công ra ca hôm nay.\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công Ra ca ngay</b></a>",
+                    'email_subject' => "[IDEAS ERP] ⚠️ Cảnh báo: Quên chấm công ra ca hôm nay [Ca $workEnd]",
+                    'email_title' => "CẢNH BÁO CHẤM CÔNG RA CA",
+                    'email_content' => "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                                    "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công ra ca</h3>" .
+                                    "  <p style=\"margin: 0; color: #7f1d1d;\">Chào <strong>" . htmlspecialchars($name) . "</strong>, hệ thống ghi nhận đã quá 15 phút sau giờ tan làm / kết thúc ca làm việc" . (!empty($workEnd) ? " (<strong>$workEnd</strong>)" : "") . " nhưng bạn <strong>chưa thực hiện chấm công ra ca hôm nay</strong>.<br/><br/>Vui lòng đăng nhập hệ thống để chấm công ra ca ngay.</p>" .
                                     "</div>" .
                                     "<p style=\"margin-top: 25px; text-align: center;\">" .
-                                    "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG</a>" .
+                                    "  <a href=\"{$loginAttendanceLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP CHẤM CÔNG NGAY</a>" .
                                     "</p>"
                 ];
 

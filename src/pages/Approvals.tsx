@@ -493,6 +493,8 @@ export default function Approvals() {
   const [otDate, setOtDate] = useState(new Date().toISOString().split('T')[0]);
   const [otStart, setOtStart] = useState('17:00');
   const [otEnd, setOtEnd] = useState('21:30');
+  const [otType, setOtType] = useState<'compensatory' | 'salary'>('compensatory');
+  const [otRate, setOtRate] = useState<number>(1.5);
   const [expenseTitle, setExpenseTitle] = useState('');
   const [jobPosition, setJobPosition] = useState('');
   const [departmentName, setDepartmentName] = useState('');
@@ -1048,19 +1050,24 @@ export default function Approvals() {
         const toStr = `${otDate}T${otEnd}`;
         const hours = diffHours(otStart, otEnd);
         const daysVal = Number((hours / 8).toFixed(2));
+        const otTypeLabel = otType === 'compensatory' ? 'Lấy OT bù (Nghỉ bù)' : 'Tính vào lương OT';
+        const rateLabel = (otRate === 1.0) ? 'Loại 1.0x (1:1)' : `Loại ${otRate}x`;
 
-        const descStr = `[Đăng ký Tăng ca] Thời gian: ${otStart} - ${otEnd} (${hours} giờ = ${daysVal} ngày công OT). Lý do: ${leaveReason}`;
+        const descStr = `[Đăng ký Tăng ca] [Hình thức: ${otTypeLabel} | ${rateLabel}] Thời gian: ${otStart} - ${otEnd} (${hours} giờ = ${daysVal} ngày công OT). Lý do: ${leaveReason}`;
 
         await fetchAPI('hrm/leaves', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             leave_type: 'overtime',
+            ot_type: otType,
+            ot_rate: otRate,
             reason: descStr,
             from_date: fromStr,
             to_date: toStr,
             total_days: daysVal,
             approver_id: appVal1 || finalApproverId,
+            approver_id_2: appVal2,
             related_user_ids: finalRelatedUserIds
           })
         });
@@ -1482,7 +1489,22 @@ export default function Approvals() {
       ]);
       const hrLead = getDefaultHrLeader();
       if (hrLead) setCustomApprover1(hrLead);
-    } else if (formType === 'leave' || formType === 'late_early' || formType === 'overtime' || formType === 'remote_work' || formType === 'attendance_bulk') {
+    } else if (formType === 'overtime') {
+      // Đăng ký tăng ca: 2 cấp duyệt tuần tự
+      // Cấp 1: Trưởng phòng / Quản lý trực tiếp
+      // Cấp 2: Nếu lấy OT bù -> Nhân sự (Duy Phương / HR); Nếu lấy lương -> Kế toán / Giám đốc
+      setShowStepManager(true);
+      setShowStepAccountant(true);
+      setShowStepDirector(false);
+      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
+      if (defaultApprover) setCustomApprover1(defaultApprover);
+      if (otType === 'compensatory') {
+        const hrLead = getDefaultHrLeader();
+        if (hrLead) setCustomApprover2(hrLead);
+      } else {
+        if (defaultAccountant) setCustomApprover2(defaultAccountant);
+      }
+    } else if (formType === 'leave' || formType === 'late_early' || formType === 'remote_work' || formType === 'attendance_bulk') {
       // Đề xuất công / nghỉ / chấm công: Mặc định Trưởng phòng (hoặc Duy Phương nếu ko có Trưởng phòng)
       setShowStepManager(true);
       setShowStepAccountant(false);
@@ -1500,6 +1522,18 @@ export default function Approvals() {
       setShowStepDirector(true);
     }
   }, [formType, selectedWorkflowDef, users, teams]);
+
+  // Tự động điều chỉnh Người duyệt Cấp 2 khi người dùng chuyển đổi loại OT (Lấy bù -> Nhân sự, Lấy lương -> Kế toán)
+  useEffect(() => {
+    if (formType === 'overtime') {
+      if (otType === 'compensatory') {
+        const hrLead = getDefaultHrLeader();
+        if (hrLead) setCustomApprover2(hrLead);
+      } else {
+        if (defaultAccountant) setCustomApprover2(defaultAccountant);
+      }
+    }
+  }, [otType, formType, users]);
 
   // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
   useEffect(() => {
@@ -4546,6 +4580,52 @@ export default function Approvals() {
                         ) : formType === 'overtime' ? (
                           /* OVERTIME REGISTRATION FORM */
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Hình thức nhận OT & Hệ số tính OT (Loại 1 hoặc x1.5) */}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 0.8fr', gap: '1rem' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                                    {t('Hình thức nhận OT')} <span style={{ color: '#ef4444' }}>*</span>
+                                  </label>
+                                  <span style={{ fontSize: '0.72rem', color: otType === 'compensatory' ? 'var(--color-primary)' : '#10b981', fontWeight: 700 }}>
+                                    {otType === 'compensatory' ? t('Cộng quỹ nghỉ bù') : t('Chi trả vào bảng lương')}
+                                  </span>
+                                </div>
+                                <CustomSelect
+                                  value={otType}
+                                  onChange={(val: any) => setOtType(val)}
+                                  options={[
+                                    { 
+                                      value: 'compensatory', 
+                                      label: t('🏖️ Lấy OT bù (Nghỉ bù) - Quy đổi thành ngày nghỉ bù') 
+                                    },
+                                    { 
+                                      value: 'salary', 
+                                      label: t('💵 Lấy lương OT (Tính vào lương) - Chi trả tiền tăng ca') 
+                                    }
+                                  ]}
+                                  width="100%"
+                                />
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                                  {t('Hệ số tính OT')} <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <CustomSelect
+                                  value={String(otRate)}
+                                  onChange={(val: any) => setOtRate(Number(val) || 1.5)}
+                                  options={[
+                                    { value: '1', label: t('Loại 1.0 (Hệ số 1.0x - Quy đổi 1:1)') },
+                                    { value: '1.5', label: t('Loại 1.5 (Hệ số 1.5x - Ngày thường)') },
+                                    { value: '2', label: t('Loại 2.0 (Hệ số 2.0x - Cuối tuần)') },
+                                    { value: '3', label: t('Loại 3.0 (Hệ số 3.0x - Lễ, Tết)') }
+                                  ]}
+                                  width="100%"
+                                />
+                              </div>
+                            </div>
+
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày tăng ca')}</label>
@@ -4597,19 +4677,33 @@ export default function Approvals() {
 
                             {/* Overtime calculation preview alert */}
                             <div className="card-panel" style={{ 
-                              padding: '10px 14px', 
-                              background: 'rgba(16, 185, 129, 0.06)', 
-                              border: '1px solid rgba(16, 185, 129, 0.15)', 
-                              borderRadius: '8px', 
+                              padding: '12px 14px', 
+                              background: otType === 'compensatory' ? 'rgba(59, 130, 246, 0.07)' : 'rgba(16, 185, 129, 0.07)', 
+                              border: `1px solid ${otType === 'compensatory' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(16, 185, 129, 0.25)'}`, 
+                              borderRadius: '10px', 
                               fontSize: '0.8rem', 
                               display: 'flex', 
-                              alignItems: 'center', 
+                              flexDirection: isMobile ? 'column' : 'row',
+                              alignItems: isMobile ? 'flex-start' : 'center', 
                               justifyContent: 'space-between',
+                              gap: '8px',
                               color: 'var(--color-text)'
                             }}>
-                              <span><strong>{t('Thời gian tăng ca quy đổi:')}</strong></span>
-                              <strong style={{ color: '#10b981' }}>
-                                {diffHours(otStart, otEnd)} {t('giờ')} ({Number((diffHours(otStart, otEnd) / 8).toFixed(2))} {t('ngày công tăng ca')} x 1.5)
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '1.2rem' }}>{otType === 'compensatory' ? '🏖️' : '💵'}</span>
+                                <div>
+                                  <div style={{ fontWeight: 700 }}>
+                                    {otType === 'compensatory' ? t('Quy đổi sang Ngày nghỉ bù:') : t('Quy đổi sang Tiền tăng ca:')}
+                                  </div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                    {otType === 'compensatory'
+                                      ? t('Cộng tự động vào quỹ phép bù cá nhân sau khi hoàn tất duyệt cấp 2 (Không tính vào lương)')
+                                      : t('Tính tự động vào cột Lương tăng ca trong bảng lương tháng')}
+                                  </div>
+                                </div>
+                              </div>
+                              <strong style={{ color: otType === 'compensatory' ? '#2563eb' : '#10b981', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                {diffHours(otStart, otEnd)} {t('giờ')} ({Number((diffHours(otStart, otEnd) / 8).toFixed(2))} công gốc) × {otRate}x = {(Number((diffHours(otStart, otEnd) / 8).toFixed(2)) * otRate).toFixed(2)} {otType === 'compensatory' ? t('ngày nghỉ bù') : t('ngày công tính lương')}
                               </strong>
                             </div>
                           </div>
@@ -7341,7 +7435,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       : users.find(u => ['director', 'admin', 'superadmin'].includes(String(u.role).toLowerCase()));
 
     // Multi-level conditions: Only show Level 2 if app2Id exists or it's multi-level finance
-    const hasLevel2 = !isHrItem && (Boolean(app2Id) || item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2)));
+    const hasLevel2 = Boolean(app2Id) || (!isHrItem && (item.type === 'advance' || (item.type === 'expense' && Boolean(detail?.approver_id_2))));
     const hasLevel3 = !isHrItem && (Boolean(app3Id) || (item.type === 'expense' && Boolean(detail?.approver_id_3)));
 
     const overallStatus = (item.status || 'pending').toLowerCase();
@@ -7383,7 +7477,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     steps.push({
       stepNumber: steps.length + 1,
-      title: isPrintStampSend ? t('Xác nhận hoàn thành') : (item.type === 'expense' ? t('Quản lý trực tiếp duyệt') : t('Phê duyệt')),
+      title: isPrintStampSend ? t('Xác nhận hoàn thành') : (item.type === 'expense' ? t('Quản lý trực tiếp duyệt') : t('Phê duyệt (Cấp 1)')),
       roleTitle: managerUser?.role ? (managerUser.role.charAt(0).toUpperCase() + managerUser.role.slice(1)) : t('Quản lý'),
       user: managerUser,
       status: s1Status,
@@ -7391,17 +7485,26 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       showBell: s1Status === 'pending'
     });
 
-    // Step 3: Level 2 Approver (Accountant) if exists
+    // Step 3: Level 2 Approver (HR or Accountant) if exists
     if (hasLevel2) {
       let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
       if (s2 === 'approved' || overallStatus === 'approved') s2Status = 'approved';
       else if (s1 !== 'approved' && overallStatus !== 'approved') s2Status = 'not_reached';
       else if (s2 === 'rejected' || overallStatus === 'rejected') s2Status = 'rejected';
 
+      const isOTCompensatory = detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù');
+      const isOTSalary = detail?.ot_type === 'salary' || rawDesc.includes('lương OT');
+      const step2Title = isOTCompensatory 
+        ? t('Nhân sự duyệt (Cấp 2)') 
+        : (isOTSalary ? t('Kế toán / Quản lý duyệt lương OT (Cấp 2)') : (isHrItem ? t('Người duyệt Cấp 2') : t('Kế toán duyệt (Cấp 2)')));
+      const step2RoleTitle = accountantUser?.role 
+        ? (accountantUser.role.charAt(0).toUpperCase() + accountantUser.role.slice(1)) 
+        : (isOTCompensatory ? t('Nhân sự') : t('Kế toán'));
+
       steps.push({
         stepNumber: steps.length + 1,
-        title: t('Kế toán duyệt (Cấp 2)'),
-        roleTitle: t('Kế toán'),
+        title: step2Title,
+        roleTitle: step2RoleTitle,
         user: accountantUser,
         status: s2Status,
         approvedAt: formatApprovalTime(detail?.approved_at_2 || detail?.updated_at),
@@ -7934,6 +8037,30 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     style={{ width: '100%', fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
+                {isOT && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                      {t('Hình thức nhận OT')}
+                    </label>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: (detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù')) ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                      color: (detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù')) ? '#2563eb' : '#15803d',
+                      fontWeight: 700,
+                      fontSize: isMobile ? '0.8125rem' : '0.875rem'
+                    }}>
+                      <span>
+                        {(detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù')) ? '🏖️ ' + t('Lấy OT bù (Nghỉ bù)') : '💵 ' + t('Lấy lương OT (Tính lương)')}
+                        {' • '}
+                        <strong>{t('Hệ số')} {detail?.ot_rate ? `${Number(detail.ot_rate)}x` : (rawDesc.includes('1.0x') ? '1.0x (1:1)' : '1.5x')}</strong>
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
                   <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{periodLabel}</label>
                   <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', alignItems: 'center' }}>

@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 241;
+$targetVersion = 243;
 $currentVersion = 186;
 
 // Query current DB version
@@ -216,6 +216,8 @@ try {
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('attendance_report_trigger_day', '1')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('attendance_report_date_mode', 'previous_month')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_checkout', '1')");
+    $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('attendance_notification_enabled', '1')");
+    $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('attendance_notification_lead_minutes', '10')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('auto_approve_checkin', '1')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('golden_hours_max_leads_per_consultant', '0')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_lead_claim', '0')");
@@ -2476,8 +2478,47 @@ try {
         $logMsg("Nâng cấp lên phiên bản 241 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 242: BỔ SUNG CỘT OT_TYPE CHO BẢNG HRM_LEAVE_REQUESTS
+    // ==========================================
+    if ($currentVersion < 242 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 242: Bổ sung cột ot_type cho hrm_leave_requests...", "info");
+        try {
+            $chkCol = $conn->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'hrm_leave_requests' AND COLUMN_NAME = 'ot_type'");
+            if ($chkCol && (int)$chkCol->fetch_row()[0] === 0) {
+                $conn->query("ALTER TABLE `hrm_leave_requests` ADD COLUMN `ot_type` VARCHAR(20) DEFAULT 'salary' COMMENT 'Loại OT: salary (lấy lương) hoặc compensatory (lấy nghỉ bù)' AFTER `leave_type`");
+                $conn->query("ALTER TABLE `hrm_leave_requests` ADD INDEX `idx_hlr_ot_type` (`ot_type`)");
+                $logMsg("Đã bổ sung thành công cột `ot_type` và index vào bảng `hrm_leave_requests`.", "success");
+            } else {
+                $logMsg("Cột `ot_type` đã tồn tại trong bảng `hrm_leave_requests`.", "info");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 242: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 242 hoàn tất.", "success");
+    }
+
+    // ==========================================
+    // PHIÊN BẢN 243: BỔ SUNG CỘT OT_RATE CHO BẢNG HRM_LEAVE_REQUESTS
+    // ==========================================
+    if ($currentVersion < 243 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 243: Bổ sung cột ot_rate cho hrm_leave_requests...", "info");
+        try {
+            $chkCol = $conn->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'hrm_leave_requests' AND COLUMN_NAME = 'ot_rate'");
+            if ($chkCol && (int)$chkCol->fetch_row()[0] === 0) {
+                $conn->query("ALTER TABLE `hrm_leave_requests` ADD COLUMN `ot_rate` DECIMAL(3,2) DEFAULT 1.50 COMMENT 'Hệ số tính OT: 1.0 (Loại 1), 1.5 (Loại 1.5), 2.0, 3.0' AFTER `ot_type`");
+                $logMsg("Đã bổ sung thành công cột `ot_rate` vào bảng `hrm_leave_requests`.", "success");
+            } else {
+                $logMsg("Cột `ot_rate` đã tồn tại trong bảng `hrm_leave_requests`.", "info");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 243: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 243 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '241') ON DUPLICATE KEY UPDATE setting_value = '241'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '243') ON DUPLICATE KEY UPDATE setting_value = '243'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

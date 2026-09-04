@@ -5275,7 +5275,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       }}>
                         <Shield size={15} color="#4f46e5" style={{ flexShrink: 0 }} />
                         <span style={{ fontSize: '0.76rem', color: '#4338ca', lineHeight: 1.4 }}>
-                          <strong>{t('Công việc cá nhân:')}</strong> {t('Chỉ bạn và Admin thấy (Leader, Giám đốc không thể xem).')}
+                          <strong>{t('Công việc cá nhân:')}</strong> {t('Chỉ bạn nhìn thấy')}
                         </span>
                       </div>
                     );

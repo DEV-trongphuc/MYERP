@@ -127,6 +127,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [otDateField, setOtDateField] = useState(() => new Date().toISOString().split('T')[0]);
   const [otStartField, setOtStartField] = useState('17:00');
   const [otEndField, setOtEndField] = useState('21:00');
+  const [otTypeField, setOtTypeField] = useState<'compensatory' | 'salary'>('compensatory');
+  const [otRateField, setOtRateField] = useState<number>(1.5);
   
   const [approverIdField, setApproverIdField] = useState('');
   const [approverId2Field, setApproverId2Field] = useState('');
@@ -320,10 +322,14 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         const toStr = `${otDateField}T${otEndField}`;
         const hours = diffHours(otStartField, otEndField);
         const daysVal = Number((hours / 8).toFixed(2));
-        const descStr = `[Đăng ký Tăng ca] Thời gian: ${otStartField} - ${otEndField} (${hours} giờ = ${daysVal} ngày công OT). Lý do: ${leaveReasonField}`;
+        const otTypeLabel = otTypeField === 'compensatory' ? 'Lấy OT bù (Nghỉ bù)' : 'Tính vào lương OT';
+        const rateLabel = (otRateField === 1.0) ? 'Loại 1.0x (1:1)' : `Loại ${otRateField}x`;
+        const descStr = `[Đăng ký Tăng ca] [Hình thức: ${otTypeLabel} | ${rateLabel}] Thời gian: ${otStartField} - ${otEndField} (${hours} giờ = ${daysVal} ngày công OT). Lý do: ${leaveReasonField}`;
         
         payload = {
           leave_type: 'overtime',
+          ot_type: otTypeField,
+          ot_rate: otRateField,
           reason: descStr,
           from_date: fromStr,
           to_date: toStr,
@@ -3151,8 +3157,64 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           })()}
 
           {/* Form Fields: Tăng ca */}
+          {/* Form Fields: Tăng ca */}
           {createLeaveType === 'overtime' && (
             <>
+              {/* Hình thức nhận OT & Hệ số tính OT (Loại 1 hoặc x1.5) */}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 0.8fr', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      {t('Hình thức nhận OT')} <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: otTypeField === 'compensatory' ? 'var(--color-primary)' : '#10b981', fontWeight: 700 }}>
+                      {otTypeField === 'compensatory' ? t('Cộng quỹ nghỉ bù') : t('Chi trả vào bảng lương')}
+                    </span>
+                  </div>
+                  <CustomSelect
+                    value={otTypeField}
+                    onChange={(val: any) => {
+                      setOtTypeField(val);
+                      if (val === 'compensatory') {
+                        const hr = usersList.find((u: any) => u.full_name?.includes('Duy Phương') || u.username === 'phuongntd' || u.role === 'hr');
+                        if (hr) setApproverId2Field(String(hr.id));
+                      } else {
+                        const acc = usersList.find((u: any) => u.role === 'accountant');
+                        if (acc) setApproverId2Field(String(acc.id));
+                      }
+                    }}
+                    options={[
+                      { 
+                        value: 'compensatory', 
+                        label: t('🏖️ Lấy OT bù (Nghỉ bù) - Quy đổi thành ngày nghỉ bù') 
+                      },
+                      { 
+                        value: 'salary', 
+                        label: t('💵 Lấy lương OT (Tính vào lương) - Chi trả tiền tăng ca') 
+                      }
+                    ]}
+                    width="100%"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                    {t('Hệ số tính OT')} <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <CustomSelect
+                    value={String(otRateField)}
+                    onChange={(val: any) => setOtRateField(Number(val) || 1.5)}
+                    options={[
+                      { value: '1', label: t('Loại 1 (Hệ số 1.0x - Quy đổi 1:1)') },
+                      { value: '1.5', label: t('Loại 1.5 (Hệ số 1.5x - Ngày thường)') },
+                      { value: '2', label: t('Loại 2.0 (Hệ số 2.0x - Cuối tuần)') },
+                      { value: '3', label: t('Loại 3.0 (Hệ số 3.0x - Lễ, Tết)') }
+                    ]}
+                    width="100%"
+                  />
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
@@ -3192,6 +3254,38 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     required
                   />
                 </div>
+              </div>
+
+              {/* Overtime calculation preview alert */}
+              <div style={{ 
+                padding: '12px 14px', 
+                background: otTypeField === 'compensatory' ? 'rgba(59, 130, 246, 0.07)' : 'rgba(16, 185, 129, 0.07)', 
+                border: `1px solid ${otTypeField === 'compensatory' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(16, 185, 129, 0.25)'}`, 
+                borderRadius: '10px', 
+                fontSize: '0.8rem', 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'flex-start' : 'center', 
+                justifyContent: 'space-between',
+                gap: '8px',
+                color: 'var(--color-text)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>{otTypeField === 'compensatory' ? '🏖️' : '💵'}</span>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>
+                      {otTypeField === 'compensatory' ? t('Quy đổi sang Ngày nghỉ bù:') : t('Quy đổi sang Tiền tăng ca:')}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                      {otTypeField === 'compensatory'
+                        ? t('Cộng tự động vào quỹ phép bù cá nhân sau khi hoàn tất duyệt cấp 2 (Không tính vào lương)')
+                        : t('Tính tự động vào cột Lương tăng ca trong bảng lương tháng')}
+                    </div>
+                  </div>
+                </div>
+                <strong style={{ color: otTypeField === 'compensatory' ? '#2563eb' : '#10b981', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                  {diffHours(otStartField, otEndField)} {t('giờ')} ({Number((diffHours(otStartField, otEndField) / 8).toFixed(2))} {t('công gốc')}) × {otRateField}x = {(Number((diffHours(otStartField, otEndField) / 8).toFixed(2)) * otRateField).toFixed(2)} {otTypeField === 'compensatory' ? t('ngày nghỉ bù') : t('ngày công tính lương')}
+                </strong>
               </div>
             </>
           )}
@@ -3284,7 +3378,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                {t('Người duyệt 2 (Không bắt buộc)')}
+                {createLeaveType === 'overtime'
+                  ? (otTypeField === 'compensatory' ? t('Người duyệt 2 (Nhân sự ghi nhận phép)') : t('Người duyệt 2 (Kế toán duyệt lương OT)'))
+                  : t('Người duyệt 2 (Không bắt buộc)')
+                }
               </label>
               <CustomSelect
                 value={approverId2Field}
