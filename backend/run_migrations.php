@@ -2462,7 +2462,7 @@ try {
             // 3. Đảm bảo toàn bộ lead đã giao có liên kết bảng contacts
             $conn->query("
                 INSERT IGNORE INTO contacts (tenant_id, name, phone, lead_id, assigned_to, created_at, updated_at)
-                SELECT l.tenant_id, l.name, l.phone, l.id, l.assigned_to, l.created_at, NOW()
+                SELECT 1, l.name, l.phone, l.id, l.assigned_to, l.created_at, NOW()
                 FROM leads l
                 LEFT JOIN contacts c ON c.lead_id = l.id
                 WHERE l.assigned_to > 0 AND c.id IS NULL
