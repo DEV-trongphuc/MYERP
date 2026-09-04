@@ -385,6 +385,51 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
 
+  // Quick Pipeline Stage Tabs (1-Click Switching)
+  const [quickPipelineStage, setQuickPipelineStage] = useState<string>('all');
+  const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
+
+  const PIPELINE_TABS = useMemo(() => {
+    const tabs: Array<{ id: string; label: string; color: string }> = [
+      { id: 'all', label: 'Tất cả', color: '#64748b' }
+    ];
+
+    if (pipelineStages && pipelineStages.length > 0) {
+      const sorted = [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0));
+      sorted.forEach(s => {
+        tabs.push({
+          id: String(s.id),
+          label: s.name,
+          color: s.color || '#3b82f6'
+        });
+      });
+    }
+
+    tabs.push(
+      { id: 'nurture', label: 'Chăm sóc lại (Nurture)', color: '#0284c7' },
+      { id: 'lost', label: 'Không tiềm năng (Lost)', color: '#ef4444' }
+    );
+
+    return tabs;
+  }, [pipelineStages]);
+
+  const getTotalActiveCount = () => {
+    if (stageCounts && Object.keys(stageCounts).length > 0) {
+      let sum = 0;
+      pipelineStages.forEach(s => {
+        sum += Number(stageCounts[s.id] || 0);
+      });
+      sum += Number(stageCounts['nurture'] || 0);
+      return sum;
+    }
+    return total;
+  };
+
+  const handleSelectQuickTab = (tabId: string) => {
+    setQuickPipelineStage(prev => prev === tabId ? 'all' : tabId);
+    setPage(1);
+  };
+
 
   const getEffectiveTeamId = () => {
     const isMarketing = user?.role === 'marketing' || 
@@ -620,6 +665,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         params.student_sub_tab = studentSubTab;
       }
       
+      // Quick Pipeline Stage Tab filter
+      if (quickPipelineStage && quickPipelineStage !== 'all') {
+        if (quickPipelineStage === 'nurture') {
+          params.lead_status = 'nurture';
+        } else if (quickPipelineStage === 'lost') {
+          params.lead_status = 'lost';
+          params.show_lost = 1;
+        } else {
+          params.stage_id = quickPipelineStage;
+        }
+      }
+
       if (activeFilters.status) {
         if (/^\d+$/.test(activeFilters.status)) {
           params.stage_id = activeFilters.status;
@@ -672,6 +729,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       const items = data.items || [];
       setContacts(items.map((c: any) => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
       setTotal(data.total || items.length);
+      if (data.stage_counts) {
+        setStageCounts(data.stage_counts);
+      }
     } catch (e: any) {
       setContacts([]);
       setTotal(0);
@@ -685,7 +745,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (initialMetadataLoaded) {
       fetchData();
     }
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus]);
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -1120,6 +1180,83 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
 
 
+      {/* QUICK STATUS TABS (Chuyển nhanh theo từng trạng thái phễu) */}
+      {segment !== 'customer' && (
+        <div
+          className="custom-scrollbar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            overflowX: 'auto',
+            paddingBottom: '8px',
+            marginBottom: '0.75rem',
+            scrollbarWidth: 'thin',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          {PIPELINE_TABS.map((tab) => {
+            const isActive = quickPipelineStage === tab.id;
+            const count = tab.id === 'all' 
+              ? getTotalActiveCount() 
+              : Number(stageCounts[tab.id] || 0);
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleSelectQuickTab(tab.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  padding: isMobile ? '5px 10px' : '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: isMobile ? '0.74rem' : '0.79rem',
+                  fontWeight: isActive ? 700 : 500,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
+                  background: isActive ? `${tab.color}15` : 'var(--color-surface)',
+                  color: isActive ? tab.color : 'var(--color-text)',
+                  boxShadow: isActive ? `0 2px 8px ${tab.color}25` : 'var(--shadow-sm)'
+                }}
+              >
+                <span
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    backgroundColor: tab.color,
+                    flexShrink: 0
+                  }}
+                />
+                <span>{tab.label}</span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    background: isActive ? tab.color : 'var(--color-bg-light)',
+                    color: isActive ? '#ffffff' : 'var(--color-text-muted)',
+                    marginLeft: '2px',
+                    minWidth: '18px',
+                    textAlign: 'center',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  {loading && !Object.keys(stageCounts).length ? '...' : count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Search + filter row */}
       <div className={isMobile ? "" : "card"} style={{ padding: isMobile ? '0' : '0.75rem 1rem', marginBottom:'0.75rem', display:'flex', gap:'0.75rem', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', background: isMobile ? 'transparent' : undefined, border: isMobile ? 'none' : undefined, boxShadow: isMobile ? 'none' : undefined }}>
         {isMobile ? (
@@ -1472,109 +1609,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 )}
               </button>
 
-              <button 
-                onClick={() => { setShowLost(!showLost); setPage(1); }}
-                style={{
-                  height: '38px',
-                  padding: '0 0.875rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  border: showLost ? '1px solid #ef4444' : '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                  background: showLost ? 'rgba(239, 68, 68, 0.08)' : 'var(--color-surface)',
-                  color: showLost ? '#ef4444' : 'var(--color-text-muted)',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  transition: 'all 0.2s',
-                  boxShadow: 'var(--shadow-sm)',
-                  whiteSpace: 'nowrap'
-                }}
-                title={showLost ? "Đang hiện data Lost. Nhấn để ẩn đi" : "Mặc định đang ẩn data Lost. Nhấn để hiện data Lost"}
-              >
-                {showLost ? <Eye size={14} /> : <EyeOff size={14} />}
-                <span>{showLost ? 'Đang hiện Lost' : 'Hiện Lost'}</span>
-              </button>
             </div>
  
-            {/* Row 2: Chọn nhanh, Sort Select & View Mode switchers */}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto', flexShrink: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-
-              {/* Quick lead status pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg-alt, rgba(0,0,0,0.03))', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border-light)', overflowX: 'auto', flexShrink: 0 }}>
-                <button
-                  type="button"
-                  onClick={() => { setQuickLeadStatus(''); setPage(1); }}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: quickLeadStatus === '' ? 'var(--color-surface)' : 'transparent',
-                    color: quickLeadStatus === '' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    boxShadow: quickLeadStatus === '' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                    transition: 'all 0.15s',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Hiện tất cả khách hàng (mặc định ẩn data Lost)"
-                >
-                  Tất cả
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { setQuickLeadStatus(quickLeadStatus === 'nurture' ? '' : 'nurture'); setPage(1); }}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: quickLeadStatus === 'nurture' ? '#0284c7' : 'transparent',
-                    color: quickLeadStatus === 'nurture' ? '#ffffff' : 'var(--color-text-muted)',
-                    boxShadow: quickLeadStatus === 'nurture' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    transition: 'all 0.15s',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Chỉ hiện các Lead đang trong diện Nuôi dưỡng (Nurture)"
-                >
-                  <Clock size={12} />
-                  <span>Chỉ Nurture</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { setQuickLeadStatus(quickLeadStatus === 'lost' ? '' : 'lost'); setPage(1); }}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: quickLeadStatus === 'lost' ? '#ef4444' : 'transparent',
-                    color: quickLeadStatus === 'lost' ? '#ffffff' : 'var(--color-text-muted)',
-                    boxShadow: quickLeadStatus === 'lost' ? '0 1px 3px rgba(239, 68, 68, 0.3)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    transition: 'all 0.15s',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Chỉ hiện các Lead đã Lost (Không tiếp tục)"
-                >
-                  <Ban size={12} />
-                  <span>Chỉ Lost</span>
-                </button>
-              </div>
+            {/* Row 2: Sort Select & View Mode switchers */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto', flexShrink: 0 }}>
 
               {!isMobile && <div style={{ flex: 1 }} />}
               

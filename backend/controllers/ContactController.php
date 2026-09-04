@@ -134,25 +134,6 @@ class ContactController {
                 $params[] = "%$search%";
             }
         }
-        // Filter by Lead Status (active, nurture, lost) or default hide lost
-        if ($leadStatus !== '') {
-            $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
-            if (!empty($statuses)) {
-                $placeholders = implode(',', array_fill(0, count($statuses), '?'));
-                if ($leadStatusOp === 'not_in') {
-                    $where[] = "(c.lead_status NOT IN ($placeholders) OR c.lead_status IS NULL)";
-                } else {
-                    $where[] = "c.lead_status IN ($placeholders)";
-                }
-                foreach ($statuses as $st) {
-                    $params[] = $st;
-                }
-            }
-        } elseif (!$showLost) {
-            // Default filter: automatically hide lost contacts unless show_lost=1 is explicitly requested
-            $where[] = "(c.lead_status != 'lost' OR c.lead_status IS NULL)";
-        }
-
         if ($status) {
             if ($statusOp === 'not_in') {
                 $where[] = 'c.status != ?';
@@ -163,14 +144,6 @@ class ContactController {
         }
         if ($source) { $where[] = 'c.source = ?'; $params[] = $source; }
         if ($owner)  { $where[] = 'c.owner_id = ?'; $params[] = (int)$owner; }
-        if ($stage)  {
-            if ($stageOp === 'not_in') {
-                $where[] = 'c.stage_id != ?';
-            } else {
-                $where[] = 'c.stage_id = ?';
-            }
-            $params[] = (int)$stage;
-        }
         if ($companyId) { $where[] = 'c.company_id = ?'; $params[] = (int)$companyId; }
         if ($projectId !== '') { $where[] = 'c.project_id = ?'; $params[] = (int)$projectId; }
         if ($campaignId !== '') { $where[] = 'c.campaign_id = ?'; $params[] = (int)$campaignId; }
@@ -265,6 +238,62 @@ class ContactController {
             }
         }
 
+        // Snapshot base WHERE and params before specific stage & lead_status filter
+        $baseWhere = $where;
+        $baseParams = $params;
+
+        // Calculate counts per pipeline stage and lead status for quick status tabs
+        $stageCounts = [];
+        try {
+            $scWhere = $baseWhere;
+            $scWhere[] = "(c.lead_status != 'lost' OR c.lead_status IS NULL)";
+            $scWhereStr = implode(' AND ', $scWhere);
+            $scStmt = $this->db->prepare("SELECT c.stage_id, COUNT(*) as cnt FROM contacts c WHERE $scWhereStr GROUP BY c.stage_id");
+            $scStmt->execute($baseParams);
+            $stageCounts = $scStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+
+            // Compute nurture and lost counts
+            $lsWhereStr = implode(' AND ', $baseWhere);
+            $lsStmt = $this->db->prepare("SELECT c.lead_status, COUNT(*) as cnt FROM contacts c WHERE $lsWhereStr GROUP BY c.lead_status");
+            $lsStmt->execute($baseParams);
+            $leadStatusCounts = $lsStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            foreach ($leadStatusCounts as $lsKey => $cnt) {
+                if (!empty($lsKey)) {
+                    $stageCounts[$lsKey] = (int)$cnt;
+                }
+            }
+        } catch (\Exception $e) {
+            $stageCounts = [];
+        }
+
+        // Filter by Lead Status (active, nurture, lost) or default hide lost
+        if ($leadStatus !== '') {
+            $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
+            if (!empty($statuses)) {
+                $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+                if ($leadStatusOp === 'not_in') {
+                    $where[] = "(c.lead_status NOT IN ($placeholders) OR c.lead_status IS NULL)";
+                } else {
+                    $where[] = "c.lead_status IN ($placeholders)";
+                }
+                foreach ($statuses as $st) {
+                    $params[] = $st;
+                }
+            }
+        } elseif (!$showLost) {
+            // Default filter: automatically hide lost contacts unless show_lost=1 is explicitly requested
+            $where[] = "(c.lead_status != 'lost' OR c.lead_status IS NULL)";
+        }
+
+        if ($stage) {
+            if ($stageOp === 'not_in') {
+                $where[] = 'c.stage_id != ?';
+            } else {
+                $where[] = 'c.stage_id = ?';
+            }
+            $params[] = (int)$stage;
+        }
+
         $whereStr = implode(' AND ', $where);
 
         $count = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $whereStr");
@@ -345,7 +374,8 @@ class ContactController {
         respond(200, [
             'items' => $data, 'total' => $total,
             'page' => $page, 'limit' => $limit,
-            'total_pages' => ceil($total / $limit)
+            'total_pages' => ceil($total / $limit),
+            'stage_counts' => $stageCounts
         ]);
     }
 
