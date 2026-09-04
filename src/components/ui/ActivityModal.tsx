@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera } from 'lucide-react';
+import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera, FileText } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { CustomSelect } from './CustomSelect';
 import { MentionInput } from './MentionInput';
@@ -22,7 +22,8 @@ const TYPES = [
   { id: 'call', label: 'Cuộc gọi', icon: <Phone size={16} />, color: 'var(--color-primary)' },
   { id: 'zalo_connect', label: 'Zalo', icon: <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain' }} alt="Zalo" />, color: '#0084FF' },
   { id: 'email', label: 'Email', icon: <Mail size={16} />, color: '#10b981' },
-  { id: 'meeting', label: 'Gặp gỡ', icon: <Users size={16} />, color: '#f59e0b' }
+  { id: 'meeting', label: 'Gặp gỡ', icon: <Users size={16} />, color: '#f59e0b' },
+  { id: 'note', label: 'Ghi chú', icon: <FileText size={16} />, color: '#8b5cf6' }
 ];
 
 const DEFAULT_SUBJECTS: Record<string, string> = {
@@ -38,7 +39,7 @@ const PLACEHOLDERS: Record<string, string> = {
   zalo_connect: 'Ví dụ: Nhắn tin Zalo tư vấn dự án...',
   email: 'Ví dụ: Gửi email báo giá căn hộ...',
   meeting: 'Ví dụ: Gặp trực tiếp tại sa bàn...',
-  note: 'Ví dụ: Ghi chú yêu cầu tài chính của khách...'
+  note: 'Ví dụ: Ghi chú trao đổi với khách hàng...'
 };
 
 export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, entityType, entityId, onSuccess, userId, activity, onSwitchToTask }) => {
@@ -98,7 +99,10 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    let subject = formData.subject;
+    let subject = formData.subject.trim();
+    if (!subject && formData.type === 'note') {
+      subject = 'Ghi chú';
+    }
     let body = formData.body;
     let status = formData.status;
 
@@ -261,7 +265,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
             }}
           >
             {/* Type selector */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isMobile ? '6px' : '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: isMobile ? '6px' : '10px' }}>
               {TYPES.map(t => (
                 <button 
                   key={t.id} type="button"
@@ -273,7 +277,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
                       ...formData, 
                       type: t.id, 
                       subject: newSubject,
-                      status: (t.id === 'call' || t.id === 'zalo_connect') ? 'done' : 'planned' 
+                      status: (t.id === 'call' || t.id === 'zalo_connect' || t.id === 'note') ? 'done' : 'planned' 
                     });
                   }}
                   style={{
@@ -441,7 +445,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
             ) : (
               <>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Tiêu đề hoạt động <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                  <label className="form-label">
+                    Tiêu đề {formData.type === 'note' ? 'ghi chú' : 'hoạt động'} {formData.type !== 'note' && <span style={{ color: 'var(--color-danger)' }}>*</span>}
+                  </label>
                   <input 
                     className="form-input" 
                     placeholder={PLACEHOLDERS[formData.type] || 'Nhập tiêu đề hoạt động...'} 

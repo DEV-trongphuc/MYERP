@@ -1086,7 +1086,7 @@ const TimelineItem = React.memo<TimelineItemProps>(({
           
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: ev.color, background: `${ev.color}12`, padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
-              {ev.type === 'meeting' ? (ev.status === 'cancelled' ? 'Hủy gặp' : (ev.status === 'planned' ? 'Lịch gặp' : 'Đã gặp')) : ev.type === 'zalo_connect' ? 'Zalo' : ev.type.toUpperCase()}
+              {ev.type === 'meeting' ? (ev.status === 'cancelled' ? 'Hủy gặp' : (ev.status === 'planned' ? 'Lịch gặp' : 'Đã gặp')) : ev.type === 'zalo_connect' ? 'Zalo' : ev.type === 'note' ? 'Ghi chú' : ev.type.toUpperCase()}
             </span>
             <span>•</span>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -3214,7 +3214,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const [drawerTaskFilter, setDrawerTaskFilter] = useState<'all' | 'assigned_to_me' | 'approve_by_me' | 'collaborator'>('all');
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [timelineFilter, setTimelineFilter] = useState<'all' | 'call' | 'email' | 'meeting' | 'task'>('all');
+  const [timelineFilter, setTimelineFilter] = useState<'all' | 'call' | 'email' | 'meeting' | 'note' | 'task'>('all');
   const [viewExpense, setViewExpense] = useState<any>(null);
   const [rejectingExpense, setRejectingExpense] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -10199,7 +10199,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 timelineFilter === 'all' ? 'Tất cả' :
                                 timelineFilter === 'call' ? 'Cuộc gọi' :
                                 timelineFilter === 'email' ? 'Email' :
-                                timelineFilter === 'meeting' ? 'Gặp gỡ' : 'Công việc'
+                                timelineFilter === 'meeting' ? 'Gặp gỡ' :
+                                timelineFilter === 'note' ? 'Ghi chú' : 'Công việc'
                               }</span>
                               <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', marginLeft: '2px' }} />
                             </button>
@@ -10240,6 +10241,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     { value: 'call', label: 'Cuộc gọi', icon: <Phone size={13} /> },
                                     { value: 'email', label: 'Email', icon: <Mail size={13} /> },
                                     { value: 'meeting', label: 'Gặp gỡ', icon: <Users size={13} /> },
+                                    { value: 'note', label: 'Ghi chú', icon: <FileText size={13} /> },
                                     { value: 'task', label: 'Công việc', icon: <CheckSquare size={13} /> }
                                   ].map(tab => {
                                     const isSelected = timelineFilter === tab.value;
