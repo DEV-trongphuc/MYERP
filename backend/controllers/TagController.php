@@ -9,8 +9,8 @@ class TagController {
     public function index($auth) {
         $tid = $auth['tenant_id'];
         
-        // Lấy tất cả tags
-        $stmt = $this->db->prepare("SELECT * FROM tags WHERE tenant_id = ? ORDER BY name ASC");
+        // Lấy tất cả tags (loại trừ các tag trạng thái cũ đã bãi bỏ)
+        $stmt = $this->db->prepare("SELECT * FROM tags WHERE tenant_id = ? AND LOWER(TRIM(name)) NOT IN ('new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified') ORDER BY name ASC");
         $stmt->execute([$tid]);
         $tags = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -119,6 +119,9 @@ class TagController {
                 $cleanedTag = trim($cleanedTag);
                 if ($cleanedTag === '') continue;
 
+                $deprecatedTags = ['new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified'];
+                if (in_array(strtolower($cleanedTag), $deprecatedTags, true)) continue;
+
                 $counts[$cleanedTag] = ($counts[$cleanedTag] ?? 0) + 1;
             }
         }
@@ -137,17 +140,7 @@ class TagController {
             $bg = $colorMap[$lowerTag] ?? '';
             
             if (empty($bg)) {
-                if (strpos($lowerTag, 'new') !== false) {
-                    $bg = '#f97316';
-                } else if (strpos($lowerTag, 'needed') !== false || strpos($lowerTag, 'considering') !== false) {
-                    $bg = '#db2777';
-                } else if (strpos($lowerTag, 'unqualified') !== false) {
-                    $bg = '#ca8a04';
-                } else if (strpos($lowerTag, 'qualified') !== false) {
-                    $bg = '#ef4444';
-                } else if (strpos($lowerTag, 'bad timing') !== false || strpos($lowerTag, 'bad_timing') !== false || strpos($lowerTag, 'baddtiming') !== false) {
-                    $bg = '#7c3aed';
-                } else if (strpos($lowerTag, 'umef') !== false || strpos($lowerTag, 'msc') !== false) {
+                if (strpos($lowerTag, 'umef') !== false || strpos($lowerTag, 'msc') !== false) {
                     $bg = '#059669';
                 } else {
                     $bg = '#2563eb';

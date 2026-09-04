@@ -375,24 +375,6 @@ class ContactController {
         }
 
         $stageId = $b['stage_id'] ?? null;
-        
-        // Auto-assign Bỏ theo dõi if unqualified tag exists
-        $hasUnqualified = false;
-        $tagsArray = $b['tags'] ?? [];
-        if (is_array($tagsArray)) {
-            foreach ($tagsArray as $tg) {
-                if (stripos(strval($tg), 'unqualified') !== false) {
-                    $hasUnqualified = true;
-                    break;
-                }
-            }
-        }
-        if ($hasUnqualified) {
-            $stmtBt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE system_slug = 'bo_theo_doi' AND tenant_id = ? LIMIT 1");
-            $stmtBt->execute([$auth['tenant_id']]);
-            $boTheoDoiId = $stmtBt->fetchColumn();
-            $stageId = $boTheoDoiId ?: 30;
-        }
 
         if (!$stageId) {
             $s = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id=? ORDER BY order_index LIMIT 1");
@@ -768,33 +750,6 @@ class ContactController {
             $params[] = $b['company_id'] ? (int)$b['company_id'] : null;
         }
 
-        // Auto-assign Bỏ theo dõi if unqualified tag is saved
-        if (isset($b['tags'])) {
-            $hasUnqualified = false;
-            $tagsToCheck = is_array($b['tags']) ? $b['tags'] : [];
-            foreach ($tagsToCheck as $tg) {
-                if (stripos(strval($tg), 'unqualified') !== false) {
-                    $hasUnqualified = true;
-                    break;
-                }
-            }
-            if ($hasUnqualified) {
-                $stmtBt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE system_slug = 'bo_theo_doi' AND tenant_id = ? LIMIT 1");
-                $stmtBt->execute([$auth['tenant_id']]);
-                $boTheoDoiId = $stmtBt->fetchColumn();
-                $b['stage_id'] = $boTheoDoiId ?: 30;
-                $b['pipeline_status'] = 'bo_theo_doi';
-            } else {
-                $targetStatus = $b['pipeline_status'] ?? $currStatus;
-                if ($targetStatus === 'bo_theo_doi') {
-                    $stmtCxd = $this->db->prepare("SELECT id FROM pipeline_stages WHERE system_slug = 'chua_xac_dinh' AND tenant_id = ? LIMIT 1");
-                    $stmtCxd->execute([$auth['tenant_id']]);
-                    $chuaXacDinhId = $stmtCxd->fetchColumn();
-                    $b['stage_id'] = $chuaXacDinhId ?: 1;
-                    $b['pipeline_status'] = 'chua_xac_dinh';
-                }
-            }
-        }
 
         foreach ($fields as $f) {
             if ($f === 'company_id') continue;
@@ -1051,6 +1006,11 @@ class ContactController {
         $b = getBody();
         if (empty($b['stage_id'])) respond(422, null, 'stage_id là bắt buộc', false);
         
+        $userNote = trim((string)($b['note'] ?? ''));
+        if ($userNote === '') {
+            respond(422, null, 'Vui lòng nhập nội dung ghi chú khi chuyển Pipeline', false);
+        }
+        
         $stageParam = trim((string)$b['stage_id']);
         $sStage = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE (CAST(id AS CHAR)=? OR system_slug=?) AND tenant_id=? LIMIT 1");
         $sStage->execute([$stageParam, $stageParam, $auth['tenant_id']]);
@@ -1250,41 +1210,7 @@ class ContactController {
             $subject = "Chuyển Pipeline sang: {$newStageName}";
         }
 
-        $extraLog = [];
-        if (!empty($currStageName) && $currStageName !== $newStageName) {
-            $extraLog[] = "Giai đoạn: {$currStageName} ➔ {$newStageName}";
-        } else {
-            $extraLog[] = "Giai đoạn: {$newStageName}";
-        }
-        if ($targetLeadStatus !== 'active') {
-            $extraLog[] = "Trạng thái: " . strtoupper($targetLeadStatus);
-        }
-        if ($leadTemp) {
-            $tempMap = ['hot' => '🔥 Nóng (HOT)', 'warm' => '🌤️ Ấm (WARM)', 'cold' => '❄️ Lạnh (COLD)'];
-            $extraLog[] = "Độ nóng: " . ($tempMap[strtolower($leadTemp)] ?? strtoupper($leadTemp));
-        }
-        if ($nextAction) {
-            $extraLog[] = "Hành động tiếp theo: " . $nextAction;
-        }
-        if ($nextFollowupDate) {
-            $extraLog[] = "Hẹn Follow-up: " . $nextFollowupDate;
-        }
-        if ($expectedIntake) {
-            $extraLog[] = "Kỳ intake: " . $expectedIntake;
-        }
-        if ($nurtureReason) {
-            $extraLog[] = "Lý do nuôi dưỡng: " . $nurtureReason;
-        }
-        if ($lostReason) {
-            $extraLog[] = "Lý do lost: " . $lostReason;
-        }
-
-        $userNote = !empty($b['note']) ? trim($b['note']) : '';
-        if ($userNote) {
-            $fullNote = $userNote . (!empty($extraLog) ? ("\n(" . implode(" | ", $extraLog) . ")") : "");
-        } else {
-            $fullNote = implode(" | ", $extraLog);
-        }
+        $fullNote = $userNote;
 
         logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $subject, $fullNote, 'contact', $id);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([

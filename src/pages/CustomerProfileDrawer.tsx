@@ -3294,31 +3294,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [showQuoteEditor, setShowQuoteEditor] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
 
-  useEffect(() => {
-    const hasUnqualified = tags.some(t => String(t).toLowerCase().includes('unqualified'));
-    const boTheoDoiStage = stages.find(s => s.system_slug === 'bo_theo_doi');
-    const boTheoDoiStageId = boTheoDoiStage ? Number(boTheoDoiStage.id) : 30;
-
-    if (hasUnqualified) {
-      if (Number(formData.stage_id) !== boTheoDoiStageId || formData.pipeline_status !== 'bo_theo_doi') {
-        setFormData((prev: any) => ({
-          ...prev,
-          stage_id: boTheoDoiStageId,
-          pipeline_status: 'bo_theo_doi'
-        }));
-      }
-    } else {
-      if (Number(formData.stage_id) === boTheoDoiStageId || formData.pipeline_status === 'bo_theo_doi') {
-        const chuaXacDinhStage = stages.find(s => s.system_slug === 'chua_xac_dinh');
-        const chuaXacDinhStageId = chuaXacDinhStage ? Number(chuaXacDinhStage.id) : 1;
-        setFormData((prev: any) => ({
-          ...prev,
-          stage_id: chuaXacDinhStageId,
-          pipeline_status: 'chua_xac_dinh'
-        }));
-      }
-    }
-  }, [tags, stages, formData.stage_id, formData.pipeline_status]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [quickUserCard, setQuickUserCard] = useState<{ id: number; name: string; role: string; email?: string; phone?: string; vacationMode?: number; avatarUrl?: string; visible: boolean; x: number; y: number } | null>(null);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -8213,56 +8188,37 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       <div className="card-panel" style={{ padding: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)' }}>
                         <div>
                           <label className="form-label" style={{ fontWeight: 700, marginBottom: '1rem', display: 'block', fontSize: '0.9375rem' }}>Gắn thẻ thông minh</label>
-                          <TagInput
-                            tags={tags}
-                            onChange={setTags}
-                            suggestions={allTags.map(t => t.name)}
-                            placeholder="Chọn thẻ tag..."
-                          />
                           {(() => {
-                            const statusTagNames = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'unqualified'];
-                            const availableTags = allTags.filter(t => !tags.includes(t.name));
-                            const statusSuggestions = availableTags.filter(t => statusTagNames.includes(t.name.toLowerCase()));
-                            const otherSuggestions = availableTags.filter(t => !statusTagNames.includes(t.name.toLowerCase()));
+                            const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified'];
+                            const cleanTags = allTags.filter(t => !deprecatedTags.includes(String(t.name || '').trim().toLowerCase()));
+                            const availableTags = cleanTags.filter(t => !tags.includes(t.name));
 
                             return (
-                              <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', width: '100%', marginBottom: '0.25rem' }}>Các tag trong hệ thống:</span>
-                                
-                                {statusSuggestions.length > 0 && (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
-                                    {statusSuggestions.map(t => (
-                                      <button
-                                        key={t.id}
-                                        onClick={() => !tags.includes(t.name) && setTags([...tags, t.name])}
-                                        className="btn ghost sm"
-                                        style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)', backgroundColor: 'var(--color-surface-hover)' }}
-                                      >
-                                        + {t.name}
-                                      </button>
-                                    ))}
+                              <>
+                                <TagInput
+                                  tags={tags}
+                                  onChange={setTags}
+                                  suggestions={cleanTags.map(t => t.name)}
+                                  placeholder="Chọn thẻ tag..."
+                                />
+                                {availableTags.length > 0 && (
+                                  <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', width: '100%' }}>Các tag trong hệ thống:</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
+                                      {availableTags.map(t => (
+                                        <button
+                                          key={t.id}
+                                          onClick={() => !tags.includes(t.name) && setTags([...tags, t.name])}
+                                          className="btn ghost sm"
+                                          style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
+                                        >
+                                          + {t.name}
+                                        </button>
+                                      ))}
+                                    </div>
                                   </div>
                                 )}
-
-                                {statusSuggestions.length > 0 && otherSuggestions.length > 0 && (
-                                  <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--color-border-light)', margin: '0.5rem 0' }} />
-                                )}
-
-                                {otherSuggestions.length > 0 && (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
-                                    {otherSuggestions.map(t => (
-                                      <button
-                                        key={t.id}
-                                        onClick={() => !tags.includes(t.name) && setTags([...tags, t.name])}
-                                        className="btn ghost sm"
-                                        style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
-                                      >
-                                        + {t.name}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                              </>
                             );
                           })()}
                         </div>
@@ -12912,12 +12868,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     </>
                   )}
 
-                  {/* Note / Audit Trail (Always Available) */}
+                  {/* Note / Audit Trail (Always Available & Mandatory) */}
                   <div>
-                    <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>Ghi chú trao đổi</label>
+                    <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
+                      Ghi chú trao đổi <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
                     <textarea
                       className="form-input"
-                      placeholder="Nhập ghi chú ngắn gọn về phản hồi khách hàng, lý do chuyển bước..."
+                      placeholder="Nhập nội dung ghi chú về phản hồi khách hàng, lý do chuyển bước (bắt buộc)..."
                       rows={3}
                       value={pipelineModal.note || ''}
                       onChange={e => setPipelineModal({ ...pipelineModal, note: e.target.value })}
@@ -12937,9 +12895,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       background: pipelineModal.leadStatus === 'nurture' ? '#f59e0b' : pipelineModal.leadStatus === 'lost' ? '#ef4444' : undefined,
                       borderColor: pipelineModal.leadStatus === 'nurture' ? '#f59e0b' : pipelineModal.leadStatus === 'lost' ? '#ef4444' : undefined
                     }}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !pipelineModal.note?.trim()}
                     onClick={async () => {
                       if (isSubmitting) return;
+
+                      // Mandatory note check
+                      if (!pipelineModal.note || !pipelineModal.note.trim()) {
+                        addToast('Vui lòng nhập nội dung ghi chú khi chuyển Pipeline', 'warning');
+                        return;
+                      }
 
                       // Validation checks
                       if (pipelineModal.leadStatus === 'nurture') {

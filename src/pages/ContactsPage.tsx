@@ -2000,18 +2000,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                                     if (isProgramTag) {
                                       bg = '#3b82f6'; // Force blue for program/course tags
-                                    } else if (!matchedDbTag) {
-                                      if (lowerTag.includes('new')) {
-                                        bg = '#f97316';
-                                      } else if (lowerTag.includes('needed') || lowerTag.includes('considering')) {
-                                        bg = '#db2777';
-                                      } else if (lowerTag.includes('unqualified')) {
-                                        bg = '#ca8a04';
-                                      } else if (lowerTag.includes('qualified')) {
-                                        bg = '#ef4444';
-                                      } else if (lowerTag.includes('bad timing') || lowerTag.includes('bad_timing') || lowerTag.includes('baddtiming')) {
-                                        bg = '#7c3aed';
-                                      }
                                     }
 
                                     return (
