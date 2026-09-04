@@ -66,9 +66,9 @@ class ContactController {
         if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'DESC';
 
         if ($sortBy === 'created_at') {
-            $orderByClause = "GREATEST(IFNULL(c.created_at, '1970-01-01'), IFNULL(c.last_contact, '1970-01-01'), IFNULL(c.updated_at, '1970-01-01'), IFNULL(dl.received_at, '1970-01-01')) $order, c.id $order";
+            $orderByClause = "GREATEST(IFNULL(c.created_at, '1970-01-01'), IFNULL(c.last_contact, '1970-01-01'), IFNULL(c.updated_at, '1970-01-01')) $order, c.id $order";
         } elseif ($sortBy === 'last_contact') {
-            $orderByClause = "COALESCE(c.last_contact, dl.received_at, c.updated_at, c.created_at, '1970-01-01') $order, c.id $order";
+            $orderByClause = "COALESCE(c.last_contact, c.updated_at, c.created_at, '1970-01-01') $order, c.id $order";
         } else {
             $orderByClause = "c.$sortBy $order, c.id $order";
         }
@@ -318,16 +318,15 @@ class ContactController {
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
             LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
-            LEFT JOIN leads l ON l.id = (
-                SELECT MAX(id) FROM leads 
-                WHERE (c.person_id IS NOT NULL AND person_id = c.person_id)
-                   OR (phone = c.phone)
-                   OR (phone = CONCAT('0', c.phone))
-                   OR (c.phone LIKE '0%' AND phone = SUBSTRING(c.phone, 2))
+            LEFT JOIN leads l ON l.id = COALESCE(
+                (SELECT MAX(id) FROM leads WHERE c.person_id IS NOT NULL AND person_id = c.person_id),
+                (SELECT MAX(id) FROM leads WHERE c.phone IS NOT NULL AND phone = c.phone),
+                (SELECT MAX(id) FROM leads WHERE c.phone IS NOT NULL AND c.phone NOT LIKE '0%' AND phone = CONCAT('0', c.phone)),
+                (SELECT MAX(id) FROM leads WHERE c.phone IS NOT NULL AND c.phone LIKE '0%' AND phone = SUBSTRING(c.phone, 2))
             )
             LEFT JOIN distribution_logs dl ON dl.id = (
                 SELECT MAX(id) FROM distribution_logs 
-                WHERE lead_id = l.id
+                WHERE lead_id = l.id AND assigned_to = c.owner_id
             )
             LEFT JOIN distribution_rounds r ON dl.round_id = r.id
             LEFT JOIN data_reports dr ON dr.id = (
