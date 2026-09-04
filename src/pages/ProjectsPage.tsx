@@ -295,7 +295,7 @@ export default function ProjectsPage() {
       .catch(err => console.error('Failed to fetch distribution rounds', err));
   }, []);
 
-  const [quickUserCard, setQuickUserCard] = useState<{ id: number; name: string; role: string; email?: string; phone?: string; vacationMode?: number; avatarUrl?: string; visible: boolean; x: number; y: number } | null>(null);
+  const [quickUserCard, setQuickUserCard] = useState<{ id: number; name: string; role: string; email?: string; phone?: string; vacationMode?: number; avatarUrl?: string; visible: boolean; x: number; y: number; employeeId?: string } | null>(null);
   const [projectModalMode, setProjectModalMode] = useState<'view' | 'edit' | 'create'>('view');
   const [campaignModalMode, setCampaignModalMode] = useState<'view' | 'edit' | 'create'>('view');
 
@@ -1956,6 +1956,13 @@ export default function ProjectsPage() {
       return uName === searchVal || uName.includes(searchVal) || searchVal.includes(uName);
     });
 
+    let empCode = (matchedUser as any)?.employee_id || '';
+    if (empCode) {
+      empCode = String(empCode).replace(/^RL-/i, 'IDEAS-');
+    } else if (matchedUser?.id) {
+      empCode = `IDEAS-${String(matchedUser.id).padStart(4, '0')}`;
+    }
+
     setQuickUserCard({
       id: matchedUser?.id || 0,
       name: matchedUser?.full_name || name,
@@ -1966,7 +1973,8 @@ export default function ProjectsPage() {
       avatarUrl: (matchedUser?.avatar_url || matchedUser?.avatar) ? resolveAttachmentUrl(matchedUser.avatar_url || matchedUser.avatar || '') : '',
       visible: true,
       x: e.clientX,
-      y: e.clientY
+      y: e.clientY,
+      employeeId: empCode
     });
   };
 
@@ -5694,7 +5702,7 @@ export default function ProjectsPage() {
                 {quickUserCard.name}
               </h4>
               <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>
-                RL-{String(quickUserCard.id).padStart(4, '0')}
+                {quickUserCard.employeeId || `IDEAS-${String(quickUserCard.id).padStart(4, '0')}`}
               </span>
 
               <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>

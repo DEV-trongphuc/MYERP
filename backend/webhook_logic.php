@@ -4030,7 +4030,7 @@ function ensurePersonAndContact($conn, $leadId) {
                     SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                         email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
                         phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
-                        notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách hàng nhắc lại / tương tác mới]\n'), ?)),
+                        notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách hàng nhắc lại / tương tác mới]\n')), ?)),
                         customer_type = IF(? != '', ?, customer_type),
                         last_contact = NOW(),
                         updated_at = NOW()
@@ -4059,7 +4059,7 @@ function ensurePersonAndContact($conn, $leadId) {
                             status = 'lead',
                             pipeline_status = ?,
                             security_expires_at = ?,
-                            notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n'), ?)),
+                            notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),
                             last_contact = NOW(),
                             updated_at = NOW()
@@ -4089,7 +4089,7 @@ function ensurePersonAndContact($conn, $leadId) {
                         SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                             email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
                             phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
-                            notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n'), ?)),
+                            notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),
                             last_contact = NOW(),
                             updated_at = NOW()

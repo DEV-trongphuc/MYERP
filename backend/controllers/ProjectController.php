@@ -604,15 +604,40 @@ class ProjectController {
             $notifyUids = array_unique($notifyUids);
 
             if (!empty($notifyUids)) {
-                $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'project_document', ?)");
+                $link = "/projects?id=" . $projectId;
+                $uploaderName = $auth['full_name'] ?? 'Hệ thống';
                 foreach ($notifyUids as $nUid) {
-                    $stmtNotif->execute([
-                        $nUid,
-                        $auth['tenant_id'],
-                        "Tài liệu dự án mới được tải lên",
-                        $auth['full_name'] . " đã tải lên tài liệu mới \"" . $fileName . "\" cho dự án " . $projectName,
-                        "/projects?id=" . $projectId
-                    ]);
+                    $chkStmt = $this->db->prepare("
+                        SELECT id, title, body 
+                        FROM notifications 
+                        WHERE user_id = ? 
+                          AND tenant_id = ? 
+                          AND type = 'project_document' 
+                          AND link = ? 
+                          AND is_read = 0 
+                          AND body LIKE ? 
+                          AND created_at >= (NOW() - INTERVAL 30 MINUTE)
+                        ORDER BY id DESC 
+                        LIMIT 1
+                    ");
+                    $chkStmt->execute([$nUid, $auth['tenant_id'], $link, "$uploaderName%"]);
+                    $existing = $chkStmt->fetch(\PDO::FETCH_ASSOC);
+
+                    if ($existing) {
+                        $count = 2;
+                        if (preg_match('/tải lên\s+(\d+)\s+tài liệu/ui', $existing['body'], $m)) {
+                            $count = (int)$m[1] + 1;
+                        }
+                        $title = "Tài liệu dự án mới được tải lên ($count tệp)";
+                        $body = "$uploaderName đã tải lên $count tài liệu mới cho dự án $projectName (gần nhất: \"$fileName\")";
+                        $updStmt = $this->db->prepare("UPDATE notifications SET title = ?, body = ?, is_read = 0, created_at = NOW() WHERE id = ?");
+                        $updStmt->execute([$title, $body, $existing['id']]);
+                    } else {
+                        $title = "Tài liệu dự án mới được tải lên";
+                        $body = "$uploaderName đã tải lên tài liệu mới \"$fileName\" cho dự án $projectName";
+                        $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'project_document', ?)");
+                        $stmtNotif->execute([$nUid, $auth['tenant_id'], $title, $body, $link]);
+                    }
                 }
             }
 

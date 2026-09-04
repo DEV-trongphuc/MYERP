@@ -3795,7 +3795,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             const parsed = JSON.parse(rawAddress);
             const erp = parsed.erp_profile || {};
             setEditAddress(erp.address_text || '');
-            setEditEmployeeId(erp.employee_id || '');
+            setEditEmployeeId(erp.employee_id ? String(erp.employee_id).replace(/^RL-/i, 'IDEAS-') : '');
             setEditDepartment(erp.department || '');
             setEditJobTitle(erp.job_title || '');
             setEditContractType(erp.contract_type || 'official');
@@ -12292,7 +12292,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           className="form-input"
                           value={editEmployeeId}
                           onChange={(e) => setEditEmployeeId(e.target.value)}
-                          placeholder="VD: RL-2026-089"
+                          placeholder="VD: IDEAS-2026-089"
                           disabled={!canEditUserAssets}
                           style={{ fontWeight: 600, color: 'var(--color-primary)', fontSize: isMobile ? '0.8125rem' : '0.875rem', height: isMobile ? '36px' : '40px', opacity: !canEditUserAssets ? 0.7 : 1, cursor: !canEditUserAssets ? 'not-allowed' : 'text', pointerEvents: !canEditUserAssets ? 'none' : 'auto' }}
                         />

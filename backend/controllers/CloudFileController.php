@@ -253,11 +253,45 @@ class CloudFileController {
 
                 $notifyUids = array_unique($notifyUids);
                 if (!empty($notifyUids)) {
-                    $title = "Tài liệu khách hàng mới";
-                    $body = "$uploaderName đã tải lên tài liệu mới \"$name\" cho khách hàng $contactName";
-                    $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'contact_document', ?)");
+                    $link = "/contacts?open_contact_id=$contact_id";
                     foreach ($notifyUids as $nUid) {
-                        $stmtNotif->execute([$nUid, $tid, $title, $body, "/contacts?open_contact_id=$contact_id"]);
+                        // Check if an unread notification for the same contact from the same uploader exists in the last 30 minutes
+                        $chkStmt = $this->db->prepare("
+                            SELECT id, title, body 
+                            FROM notifications 
+                            WHERE user_id = ? 
+                              AND tenant_id = ? 
+                              AND type = 'contact_document' 
+                              AND link = ? 
+                              AND is_read = 0 
+                              AND body LIKE ? 
+                              AND created_at >= (NOW() - INTERVAL 30 MINUTE)
+                            ORDER BY id DESC 
+                            LIMIT 1
+                        ");
+                        $chkStmt->execute([$nUid, $tid, $link, "$uploaderName%"]);
+                        $existing = $chkStmt->fetch(\PDO::FETCH_ASSOC);
+
+                        if ($existing) {
+                            $count = 2;
+                            if (preg_match('/tải lên\s+(\d+)\s+tài liệu/ui', $existing['body'], $m)) {
+                                $count = (int)$m[1] + 1;
+                            }
+                            $title = "Tài liệu khách hàng mới ($count tệp)";
+                            $body = "$uploaderName đã tải lên $count tài liệu mới cho khách hàng $contactName (gần nhất: \"$name\")";
+
+                            $updStmt = $this->db->prepare("
+                                UPDATE notifications 
+                                SET title = ?, body = ?, is_read = 0, created_at = NOW() 
+                                WHERE id = ?
+                            ");
+                            $updStmt->execute([$title, $body, $existing['id']]);
+                        } else {
+                            $title = "Tài liệu khách hàng mới";
+                            $body = "$uploaderName đã tải lên tài liệu mới \"$name\" cho khách hàng $contactName";
+                            $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'contact_document', ?)");
+                            $stmtNotif->execute([$nUid, $tid, $title, $body, $link]);
+                        }
                     }
                 }
             }
@@ -281,16 +315,48 @@ class CloudFileController {
                 $stmtTarget->execute([$targetUserId]);
                 $targetExists = $stmtTarget->fetch();
                 if ($targetExists) {
-                    $title = "Tài liệu nhân sự mới đã được tải lên";
-                    if ($uid === $targetUserId) {
-                        $body = "Bạn đã tải lên tài liệu mới: $name";
+                    $link = '/account';
+                    $chkStmt = $this->db->prepare("
+                        SELECT id, title, body 
+                        FROM notifications 
+                        WHERE user_id = ? 
+                          AND tenant_id = ? 
+                          AND type = 'mention' 
+                          AND link = ? 
+                          AND is_read = 0 
+                          AND title LIKE 'Tài liệu nhân sự mới%'
+                          AND created_at >= (NOW() - INTERVAL 30 MINUTE)
+                        ORDER BY id DESC 
+                        LIMIT 1
+                    ");
+                    $chkStmt->execute([$targetUserId, $tid, $link]);
+                    $existing = $chkStmt->fetch(\PDO::FETCH_ASSOC);
+
+                    if ($existing) {
+                        $count = 2;
+                        if (preg_match('/tải lên\s+(\d+)\s+tài liệu/ui', $existing['body'], $m)) {
+                            $count = (int)$m[1] + 1;
+                        }
+                        $title = "Tài liệu nhân sự mới đã được tải lên ($count tệp)";
+                        if ($uid === $targetUserId) {
+                            $body = "Bạn đã tải lên $count tài liệu mới (gần nhất: \"$name\")";
+                        } else {
+                            $body = "$uploaderName đã tải lên $count tài liệu mới cho bạn (gần nhất: \"$name\")";
+                        }
+                        $updStmt = $this->db->prepare("UPDATE notifications SET title = ?, body = ?, is_read = 0, created_at = NOW() WHERE id = ?");
+                        $updStmt->execute([$title, $body, $existing['id']]);
                     } else {
-                        $body = "$uploaderName đã tải lên tài liệu mới cho bạn: $name";
+                        $title = "Tài liệu nhân sự mới đã được tải lên";
+                        if ($uid === $targetUserId) {
+                            $body = "Bạn đã tải lên tài liệu mới: \"$name\"";
+                        } else {
+                            $body = "$uploaderName đã tải lên tài liệu mới cho bạn: \"$name\"";
+                        }
+                        
+                        // Insert notification
+                        $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'mention', ?)");
+                        $stmtNotif->execute([$targetUserId, $tid, $title, $body, $link]);
                     }
-                    
-                    // Insert notification
-                    $stmtNotif = $this->db->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'mention', ?)");
-                    $stmtNotif->execute([$targetUserId, $tid, $title, $body, '/account']);
                 }
             }
         }

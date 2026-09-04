@@ -4,6 +4,9 @@ class NotificationController {
     public function __construct(PDO $db) { $this->db = $db; }
 
     public function index(array $auth): void {
+        // Tự động gộp các thông báo tải tài liệu trùng lặp / liên tiếp cho cùng đối tượng trong 24h
+        $this->consolidateUploadNotifications((int)$auth['user_id']);
+
         $stmt = $this->db->prepare("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100");
         $stmt->execute([$auth['user_id']]);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -392,5 +395,92 @@ class NotificationController {
         }
 
         respond(200, $sentResults, "Đã gửi xếp hàng đợi 2 mẫu email nhắc chấm công thành công cho $email");
+    }
+
+    private function consolidateUploadNotifications(int $userId): void {
+        try {
+            // Tìm các nhóm thông báo upload chưa đọc (is_read = 0) bị trùng lặp / liên tiếp cho cùng đối tượng trong 24h
+            $stmt = $this->db->prepare("
+                SELECT id, type, title, body, link, created_at 
+                FROM notifications 
+                WHERE user_id = ? 
+                  AND is_read = 0 
+                  AND type IN ('contact_document', 'project_document')
+                  AND created_at >= (NOW() - INTERVAL 24 HOUR)
+                ORDER BY id DESC
+            ");
+            $stmt->execute([$userId]);
+            $notifs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            if (empty($notifs)) return;
+
+            // Gom nhóm theo type + link
+            $groups = [];
+            foreach ($notifs as $n) {
+                $key = $n['type'] . '::' . ($n['link'] ?? '');
+                $groups[$key][] = $n;
+            }
+
+            foreach ($groups as $key => $groupRows) {
+                if (count($groupRows) <= 1) continue;
+
+                // Có từ 2 thông báo trở lên cho cùng 1 link
+                $newest = $groupRows[0];
+                $olderRows = array_slice($groupRows, 1);
+                $olderIds = array_column($olderRows, 'id');
+
+                // Tính tổng số file
+                $totalFiles = 0;
+                foreach ($groupRows as $row) {
+                    if (preg_match('/tải lên\s+(\d+)\s+tài liệu/ui', $row['body'], $mCount)) {
+                        $totalFiles += (int)$mCount[1];
+                    } else {
+                        $totalFiles += 1;
+                    }
+                }
+
+                // Trích xuất thông tin uploader, target name và tên file gần nhất từ newest
+                $uploader = 'Hệ thống';
+                if (preg_match('/^(.+?)\s+đã tải lên/ui', $newest['body'], $mU)) {
+                    $uploader = trim($mU[1]);
+                }
+                
+                $targetName = '';
+                if (preg_match('/cho khách hàng\s+(.+)$/ui', $newest['body'], $mC)) {
+                    $targetName = trim($mC[1]);
+                } else if (preg_match('/cho dự án\s+(.+)$/ui', $newest['body'], $mP)) {
+                    $targetName = trim($mP[1]);
+                }
+
+                $latestFile = '';
+                if (preg_match('/[\"“]([^\"”]+)[\"”]/u', $newest['body'], $mF)) {
+                    $latestFile = trim($mF[1]);
+                }
+
+                if ($newest['type'] === 'contact_document') {
+                    $newTitle = "Tài liệu khách hàng mới ($totalFiles tệp)";
+                    $targetStr = !empty($targetName) ? " cho khách hàng $targetName" : "";
+                    $fileStr = !empty($latestFile) ? " (gần nhất: \"$latestFile\")" : "";
+                    $newBody = "$uploader đã tải lên $totalFiles tài liệu mới$targetStr$fileStr";
+                } else {
+                    $newTitle = "Tài liệu dự án mới được tải lên ($totalFiles tệp)";
+                    $targetStr = !empty($targetName) ? " cho dự án $targetName" : "";
+                    $fileStr = !empty($latestFile) ? " (gần nhất: \"$latestFile\")" : "";
+                    $newBody = "$uploader đã tải lên $totalFiles tài liệu mới$targetStr$fileStr";
+                }
+
+                // Cập nhật thông báo mới nhất
+                $upStmt = $this->db->prepare("UPDATE notifications SET title = ?, body = ?, is_read = 0 WHERE id = ?");
+                $upStmt->execute([$newTitle, $newBody, $newest['id']]);
+
+                // Xóa các thông báo trùng cũ hơn
+                if (!empty($olderIds)) {
+                    $inPlaceholders = implode(',', array_fill(0, count($olderIds), '?'));
+                    $delStmt = $this->db->prepare("DELETE FROM notifications WHERE id IN ($inPlaceholders)");
+                    $delStmt->execute($olderIds);
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log("Error consolidating notifications: " . $e->getMessage());
+        }
     }
 }

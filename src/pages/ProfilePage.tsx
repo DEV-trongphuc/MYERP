@@ -191,7 +191,7 @@ export const ProfilePage: React.FC = () => {
           if (addressObj && addressObj.erp_profile) {
             const erp = addressObj.erp_profile;
             setAddress(erp.address_text || '');
-            setEmployeeId(erp.employee_id || '');
+            setEmployeeId(erp.employee_id ? String(erp.employee_id).replace(/^RL-/i, 'IDEAS-') : '');
             setDepartment(erp.department || '');
             setJobTitle(erp.job_title || '');
             setContractType(erp.contract_type || 'official');
@@ -706,7 +706,7 @@ export const ProfilePage: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Mã nhân viên')}</label>
-                    <input type="text" className="form-input" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="VD: RL-2026-089" style={{ fontWeight: 600, color: 'var(--color-primary)' }} />
+                    <input type="text" className="form-input" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="VD: IDEAS-2026-089" style={{ fontWeight: 600, color: 'var(--color-primary)' }} />
                   </div>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Bộ phận / Phòng ban')}</label>

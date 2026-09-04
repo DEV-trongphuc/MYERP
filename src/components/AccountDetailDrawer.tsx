@@ -485,7 +485,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                 const erp = addressObj.erp_profile;
                 setAddress(erp.address_text || '');
                 setAddressTemporary(erp.address_temporary || '');
-                setEmployeeId(erp.employee_id || (d.id ? 'RL-' + d.id : ''));
+                setEmployeeId(erp.employee_id ? String(erp.employee_id).replace(/^RL-/i, 'IDEAS-') : (d.id ? 'IDEAS-' + d.id : ''));
                 setDepartment(erp.department || d.team_name || '');
                 setJobTitle(erp.job_title || d.job_title || '');
                 setContractType(erp.contract_type || 'official');
@@ -526,7 +526,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                 setCertificates([]);
                 setHrRecords([]);
                 setAssignedAssets([]);
-                setEmployeeId(d.id ? 'RL-' + d.id : '');
+                setEmployeeId(d.id ? 'IDEAS-' + d.id : '');
                 setDepartment(d.team_name || '');
                 setJobTitle(d.job_title || '');
               }
@@ -536,7 +536,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
               setCertificates([]);
               setHrRecords([]);
               setAssignedAssets([]);
-              setEmployeeId(d.id ? 'RL-' + d.id : '');
+              setEmployeeId(d.id ? 'IDEAS-' + d.id : '');
               setDepartment(d.team_name || '');
               setJobTitle(d.job_title || '');
             }
@@ -1366,7 +1366,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                 {account ? t('Hồ sơ Nhân sự') : t('Thêm Nhân sự')}
               </h2>
               <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {account ? `${t('Mã nhân viên')}: ${employeeId || (account?.id ? `RL-${account.id}` : '—')} · ${name}` : t('Khai báo hồ sơ làm việc.')}
+                {account ? `${t('Mã nhân viên')}: ${employeeId ? String(employeeId).replace(/^RL-/i, 'IDEAS-') : (account?.id ? `IDEAS-${account.id}` : '—')} · ${name}` : t('Khai báo hồ sơ làm việc.')}
               </p>
             </div>
           </div>
@@ -1511,7 +1511,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                         );
                       })()}
                       <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-                        {t('Mã nhân viên')}: {employeeId || (account?.id ? `RL-${account.id}` : '—')}
+                        {t('Mã nhân viên')}: {employeeId ? String(employeeId).replace(/^RL-/i, 'IDEAS-') : (account?.id ? `IDEAS-${account.id}` : '—')}
                       </p>
                     </div>
                     <input 
@@ -2099,7 +2099,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
                       <div className="form-group">
                         <label className="form-label">{t('Mã nhân viên')}</label>
-                        <input className="form-input" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="RL-10025" />
+                        <input className="form-input" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="IDEAS-10025" />
                       </div>
                       <div className="form-group">
                         <label className="form-label">{t('Phòng ban')}</label>

@@ -2202,11 +2202,26 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {docs.map(doc => (
-                          <div key={doc.id} className="card-panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
-                            <div style={{ width: 40, height: 40, background: doc.name.endsWith('.pdf') ? 'var(--color-warning-light)' : 'var(--color-info-light)', color: doc.name.endsWith('.pdf') ? 'var(--color-warning)' : 'var(--color-info)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              {doc.name.endsWith('.pdf') ? <FileBadge size={20} /> : <FileText size={20} />}
-                            </div>
+                        {docs.map(doc => {
+                          const isPdf = doc.name.endsWith('.pdf');
+                          const isDoc = doc.name.endsWith('.doc') || doc.name.endsWith('.docx');
+                          return (
+                            <div key={doc.id} className="card-panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
+                              {isPdf ? (
+                                <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #fff1f2 0%, #fee2e2 100%)', border: '1px solid #fca5a5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(225, 29, 72, 0.1)' }} title="Tài liệu PDF">
+                                  <FileText size={20} style={{ color: '#e11d48' }} />
+                                  <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#e11d48', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PDF</span>
+                                </div>
+                              ) : isDoc ? (
+                                <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '1px solid #bfdbfe', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)' }} title="Tài liệu Word (DOC/DOCX)">
+                                  <FileText size={20} style={{ color: '#2563eb' }} />
+                                  <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#2563eb', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>DOC</span>
+                                </div>
+                              ) : (
+                                <div style={{ width: 42, height: 42, background: 'var(--color-info-light)', color: 'var(--color-info)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <FileText size={20} />
+                                </div>
+                              )}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <h4 style={{ fontSize: '0.9rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</h4>
                               <p className="text-xs text-light mt-1">Tải lên: {doc.date} • {doc.size}</p>
@@ -2244,7 +2259,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               }}><Trash2 size={14} /></button>
                             </div>
                           </div>
-                        ))}
+                        );
+                      })}
                       </div>
                     )}
                   </div>

@@ -3213,6 +3213,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [currentFolder, setCurrentFolder] = useState<string>('');
   const [localFolders, setLocalFolders] = useState<string[]>([]);
   const [movingFile, setMovingFile] = useState<any>(null);
+  const [previewDocImage, setPreviewDocImage] = useState<{ url: string; name: string } | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && previewDocImage) {
+        setPreviewDocImage(null);
+      }
+    };
+    if (previewDocImage) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewDocImage]);
   const [showDriveLinkModal, setShowDriveLinkModal] = useState(false);
   const [driveLinkName, setDriveLinkName] = useState('');
   const [driveLinkUrl, setDriveLinkUrl] = useState('');
@@ -3300,7 +3313,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
 
   const [loadingRelated, setLoadingRelated] = useState(false);
-  const [quickUserCard, setQuickUserCard] = useState<{ id: number; name: string; role: string; email?: string; phone?: string; vacationMode?: number; avatarUrl?: string; visible: boolean; x: number; y: number } | null>(null);
+  const [quickUserCard, setQuickUserCard] = useState<{ id: number; name: string; role: string; email?: string; phone?: string; vacationMode?: number; avatarUrl?: string; visible: boolean; x: number; y: number; employeeId?: string } | null>(null);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [tempAvatar, setTempAvatar] = useState('');
 
@@ -3333,6 +3346,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       return uName === searchVal || uName.includes(searchVal) || searchVal.includes(uName);
     });
 
+    let empCode = (user as any)?.employee_id || '';
+    if (empCode) {
+      empCode = String(empCode).replace(/^RL-/i, 'IDEAS-');
+    } else if (user?.id) {
+      empCode = `IDEAS-${String(user.id).padStart(4, '0')}`;
+    }
+
     setQuickUserCard({
       id: user?.id || 0,
       name: user?.full_name || name,
@@ -3343,7 +3363,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       avatarUrl: (user?.avatar_url || user?.avatar) ? resolveAttachmentUrl(user.avatar_url || user.avatar || '') : '',
       visible: true,
       x: e.clientX,
-      y: e.clientY
+      y: e.clientY,
+      employeeId: empCode
     });
   };
 
@@ -5848,7 +5869,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           {quickUserCard.name}
                         </h4>
                         <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '6px', fontWeight: 600 }}>
-                          RL-{String(quickUserCard.id).padStart(4, '0')}
+                          {quickUserCard.employeeId || `IDEAS-${String(quickUserCard.id).padStart(4, '0')}`}
                         </span>
                         
                         <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
@@ -11743,28 +11764,104 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             const isDrive = fileUrl && fileUrl.includes('drive.google.com');
                             const isLink = doc.type === 'link' || isDrive || (fileUrl && fileUrl.startsWith('http') && !fileUrl.includes('/uploads/'));
                             const isImg = !isLink && ext && ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+                            const isPdf = !isLink && ext === 'pdf';
+                            const isDoc = !isLink && ext && ['doc', 'docx'].includes(ext);
+                            const isExcel = !isLink && ext && ['xls', 'xlsx', 'csv'].includes(ext);
+                            const isPpt = !isLink && ext && ['ppt', 'pptx'].includes(ext);
                             return (
                               <div key={doc.id} className="card-panel" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--color-surface)' }}>
-                                <div style={{ width: 40, height: 40, background: isLink ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-info-light)', color: isLink ? '#3b82f6' : 'var(--color-info)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                                  {isImg ? (
-                                    <img src={fileUrl} alt={doc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  ) : isDrive ? (
-                                    <img src="https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" style={{ width: '22px', height: '22px', objectFit: 'contain' }} alt="Drive" />
-                                  ) : isLink ? (
-                                    <Link2 size={20} />
-                                  ) : (
-                                    <FileText size={20} />
-                                  )}
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <a 
-                                    href={fileUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                {isImg ? (
+                                  <div 
+                                    onClick={() => setPreviewDocImage({ url: fileUrl, name: doc.name })}
+                                    style={{ 
+                                      width: 42, 
+                                      height: 42, 
+                                      borderRadius: '10px', 
+                                      overflow: 'hidden', 
+                                      border: '1px solid var(--color-border-light)', 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center', 
+                                      flexShrink: 0, 
+                                      cursor: 'zoom-in', 
+                                      position: 'relative', 
+                                      background: 'var(--color-bg)',
+                                      boxShadow: '0 2px 5px rgba(0,0,0,0.06)'
+                                    }}
+                                    className="hover-lift"
+                                    title="Nhấn để xem trước ảnh"
                                   >
-                                    {doc.name}
-                                  </a>
+                                    <img src={fileUrl} alt={doc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  </div>
+                                ) : isDrive ? (
+                                  <div style={{ width: 42, height: 42, background: 'rgba(59, 130, 246, 0.08)', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <img src="https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" style={{ width: '22px', height: '22px', objectFit: 'contain' }} alt="Drive" />
+                                  </div>
+                                ) : isLink ? (
+                                  <div style={{ width: 42, height: 42, background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <Link2 size={20} />
+                                  </div>
+                                ) : isPdf ? (
+                                  <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #fff1f2 0%, #fee2e2 100%)', border: '1px solid #fca5a5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(225, 29, 72, 0.1)' }} title="Tài liệu PDF">
+                                    <FileText size={20} style={{ color: '#e11d48' }} />
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#e11d48', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PDF</span>
+                                  </div>
+                                ) : isDoc ? (
+                                  <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '1px solid #bfdbfe', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)' }} title="Tài liệu Word (DOC/DOCX)">
+                                    <FileText size={20} style={{ color: '#2563eb' }} />
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#2563eb', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>DOC</span>
+                                  </div>
+                                ) : isExcel ? (
+                                  <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '1px solid #bbf7d0', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(22, 163, 74, 0.1)' }} title="Bảng tính Excel">
+                                    <FileText size={20} style={{ color: '#16a34a' }} />
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#16a34a', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>XLS</span>
+                                  </div>
+                                ) : isPpt ? (
+                                  <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', border: '1px solid #fed7aa', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(234, 88, 12, 0.1)' }} title="Trình chiếu PowerPoint">
+                                    <FileText size={20} style={{ color: '#ea580c' }} />
+                                    <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '7.5px', fontWeight: 900, color: '#ffffff', background: '#ea580c', padding: '1px 3px', borderRadius: '3px', lineHeight: 1, letterSpacing: '-0.3px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>PPT</span>
+                                  </div>
+                                ) : (
+                                  <div style={{ width: 42, height: 42, background: 'var(--color-info-light)', color: 'var(--color-info)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <FileText size={20} />
+                                  </div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  {isImg ? (
+                                    <button 
+                                      type="button"
+                                      onClick={() => setPreviewDocImage({ url: fileUrl, name: doc.name })}
+                                      style={{ 
+                                        background: 'none', 
+                                        border: 'none', 
+                                        padding: 0, 
+                                        font: 'inherit',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.9rem', 
+                                        fontWeight: 600, 
+                                        color: 'var(--color-primary)', 
+                                        display: 'block', 
+                                        whiteSpace: 'nowrap', 
+                                        overflow: 'hidden', 
+                                        textOverflow: 'ellipsis',
+                                        maxWidth: '100%'
+                                      }}
+                                      className="hover-underline"
+                                      title="Nhấn để xem trước ảnh"
+                                    >
+                                      {doc.name}
+                                    </button>
+                                  ) : (
+                                    <a 
+                                      href={fileUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                    >
+                                      {doc.name}
+                                    </a>
+                                  )}
                                   <p className="text-xs text-light mt-1">Tải lên: {doc.date} • {isLink ? 'Google Drive Link' : doc.size}</p>
                                 </div>
                                 {isOwnerOrAdmin && !doc.isCoopAttachment && (
@@ -11942,6 +12039,150 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
                           </div>
                         </CustomModal>
+                      )}
+
+                      {/* Full screen Image Lightbox Modal */}
+                      {previewDocImage && createPortal(
+                        <div 
+                          className="overlay-backdrop animate-fade" 
+                          style={{ 
+                            position: 'fixed',
+                            inset: 0,
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            zIndex: 1000500, 
+                            background: 'rgba(15, 23, 42, 0.88)',
+                            backdropFilter: 'blur(8px)',
+                            padding: '24px'
+                          }} 
+                          onClick={() => setPreviewDocImage(null)}
+                        >
+                          <div 
+                            style={{ 
+                              position: 'relative', 
+                              maxWidth: '94vw', 
+                              maxHeight: '92vh', 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              alignItems: 'center',
+                              background: '#1e293b',
+                              borderRadius: '16px',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+                              overflow: 'hidden'
+                            }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {/* Lightbox Header Bar */}
+                            <div style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px 18px',
+                              background: 'rgba(15, 23, 42, 0.85)',
+                              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                              color: '#ffffff',
+                              gap: '12px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                <Camera size={18} style={{ color: '#38bdf8', flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#f8fafc' }}>
+                                  {previewDocImage.name}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                <a
+                                  href={previewDocImage.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(255, 255, 255, 0.1)',
+                                    color: '#ffffff',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 600,
+                                    textDecoration: 'none',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Mở trong tab mới"
+                                >
+                                  <ExternalLink size={13} />
+                                  <span>Mở tab mới</span>
+                                </a>
+                                <a
+                                  href={previewDocImage.url}
+                                  download={previewDocImage.name}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(255, 255, 255, 0.1)',
+                                    color: '#ffffff',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 600,
+                                    textDecoration: 'none',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Tải về máy"
+                                >
+                                  <Upload size={13} style={{ transform: 'rotate(180deg)' }} />
+                                  <span>Tải về</span>
+                                </a>
+                                <button
+                                  onClick={() => setPreviewDocImage(null)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(239, 68, 68, 0.2)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#ef4444',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Đóng (ESC)"
+                                >
+                                  <X size={18} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Image Display Area */}
+                            <div style={{
+                              padding: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              maxHeight: 'calc(92vh - 60px)',
+                              overflow: 'auto',
+                              background: '#0f172a'
+                            }}>
+                              <img 
+                                src={previewDocImage.url} 
+                                alt={previewDocImage.name} 
+                                style={{ 
+                                  maxWidth: '90vw', 
+                                  maxHeight: '78vh', 
+                                  borderRadius: '8px', 
+                                  boxShadow: '0 10px 25px rgba(0, 0, 0, 0.4)',
+                                  objectFit: 'contain'
+                                }} 
+                              />
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
                   )}
