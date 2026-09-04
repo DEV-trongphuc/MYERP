@@ -4709,9 +4709,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               {(() => {
                 const detailDayShifts = calendarShifts.filter(s => s.shift_date === selectedDateForDetail);
                 const hasHoliday = detailDayShifts.some(s => s.shift_type === 'holiday');
+                const hasOvertime = detailDayShifts.some(s => s.shift_type === 'overtime');
+                const hasWeekend = detailDayShifts.some(s => s.shift_type === 'weekend');
+                const hasNight = detailDayShifts.some(s => s.shift_type === 'night');
                 const dayOfWeek = selectedDateForDetail ? new Date(selectedDateForDetail).getDay() : 1;
                 const isWeekendDetail = dayOfWeek === 0 || dayOfWeek === 6;
-                const activeShiftType = hasHoliday ? 'holiday' : isWeekendDetail ? 'weekend' : 'night';
+
+                let tabLabel = t('Trực ca & Tăng ca');
+                let TabIcon = Zap;
+                if (hasOvertime && !hasNight && !hasWeekend && !hasHoliday) {
+                  tabLabel = t('Tăng ca (OT)');
+                  TabIcon = Zap;
+                } else if (!hasOvertime && hasHoliday) {
+                  tabLabel = t('Trực lễ');
+                  TabIcon = Zap;
+                } else if (!hasOvertime && (hasWeekend || isWeekendDetail) && !hasNight) {
+                  tabLabel = t('Trực tuần');
+                  TabIcon = Calendar;
+                } else if (!hasOvertime && !hasHoliday && !hasWeekend && !isWeekendDetail) {
+                  tabLabel = t('Trực đêm');
+                  TabIcon = Moon;
+                }
 
                 return (
                   <button
@@ -4735,18 +4753,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                       gap: '4px'
                     }}
                   >
-                    {activeShiftType === 'holiday' ? (
-                      <Zap size={isMobile ? 12 : 14} />
-                    ) : activeShiftType === 'weekend' ? (
-                      <Calendar size={isMobile ? 12 : 14} />
-                    ) : (
-                      <Moon size={isMobile ? 12 : 14} />
-                    )}
-                    {activeShiftType === 'holiday'
-                      ? t('Trực lễ')
-                      : activeShiftType === 'weekend'
-                      ? t('Trực tuần')
-                      : t('Trực đêm')}
+                    <TabIcon size={isMobile ? 12 : 14} />
+                    {tabLabel}
                     <span style={{
                       fontSize: '0.625rem',
                       padding: '1px 5px',
@@ -5259,72 +5267,121 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     {(() => {
                       const dayShifts = calendarShifts.filter(s => s.shift_date === selectedDateForDetail);
                       const hasHoliday = dayShifts.some(s => s.shift_type === 'holiday');
+                      const hasOvertime = dayShifts.some(s => s.shift_type === 'overtime');
+                      const hasWeekend = dayShifts.some(s => s.shift_type === 'weekend');
+                      const hasNight = dayShifts.some(s => s.shift_type === 'night');
                       const dayOfWeek = selectedDateForDetail ? new Date(selectedDateForDetail).getDay() : 1;
                       const isWeekendDetail = dayOfWeek === 0 || dayOfWeek === 6;
-                      const activeShiftType = hasHoliday ? 'holiday' : isWeekendDetail ? 'weekend' : 'night';
 
                       if (dayShifts.length === 0) {
                         return (
                           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--color-text-muted)' }}>
-                            {activeShiftType === 'holiday' ? (
+                            {hasOvertime ? (
                               <Zap size={32} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
-                            ) : activeShiftType === 'weekend' ? (
+                            ) : hasHoliday ? (
+                              <Zap size={32} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
+                            ) : (hasWeekend || isWeekendDetail) ? (
                               <Calendar size={32} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
                             ) : (
                               <Moon size={32} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
                             )}
                             <p style={{ fontSize: '0.8125rem' }}>
-                              {activeShiftType === 'holiday'
+                              {hasOvertime
+                                ? t('Không có nhân sự nào đăng ký tăng ca trong ngày này.')
+                                : hasHoliday
                                 ? t('Không có nhân sự nào được phân công trực lễ trong ngày này.')
-                                : activeShiftType === 'weekend'
+                                : (hasWeekend || isWeekendDetail)
                                 ? t('Không có nhân sự nào được phân công trực cuối tuần trong ngày này.')
                                 : t('Không có nhân sự nào được phân công trực đêm trong ngày này.')}
                             </p>
                           </div>
                         );
                       }
-                      return dayShifts.map((row, rIdx) => (
-                        <div key={row.id || `${row.shift_type}-${rIdx}`} style={{
-                          padding: '12px',
-                          background: 'var(--color-bg-light)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: '10px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '8px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Avatar src={resolveAttachmentUrl(row.user_avatar)} name={row.user_name} size={28} />
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--color-text)' }}>{row.user_name}</span>
-                              <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-light)' }}>{row.user_email || '—'}</span>
+                      return dayShifts.map((row, rIdx) => {
+                        const isApproved = (Number(row.approved) === 1 || row.status === 'approved');
+                        let displayReason = row.reason || '';
+                        if (row.shift_type === 'overtime' && displayReason) {
+                          const match = displayReason.match(/Lý do:\s*(.*)$/i);
+                          if (match && match[1] && match[1].trim()) {
+                            displayReason = match[1].trim();
+                          }
+                        }
+
+                        return (
+                          <div key={row.id || `${row.shift_type}-${rIdx}`} style={{
+                            padding: '12px 14px',
+                            background: 'var(--color-bg-light)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                              <Avatar src={resolveAttachmentUrl(row.user_avatar)} name={row.user_name} size={32} />
+                              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {row.user_name}
+                                </span>
+                                <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {row.user_email || '—'}
+                                </span>
+                                {displayReason && (
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                                    💬 {displayReason}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: row.shift_type === 'overtime' ? '#7c3aed' : row.shift_type === 'holiday' ? '#ea580c' : row.shift_type === 'weekend' ? '#2563eb' : '#0284c7'
+                              }}>
+                                {row.shift_type === 'overtime' ? (
+                                  <>
+                                    <Zap size={13} />
+                                    <span>{t('Tăng ca (OT)')}: {row.start_time || '17:00'} - {row.end_time || '19:00'}</span>
+                                    {row.total_days ? <span style={{ opacity: 0.8, fontWeight: 600 }}>({row.total_days} công OT)</span> : null}
+                                  </>
+                                ) : row.shift_type === 'holiday' ? (
+                                  <>
+                                    <Zap size={13} />
+                                    <span>{t('Trực lễ')} {row.holiday_name ? `(${row.holiday_name})` : ''}</span>
+                                  </>
+                                ) : row.shift_type === 'weekend' ? (
+                                  <>
+                                    <Calendar size={13} />
+                                    <span>{t('Trực cuối tuần')}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Moon size={13} />
+                                    <span>{t('Trực đêm')} ({sysSettings?.night_shift_start_time || '18:00'} - {sysSettings?.night_shift_end_time || '06:00'})</span>
+                                  </>
+                                )}
+                              </span>
+                              <span style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                borderRadius: '20px',
+                                backgroundColor: isApproved ? '#ecfdf5' : '#fef3c7',
+                                color: isApproved ? '#059669' : '#d97706',
+                                border: `1px solid ${isApproved ? '#a7f3d0' : '#fde68a'}`,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {isApproved ? t('Đã duyệt') : t('Chờ duyệt')}
+                              </span>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                              {row.shift_type === 'overtime'
-                                ? `⚡ ${t('Tăng ca (OT)')} (${row.start_time || '17:00'} - ${row.end_time || '19:00'})${row.total_days ? ` • ${row.total_days} công OT` : ''}`
-                                : row.shift_type === 'holiday'
-                                ? `🎉 ${t('Trực lễ')} ${row.holiday_name ? `(${row.holiday_name})` : ''}`
-                                : row.shift_type === 'weekend'
-                                ? `📅 ${t('Trực cuối tuần')}`
-                                : `🌙 ${t('Trực đêm')} (${sysSettings?.night_shift_start_time || '18:00'} - ${sysSettings?.night_shift_end_time || '06:00'})`}
-                            </span>
-                            <span style={{
-                              fontSize: '0.65rem',
-                              fontWeight: 600,
-                              padding: '2px 8px',
-                              borderRadius: '20px',
-                              backgroundColor: (Number(row.approved) === 1 || row.status === 'approved') ? 'var(--color-success-light)' : 'var(--color-warning-light)',
-                              color: (Number(row.approved) === 1 || row.status === 'approved') ? 'var(--color-success)' : 'var(--color-warning)',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {(Number(row.approved) === 1 || row.status === 'approved') ? t('Đã duyệt') : t('Chờ duyệt')}
-                            </span>
-                          </div>
-                        </div>
-                      ));
+                        );
+                      });
                     })()}
                   </div>
                 </div>
