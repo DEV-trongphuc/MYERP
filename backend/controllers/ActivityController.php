@@ -378,7 +378,7 @@ class ActivityController {
                 OR (
                     a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
                     AND NOT (
-                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CAST(a.user_id AS CHAR)) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
                         OR (a.tags LIKE \'%ca_nhan%\' OR a.tags LIKE \'%personal%\')
                     )
                 )
@@ -412,7 +412,7 @@ class ActivityController {
                     (
                         a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
                         AND NOT (
-                            (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CAST(a.user_id AS CHAR)) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                            (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
                             OR (a.tags LIKE \'%ca_nhan%\' OR a.tags LIKE \'%personal%\')
                         )
                     )
@@ -439,7 +439,7 @@ class ActivityController {
             $where[] = '(
                 NOT (
                     (
-                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CAST(a.user_id AS CHAR)) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
                         OR (a.tags LIKE \'%ca_nhan%\' OR a.tags LIKE \'%personal%\')
                     )
                     AND a.user_id != ? AND a.created_by != ?

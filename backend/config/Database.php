@@ -17,6 +17,7 @@ class Database {
             ];
             self::$instance = new PDO($dsn, DB_USER, DB_PASS, $opts);
             self::$instance->exec("SET time_zone = '+07:00'");
+            self::$instance->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
         }
         return self::$instance;
     }

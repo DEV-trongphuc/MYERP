@@ -16,6 +16,7 @@ if ($conn->connect_error) {
 }
 
 $conn->set_charset("utf8mb4");
+$conn->query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
 // BUG-FIX: Đảm bảo MySQL chạy cùng múi giờ với PHP để hàm NOW(), CURDATE() thống kê chính xác
 $conn->query("SET time_zone = '+07:00'");
 
