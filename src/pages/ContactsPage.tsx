@@ -414,13 +414,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, [pipelineStages]);
 
   const getTotalActiveCount = () => {
+    if (stageCounts && typeof stageCounts['all'] !== 'undefined') {
+      return Number(stageCounts['all']);
+    }
+    if (quickPipelineStage === 'all' && total > 0) {
+      return total;
+    }
     if (stageCounts && Object.keys(stageCounts).length > 0) {
       let sum = 0;
       pipelineStages.forEach(s => {
         sum += Number(stageCounts[s.id] || 0);
       });
-      sum += Number(stageCounts['nurture'] || 0);
-      return sum;
+      return sum > 0 ? sum : total;
     }
     return total;
   };

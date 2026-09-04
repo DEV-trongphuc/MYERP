@@ -248,9 +248,18 @@ class ContactController {
             $scWhere = $baseWhere;
             $scWhere[] = "(c.lead_status != 'lost' OR c.lead_status IS NULL)";
             $scWhereStr = implode(' AND ', $scWhere);
+
+            // Compute total active count for "Tất cả" tab
+            $totStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $scWhereStr");
+            $totStmt->execute($baseParams);
+            $stageCounts['all'] = (int)$totStmt->fetchColumn();
+
             $scStmt = $this->db->prepare("SELECT c.stage_id, COUNT(*) as cnt FROM contacts c WHERE $scWhereStr GROUP BY c.stage_id");
             $scStmt->execute($baseParams);
-            $stageCounts = $scStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            $stageCountsFromDb = $scStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+            foreach ($stageCountsFromDb as $sId => $cnt) {
+                $stageCounts[$sId] = (int)$cnt;
+            }
 
             // Compute nurture and lost counts
             $lsWhereStr = implode(' AND ', $baseWhere);
