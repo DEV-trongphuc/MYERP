@@ -17,6 +17,21 @@ function sendZaloMessage($botToken, $chatId, $text, $sync = true, $leadId = 0)
         return false;
     }
 
+    // BẢO VỆ CHỐNG GỬI LẶP TIN NHẮN (DEDUPLICATION 30S):
+    static $sentZaloCache = [];
+    $dedupKey = md5($chatId . '_' . trim($text));
+    $now = time();
+    if (isset($sentZaloCache[$dedupKey]) && ($now - $sentZaloCache[$dedupKey]) < 30) {
+        return true;
+    }
+    $sentZaloCache[$dedupKey] = $now;
+
+    $tempDedupFile = sys_get_temp_dir() . '/zalo_dedup_' . $dedupKey;
+    if (file_exists($tempDedupFile) && ($now - @filemtime($tempDedupFile)) < 30) {
+        return true;
+    }
+    @file_put_contents($tempDedupFile, (string)$now, LOCK_EX);
+
     global $conn;
 
     // BẢO VỆ TUYỆT ĐỐI GROUP ZALO DATA:

@@ -1935,8 +1935,21 @@ foreach ($connections as $connItem) {
                     continue;
                 }
 
-                if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
-                    // Duplicate < threshold months, skip assigning to new round but update last interaction
+                // Điều kiện giữ lại cho Sale cũ:
+                // 1. Trùng trong hạn định < $dupCheckMonths
+                // HOẶC
+                // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
+                $keepForOldSale = false;
+                if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+                    if ($crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+                        $keepForOldSale = true;
+                    } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
+                        $keepForOldSale = true;
+                    }
+                }
+
+                if ($keepForOldSale) {
+                    // Duplicate < threshold months hoặc đã ở bước Hồ sơ -> giữ nguyên Sale cũ, không đổi Sale
                     $assignedTo = $crmCheckResult['assignedTo'];
                     
                     $conn->begin_transaction();
@@ -2241,32 +2254,6 @@ foreach ($connections as $connItem) {
                     }
                     $syncedCount++;
                 } else if (($cronStatus === 'assigned' || $cronStatus === 'compensation') && !empty($leadId) && $assignedConsultantId) {
-                    // Notify Sale (mailer.php already loaded above)
-                    static $assignedConsultantCache = [];
-                    if (!isset($assignedConsultantCache[$assignedConsultantId])) {
-                        $stmtC2 = $conn->prepare("SELECT name, email, zalo_chat_id FROM consultants WHERE id = ?");
-                        $stmtC2->bind_param("i", $assignedConsultantId);
-                        $stmtC2->execute();
-                        $assignedConsultantCache[$assignedConsultantId] = $stmtC2->get_result()->fetch_assoc();
-                        $stmtC2->close();
-                    }
-                    $c = $assignedConsultantCache[$assignedConsultantId];
-                    
-                    if ($c) {
-                        // Gửi Email
-                        try {
-                            sendLeadAssignedEmailToSale($c['email'], $c['name'], $name, $phone, $note, $source, $ccEmails, $roundName, $leadId ?? 0, $assignedConsultantId ?? 0, $targetRoundId ?? 0);
-                        } catch (Exception $mailEx) {
-                            logSync("Error sending assigned sale email: " . $mailEx->getMessage());
-                        }
-                        
-                        // Gửi Zalo Message (Đồng bộ Đa Kênh)
-                        try {
-                            sendLeadAssignedZaloMessageToSale($assignedConsultantId, $c['name'], $name, $phone, $note, $source, $roundName, $leadId ?? 0, $targetRoundId ?? 0, $email, $type);
-                        } catch (Exception $zaloEx) {
-                            logSync("Error sending assigned sale Zalo: " . $zaloEx->getMessage());
-                        }
-                    }
                     $syncedCount++;
                 }
             } finally {

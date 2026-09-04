@@ -474,7 +474,20 @@ if ($isSilent == 1) {
     respondAndNotifyAdmin($conn, $connData, $leadId, $custData, $distData, ["success" => true, "status" => "silent", "message" => "Chỉ đồng bộ check trùng, không định tuyến."], $lockKey, $lockReleased);
 }
 
-if ($crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+// Điều kiện giữ lại cho Sale cũ:
+// 1. Trùng trong hạn định < $dupCheckMonths
+// HOẶC
+// 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
+$keepForOldSale = false;
+if ($crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+    if ($crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+        $keepForOldSale = true;
+    } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
+        $keepForOldSale = true;
+    }
+}
+
+if ($keepForOldSale) {
     $assignedTo = $crmCheckResult['assignedTo'];
     $conn->begin_transaction();
     try {
@@ -881,17 +894,6 @@ try {
                     $stmtDbNotif->bind_param("isss", $assignedConsultantId, $notifTitle, $notifBody, $notifLink);
                     $stmtDbNotif->execute();
                     $stmtDbNotif->close();
-                }
-
-                try {
-                    sendLeadAssignedEmailToSale($c['email'], $c['name'], $name, $phone, $note, $source, $ccEmails, $roundName, $leadId, $assignedConsultantId, $targetRoundId);
-                } catch (Exception $mailEx) {
-                    error_log("Error sending webhook assigned sale email: " . $mailEx->getMessage());
-                }
-                try {
-                    sendLeadAssignedZaloMessageToSale($assignedConsultantId, $c['name'], $name, $phone, $note, $source, $roundName, $leadId, $targetRoundId, $email, $type);
-                } catch (Exception $zaloEx) {
-                    error_log("Error sending webhook assigned sale Zalo: " . $zaloEx->getMessage());
                 }
             }
             $stmt->close();

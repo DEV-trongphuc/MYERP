@@ -1331,7 +1331,20 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
             $dupCheckMonths = 6;
         }
 
-        if (!$override_consultant_id && $crmCheckResult['isDuplicate'] && $crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths && !empty($crmCheckResult['assignedTo'])) {
+        // Điều kiện giữ lại cho Sale cũ:
+        // 1. Trùng trong hạn định < $dupCheckMonths
+        // HOẶC
+        // 2. Đã ở bước Hồ sơ trở đi (chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi)
+        $keepForOldSale = false;
+        if (!$override_consultant_id && $crmCheckResult['isDuplicate'] && !empty($crmCheckResult['assignedTo'])) {
+            if ($crmCheckResult['monthsSinceLastInteraction'] < $dupCheckMonths) {
+                $keepForOldSale = true;
+            } else if (isset($crmCheckResult['isBeforeHoSo']) && !$crmCheckResult['isBeforeHoSo']) {
+                $keepForOldSale = true;
+            }
+        }
+
+        if ($keepForOldSale) {
             $assignedTo = $crmCheckResult['assignedTo'];
             $conn->begin_transaction();
             $inTransaction = true;

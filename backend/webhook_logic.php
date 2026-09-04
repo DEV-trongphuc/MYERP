@@ -621,6 +621,9 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
             $assignedTo = null;
         }
 
+        $existingContactId = getContactIdByPhoneOrEmail($conn, $phone, $email);
+        $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
+
         return [
             'isDuplicate' => $isDuplicate,
             'leadExists' => true,
@@ -630,9 +633,14 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
             'assignedName' => $leadRow['consultant_name'] ?? 'Không rõ',
             'lastInteractionDate' => $leadRow['last_interaction_date'] ?? null,
             'originalAssignedTo' => $leadRow['assigned_to'] ?? null,
-            'consultantStatus' => $effectiveStatus
+            'consultantStatus' => $effectiveStatus,
+            'contactId' => $existingContactId,
+            'isBeforeHoSo' => $isBeforeHoSo
         ];
     }
+
+    $existingContactId = getContactIdByPhoneOrEmail($conn, $phone, $email);
+    $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
 
     return [
         'isDuplicate' => false,
@@ -643,8 +651,98 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
         'assignedName' => 'Không rõ',
         'lastInteractionDate' => null,
         'originalAssignedTo' => null,
-        'consultantStatus' => null
+        'consultantStatus' => null,
+        'contactId' => $existingContactId,
+        'isBeforeHoSo' => $isBeforeHoSo
     ];
+}
+
+/**
+ * Tìm ID liên hệ (contact) trong CRM qua số điện thoại hoặc email
+ */
+function getContactIdByPhoneOrEmail($conn, $phone, $email = null)
+{
+    if (!empty($phone)) {
+        $cleanPhone = normalizePhone($phone);
+        $stmt = $conn->prepare("SELECT id FROM contacts WHERE phone = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param("s", $cleanPhone);
+            $stmt->execute();
+            $r = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($r) return (int)$r['id'];
+        }
+    }
+    if (!empty($email)) {
+        $cleanEmail = trim(strtolower($email));
+        $stmt = $conn->prepare("SELECT id FROM contacts WHERE email = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param("s", $cleanEmail);
+            $stmt->execute();
+            $r = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($r) return (int)$r['id'];
+        }
+    }
+    return null;
+}
+
+/**
+ * Kiểm tra xem liên hệ trong CRM có đang ở TRƯỚC bước "Hồ sơ" hay không.
+ * Quy tắc:
+ * - Nếu là học viên / won / customer -> KHÔNG phải trước bước hồ sơ (false).
+ * - Nếu pipeline stage order_index >= 9 (từ 09 – Application Started trở đi) -> KHÔNG phải trước bước hồ sơ (false).
+ * - Nếu pipeline_status thuộc các trạng thái hồ sơ / học phí -> false.
+ * - Chỉ khi ở trước bước Hồ sơ (order_index < 9 hoặc chưa có stage) thì mới trả về true.
+ */
+function isContactBeforeHoSoStep($conn, $contactId)
+{
+    if (!$contactId) {
+        return true;
+    }
+    $stmt = $conn->prepare("
+        SELECT c.id, c.status, c.pipeline_status, c.stage_id, ps.order_index, ps.system_slug 
+        FROM contacts c 
+        LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id 
+        WHERE c.id = ? LIMIT 1
+    ");
+    if (!$stmt) {
+        return true;
+    }
+    $stmt->bind_param("i", $contactId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+        return true;
+    }
+
+    // Đã là học viên / won / customer -> đã qua bước Hồ sơ
+    if (in_array(strtolower($row['status'] ?? ''), ['customer', 'won'])) {
+        return false;
+    }
+
+    // Kiểm tra order_index của pipeline stage (Order 9 = 09 – Application Started)
+    if (isset($row['order_index']) && $row['order_index'] !== null) {
+        if ((int)$row['order_index'] >= 9) {
+            return false;
+        }
+    }
+
+    // Kiểm tra slug / pipeline_status
+    $statusSlug = strtolower(trim($row['pipeline_status'] ?? ''));
+    $stageSlug = strtolower(trim($row['system_slug'] ?? ''));
+    $hoSoSlugs = [
+        'application_started', 'application_completed', 'ho_so', 'nop_ho_so', 
+        'admission_approved', 'offer_accepted', 'deposit_tuition_payment', 
+        'enrolled', 'le_phi', 'le_phi_ho_so', 'dong_le_phi'
+    ];
+    if (in_array($statusSlug, $hoSoSlugs) || in_array($stageSlug, $hoSoSlugs)) {
+        return false;
+    }
+
+    return true;
 }
 
 function stripAccents($str)
@@ -1605,6 +1703,11 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
             $uStmt = $conn->prepare("UPDATE leads SET last_interaction_date = ? WHERE id = ?");
             $uStmt->bind_param("si", $dateVal, $id);
         } else if ($assignedConsultantId) {
+            // Kiểm tra xem khách hàng này có liên hệ trong CRM đã ở bước Hồ sơ trở đi hay chưa
+            // (Chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi nha)
+            $existingContactId = getContactIdByPhoneOrEmail($conn, $phone, $email);
+            $isBeforeHoSo = isContactBeforeHoSoStep($conn, $existingContactId);
+
             // Get claim setting
             $requireClaim = 0;
             $reqRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'require_lead_claim' LIMIT 1");
@@ -1614,20 +1717,36 @@ function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type
             $isAcceptedVal = ($requireClaim === 0) ? 1 : 0;
             $acceptedAtVal = ($requireClaim === 0) ? $dateVal : null;
 
-            $uStmt = $conn->prepare("UPDATE leads SET 
-                name = IF(? != '' AND (name = '' OR name IS NULL), ?, name),
-                email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
-                phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
-                source = ?, 
-                type = ?, 
-                note = IF(TRIM(?) = '', note, CONCAT(IFNULL(note, ''), IF(IFNULL(note, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ']\n')), ?)), 
-                last_interaction_date = ?, 
-                is_accepted = IF(assigned_to IS NULL OR assigned_to = 0, ?, is_accepted),
-                accepted_at = IF(assigned_to IS NULL OR assigned_to = 0, ?, accepted_at),
-                assigned_to = IF(assigned_to IS NULL OR assigned_to = 0, ?, assigned_to), 
-                connection_id = IF(? IS NOT NULL, ?, connection_id) 
-                WHERE id = ?");
-            $uStmt->bind_param("sssssssssssisiiii", $name, $name, $email, $email, $phone, $phone, $source, $type, $note, $note, $dateVal, $isAcceptedVal, $acceptedAtVal, $assignedConsultantId, $connectionId, $connectionId, $id);
+            if ($isBeforeHoSo) {
+                // Trước bước hồ sơ -> Được phép đổi Sale mới
+                $uStmt = $conn->prepare("UPDATE leads SET 
+                    name = IF(? != '' AND (name = '' OR name IS NULL), ?, name),
+                    email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
+                    phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                    source = ?, 
+                    type = ?, 
+                    note = IF(TRIM(?) = '', note, CONCAT(IFNULL(note, ''), IF(IFNULL(note, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ']\n')), ?)), 
+                    last_interaction_date = ?, 
+                    is_accepted = ?,
+                    accepted_at = ?,
+                    assigned_to = ?, 
+                    connection_id = IF(? IS NOT NULL, ?, connection_id) 
+                    WHERE id = ?");
+                $uStmt->bind_param("sssssssssssisiiii", $name, $name, $email, $email, $phone, $phone, $source, $type, $note, $note, $dateVal, $isAcceptedVal, $acceptedAtVal, $assignedConsultantId, $connectionId, $connectionId, $id);
+            } else {
+                // Đã ở bước Hồ sơ trở đi -> Bắt buộc giữ nguyên Sale cũ, không đổi Sale mới
+                $uStmt = $conn->prepare("UPDATE leads SET 
+                    name = IF(? != '' AND (name = '' OR name IS NULL), ?, name),
+                    email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
+                    phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                    source = ?, 
+                    type = ?, 
+                    note = IF(TRIM(?) = '', note, CONCAT(IFNULL(note, ''), IF(IFNULL(note, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n')), ?)), 
+                    last_interaction_date = ?, 
+                    connection_id = IF(? IS NOT NULL, ?, connection_id) 
+                    WHERE id = ?");
+                $uStmt->bind_param("sssssssssssiii", $name, $name, $email, $email, $phone, $phone, $source, $type, $note, $note, $dateVal, $connectionId, $connectionId, $id);
+            }
         } else {
             // Don't overwrite assigned_to when lead is pending/unassigned
             $uStmt = $conn->prepare("UPDATE leads SET 
@@ -3827,6 +3946,9 @@ function ensurePersonAndContact($conn, $leadId) {
             $chuaXacDinhDuration = "+$shareHours hours";
         }
         $secExpiresTime = null;
+        if (!empty($chuaXacDinhDuration)) {
+            $secExpiresTime = date('Y-m-d H:i:s', strtotime($chuaXacDinhDuration));
+        }
 
         $tenantId = 1; // default fallback
         $ownerUserId = null;
@@ -3865,7 +3987,7 @@ function ensurePersonAndContact($conn, $leadId) {
 
         // Get all active contacts for this person
         $existingContacts = [];
-        $stmtExist = $conn->prepare("SELECT id, owner_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL");
+        $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
         $stmtExist->bind_param("i", $person_id);
         $stmtExist->execute();
         $resExist = $stmtExist->get_result();
@@ -3874,34 +3996,105 @@ function ensurePersonAndContact($conn, $leadId) {
         }
         $stmtExist->close();
 
+        // Tìm tiếp qua phone nếu person_id chưa có contact để tránh tạo trùng
+        if (empty($existingContacts) && !empty($phone)) {
+            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE phone = ? AND deleted_at IS NULL ORDER BY id DESC");
+            if ($stmtExistPhone) {
+                $stmtExistPhone->bind_param("s", $phone);
+                $stmtExistPhone->execute();
+                $resExistPhone = $stmtExistPhone->get_result();
+                while ($rowExistP = $resExistPhone->fetch_assoc()) {
+                    $existingContacts[] = $rowExistP;
+                }
+                $stmtExistPhone->close();
+            }
+        }
+
         if (!empty($existingContacts)) {
-            // Update all existing active contacts (useful for parallel owners)
-            $stmtUpContact = $conn->prepare("
-                UPDATE contacts 
-                SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
-                    email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
-                    phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
-                    notes = ?,
-                    customer_type = ?
-                WHERE id = ?
-            ");
-            foreach ($existingContacts as $c) {
-                $stmtUpContact->bind_param("sssssssssi", $fullName, $fullName, $email, $email, $phone, $phone, $note, $type, $c['id']);
-                $stmtUpContact->execute();
-            }
-            $stmtUpContact->close();
-        }
+            // (Không tạo thêm tiềm năng mới nha chỉ lấy cái cũ giao lại cho sale mới thôi)
+            $primaryContact = $existingContacts[0];
+            $primaryContactId = (int)$primaryContact['id'];
 
-        // Also check if the primary owner contact exists, if not, create it
-        $hasOwnerContact = false;
-        foreach ($existingContacts as $c) {
-            if ((int)$c['owner_id'] === (int)$ownerUserId) {
-                $hasOwnerContact = true;
-                break;
-            }
-        }
+            $alreadyOwned = ((int)$primaryContact['owner_id'] === (int)$ownerUserId);
 
-        if (!$hasOwnerContact) {
+            if ($alreadyOwned) {
+                // Đã thuộc Sale này -> Cập nhật thông tin và nối thêm ghi chú
+                $stmtUpContact = $conn->prepare("
+                    UPDATE contacts 
+                    SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
+                        email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
+                        phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                        notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ']\n'), ?)),
+                        customer_type = IF(? != '', ?, customer_type),
+                        updated_at = NOW()
+                    WHERE id = ?
+                ");
+                if ($stmtUpContact) {
+                    $stmtUpContact->bind_param("ssssssssssi", $fullName, $fullName, $email, $email, $phone, $phone, $note, $note, $type, $type, $primaryContactId);
+                    $stmtUpContact->execute();
+                    $stmtUpContact->close();
+                }
+            } else {
+                // Thuộc Sale cũ -> kiểm tra điều kiện trước bước Hồ sơ
+                // (và chỉ thay đổi từ trước bước Hồ sơ thì mới đổi thôi nha)
+                $isBeforeHoSo = isContactBeforeHoSoStep($conn, $primaryContactId);
+
+                if ($isBeforeHoSo) {
+                    // Đủ điều kiện giao lại cho Sale mới: đổi sale, vẫn giữ nguyên khách hàng cũ trùng đó, không tạo thêm tiềm năng mới
+                    $stmtTransfer = $conn->prepare("
+                        UPDATE contacts 
+                        SET owner_id = ?,
+                            person_id = IF(person_id IS NULL, ?, person_id),
+                            full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
+                            email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
+                            phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                            source = IF(? != '' AND ? != 'other', ?, source),
+                            status = 'lead',
+                            pipeline_status = ?,
+                            security_expires_at = ?,
+                            notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n'), ?)),
+                            customer_type = IF(? != '', ?, customer_type),
+                            updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($stmtTransfer) {
+                        $stmtTransfer->bind_param("iisssssssssssssssi", 
+                            $ownerUserId, 
+                            $person_id,
+                            $fullName, $fullName, 
+                            $email, $email, 
+                            $phone, $phone, 
+                            $source, $source, $source,
+                            $triggerStatus, 
+                            $secExpiresTime, 
+                            $note, $note, 
+                            $type, $type, 
+                            $primaryContactId
+                        );
+                        $stmtTransfer->execute();
+                        $stmtTransfer->close();
+                    }
+                } else {
+                    // Đã ở bước Hồ sơ trở đi -> Bắt buộc giữ nguyên Sale cũ, không đổi Sale
+                    $stmtKeepOld = $conn->prepare("
+                        UPDATE contacts 
+                        SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
+                            email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
+                            phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                            notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n'), ?)),
+                            customer_type = IF(? != '', ?, customer_type),
+                            updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($stmtKeepOld) {
+                        $stmtKeepOld->bind_param("ssssssssssi", $fullName, $fullName, $email, $email, $phone, $phone, $note, $note, $type, $type, $primaryContactId);
+                        $stmtKeepOld->execute();
+                        $stmtKeepOld->close();
+                    }
+                }
+            }
+        } else {
+            // Trường hợp khách hàng HOÀN TOÀN MỚI (chưa từng có liên hệ nào trong hệ thống CRM)
             $initTemp = 'cold'; // Mặc định lạnh cho các nguồn MKT (R3, R2, R3_Fb, Messenger...)
             if ($source === 'gioi_thieu' || $source === 'ca_nhan') {
                 $initTemp = 'neutral'; // Ấm sẵn cho khách cá nhân hoặc giới thiệu
