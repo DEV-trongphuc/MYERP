@@ -2723,7 +2723,21 @@ export default function Approvals() {
                 </thead>
                 <tbody>
                   {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
-                    const isPendingAction = activeTab === 'pending';
+                    const role = (user?.role || '').toLowerCase();
+                    const userId = Number(user?.id || 0);
+                    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
+                    
+                    let canApproveThisItem = isSuperAdmin;
+                    if (!canApproveThisItem) {
+                      const targetApproverId = (item as any)?.approver_id || (item as any)?.manager_id;
+                      if (targetApproverId && Number(targetApproverId) === userId) {
+                        canApproveThisItem = true;
+                      } else if (!targetApproverId && role === 'hr') {
+                        canApproveThisItem = true;
+                      }
+                    }
+
+                    const isPendingAction = activeTab === 'pending' && canApproveThisItem;
 
                     return (
                       <tr 
@@ -6915,6 +6929,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     if (item.type === 'attendance_bulk' || item.type === 'checkin') {
       const targetApproverId = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
       if (targetApproverId && Number(targetApproverId) === userId) return true;
+      if (targetApproverId && Number(targetApproverId) !== userId) {
+        return isSuperAdmin;
+      }
       if (isHrAdmin) return true;
       return false;
     }

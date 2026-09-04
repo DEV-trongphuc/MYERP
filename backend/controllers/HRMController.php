@@ -1878,10 +1878,12 @@ class HRMController {
                 // Người được chỉ định làm người duyệt có quyền duyệt bất kể chức vụ hệ thống
                 $shouldShow = true;
             } else if ($role === 'hr') {
-                // Bộ phận nhân sự quản lý chấm công chung toàn công ty
-                $shouldShow = true;
-            } else if ($b['status'] === 'pending_manager' && (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || in_array((int)($b['user_id'] ?? 0), $managedUserIds, true))) {
-                // Trưởng nhóm/quản lý quản lý nhân sự thuộc nhóm của mình
+                // HR chỉ duyệt nếu đơn không chỉ định người duyệt riêng (empty manager_id) hoặc đang chờ HR duyệt (pending_hr)
+                if (empty($b['manager_id']) || $b['status'] === 'pending_hr') {
+                    $shouldShow = true;
+                }
+            } else if ($b['status'] === 'pending_manager' && empty($b['manager_id']) && (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || in_array((int)($b['user_id'] ?? 0), $managedUserIds, true))) {
+                // Trưởng nhóm/quản lý quản lý nhân sự thuộc nhóm của mình nếu không chỉ định người duyệt cụ thể
                 $shouldShow = true;
             }
 
