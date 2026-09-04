@@ -805,6 +805,25 @@ class CooperationController {
                             "Vui lòng truy cập hệ thống để xem chi tiết.";
             $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
 
+            // In-app notifications to shareholders & creator
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                $uids = array_map('intval', array_keys($shares));
+                if (!empty($slip['created_by'])) $uids[] = (int)$slip['created_by'];
+                $uids = array_unique($uids);
+                foreach ($uids as $targetUid) {
+                    if ($targetUid > 0 && $targetUid !== (int)$auth['user_id']) {
+                        NotificationService::send($this->db, $auth['tenant_id'], 'COOP_SLIP_APPROVED', [
+                            'target_user_id' => $targetUid,
+                            'slip_id' => $id,
+                            'approver_name' => $auth['full_name'] ?? 'Ban Quản Trị'
+                        ]);
+                    }
+                }
+            } catch (\Throwable $notifEx) {
+                error_log("Coop slip approve notification error: " . $notifEx->getMessage());
+            }
+
             logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'APPROVE_COOPERATION_SLIP', 'cooperation_slip', $id, "Duyệt phiếu hợp tác hoa hồng ID: $id");
             respond(200, null, 'Phê duyệt phiếu hợp tác hoa hồng thành công');
         } catch (Exception $e) {
@@ -854,6 +873,26 @@ class CooperationController {
                         "Lý do: <em>" . htmlspecialchars($details) . "</em>.<br/>" .
                         "Vui lòng truy cập hệ thống IDEAS CRM để xem chi tiết và cập nhật lại.";
         $this->notifyShareholders($id, $shares, $emailSubject, $emailTitle, $emailContent);
+
+        // In-app notifications to shareholders & creator
+        try {
+            require_once __DIR__ . '/../NotificationService.php';
+            $uids = array_map('intval', array_keys($shares));
+            if (!empty($slip['created_by'])) $uids[] = (int)$slip['created_by'];
+            $uids = array_unique($uids);
+            foreach ($uids as $targetUid) {
+                if ($targetUid > 0 && $targetUid !== (int)$auth['user_id']) {
+                    NotificationService::send($this->db, $auth['tenant_id'], 'COOP_SLIP_REJECTED', [
+                        'target_user_id' => $targetUid,
+                        'slip_id' => $id,
+                        'reason' => $details,
+                        'approver_name' => $auth['full_name'] ?? 'Người phản hồi'
+                    ]);
+                }
+            }
+        } catch (\Throwable $notifEx) {
+            error_log("Coop slip reject notification error: " . $notifEx->getMessage());
+        }
 
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REJECT_COOPERATION_SLIP', 'cooperation_slip', $id, "Từ chối phiếu hợp tác ID: $id. Lý do: $details");
         respond(200, null, 'Đã từ chối phiếu hợp tác và yêu cầu ký lại từ đầu');

@@ -172,11 +172,40 @@ export const Header = ({
     }, 1000);
   };
 
+  // Web Audio API synthesized notification chime
+  const playNotificationChime = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+      
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
+      
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start(now);
+      osc.stop(now + 0.35);
+    } catch (e) {
+      // Autoplay or browser policy restriction
+    }
+  };
+
   // Window Focus Events
   useEffect(() => {
     const handleFocus = () => {
       isWindowFocused.current = true;
       stopFlashingTitle();
+      fetchNotifications();
     };
     const handleBlur = () => {
       isWindowFocused.current = false;
@@ -308,6 +337,9 @@ export const Header = ({
           });
           
           if (newUnreadCount > 0 && hasNewUnread && latestNotif) {
+            // Play pleasing audio chime
+            playNotificationChime();
+
             // Trigger desktop notification
             if ('Notification' in window && Notification.permission === 'granted') {
               try {
@@ -320,6 +352,14 @@ export const Header = ({
               }
             }
             
+            // Show toast notification if modal is not currently open
+            if (!isNotifModalOpen) {
+              toast((latestNotif.title || 'Thông báo mới') + (latestNotif.body ? `: ${latestNotif.body.substring(0, 80)}...` : ''), {
+                icon: '🔔',
+                duration: 6000
+              });
+            }
+
             // Dispatch event for auto-refreshing other active components
             window.dispatchEvent(new CustomEvent('new-notification-received'));
             
@@ -373,7 +413,7 @@ export const Header = ({
   useEffect(() => {
     fetchNotifications();
     fetchNotifPrefs();
-    const interval = setInterval(fetchNotifications, 30000); // Polling fallback every 30s
+    const interval = setInterval(fetchNotifications, 10000); // Polling every 10s for responsive notifications
     
     const handleRealtimeUpdate = () => {
       fetchNotifications();

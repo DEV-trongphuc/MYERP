@@ -1440,6 +1440,7 @@ class FinanceController
                     'target_user_id' => (int)$expenseRow['created_by'],
                     'title' => $expenseRow['title'],
                     'amount' => (float)$expenseRow['amount'],
+                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                     'reject_reason' => $data['reject_reason'] ?? '',
                     'ref_id' => $id
                 ]);

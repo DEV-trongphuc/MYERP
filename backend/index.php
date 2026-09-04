@@ -432,7 +432,8 @@ function returnStock(PDO $db, int $tid, int $uid, string $invNum): void {
     }
 }
 
-// ── Load controllers ──────────────────────────────────────────
+// ── Load services & controllers ───────────────────────────────
+require_once __DIR__ . '/NotificationService.php';
 require_once __DIR__ . '/controllers/AuthController.php';
 require_once __DIR__ . '/controllers/DashboardController.php';
 require_once __DIR__ . '/controllers/ContactController.php';

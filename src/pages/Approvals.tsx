@@ -1258,6 +1258,9 @@ export default function Approvals() {
         });
       }
       toast.success(t('Gửi đề xuất thành công!'));
+      window.dispatchEvent(new CustomEvent('checkin-status-changed'));
+      window.dispatchEvent(new CustomEvent('approval-updated'));
+      window.dispatchEvent(new CustomEvent('refresh-approvals'));
       setShowCreateModal(false);
       setSelectedWorkflowDef(null);
       setEditingItemId(null);
@@ -2136,8 +2139,18 @@ export default function Approvals() {
       );
       const matchesCategory = listCategoryFilter === 'all' || itemCategory === listCategoryFilter;
       
-      const matchesStatus = listStatusFilter === 'all' || 
-        (item.status || 'pending').toLowerCase() === listStatusFilter.toLowerCase();
+      const rawStatus = (item.status || 'pending').toLowerCase();
+      const isItemPending = ['pending', 'pending_manager', 'pending_hr', 'pending_approval', 'level1_approved'].includes(rawStatus);
+      const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
+      const isItemRejected = ['rejected', 'failed'].includes(rawStatus);
+
+      let matchesStatus = listStatusFilter === 'all';
+      if (!matchesStatus) {
+        if (listStatusFilter === 'pending') matchesStatus = isItemPending;
+        else if (listStatusFilter === 'approved') matchesStatus = isItemApproved;
+        else if (listStatusFilter === 'rejected') matchesStatus = isItemRejected;
+        else matchesStatus = rawStatus === listStatusFilter.toLowerCase();
+      }
       
       let matchesDate = true;
       if (item.created_at) {
@@ -3842,7 +3855,7 @@ export default function Approvals() {
                                 title={t('Tự động quét và liệt kê toàn bộ các ngày thiếu công trong tháng đã chọn')}
                               >
                                 <RefreshCw size={14} className={suggestedLoading ? 'spin' : ''} />
-                                {suggestedLoading ? t('Đang quét...') : t('Quét công gộp cả tháng')}
+                                {suggestedLoading ? t('Đang quét...') : t('Quét ngày thiếu công cả tháng')}
                               </button>
                             </div>
 
@@ -4013,7 +4026,7 @@ export default function Approvals() {
                             ) : (
                               <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem', border: '1px dashed var(--color-border)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
                                 <span>{t('Chưa có ngày nào trong danh sách đề nghị cập nhật công.')}</span>
-                                <span style={{ fontSize: '0.75rem' }}>{t('Bấm "+ Thêm ngày" để thêm ngày bất kỳ, hoặc bấm "Quét công gộp cả tháng" để hệ thống tự động tìm các ngày thiếu công trong tháng.')}</span>
+                                <span style={{ fontSize: '0.75rem' }}>{t('Bấm "+ Thêm ngày" để thêm ngày bất kỳ, hoặc bấm "Quét ngày thiếu công cả tháng" để hệ thống tự động tìm các ngày thiếu công trong tháng.')}</span>
                               </div>
                             )}
                           </div>
@@ -6757,7 +6770,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     const role = (user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
-    const isSuperAdmin = ['superadmin', 'super_admin', 'admin'].includes(role);
+    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
+    const isHrAdmin = ['superadmin', 'super_admin', 'admin', 'director', 'hr'].includes(role);
 
     if (item.type === 'expense') {
       const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();
@@ -6822,7 +6836,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     if (item.type === 'attendance_bulk' || item.type === 'checkin') {
       const targetApproverId = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
       if (targetApproverId && Number(targetApproverId) === userId) return true;
-      return isSuperAdmin;
+      if (isHrAdmin) return true;
+      return false;
     }
     
     return isSuperAdmin;
@@ -7643,13 +7658,20 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
     };
 
+    const isSingleBulkDay = item.type === 'attendance_bulk' && (detail?.details?.length === 1 || (item as any)?.days_count === 1);
+    const singleBulkDateStr = isSingleBulkDay ? (detail?.details?.[0]?.check_in_date ? new Date(detail.details[0].check_in_date).toLocaleDateString('vi-VN') : ((item as any)?.single_date ? new Date((item as any).single_date).toLocaleDateString('vi-VN') : '')) : '';
+
     const rawTitle = (
-      item.title ||
+      (item.type === 'attendance_bulk' ? (
+        isSingleBulkDay && singleBulkDateStr
+          ? `Phiếu giải trình cập nhật công ngày ${singleBulkDateStr}`
+          : (detail?.title && !detail.title.includes('công gộp') ? detail.title : (item.title && !item.title.includes('công gộp') ? item.title : `Phiếu cập nhật công tháng ${detail?.month_period || (item as any)?.month_period || ''}`.trim()))
+      ) : '') ||
       detail?.title ||
+      item.title ||
       (item.type === 'leave' ? getLeaveTitle(detail?.leave_type || (item as any).leave_type, detail?.reason || item.description) : '') ||
       (item.type === 'advance' ? t('Đề nghị tạm ứng lương') : '') ||
       (item.type === 'checkin' ? t('Giải trình quên chấm công') : '') ||
-      (item.type === 'attendance_bulk' ? (detail?.title || t('Đề xuất bổ sung chấm công hàng loạt')) : '') ||
       (detail?.expense_title || detail?.name || '')
     );
 
@@ -7976,21 +7998,25 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Chu kỳ tháng')}</label>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                    {detail?.details?.length === 1 ? t('Ngày giải trình') : t('Chu kỳ tháng')}
+                  </label>
                   <input
                     type="text"
                     className="form-input"
-                    value={detail?.month_period || '—'}
+                    value={detail?.details?.length === 1 && detail.details[0].check_in_date ? new Date(detail.details[0].check_in_date).toLocaleDateString('vi-VN') : (detail?.month_period || '—')}
                     disabled
                     style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Tổng số ngày bổ sung')}</label>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                    {detail?.details?.length === 1 ? t('Hình thức') : t('Tổng số ngày bổ sung')}
+                  </label>
                   <input
                     type="text"
                     className="form-input"
-                    value={`${detail?.details?.length || 0} ${t('ngày')}`}
+                    value={detail?.details?.length === 1 ? t('Giải trình 1 ngày') : `${detail?.details?.length || 0} ${t('ngày')}`}
                     disabled
                     style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
@@ -8162,7 +8188,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             ) : (
               <textarea
                 rows={3}
-                value={cleanNoteText || detail?.reason || detail?.notes || detail?.description || item.description || t('Không có mô tả chi tiết')}
+                value={
+                  (item.type === 'attendance_bulk' && (detail?.details?.length === 1 || (item as any)?.days_count === 1))
+                    ? (detail?.details?.[0]?.reason && detail.details[0].reason !== 'Bổ sung công'
+                        ? detail.details[0].reason
+                        : (detail?.description && !detail.description.includes('hàng loạt') && !detail.description.includes('công gộp')
+                            ? detail.description
+                            : `Giải trình cập nhật công ngày ${detail?.details?.[0]?.check_in_date ? new Date(detail.details[0].check_in_date).toLocaleDateString('vi-VN') : ((item as any)?.single_date ? new Date((item as any).single_date).toLocaleDateString('vi-VN') : '')}`))
+                    : (cleanNoteText || detail?.reason || detail?.notes || detail?.description || item.description || t('Không có mô tả chi tiết'))
+                }
                 disabled
                 style={{
                   width: '100%',

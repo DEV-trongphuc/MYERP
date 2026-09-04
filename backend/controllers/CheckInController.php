@@ -1,6 +1,8 @@
 <?php
 // backend/controllers/CheckInController.php
 
+require_once __DIR__ . '/../NotificationService.php';
+
 class CheckInController {
     private PDO $db;
 
@@ -49,7 +51,7 @@ class CheckInController {
                         SELECT d.id, d.suggested_check_in, d.suggested_check_out, r.id as request_id, r.status
                         FROM attendance_bulk_request_details d
                         JOIN attendance_bulk_requests r ON d.request_id = r.id
-                        WHERE r.user_id = ? AND d.date = ? AND r.status IN ('pending_manager', 'pending_hr', 'pending')
+                        WHERE r.user_id = ? AND d.check_in_date = ? AND r.status IN ('pending_manager', 'pending_hr', 'pending')
                         ORDER BY r.id DESC LIMIT 1
                     ");
                     $bulkStmt->execute([$auth['user_id'], $today]);
@@ -758,7 +760,10 @@ class CheckInController {
             'user_name' => $row['full_name'] ?? 'Nhân viên',
             'date' => $row['check_in_date'],
             'status' => $status,
+            'approver_name' => $auth['full_name'] ?? 'Người duyệt',
+            'admin_note' => $adminNote,
             'reason' => $adminNote ?: ($row['reason'] ?? ''),
+            'ref_id' => $id,
             'is_supplementary' => $isSupplementary
         ]);
 
@@ -1179,14 +1184,32 @@ class CheckInController {
 
             // Send notification to approver/manager (ATTENDANCE_UPDATE event type)
             try {
+                require_once __DIR__ . '/../NotificationService.php';
                 $userName = $auth['full_name'] ?? 'Nhân viên';
                 $targetUid = $approverId ?: $userId;
-                NotificationService::send($this->db, 1, 'ATTENDANCE_UPDATE', [
+                $daysCount = count($details);
+                $isSingleDay = ($daysCount === 1);
+                $singleDateStr = $isSingleDay && !empty($details[0]['date']) ? date('d/m/Y', strtotime($details[0]['date'])) : '';
+                $firstReason = trim($details[0]['reason'] ?? '');
+
+                if ($isSingleDay) {
+                    $notifReason = ($firstReason && $firstReason !== 'Bổ sung công') ? $firstReason : ("Giải trình cập nhật công ngày $singleDateStr");
+                } else {
+                    $notifReason = "Đề xuất cập nhật công chu kỳ tháng $month ($daysCount ngày)";
+                }
+
+                $tenantId = (int)($auth['tenant_id'] ?? 1);
+
+                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
                     'user_id' => $targetUid,
                     'user_name' => $userName,
-                    'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày)",
+                    'reason' => $notifReason,
                     'ref_id' => $requestId,
-                    'is_bulk' => true
+                    'is_bulk' => true,
+                    'is_single_day' => $isSingleDay,
+                    'single_date' => $singleDateStr,
+                    'days_count' => $daysCount,
+                    'month_period' => $month
                 ]);
 
                 // Notify related persons
@@ -1194,12 +1217,16 @@ class CheckInController {
                     foreach ($relArr as $relUid) {
                         $relUid = (int)$relUid;
                         if ($relUid > 0 && $relUid !== (int)$userId && $relUid !== (int)$targetUid) {
-                            NotificationService::send($this->db, 1, 'ATTENDANCE_UPDATE', [
+                            NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
                                 'user_id' => $relUid,
                                 'user_name' => $userName,
-                                'reason' => "Đề xuất bổ sung công tổng hợp tháng $month (" . count($details) . " ngày) (Bạn được gắn là Người liên quan)",
+                                'reason' => $notifReason . " (Bạn được gắn là Người liên quan)",
                                 'ref_id' => $requestId,
-                                'is_bulk' => true
+                                'is_bulk' => true,
+                                'is_single_day' => $isSingleDay,
+                                'single_date' => $singleDateStr,
+                                'days_count' => $daysCount,
+                                'month_period' => $month
                             ]);
                         }
                     }
@@ -1285,6 +1312,18 @@ class CheckInController {
         ");
         $stmtDetails->execute([$id]);
         $req['details'] = $stmtDetails->fetchAll(PDO::FETCH_ASSOC);
+
+        $daysCount = count($req['details']);
+        if ($daysCount === 1 && !empty($req['details'][0]['check_in_date'])) {
+            $singleDate = date('d/m/Y', strtotime($req['details'][0]['check_in_date']));
+            $req['title'] = 'Phiếu giải trình cập nhật công ngày ' . $singleDate;
+            $firstR = trim($req['details'][0]['reason'] ?? '');
+            $req['description'] = ($firstR && $firstR !== 'Bổ sung công') ? $firstR : ('Giải trình cập nhật công ngày ' . $singleDate);
+        } else {
+            $cntStr = $daysCount > 1 ? " ($daysCount ngày)" : '';
+            $req['title'] = 'Phiếu cập nhật công tháng ' . $req['month_period'] . $cntStr;
+            $req['description'] = 'Giải trình cập nhật công chu kỳ tháng ' . $req['month_period'] . $cntStr;
+        }
 
         respond(200, $req);
     }
@@ -1415,15 +1454,70 @@ class CheckInController {
 
             // Send notification to employee
             try {
+                require_once __DIR__ . '/../NotificationService.php';
                 $statusText = $status === 'approved' ? 'chấp thuận' : 'từ chối';
-                NotificationService::send($this->db, 1, 'ATTENDANCE_APPROVAL_RESULT', [
-                    'user_id' => $req['user_id'],
+                $stmtCheckDets = $this->db->prepare("SELECT check_in_date FROM attendance_bulk_request_details WHERE request_id = ? ORDER BY check_in_date ASC");
+                $stmtCheckDets->execute([$id]);
+                $reqDets = $stmtCheckDets->fetchAll(PDO::FETCH_ASSOC);
+                $daysCount = count($reqDets);
+                $isSingleDay = ($daysCount === 1);
+                $singleDateStr = $isSingleDay && !empty($reqDets[0]['check_in_date']) ? date('d/m/Y', strtotime($reqDets[0]['check_in_date'])) : '';
+
+                if ($isSingleDay) {
+                    $itemTitle = "Phiếu giải trình cập nhật công ngày $singleDateStr";
+                    $notifReason = "$itemTitle đã được " . $statusText;
+                } else {
+                    $cntStr = $daysCount > 1 ? " ($daysCount ngày)" : "";
+                    $itemTitle = "Phiếu cập nhật công tháng " . $req['month_period'] . $cntStr;
+                    $notifReason = "$itemTitle đã được " . $statusText;
+                }
+
+                $tenantId = (int)($auth['tenant_id'] ?? $req['tenant_id'] ?? 1);
+                $approverName = $auth['full_name'] ?? 'Người duyệt';
+
+                // 1. Gửi kết quả phê duyệt cho người tạo đề xuất
+                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_APPROVAL_RESULT', [
+                    'user_id' => (int)$req['user_id'],
                     'user_name' => $req['full_name'],
-                    'date' => $req['month_period'],
+                    'item_title' => $itemTitle,
+                    'date' => $isSingleDay ? $singleDateStr : $req['month_period'],
                     'status' => $status,
                     'is_supplementary' => true,
-                    'reason' => "Đề xuất bổ sung công tháng " . $req['month_period'] . " đã được " . $statusText
+                    'is_single_day' => $isSingleDay,
+                    'single_date' => $singleDateStr,
+                    'days_count' => $daysCount,
+                    'ref_id' => $id,
+                    'approver_name' => $approverName,
+                    'admin_note' => $adminNote,
+                    'reason' => $adminNote ?: $notifReason
                 ]);
+
+                // 2. Gửi thông báo cho những người theo dõi / liên quan (nếu có)
+                if (!empty($req['related_user_ids'])) {
+                    $relList = is_array($req['related_user_ids']) ? $req['related_user_ids'] : json_decode($req['related_user_ids'], true);
+                    if (is_array($relList)) {
+                        foreach ($relList as $relUid) {
+                            $relUid = (int)$relUid;
+                            if ($relUid > 0 && $relUid !== (int)$req['user_id'] && $relUid !== (int)$auth['user_id']) {
+                                NotificationService::send($this->db, $tenantId, 'ATTENDANCE_APPROVAL_RESULT', [
+                                    'user_id' => $relUid,
+                                    'user_name' => $req['full_name'],
+                                    'item_title' => $itemTitle,
+                                    'date' => $isSingleDay ? $singleDateStr : $req['month_period'],
+                                    'status' => $status,
+                                    'is_supplementary' => true,
+                                    'is_single_day' => $isSingleDay,
+                                    'single_date' => $singleDateStr,
+                                    'days_count' => $daysCount,
+                                    'ref_id' => $id,
+                                    'approver_name' => $approverName,
+                                    'admin_note' => $adminNote,
+                                    'reason' => ($adminNote ? "$adminNote - " : "") . "(Đề xuất bạn đang theo dõi đã có kết quả)"
+                                ]);
+                            }
+                        }
+                    }
+                }
             } catch (\Throwable $ne) {
                 error_log("Failed to send bulk approve notification: " . $ne->getMessage());
             }

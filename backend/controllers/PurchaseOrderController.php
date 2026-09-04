@@ -474,7 +474,8 @@ class PurchaseOrderController {
                     'current_level' => $currentLevel,
                     'status' => $statusInput,
                     'next_approval_status' => $nextApprovalStatus,
-                    'creator_id' => $po['created_by']
+                    'creator_id' => $po['created_by'],
+                    'approver_name' => $auth['full_name'] ?? 'Người duyệt'
                 ];
                 
                 $nextApproverId = null;

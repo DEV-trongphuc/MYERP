@@ -276,6 +276,8 @@ class NotificationService {
 
             case 'ATTENDANCE_UPDATE':
                 $isBulk = !empty($payload['is_bulk']);
+                $isSingleDay = !empty($payload['is_single_day']) || ((int)($payload['days_count'] ?? 0) === 1);
+                $singleDate = !empty($payload['single_date']) ? $payload['single_date'] : $today;
                 $targetUid = (int)($payload['user_id'] ?? $payload['approver_id'] ?? 0);
                 if (!empty($payload['recipients'])) {
                     $recipients = $payload['recipients'];
@@ -287,34 +289,85 @@ class NotificationService {
                 $bulkLink = $isBulk && !empty($payload['ref_id']) 
                     ? "/approvals?open_id=" . $payload['ref_id'] . "&open_type=attendance_bulk" 
                     : "/attendance?view=calendar&date=" . $today;
-                $title = $isBulk ? "Đề xuất cập nhật công gộp - NV $userName" : "Yêu cầu cập nhật công - NV $userName";
-                $body = $isBulk 
-                    ? "Nhân viên $userName vừa gửi Phiếu cập nhật công gộp cần bạn phê duyệt: \"" . $reason . "\""
-                    : "Nhân viên $userName vừa gửi Yêu cầu cập nhật công bổ sung ngày $today lúc " . substr($time, 0, 5) . " với lý do: \"" . $reason . "\"";
+
+                if ($isSingleDay) {
+                    $title = "Phiếu giải trình cập nhật công - NV $userName";
+                    $body = "Nhân viên $userName vừa gửi Phiếu giải trình cập nhật công ngày $singleDate cần bạn phê duyệt: \"" . $reason . "\"";
+                    $zaloMsg = "🔄 [ GIẢI TRÌNH CẬP NHẬT CÔNG ]\n\n"
+                        . "Nhân viên $userName vừa gửi Phiếu giải trình cập nhật công ngày $singleDate:\n"
+                        . "  • Tên NV: $userName\n"
+                        . "  • Ngày giải trình: $singleDate\n"
+                        . "  • Lý do: \"$reason\"\n\n"
+                        . "Vui lòng truy cập hệ thống để phê duyệt.";
+                    $tgMsg = "🔄 <b>[ GIẢI TRÌNH CẬP NHẬT CÔNG ]</b>\n\n"
+                        . "Nhân viên <b>$userName</b> vừa gửi Phiếu giải trình cập nhật công ngày <code>$singleDate</code>:\n"
+                        . "  • Tên NV: <b>$userName</b>\n"
+                        . "  • Ngày giải trình: <code>$singleDate</code>\n"
+                        . "  • Lý do: <i>\"$reason\"</i>\n\n"
+                        . "Vui lòng truy cập hệ thống để phê duyệt.";
+                    $emailSubject = "[IDEAS] Phiếu giải trình cập nhật công - NV $userName";
+                    $emailTitle = "PHIẾU GIẢI TRÌNH CẬP NHẬT CÔNG";
+                    $emailContent = "Chào quản trị viên,<br/><br/>" .
+                                    "Nhân viên <strong>$userName</strong> vừa gửi Phiếu giải trình cập nhật công ngày $singleDate.<br/>" .
+                                    "Lý do: <em>\"$reason\"</em>.<br/>" .
+                                    "Vui lòng truy cập hệ thống để phê duyệt.";
+                } elseif ($isBulk) {
+                    $mPeriod = $payload['month_period'] ?? date('Y-m');
+                    $cntStr = !empty($payload['days_count']) ? " ({$payload['days_count']} ngày)" : "";
+                    $title = "Phiếu cập nhật công tháng $mPeriod$cntStr - NV $userName";
+                    $body = "Nhân viên $userName vừa gửi Phiếu cập nhật công tháng $mPeriod$cntStr cần bạn phê duyệt: \"" . $reason . "\"";
+                    $zaloMsg = "🔄 [ CẬP NHẬT CÔNG THÁNG $mPeriod ]\n\n"
+                        . "Nhân viên $userName vừa gửi Phiếu cập nhật công tháng $mPeriod$cntStr:\n"
+                        . "  • Tên NV: $userName\n"
+                        . "  • Chu kỳ: $mPeriod\n"
+                        . "  • Nội dung: \"$reason\"\n\n"
+                        . "Vui lòng truy cập hệ thống để phê duyệt.";
+                    $tgMsg = "🔄 <b>[ CẬP NHẬT CÔNG THÁNG $mPeriod ]</b>\n\n"
+                        . "Nhân viên <b>$userName</b> vừa gửi Phiếu cập nhật công tháng <code>$mPeriod</code>$cntStr:\n"
+                        . "  • Tên NV: <b>$userName</b>\n"
+                        . "  • Chu kỳ: <code>$mPeriod</code>\n"
+                        . "  • Nội dung: <i>\"$reason\"</i>\n\n"
+                        . "Vui lòng truy cập hệ thống để phê duyệt.";
+                    $emailSubject = "[IDEAS] Phiếu cập nhật công tháng $mPeriod - NV $userName";
+                    $emailTitle = "PHIẾU CẬP NHẬT CÔNG THÁNG $mPeriod";
+                    $emailContent = "Chào quản trị viên,<br/><br/>" .
+                                    "Nhân viên <strong>$userName</strong> vừa gửi Phiếu cập nhật công tháng $mPeriod$cntStr.<br/>" .
+                                    "Nội dung: <em>\"$reason\"</em>.<br/>" .
+                                    "Vui lòng truy cập hệ thống để phê duyệt.";
+                } else {
+                    $title = "Yêu cầu cập nhật công - NV $userName";
+                    $body = "Nhân viên $userName vừa gửi Yêu cầu cập nhật công bổ sung ngày $today lúc " . substr($time, 0, 5) . " với lý do: \"" . $reason . "\"";
+                    $zaloMsg = "🔄 [ YÊU CẦU CẬP NHẬT CÔNG ]\n\n"
+                        . "Nhân viên $userName vừa gửi Yêu cầu cập nhật công ngày $today:\n"
+                        . "  • Tên NV: $userName\n"
+                        . "  • Giờ đề xuất: " . substr($time, 0, 5) . "\n"
+                        . "  • Lý do: \"$reason\"\n\n"
+                        . "Vui lòng truy cập hệ thống CRM để phê duyệt.";
+                    $tgMsg = "🔄 <b>[ YÊU CẦU CẬP NHẬT CÔNG ]</b>\n\n"
+                        . "Nhân viên <b>$userName</b> vừa gửi Yêu cầu cập nhật công ngày <code>$today</code>:\n"
+                        . "  • Tên NV: <b>$userName</b>\n"
+                        . "  • Giờ đề xuất: <code>" . substr($time, 0, 5) . "</code>\n"
+                        . "  • Lý do: <i>\"$reason\"</i>\n\n"
+                        . "Vui lòng truy cập hệ thống CRM để phê duyệt.";
+                    $emailSubject = "[IDEAS] Yêu cầu cập nhật công - NV $userName";
+                    $emailTitle = "YÊU CẦU CẬP NHẬT CÔNG";
+                    $emailContent = "Chào quản trị viên,<br/><br/>" .
+                                    "Nhân viên <strong>$userName</strong> vừa gửi Yêu cầu cập nhật công bổ sung ngày $today lúc " . substr($time, 0, 5) . ".<br/>" .
+                                    "Lý do: <em>\"$reason\"</em>.<br/>" .
+                                    "Vui lòng truy cập hệ thống CRM để phê duyệt.";
+                }
+
                 return [
                     'recipients' => $recipients,
                     'title' => $title,
                     'body' => $body,
                     'type' => "attendance_update",
                     'link' => $bulkLink,
-                    'zalo_msg' => "🔄 [ YÊU CẦU CẬP NHẬT CÔNG ]\n\n"
-                        . "Nhân viên $userName vừa gửi Yêu cầu cập nhật công ngày $today:\n"
-                        . "  • Tên NV: $userName\n"
-                        . "  • Giờ đề xuất: " . substr($time, 0, 5) . "\n"
-                        . "  • Lý do: \"$reason\"\n\n"
-                        . "Vui lòng truy cập hệ thống CRM để phê duyệt.",
-                    'tg_msg' => "🔄 <b>[ YÊU CẦU CẬP NHẬT CÔNG ]</b>\n\n"
-                        . "Nhân viên <b>$userName</b> vừa gửi Yêu cầu cập nhật công ngày <code>$today</code>:\n"
-                        . "  • Tên NV: <b>$userName</b>\n"
-                        . "  • Giờ đề xuất: <code>" . substr($time, 0, 5) . "</code>\n"
-                        . "  • Lý do: <i>\"$reason\"</i>\n\n"
-                        . "Vui lòng truy cập hệ thống CRM để phê duyệt.",
-                    'email_subject' => "[IDEAS] Yêu cầu cập nhật công - NV $userName",
-                    'email_title' => "YÊU CẦU CẬP NHẬT CÔNG",
-                    'email_content' => "Chào quản trị viên,<br/><br/>" .
-                                    "Nhân viên <strong>$userName</strong> vừa gửi Yêu cầu cập nhật công bổ sung ngày $today lúc " . substr($time, 0, 5) . ".<br/>" .
-                                    "Lý do: <em>\"$reason\"</em>.<br/>" .
-                                    "Vui lòng truy cập hệ thống CRM để phê duyệt."
+                    'zalo_msg' => $zaloMsg,
+                    'tg_msg' => $tgMsg,
+                    'email_subject' => $emailSubject,
+                    'email_title' => $emailTitle,
+                    'email_content' => $emailContent
                 ];
 
             case 'APPROVAL_REMINDER':
@@ -341,7 +394,10 @@ class NotificationService {
             case 'ATTENDANCE_APPROVAL_RESULT':
                 $status = $payload['status'] ?? 'approved';
                 $isSupplementary = !empty($payload['is_supplementary']);
+                $isSingleDay = !empty($payload['is_single_day']) || ((int)($payload['days_count'] ?? 0) === 1);
+                $singleDate = !empty($payload['single_date']) ? $payload['single_date'] : $today;
                 $statusText = $status === 'approved' ? "chấp thuận" : ($status === 'rejected' ? "từ chối" : "cập nhật thành chờ duyệt");
+                $approverName = $payload['approver_name'] ?? 'Người duyệt';
 
                 $recipients = [];
                 if (!empty($payload['user_id'])) {
@@ -351,28 +407,53 @@ class NotificationService {
                     if ($rowU) $recipients[] = $rowU;
                 }
 
-                $title = $isSupplementary
-                    ? ($status === 'approved' ? "Cập nhật công của bạn đã được duyệt" : "Yêu cầu cập nhật công bị từ chối")
-                    : ($status === 'approved' ? "Chấm công đi trễ đã được duyệt" : "Yêu cầu đi trễ bị từ chối");
-                $body = "Yêu cầu " . ($isSupplementary ? "cập nhật công" : "nhận lead/đi trễ") . " ngày " . $today . " của bạn đã được " . $statusText . " bởi quản trị viên." . (!empty($reason) ? " Ghi chú: \"$reason\"" : "");
+                $refId = $payload['ref_id'] ?? '';
+                $link = $refId ? "/approvals?open_id={$refId}&open_type=attendance_bulk" : "/attendance";
+
+                if ($isSingleDay) {
+                    $title = $status === 'approved' ? "Phiếu giải trình cập nhật công đã được duyệt" : "Phiếu giải trình cập nhật công bị từ chối";
+                    $body = "$approverName đã $statusText Phiếu giải trình cập nhật công ngày $singleDate của bạn." . (!empty($payload['admin_note']) ? " Ghi chú: \"{$payload['admin_note']}\"" : "");
+                    $zaloMsg = "✅ [ KẾT QUẢ GIẢI TRÌNH CẬP NHẬT CÔNG ]\n\n"
+                        . "$approverName đã $statusText Phiếu giải trình cập nhật công ngày $singleDate của bạn.\n"
+                        . (!empty($payload['admin_note']) ? "  • Ghi chú: \"{$payload['admin_note']}\"\n" : "")
+                        . "\nVui lòng truy cập hệ thống để kiểm tra.";
+                    $tgMsg = "✅ <b>[ KẾT QUẢ GIẢI TRÌNH CẬP NHẬT CÔNG ]</b>\n\n"
+                        . "<b>$approverName</b> đã <b>$statusText</b> Phiếu giải trình cập nhật công ngày <code>$singleDate</code> của bạn.\n"
+                        . (!empty($payload['admin_note']) ? "  • Ghi chú: <i>\"" . htmlspecialchars($payload['admin_note']) . "\"</i>\n" : "");
+                } elseif ($isSupplementary) {
+                    $mPeriod = $payload['date'] ?? date('Y-m');
+                    $title = $status === 'approved' ? "Phiếu cập nhật công tháng $mPeriod đã được duyệt" : "Phiếu cập nhật công tháng $mPeriod bị từ chối";
+                    $body = "$approverName đã $statusText Phiếu cập nhật công chu kỳ tháng $mPeriod của bạn." . (!empty($payload['admin_note']) ? " Ghi chú: \"{$payload['admin_note']}\"" : "");
+                    $zaloMsg = "✅ [ KẾT QUẢ CẬP NHẬT CÔNG THÁNG $mPeriod ]\n\n"
+                        . "$approverName đã $statusText Phiếu cập nhật công chu kỳ tháng $mPeriod của bạn.\n"
+                        . (!empty($payload['admin_note']) ? "  • Ghi chú: \"{$payload['admin_note']}\"\n" : "");
+                    $tgMsg = "✅ <b>[ KẾT QUẢ CẬP NHẬT CÔNG THÁNG $mPeriod ]</b>\n\n"
+                        . "<b>$approverName</b> đã <b>$statusText</b> Phiếu cập nhật công chu kỳ tháng <code>$mPeriod</code> của bạn.\n"
+                        . (!empty($payload['admin_note']) ? "  • Ghi chú: <i>\"" . htmlspecialchars($payload['admin_note']) . "\"</i>\n" : "");
+                } else {
+                    $title = $status === 'approved' ? "Chấm công đi trễ đã được duyệt" : "Yêu cầu đi trễ bị từ chối";
+                    $body = "$approverName đã $statusText yêu cầu giải trình chấm công ngày $today của bạn." . (!empty($payload['admin_note']) ? " Ghi chú: \"{$payload['admin_note']}\"" : "");
+                    $zaloMsg = "✅ [ KẾT QUẢ DUYỆT ĐI TRỄ ]\n\n"
+                        . "$approverName đã $statusText yêu cầu giải trình đi trễ ngày $today của bạn.\n"
+                        . (!empty($payload['admin_note']) ? "  • Ghi chú: \"{$payload['admin_note']}\"\n" : "");
+                    $tgMsg = "✅ <b>[ KẾT QUẢ DUYỆT ĐI TRỄ ]</b>\n\n"
+                        . "<b>$approverName</b> đã <b>$statusText</b> yêu cầu giải trình đi trễ ngày <code>$today</code> của bạn.\n"
+                        . (!empty($payload['admin_note']) ? "  • Ghi chú: <i>\"" . htmlspecialchars($payload['admin_note']) . "\"</i>\n" : "");
+                }
 
                 return [
                     'recipients' => $recipients,
                     'title' => $title,
                     'body' => $body,
                     'type' => "attendance",
-                    'link' => "/sale-portal",
-                    'zalo_msg' => "✅ [ KẾT QUẢ DUYỆT " . ($isSupplementary ? "CẬP NHẬT CÔNG" : "ĐI TRỄ") . " ]\n\n"
-                        . "Yêu cầu của $userName ngày $today đã được $statusText bởi quản trị viên.\n"
-                        . (!empty($reason) ? "  • Ghi chú: \"$reason\"\n" : ""),
-                    'tg_msg' => "✅ <b>[ KẾT QUẢ DUYỆT " . ($isSupplementary ? "CẬP NHẬT CÔNG" : "ĐI TRỄ") . " ]</b>\n\n"
-                        . "Yêu cầu của <b>" . htmlspecialchars($userName) . "</b> ngày <code>$today</code> đã được <b>$statusText</b> bởi quản trị viên.\n",
-                    'email_subject' => "[IDEAS] Phê duyệt " . ($isSupplementary ? "cập nhật công" : "đi trễ") . " - Ngày " . $today,
+                    'link' => $link,
+                    'zalo_msg' => $zaloMsg,
+                    'tg_msg' => $tgMsg,
+                    'email_subject' => "[IDEAS] " . $title,
                     'email_title' => "KẾT QUẢ PHÊ DUYỆT CHẤM CÔNG",
                     'email_content' => "Chào <strong>" . htmlspecialchars($userName) . "</strong>,<br/><br/>" .
-                                    "Yêu cầu " . ($isSupplementary ? "cập nhật công" : "phê duyệt đi trễ") . " ngày $today của bạn đã được <strong>$statusText</strong> bởi quản trị viên.<br/>" .
-                                    (!empty($reason) ? "Ghi chú: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "") .
-                                    "Vui lòng kiểm tra trên hệ thống CRM."
+                                    $body . "<br/>" .
+                                    "Vui lòng kiểm tra trên hệ thống IDEAS ERP."
                 ];
 
             case 'HOLIDAY_REGISTRATION_OPENED':
@@ -698,21 +779,22 @@ class NotificationService {
                 $statusText = $isApproved ? 'ĐÃ DUYỆT' : 'TỪ CHỐI';
                 $statusTextLower = $isApproved ? 'chấp thuận' : 'từ chối';
                 $rejectReason = $payload['reject_reason'] ?? $payload['reason'] ?? '';
+                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Người phê duyệt';
 
                 return [
                     'recipients' => $recipients,
                     'title' => $isApproved ? "Đề xuất đã được duyệt: $titleText" : "Đề xuất bị từ chối: $titleText",
-                    'body' => "Đề xuất \"$titleText\" của bạn đã được $statusTextLower bởi quản trị viên." . (!empty($rejectReason) ? " Lý do: $rejectReason" : ""),
+                    'body' => "$approverName đã $statusTextLower đề xuất \"$titleText\" của bạn." . (!empty($rejectReason) ? " Lý do: $rejectReason" : ""),
                     'type' => "expense",
                     'link' => "/approvals?open_id=" . ($payload['ref_id'] ?? '') . "&open_type=expense",
                     'zalo_msg' => ($isApproved ? "✅" : "❌") . " [ ĐỀ XUẤT $statusText ]\n\n"
-                        . "Đề xuất của bạn đã được $statusTextLower bởi quản trị viên:\n"
+                        . "$approverName đã $statusTextLower đề xuất của bạn:\n"
                         . "  • Tiêu đề: $titleText\n"
                         . ($hasCost ? "  • Số tiền: $amountText\n" : "")
                         . (!empty($rejectReason) ? "  • Lý do: $rejectReason\n" : "")
                         . "\nVui lòng truy cập hệ thống để xem chi tiết.",
                     'tg_msg' => ($isApproved ? "✅" : "❌") . " <b>[ ĐỀ XUẤT $statusText ]</b>\n\n"
-                        . "Đề xuất của bạn đã được <b>$statusTextLower</b> bởi quản trị viên:\n"
+                        . "<b>$approverName</b> đã <b>$statusTextLower</b> đề xuất của bạn:\n"
                         . "  • Tiêu đề: <b>" . htmlspecialchars($titleText) . "</b>\n"
                         . ($hasCost ? "  • Số tiền: <b>$amountText</b>\n" : "")
                         . (!empty($rejectReason) ? "  • Lý do: <i>" . htmlspecialchars($rejectReason) . "</i>\n" : "")
@@ -1362,6 +1444,7 @@ class NotificationService {
                 $leaveType = $payload['leave_type_text'] ?? 'Nghỉ phép';
                 $statusText = $payload['status_text'] ?? 'được cập nhật';
                 $leavePeriod = ($payload['start_date'] ?? '') . ' -> ' . ($payload['end_date'] ?? '');
+                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Người phê duyệt';
                 
                 $isWFH = strpos(mb_strtolower($leaveType), 'làm việc từ xa') !== false || strpos(mb_strtolower($leaveType), 'remote') !== false;
                 $isOT = strpos(mb_strtolower($leaveType), 'tăng ca') !== false || strpos(mb_strtolower($leaveType), 'overtime') !== false;
@@ -1383,19 +1466,19 @@ class NotificationService {
                 return [
                     'recipients' => $recipients,
                     'title' => "Kết quả duyệt: $leaveType",
-                    'body' => "$actionName từ $leavePeriod của bạn đã được $statusText." . (!empty($reason) ? " Ghi chú: \"$reason\"" : "") . $balanceStr,
+                    'body' => "$approverName đã $statusText $actionName ($leavePeriod) của bạn." . (!empty($reason) ? " Ghi chú: \"$reason\"" : "") . $balanceStr,
                     'type' => "leave",
                     'link' => "/approvals?open_id=" . ($payload['ref_id'] ?? '') . "&open_type=leave&open_status=" . ($payload['status'] ?? ''),
                     'zalo_msg' => "$icon [ $headerTitle ]\n\n"
-                        . "$actionName ($leavePeriod) của bạn đã được $statusText.\n"
+                        . "$approverName đã $statusText $actionName ($leavePeriod) của bạn.\n"
                         . (!empty($reason) ? "Ghi chú: \"$reason\"\n" : "") . $balanceStr,
                     'tg_msg' => "$icon <b>[ $headerTitle ]</b>\n\n"
-                        . "$actionName (<code>$leavePeriod</code>) của bạn đã được <b>$statusText</b>.\n"
+                        . "<b>$approverName</b> đã <b>$statusText</b> $actionName (<code>$leavePeriod</code>) của bạn.\n"
                         . (!empty($reason) ? "Ghi chú: <i>\"$reason\"</i>\n" : "") . $balanceStr,
-                    'email_subject' => "[IDEAS] Kết quả duyệt $actionName của bạn",
+                    'email_subject' => "[IDEAS] $approverName đã $statusText $actionName của bạn",
                     'email_title' => $headerTitle,
                     'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
-                                    "$actionName từ <strong>$leavePeriod</strong> của bạn đã được <strong>$statusText</strong> bởi người phê duyệt.<br/>" .
+                                    "<strong>$approverName</strong> đã <strong>$statusText</strong> $actionName từ <strong>$leavePeriod</strong> của bạn.<br/>" .
                                     (!empty($reason) ? "Ghi chú: <em>\"$reason\"</em>." : "") . $balanceHtml
                 ];
 
@@ -1438,23 +1521,26 @@ class NotificationService {
                 $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
                 $amountText = number_format((float)($payload['amount'] ?? 0), 0, ',', '.') . 'đ';
                 $statusText = $payload['status_text'] ?? 'được cập nhật';
+                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Quản lý';
+                $isApproved = ($payload['status'] ?? '') !== 'rejected';
+                $icon = $isApproved ? '✅' : '❌';
                 return [
                     'recipients' => $recipients,
                     'title' => "Kết quả duyệt tạm ứng lương",
-                    'body' => "Đề xuất tạm ứng $amountText của bạn đã được $statusText. Ghi chú: \"$reason\"",
+                    'body' => "$approverName đã $statusText đề xuất tạm ứng $amountText của bạn." . (!empty($reason) ? " Ghi chú: \"$reason\"" : ""),
                     'type' => "expense",
                     'link' => "/approvals?open_id=" . ($payload['ref_id'] ?? '') . "&open_type=advance&open_status=" . ($payload['status'] ?? ''),
-                    'zalo_msg' => "✅ [ KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG ]\n\n"
-                        . "Đề xuất tạm ứng $amountText của bạn đã được $statusText.\n"
-                        . "Ghi chú: \"$reason\"",
-                    'tg_msg' => "✅ <b>[ KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG ]</b>\n\n"
-                        . "Đề xuất tạm ứng <b>$amountText</b> của bạn đã được <b>$statusText</b>.\n"
-                        . "Ghi chú: <i>\"$reason\"</i>",
-                    'email_subject' => "[IDEAS] Kết quả duyệt tạm ứng lương của bạn",
+                    'zalo_msg' => "$icon [ KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG ]\n\n"
+                        . "$approverName đã $statusText đề xuất tạm ứng $amountText của bạn.\n"
+                        . (!empty($reason) ? "Ghi chú: \"$reason\"" : ""),
+                    'tg_msg' => "$icon <b>[ KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG ]</b>\n\n"
+                        . "<b>$approverName</b> đã <b>$statusText</b> đề xuất tạm ứng <b>$amountText</b> của bạn.\n"
+                        . (!empty($reason) ? "Ghi chú: <i>\"$reason\"</i>" : ""),
+                    'email_subject' => "[IDEAS] $approverName đã $statusText đề xuất tạm ứng lương của bạn",
                     'email_title' => "KẾT QUẢ DUYỆT TẠM ỨNG LƯƠNG",
                     'email_content' => "Chào <strong>$userName</strong>,<br/><br/>" .
-                                    "Yêu cầu tạm ứng số tiền <strong>$amountText</strong> của bạn đã được <strong>$statusText</strong> bởi quản lý.<br/>" .
-                                    "Ghi chú/lý do: <em>\"$reason\"</em>."
+                                    "<strong>$approverName</strong> đã <strong>$statusText</strong> yêu cầu tạm ứng số tiền <strong>$amountText</strong> của bạn.<br/>" .
+                                    (!empty($reason) ? "Ghi chú/lý do: <em>\"$reason\"</em>." : "")
                 ];
 
             case 'HRM_PAYSLIP_PUBLISHED':
@@ -1544,57 +1630,58 @@ class NotificationService {
                 ];
 
             case 'PO_APPROVED':
-                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? 0));
+            case 'PO_REJECTED':
+                $isApproved = ($eventType === 'PO_APPROVED');
+                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? $payload['creator_id'] ?? 0));
                 $poNumber = $payload['po_number'] ?? '';
                 $poId = $payload['po_id'] ?? 0;
+                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Người phê duyệt';
+                $statusText = $isApproved ? 'phê duyệt hoàn tất' : 'từ chối';
+                $icon = $isApproved ? '✅' : '❌';
                 return [
                     'recipients' => $recipients,
-                    'title' => "Đơn nhập hàng đã được phê duyệt",
-                    'body' => "Đơn nhập hàng " . $poNumber . " đã được phê duyệt hoàn tất",
+                    'title' => $isApproved ? "Đơn nhập hàng đã được phê duyệt" : "Đơn nhập hàng bị từ chối",
+                    'body' => "$approverName đã $statusText đơn nhập hàng $poNumber của bạn." . (!empty($reason) ? " Lý do: \"$reason\"" : ""),
                     'type' => "purchase_order",
                     'link' => "/purchase-orders?open_id=" . $poId,
-                    'zalo_msg' => "✅ [ ĐƠN NHẬP HÀNG ĐÃ ĐƯỢC PHÊ DUYỆT ]\n\n"
-                        . "Đơn nhập hàng $poNumber của bạn đã được phê duyệt hoàn tất.\n"
-                        . "  • Mã đơn: $poNumber\n"
-                        . "  • Trạng thái: Đã phê duyệt (Approved)\n\n"
-                        . "Vui lòng kiểm tra trên hệ thống CRM.",
-                    'tg_msg' => "✅ <b>[ ĐƠN NHẬP HÀNG ĐÃ ĐƯỢC PHÊ DUYỆT ]</b>\n\n"
-                        . "Đơn nhập hàng <b>$poNumber</b> của bạn đã được phê duyệt hoàn tất.\n"
-                        . "  • Mã đơn: <code>$poNumber</code>\n"
-                        . "  • Trạng thái: <b>Đã phê duyệt (Approved)</b>\n\n"
-                        . "Vui lòng kiểm tra trên hệ thống CRM.",
-                    'email_subject' => "[IDEAS] Đơn nhập hàng $poNumber đã được phê duyệt",
-                    'email_title' => "ĐƠN NHẬP HÀNG ĐÃ ĐƯỢC PHÊ DUYỆT",
+                    'zalo_msg' => "$icon [ ĐƠN NHẬP HÀNG $poNumber ]\n\n"
+                        . "$approverName đã $statusText đơn nhập hàng $poNumber của bạn.\n"
+                        . (!empty($reason) ? "  • Lý do: \"$reason\"\n" : "")
+                        . "\nVui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                    'tg_msg' => "$icon <b>[ ĐƠN NHẬP HÀNG <code>$poNumber</code> ]</b>\n\n"
+                        . "<b>$approverName</b> đã <b>$statusText</b> đơn nhập hàng <code>$poNumber</code> của bạn.\n"
+                        . (!empty($reason) ? "  • Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : "")
+                        . "\nVui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                    'email_subject' => "[IDEAS] $approverName đã $statusText đơn nhập hàng $poNumber",
+                    'email_title' => $isApproved ? "ĐƠN NHẬP HÀNG ĐÃ ĐƯỢC PHÊ DUYỆT" : "ĐƠN NHẬP HÀNG ĐÃ BỊ TỪ CHỐI",
                     'email_content' => "Chào bạn,<br/><br/>"
-                        . "Đơn nhập hàng <strong>$poNumber</strong> của bạn đã được phê duyệt hoàn tất.<br/>"
-                        . "Vui lòng truy cập hệ thống CRM để kiểm tra."
+                        . "<strong>$approverName</strong> đã <strong>$statusText</strong> đơn nhập hàng <strong>$poNumber</strong> của bạn.<br/>"
+                        . (!empty($reason) ? "Lý do: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "")
+                        . "Vui lòng truy cập hệ thống IDEAS ERP để kiểm tra."
                 ];
 
-            case 'PO_REJECTED':
-                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? 0));
-                $poNumber = $payload['po_number'] ?? '';
-                $poId = $payload['po_id'] ?? 0;
+            case 'COOP_SLIP_APPROVED':
+            case 'COOP_SLIP_REJECTED':
+                $isApproved = ($eventType === 'COOP_SLIP_APPROVED');
+                $slipId = (int)($payload['slip_id'] ?? 0);
+                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Quản trị viên';
+                $statusText = $isApproved ? 'phê duyệt thành công' : 'từ chối / yêu cầu chỉnh sửa';
+                $recipients = $payload['recipients'] ?? [];
+                if (empty($recipients) && !empty($payload['target_user_id'])) {
+                    $recipients = self::getRecipientById($db, (int)$payload['target_user_id']);
+                }
+                $icon = $isApproved ? '✅' : '❌';
                 return [
                     'recipients' => $recipients,
-                    'title' => "Đơn nhập hàng đã bị từ chối",
-                    'body' => "Đơn nhập hàng " . $poNumber . " đã bị từ chối phê duyệt",
-                    'type' => "purchase_order",
-                    'link' => "/purchase-orders?open_id=" . $poId,
-                    'zalo_msg' => "❌ [ ĐƠN NHẬP HÀNG ĐÃ BỊ TỪ CHỐI ]\n\n"
-                        . "Đơn nhập hàng $poNumber của bạn đã bị từ chối phê duyệt.\n"
-                        . "  • Mã đơn: $poNumber\n"
-                        . "  • Trạng thái: Bị từ chối (Rejected)\n\n"
-                        . "Vui lòng kiểm tra lý do trên hệ thống CRM.",
-                    'tg_msg' => "❌ <b>[ ĐƠN NHẬP HÀNG ĐÃ BỊ TỪ CHỐI ]</b>\n\n"
-                        . "Đơn nhập hàng <b>$poNumber</b> của bạn đã bị từ chối phê duyệt.\n"
-                        . "  • Mã đơn: <code>$poNumber</code>\n"
-                        . "  • Trạng thái: <b>Bị từ chối (Rejected)</b>\n\n"
-                        . "Vui lòng kiểm tra lý do trên hệ thống CRM.",
-                    'email_subject' => "[IDEAS] Đơn nhập hàng $poNumber đã bị từ chối",
-                    'email_title' => "ĐƠN NHẬP HÀNG ĐÃ BỊ TỪ CHỐI",
-                    'email_content' => "Chào bạn,<br/><br/>"
-                        . "Đơn nhập hàng <strong>$poNumber</strong> của bạn đã bị từ chối phê duyệt.<br/>"
-                        . "Vui lòng truy cập hệ thống CRM để kiểm tra chi tiết."
+                    'title' => $isApproved ? "Phiếu hợp tác #$slipId đã được duyệt" : "Phiếu hợp tác #$slipId bị từ chối",
+                    'body' => "$approverName đã $statusText Phiếu hợp tác #$slipId của bạn." . (!empty($reason) ? " Lý do: \"$reason\"" : ""),
+                    'type' => "approval",
+                    'link' => "/cooperation-slips",
+                    'zalo_msg' => "$icon [ PHIẾU HỢP TÁC #$slipId ]\n\n$approverName đã $statusText Phiếu hợp tác #$slipId.\n" . (!empty($reason) ? "Lý do: \"$reason\"\n" : ""),
+                    'tg_msg' => "$icon <b>[ PHIẾU HỢP TÁC #$slipId ]</b>\n\n<b>$approverName</b> đã <b>$statusText</b> Phiếu hợp tác #$slipId.\n" . (!empty($reason) ? "Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : ""),
+                    'email_subject' => "[IDEAS] $approverName đã $statusText Phiếu hợp tác #$slipId",
+                    'email_title' => "KẾT QUẢ PHÊ DUYỆT PHIẾU HỢP TÁC",
+                    'email_content' => "Chào bạn,<br/><br/><strong>$approverName</strong> đã <strong>$statusText</strong> Phiếu hợp tác #$slipId.<br/>" . (!empty($reason) ? "Lý do: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "")
                 ];
 
             default:

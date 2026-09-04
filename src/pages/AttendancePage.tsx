@@ -1223,7 +1223,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               ) : (
                 <CheckSquare size={13} />
               )}
-              {isOpeningBulkModal ? t('Đang mở...') : (isMobile ? t('C.nhật công') : t('Cập nhật công gộp'))}
+              {isOpeningBulkModal ? t('Đang mở...') : (isMobile ? t('C.nhật công') : t('Cập nhật bổ sung công'))}
             </button>
 
             {/* View Mode Icon Switcher */}
@@ -4013,7 +4013,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               ) : (
                 <CheckSquare size={12} />
               )}
-              {isOpeningBulkModal ? t('Đang mở...') : (isMobile ? t('C.nhật công') : t('Cập nhật công gộp'))}
+              {isOpeningBulkModal ? t('Đang mở...') : (isMobile ? t('C.nhật công') : t('Cập nhật bổ sung công'))}
             </button>
 
             {/* View Mode Icon Switcher */}

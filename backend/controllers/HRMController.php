@@ -37,6 +37,21 @@ class HRMController {
         return 'Đơn xin nghỉ phép (' . self::formatLeaveTypeText($type) . ')';
     }
 
+    public static function formatBulkTitleAndDesc(array $b): array {
+        $daysCount = (int)($b['days_count'] ?? 0);
+        if ($daysCount === 1 && !empty($b['single_date'])) {
+            $dFmt = date('d/m/Y', strtotime($b['single_date']));
+            $title = 'Phiếu giải trình cập nhật công ngày ' . $dFmt;
+            $r = trim($b['first_reason'] ?? '');
+            $desc = ($r && $r !== 'Bổ sung công') ? $r : ('Giải trình cập nhật công ngày ' . $dFmt);
+        } else {
+            $cntStr = $daysCount > 1 ? " ($daysCount ngày)" : '';
+            $title = 'Phiếu cập nhật công tháng ' . ($b['month_period'] ?? date('Y-m')) . $cntStr;
+            $desc = 'Giải trình cập nhật công chu kỳ tháng ' . ($b['month_period'] ?? date('Y-m')) . $cntStr;
+        }
+        return [$title, $desc];
+    }
+
     // --- PROFILES & CONTRACTS ---
 
     public function indexProfiles(array $auth): void {
@@ -557,6 +572,7 @@ class HRMController {
                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_APPROVAL', [
                     'user_id' => $leaveRow['user_id'],
                     'user_name' => $leaveRow['full_name'],
+                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                     'leave_type_text' => $leaveTypeText,
                     'start_date' => $leaveRow['start_date'],
                     'end_date' => $leaveRow['end_date'],
@@ -578,6 +594,7 @@ class HRMController {
                                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_LEAVE_APPROVAL', [
                                     'user_id' => $relUid,
                                     'user_name' => $leaveRow['full_name'],
+                                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                                     'leave_type_text' => $leaveTypeText,
                                     'start_date' => $leaveRow['start_date'],
                                     'end_date' => $leaveRow['end_date'],
@@ -846,6 +863,7 @@ class HRMController {
                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_APPROVAL', [
                     'user_id' => $advRow['user_id'],
                     'user_name' => $advRow['full_name'],
+                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                     'amount' => (float)$advRow['amount'],
                     'status_text' => $statusText,
                     'reason' => $approverNote,
@@ -863,6 +881,7 @@ class HRMController {
                                 NotificationService::send($this->db, $auth['tenant_id'], 'HRM_ADVANCE_APPROVAL', [
                                     'user_id' => $relUid,
                                     'user_name' => $advRow['full_name'],
+                                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                                     'amount' => (float)$advRow['amount'],
                                     'status_text' => $statusText,
                                     'reason' => $approverNote . ' (Đơn bạn đang theo dõi đã có kết quả)',
@@ -1833,7 +1852,10 @@ class HRMController {
 
         // 5. Pending Bulk Attendance Requests
         $stmtBulks = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name, u.team_id
+            SELECT r.*, u.full_name as employee_name, u.team_id,
+                   (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
+                   (SELECT check_in_date FROM attendance_bulk_request_details WHERE request_id = r.id ORDER BY check_in_date ASC LIMIT 1) as single_date,
+                   (SELECT reason FROM attendance_bulk_request_details WHERE request_id = r.id AND reason IS NOT NULL AND reason != '' LIMIT 1) as first_reason
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             WHERE u.tenant_id = ? AND r.status IN ('pending_manager', 'pending_hr')
@@ -1845,15 +1867,26 @@ class HRMController {
         foreach ($bulks as $b) {
             $shouldShow = false;
             $isAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-            if ($isAdmin) {
+            $isAssignedApprover = ((int)($b['manager_id'] ?? 0) === $userId) || ((int)($b['approved_by'] ?? 0) === $userId);
+
+            if ((int)$b['user_id'] === $userId && !$isAdmin) {
+                // Người tạo không tự duyệt đề xuất của chính mình trừ khi là Admin
+                $shouldShow = false;
+            } else if ($isAdmin) {
                 $shouldShow = true;
-            } else if ($b['status'] === 'pending_hr' && $role === 'hr') {
+            } else if ($isAssignedApprover) {
+                // Người được chỉ định làm người duyệt có quyền duyệt bất kể chức vụ hệ thống
                 $shouldShow = true;
-            } else if ($b['status'] === 'pending_manager' && $role === 'manager' && (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || (int)($b['manager_id'] ?? 0) === $userId)) {
+            } else if ($role === 'hr') {
+                // Bộ phận nhân sự quản lý chấm công chung toàn công ty
+                $shouldShow = true;
+            } else if ($b['status'] === 'pending_manager' && (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || in_array((int)($b['user_id'] ?? 0), $managedUserIds, true))) {
+                // Trưởng nhóm/quản lý quản lý nhân sự thuộc nhóm của mình
                 $shouldShow = true;
             }
 
             if ($shouldShow) {
+                list($bTitle, $bDesc) = self::formatBulkTitleAndDesc($b);
                 $pending[] = [
                     'id' => (int)$b['id'],
                     'type' => 'attendance_bulk',
@@ -1862,8 +1895,8 @@ class HRMController {
                     'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
                     'manager_id' => (int)($b['manager_id'] ?? 0),
                     'approved_at' => $b['approved_at'] ?? null,
-                    'title' => 'Phiếu cập nhật công gộp tháng ' . $b['month_period'],
-                    'description' => 'Giải trình công hàng loạt chu kỳ tháng ' . $b['month_period'],
+                    'title' => $bTitle,
+                    'description' => $bDesc,
                     'status' => $b['status'],
                     'created_at' => $b['created_at']
                 ];
@@ -2011,7 +2044,10 @@ class HRMController {
 
         // 5. My Bulk Attendance Requests
         $stmtBulks = $this->db->prepare("
-            SELECT r.*, u.full_name as employee_name
+            SELECT r.*, u.full_name as employee_name,
+                   (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
+                   (SELECT check_in_date FROM attendance_bulk_request_details WHERE request_id = r.id ORDER BY check_in_date ASC LIMIT 1) as single_date,
+                   (SELECT reason FROM attendance_bulk_request_details WHERE request_id = r.id AND reason IS NOT NULL AND reason != '' LIMIT 1) as first_reason
             FROM attendance_bulk_requests r
             JOIN users u ON r.user_id = u.id
             WHERE r.user_id = ?
@@ -2021,6 +2057,7 @@ class HRMController {
         $stmtBulks->execute([$userId]);
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
         foreach ($bulks as $b) {
+            list($bTitle, $bDesc) = self::formatBulkTitleAndDesc($b);
             $pending[] = [
                 'id' => (int)$b['id'],
                 'type' => 'attendance_bulk',
@@ -2029,8 +2066,8 @@ class HRMController {
                 'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
                 'manager_id' => (int)($b['manager_id'] ?? 0),
                 'approved_at' => $b['approved_at'] ?? null,
-                'title' => 'Phiếu cập nhật công gộp tháng ' . $b['month_period'],
-                'description' => 'Giải trình công hàng loạt chu kỳ tháng ' . $b['month_period'],
+                'title' => $bTitle,
+                'description' => $bDesc,
                 'status' => $b['status'],
                 'created_at' => $b['created_at']
             ];
@@ -2187,6 +2224,44 @@ class HRMController {
                     'notes' => $e['notes'] ?? '',
                     'status' => $e['status'],
                     'created_at' => $e['created_at'],
+                    'is_following' => true
+                ];
+            }
+        }
+
+        // 4. Bulk Attendance Requests where user is in related_user_ids
+        $stmtBulks = $this->db->prepare("
+            SELECT r.*, u.full_name as employee_name,
+                   (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
+                   (SELECT check_in_date FROM attendance_bulk_request_details WHERE request_id = r.id ORDER BY check_in_date ASC LIMIT 1) as single_date,
+                   (SELECT reason FROM attendance_bulk_request_details WHERE request_id = r.id AND reason IS NOT NULL AND reason != '' LIMIT 1) as first_reason
+            FROM attendance_bulk_requests r
+            JOIN users u ON r.user_id = u.id
+            WHERE u.tenant_id = ? AND r.user_id != ? AND (r.related_user_ids LIKE ? OR r.related_user_ids LIKE ?)
+            ORDER BY r.created_at DESC
+            LIMIT 100
+        ");
+        $stmtBulks->execute([$auth['tenant_id'], $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
+        $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($bulks as $b) {
+            $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true)) : [];
+            if (!is_array($relArr)) $relArr = [];
+            $relArr = array_map('intval', $relArr);
+
+            if (in_array($userId, $relArr, true)) {
+                list($bTitle, $bDesc) = self::formatBulkTitleAndDesc($b);
+                $pending[] = [
+                    'id' => (int)$b['id'],
+                    'type' => 'attendance_bulk',
+                    'employee_name' => $b['employee_name'],
+                    'user_id' => (int)$b['user_id'],
+                    'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
+                    'manager_id' => (int)($b['manager_id'] ?? 0),
+                    'related_user_ids' => $relArr,
+                    'title' => $bTitle,
+                    'description' => $bDesc,
+                    'status' => $b['status'],
+                    'created_at' => $b['created_at'],
                     'is_following' => true
                 ];
             }
@@ -2430,7 +2505,10 @@ class HRMController {
         // 5. All Bulk Attendance Requests
         if ($isHrAdmin) {
             $stmtBulks = $this->db->prepare("
-                SELECT r.*, u.full_name as employee_name
+                SELECT r.*, u.full_name as employee_name,
+                       (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
+                       (SELECT check_in_date FROM attendance_bulk_request_details WHERE request_id = r.id ORDER BY check_in_date ASC LIMIT 1) as single_date,
+                       (SELECT reason FROM attendance_bulk_request_details WHERE request_id = r.id AND reason IS NOT NULL AND reason != '' LIMIT 1) as first_reason
                 FROM attendance_bulk_requests r
                 JOIN users u ON r.user_id = u.id
                 WHERE u.tenant_id = ?
@@ -2440,11 +2518,14 @@ class HRMController {
             $stmtBulks->execute([$auth['tenant_id']]);
         } else {
             $sqlB = "
-                SELECT r.*, u.full_name as employee_name
+                SELECT r.*, u.full_name as employee_name,
+                       (SELECT COUNT(*) FROM attendance_bulk_request_details WHERE request_id = r.id) as days_count,
+                       (SELECT check_in_date FROM attendance_bulk_request_details WHERE request_id = r.id ORDER BY check_in_date ASC LIMIT 1) as single_date,
+                       (SELECT reason FROM attendance_bulk_request_details WHERE request_id = r.id AND reason IS NOT NULL AND reason != '' LIMIT 1) as first_reason
                 FROM attendance_bulk_requests r
                 JOIN users u ON r.user_id = u.id
-                WHERE u.tenant_id = ? AND (r.user_id = ? OR r.manager_id = ? OR r.approved_by = ?";
-            $pB = [$auth['tenant_id'], $userId, $userId, $userId];
+                WHERE u.tenant_id = ? AND (r.user_id = ? OR r.manager_id = ? OR r.approved_by = ? OR r.related_user_ids LIKE ? OR r.related_user_ids LIKE ?";
+            $pB = [$auth['tenant_id'], $userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%'];
             if (!empty($managedUserIds)) {
                 $ph = implode(',', array_fill(0, count($managedUserIds), '?'));
                 $sqlB .= " OR r.user_id IN ($ph)";
@@ -2456,6 +2537,7 @@ class HRMController {
         }
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
         foreach ($bulks as $b) {
+            list($bTitle, $bDesc) = self::formatBulkTitleAndDesc($b);
             $all[] = [
                 'id' => (int)$b['id'],
                 'type' => 'attendance_bulk',
@@ -2464,8 +2546,8 @@ class HRMController {
                 'approver_id' => (int)($b['approved_by'] ?? $b['manager_id'] ?? 0),
                 'manager_id' => (int)($b['manager_id'] ?? 0),
                 'approved_at' => $b['approved_at'] ?? null,
-                'title' => 'Phiếu cập nhật công gộp tháng ' . $b['month_period'],
-                'description' => 'Giải trình công hàng loạt chu kỳ tháng ' . $b['month_period'],
+                'title' => $bTitle,
+                'description' => $bDesc,
                 'status' => $b['status'],
                 'created_at' => $b['created_at']
             ];
