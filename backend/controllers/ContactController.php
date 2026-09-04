@@ -1239,9 +1239,9 @@ class ContactController {
 
         // Build clear, informative log title and note
         if ($targetLeadStatus === 'nurture') {
-            $subject = "Chuyển trạng thái: 🕒 Nurture (Nuôi dưỡng)";
+            $subject = "Chuyển trạng thái: Nurture (Nuôi dưỡng)";
         } elseif ($targetLeadStatus === 'lost') {
-            $subject = "Chuyển trạng thái: 🚫 Lost (Không tiếp tục)";
+            $subject = "Chuyển trạng thái: Lost (Không tiếp tục)";
         } elseif (!empty($currStageName) && $currStageName !== $newStageName) {
             $subject = "Chuyển Pipeline: {$currStageName} ➔ {$newStageName}";
         } else {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, Mail, Eye, EyeOff, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -1484,13 +1484,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     boxShadow: quickLeadStatus === 'nurture' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
+                    gap: '5px',
                     transition: 'all 0.15s',
                     whiteSpace: 'nowrap'
                   }}
                   title="Chỉ hiện các Lead đang trong diện Nuôi dưỡng (Nurture)"
                 >
-                  <span>🕒</span>
+                  <Clock size={12} />
                   <span>Chỉ Nurture</span>
                 </button>
 
@@ -1509,13 +1509,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     boxShadow: quickLeadStatus === 'lost' ? '0 1px 3px rgba(239, 68, 68, 0.3)' : 'none',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
+                    gap: '5px',
                     transition: 'all 0.15s',
                     whiteSpace: 'nowrap'
                   }}
                   title="Chỉ hiện các Lead đã Lost (Không tiếp tục)"
                 >
-                  <span>🚫</span>
+                  <Ban size={12} />
                   <span>Chỉ Lost</span>
                 </button>
               </div>
@@ -1686,9 +1686,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       onChange={v => setFilterLeadStatus(v)}
                       options={[
                         { value: '', label: 'Tất cả trạng thái Lead' },
-                        { value: 'active', label: '🟢 Đang hoạt động (Active)' },
-                        { value: 'nurture', label: '🕒 Nuôi dưỡng (Nurture)' },
-                        { value: 'lost', label: '🚫 Không tiếp tục (Lost)' }
+                        { value: 'active', label: 'Đang hoạt động (Active)', icon: <CheckCircle2 size={13} style={{ color: '#10b981' }} /> },
+                        { value: 'nurture', label: 'Nuôi dưỡng (Nurture)', icon: <Clock size={13} style={{ color: '#d97706' }} /> },
+                        { value: 'lost', label: 'Không tiếp tục (Lost)', icon: <Ban size={13} style={{ color: '#ef4444' }} /> }
                       ]}
                     />
                   </div>
@@ -2319,10 +2319,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 style={{ 
                                   backgroundColor: 'rgba(245, 158, 11, 0.12)', 
                                   color: '#d97706', 
-                                  border: '1px solid rgba(245, 158, 11, 0.3)'
+                                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px'
                                 }}
                               >
-                                🕒 Nurture
+                                <Clock size={11} />
+                                <span>Nurture</span>
                               </span>
                             ) : c.lead_status === 'lost' ? (
                               <span 
@@ -2330,10 +2336,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 style={{ 
                                   backgroundColor: 'rgba(239, 68, 68, 0.12)', 
                                   color: '#dc2626', 
-                                  border: '1px solid rgba(239, 68, 68, 0.3)'
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px'
                                 }}
                               >
-                                🚫 Lost
+                                <Ban size={11} />
+                                <span>Lost</span>
                               </span>
                             ) : c.stage_name ? (
                               <span 
@@ -2740,36 +2752,44 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   Ticket lỗi
                                 </span>
                               ) : c.lead_status === 'nurture' ? (
-                                  <span 
-                                    className="badge" 
-                                    style={{ 
-                                      borderRadius: '8px', 
-                                      padding: '4px 8px', 
-                                      fontSize: '0.72rem', 
-                                      fontWeight: 700,
-                                      backgroundColor: 'rgba(245, 158, 11, 0.12)', 
-                                      color: '#d97706', 
-                                      border: '1px solid rgba(245, 158, 11, 0.3)'
-                                    }}
-                                  >
-                                    🕒 Nurture
-                                  </span>
-                                ) : c.lead_status === 'lost' ? (
-                                  <span 
-                                    className="badge" 
-                                    style={{ 
-                                      borderRadius: '8px', 
-                                      padding: '4px 8px', 
-                                      fontSize: '0.72rem', 
-                                      fontWeight: 700,
-                                      backgroundColor: 'rgba(239, 68, 68, 0.12)', 
-                                      color: '#dc2626', 
-                                      border: '1px solid rgba(239, 68, 68, 0.3)'
-                                    }}
-                                  >
-                                    🚫 Lost
-                                  </span>
-                                ) : c.stage_name ? (
+                                <span 
+                                  className="badge" 
+                                  style={{ 
+                                    borderRadius: '8px', 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.72rem', 
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(245, 158, 11, 0.12)', 
+                                    color: '#d97706', 
+                                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <Clock size={11} />
+                                  <span>Nurture</span>
+                                </span>
+                              ) : c.lead_status === 'lost' ? (
+                                <span 
+                                  className="badge" 
+                                  style={{ 
+                                    borderRadius: '8px', 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.72rem', 
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                    color: '#dc2626', 
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <Ban size={11} />
+                                  <span>Lost</span>
+                                </span>
+                              ) : c.stage_name ? (
                                   <span 
                                     className="badge" 
                                     style={{ 

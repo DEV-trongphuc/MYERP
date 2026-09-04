@@ -12692,12 +12692,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   border: '1px solid var(--color-border)',
                   display: 'flex',
                   flexDirection: 'column',
-                  overflow: 'hidden',
+                  overflow: 'visible',
                   zIndex: 2
                 }}
               >
                 {/* Header */}
-                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-alt)' }}>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-alt)', borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}>
                   <div>
                     {pipelineModal.leadStatus === 'nurture' ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -12742,8 +12742,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   </button>
                 </div>
 
-                {/* Body Content Scrollable */}
-                <div style={{ padding: '1.25rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }} className="custom-scrollbar">
+                {/* Body Content */}
+                <div style={{ padding: '1.25rem', overflowY: 'visible', display: 'flex', flexDirection: 'column', gap: '1rem' }} className="custom-scrollbar">
                   
                   {/* Nurture Mode */}
                   {pipelineModal.leadStatus === 'nurture' && (
@@ -12764,16 +12764,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
                           Lý do nuôi dưỡng <span style={{ color: '#ef4444' }}>*</span>
                         </label>
-                        <select
-                          className="form-input"
+                        <CustomSelect
                           value={pipelineModal.nurtureReason || ''}
-                          onChange={e => setPipelineModal({ ...pipelineModal, nurtureReason: e.target.value })}
-                        >
-                          <option value="">-- Chọn lý do nuôi dưỡng --</option>
-                          {standardNurtureReasons.map((r, i) => (
-                            <option key={i} value={r}>{r}</option>
-                          ))}
-                        </select>
+                          onChange={val => setPipelineModal({ ...pipelineModal, nurtureReason: val })}
+                          placeholder="-- Chọn lý do nuôi dưỡng --"
+                          options={standardNurtureReasons.map(r => ({ value: r, label: r }))}
+                          width="100%"
+                        />
                       </div>
                     </>
                   )}
@@ -12784,16 +12781,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
                         Lý do mất lead <span style={{ color: '#ef4444' }}>*</span>
                       </label>
-                      <select
-                        className="form-input"
+                      <CustomSelect
                         value={pipelineModal.lostReason || ''}
-                        onChange={e => setPipelineModal({ ...pipelineModal, lostReason: e.target.value })}
-                      >
-                        <option value="">-- Chọn lý do mất Lead --</option>
-                        {standardLostReasons.map((r, i) => (
-                          <option key={i} value={r}>{r}</option>
-                        ))}
-                      </select>
+                        onChange={val => setPipelineModal({ ...pipelineModal, lostReason: val })}
+                        placeholder="-- Chọn lý do mất Lead --"
+                        options={standardLostReasons.map(r => ({ value: r, label: r }))}
+                        width="100%"
+                      />
                     </div>
                   )}
 
@@ -12895,7 +12889,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 </div>
 
                 {/* Footer Controls */}
-                <div style={{ padding: '0.875rem 1.25rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', gap: '0.625rem', background: 'var(--color-bg-alt)' }}>
+                <div style={{ padding: '0.875rem 1.25rem', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', gap: '0.625rem', background: 'var(--color-bg-alt)', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
                   <button className="btn outline" onClick={() => setPipelineModal({ ...pipelineModal, isOpen: false })} disabled={isSubmitting}>
                     Hủy
                   </button>
