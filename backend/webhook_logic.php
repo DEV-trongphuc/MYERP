@@ -3918,8 +3918,8 @@ function ensurePersonAndContact($conn, $leadId) {
     if (!$person) return;
     $person_id = $person['id'];
 
-    // Update Lead with person_id
-    $stmtUpLead = $conn->prepare("UPDATE leads SET person_id = ? WHERE id = ?");
+    // Update Lead with person_id and fresh interaction date
+    $stmtUpLead = $conn->prepare("UPDATE leads SET person_id = ?, last_interaction_date = NOW() WHERE id = ?");
     if ($stmtUpLead) {
         $stmtUpLead->bind_param("ii", $person_id, $leadId);
         $stmtUpLead->execute();
@@ -4030,8 +4030,9 @@ function ensurePersonAndContact($conn, $leadId) {
                     SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                         email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
                         phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
-                        notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ']\n'), ?)),
+                        notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách hàng nhắc lại / tương tác mới]\n'), ?)),
                         customer_type = IF(? != '', ?, customer_type),
+                        last_contact = NOW(),
                         updated_at = NOW()
                     WHERE id = ?
                 ");
@@ -4060,6 +4061,7 @@ function ensurePersonAndContact($conn, $leadId) {
                             security_expires_at = ?,
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n'), ?)),
                             customer_type = IF(? != '', ?, customer_type),
+                            last_contact = NOW(),
                             updated_at = NOW()
                         WHERE id = ?
                     ");
@@ -4089,6 +4091,7 @@ function ensurePersonAndContact($conn, $leadId) {
                             phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', '\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n'), ?)),
                             customer_type = IF(? != '', ?, customer_type),
+                            last_contact = NOW(),
                             updated_at = NOW()
                         WHERE id = ?
                     ");

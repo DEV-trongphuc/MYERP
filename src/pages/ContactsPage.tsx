@@ -41,14 +41,70 @@ const cleanInteractionText = (text: string) => {
     .trim();
 };
 
-const getInteractionTime = (lastContact: string | null, updatedAt: string, createdAt: string) => {
-  if (!lastContact) return updatedAt || createdAt;
-  const contactDate = lastContact.slice(0, 10);
-  const updateDate = (updatedAt || '').slice(0, 10);
-  if (contactDate === updateDate) {
-    return updatedAt;
-  }
-  return lastContact;
+const getInteractionTime = (lastContact: string | null, updatedAt: string, createdAt: string, distributedAt?: string | null) => {
+  const parseTime = (t: string | null | undefined) => {
+    if (!t) return 0;
+    const ms = new Date(t).getTime();
+    return isNaN(ms) ? 0 : ms;
+  };
+  const maxMs = Math.max(parseTime(lastContact), parseTime(updatedAt), parseTime(createdAt), parseTime(distributedAt));
+  return maxMs > 0 ? new Date(maxMs).toISOString() : (lastContact || updatedAt || createdAt);
+};
+
+const renderInteractionInfo = (c: any) => {
+  const interactionTime = getInteractionTime(c.last_contact, c.updated_at, c.created_at, c.distributed_at);
+  const timeText = formatTimeAgo(interactionTime);
+  const isReassigned = Boolean(
+    c.notes?.includes('Tái phân bổ') || 
+    c.notes?.includes('giao lại') || 
+    c.notes?.includes('Giao lại') ||
+    c.round_name?.toLowerCase().includes('giao lại') ||
+    c.round_name?.toLowerCase().includes('tái phân')
+  );
+  const isReminder = Boolean(
+    !isReassigned && (
+      c.notes?.includes('nhắc lại') || 
+      c.notes?.includes('Nhắc lại') || 
+      c.notes?.includes('đăng ký lại') || 
+      c.notes?.includes('Đăng ký lại') || 
+      c.dl_status === 'duplicate' ||
+      c.round_name?.toLowerCase().includes('nhắc lại')
+    )
+  );
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+        Tương tác: {timeText}
+      </span>
+      {isReassigned && (
+        <span style={{ 
+          fontSize: '0.625rem', 
+          fontWeight: 700, 
+          padding: '1px 5px', 
+          borderRadius: '4px', 
+          background: 'rgba(245, 158, 11, 0.12)', 
+          color: '#d97706',
+          lineHeight: '1.2'
+        }}>
+          Giao lại
+        </span>
+      )}
+      {isReminder && (
+        <span style={{ 
+          fontSize: '0.625rem', 
+          fontWeight: 700, 
+          padding: '1px 5px', 
+          borderRadius: '4px', 
+          background: 'rgba(59, 130, 246, 0.12)', 
+          color: '#2563eb',
+          lineHeight: '1.2'
+        }}>
+          Nhắc lại
+        </span>
+      )}
+    </div>
+  );
 };
 
 const calcScore = (c: any, rules: any, decayDays = 5) => {
@@ -2390,20 +2446,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {columns.find(col => col.id === 'owner')?.visible && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
                             {isSale ? (
-                              <div 
-                                style={{ 
-                                  fontSize: '0.725rem', 
-                                  color: c.last_interaction ? 'var(--color-text)' : 'var(--color-text-muted)',
-                                  fontWeight: c.last_interaction ? 500 : 400,
-                                  minWidth: '200px',
-                                  maxWidth: '350px',
-                                  whiteSpace: 'normal',
-                                  wordBreak: 'break-word',
-                                  lineHeight: '1.4'
-                                }}
-                                title={cleanInteractionText(c.last_interaction) || undefined}
-                              >
-                                {cleanInteractionText(c.last_interaction) || 'Chưa có tương tác'}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {renderInteractionInfo(c)}
+                                <div 
+                                  style={{ 
+                                    fontSize: '0.725rem', 
+                                    color: c.last_interaction ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                    fontWeight: c.last_interaction ? 500 : 400,
+                                    minWidth: '200px',
+                                    maxWidth: '350px',
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'break-word',
+                                    lineHeight: '1.4'
+                                  }}
+                                  title={cleanInteractionText(c.last_interaction) || undefined}
+                                >
+                                  {cleanInteractionText(c.last_interaction) || (c.notes ? c.notes.trim().split('\n').pop() : 'Chưa có tương tác')}
+                                </div>
                               </div>
                             ) : c.owner_name ? (() => {
                               const collabs = (c.collaborator_ids || '')
@@ -2433,9 +2492,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                           (+{collabs.length})
                                         </span>
                                       </span>
-                                      <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                                        Tương tác: {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
-                                      </span>
+                                      {renderInteractionInfo(c)}
                                     </div>
                                   </div>
                                 );
@@ -2446,9 +2503,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <Avatar name={c.owner_name} src={c.owner_avatar} size={32} />
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                     <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{c.owner_name}</span>
-                                    <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                                      Tương tác: {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
-                                    </span>
+                                    {renderInteractionInfo(c)}
                                   </div>
                                 </div>
                               );
@@ -2459,9 +2514,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa giao</span>
-                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                                    Tương tác: {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
-                                  </span>
+                                  {renderInteractionInfo(c)}
                                 </div>
                               </div>
                             )}
@@ -2536,6 +2589,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.35 }}>
                                   <div style={{ fontWeight: 600 }}>{dateStr}</div>
                                   <div style={{ fontSize: '0.725rem', opacity: 0.85 }}>{timeStr}</div>
+                                  {Boolean(c.distributed_at && new Date(c.distributed_at).getTime() > (new Date(c.created_at).getTime() + 86400000)) && (
+                                    <div style={{ fontSize: '0.675rem', color: '#d97706', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap' }}>
+                                      Giao: {new Date(c.distributed_at).toLocaleDateString('vi-VN')}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })() : '—'}
@@ -2851,9 +2909,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               </div>
                               <div>
                                 <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Tương tác cuối</p>
-                                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                  {formatTimeAgo(getInteractionTime(c.last_contact, c.updated_at, c.created_at))}
-                                </p>
+                                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                  {renderInteractionInfo(c)}
+                                </div>
                               </div>
                             </div>
                           </div>
