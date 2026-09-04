@@ -275,15 +275,26 @@ class NotificationService {
                 ];
 
             case 'ATTENDANCE_UPDATE':
-                $recipients = self::getAdminsAndManagers($db, $tenantId, $payload['team_id'] ?? null);
                 $isBulk = !empty($payload['is_bulk']);
+                $targetUid = (int)($payload['user_id'] ?? $payload['approver_id'] ?? 0);
+                if (!empty($payload['recipients'])) {
+                    $recipients = $payload['recipients'];
+                } elseif ($targetUid > 0) {
+                    $recipients = self::getRecipientById($db, $targetUid);
+                } else {
+                    $recipients = self::getAdminsAndManagers($db, $tenantId, $payload['team_id'] ?? null);
+                }
                 $bulkLink = $isBulk && !empty($payload['ref_id']) 
                     ? "/approvals?open_id=" . $payload['ref_id'] . "&open_type=attendance_bulk" 
                     : "/attendance?view=calendar&date=" . $today;
+                $title = $isBulk ? "Đề xuất cập nhật công gộp - NV $userName" : "Yêu cầu cập nhật công - NV $userName";
+                $body = $isBulk 
+                    ? "Nhân viên $userName vừa gửi Phiếu cập nhật công gộp cần bạn phê duyệt: \"" . $reason . "\""
+                    : "Nhân viên $userName vừa gửi Yêu cầu cập nhật công bổ sung ngày $today lúc " . substr($time, 0, 5) . " với lý do: \"" . $reason . "\"";
                 return [
                     'recipients' => $recipients,
-                    'title' => "Yêu cầu cập nhật công",
-                    'body' => "Nhân viên " . $userName . " vừa gửi Yêu cầu cập nhật công bổ sung ngày " . $today . " lúc " . substr($time, 0, 5) . " với lý do: \"" . $reason . "\"",
+                    'title' => $title,
+                    'body' => $body,
                     'type' => "attendance_update",
                     'link' => $bulkLink,
                     'zalo_msg' => "🔄 [ YÊU CẦU CẬP NHẬT CÔNG ]\n\n"
@@ -1475,7 +1486,7 @@ class NotificationService {
                            COALESCE(NULLIF(NULLIF(TRIM(u.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết'), NULLIF(NULLIF(TRIM(c.telegram_chat_id), 'chưa liên kết'), 'Chưa liên kết')) AS telegram_chat_id
                     FROM users u
                     LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
-                    WHERE u.tenant_id = ? AND u.status = 'active' AND u.role IN ('hr', 'accountant')
+                    WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role IN ('hr', 'accountant')
                 ");
                 $stmtHr->execute([$tenantId]);
                 $recipients = $stmtHr->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -1663,7 +1674,7 @@ class NotificationService {
                                u.full_name, c.id AS is_consultant
                         FROM users u
                         LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
-                        WHERE u.id IN ($inPlace) AND u.status = 'active'
+                        WHERE u.id IN ($inPlace) AND u.is_active = 1
                     ");
                     $stmtL->execute(array_values($leaderIds));
                     $teamApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -1683,7 +1694,7 @@ class NotificationService {
             FROM users u
             LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
             WHERE u.tenant_id = ? 
-              AND u.status = 'active'
+              AND u.is_active = 1
               AND u.role IN ('admin', 'superadmin', 'super_admin', 'hr')
         ";
         $stmt = $db->prepare($sql);
@@ -1730,7 +1741,7 @@ class NotificationService {
                         
                         if (!empty($leaderIds)) {
                             $inPlace = implode(',', array_fill(0, count($leaderIds), '?'));
-                            $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inPlace) AND status = 'active'");
+                            $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inPlace) AND is_active = 1");
                             $stmtL->execute(array_values($leaderIds));
                             $teamApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
                             if (!empty($teamApprovers)) {
@@ -1769,7 +1780,7 @@ class NotificationService {
                                     }
                                     if (!empty($lIds)) {
                                         $inP = implode(',', array_fill(0, count($lIds), '?'));
-                                        $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inP) AND status = 'active'");
+                                        $stmtL = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE id IN ($inP) AND is_active = 1");
                                         $stmtL->execute(array_values($lIds));
                                         $tApprovers = $stmtL->fetchAll(PDO::FETCH_ASSOC) ?: [];
                                         if (!empty($tApprovers)) return $tApprovers;
@@ -1800,7 +1811,7 @@ class NotificationService {
                 }
 
                 $whereStr = implode(' OR ', $whereClauses);
-                $sql = "SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE tenant_id = ? AND status = 'active' AND ($whereStr)";
+                $sql = "SELECT id, email, zalo_chat_id, telegram_chat_id, full_name FROM users WHERE tenant_id = ? AND is_active = 1 AND ($whereStr)";
                 $stmtD = $db->prepare($sql);
                 $stmtD->execute($params);
                 $desigApprovers = $stmtD->fetchAll(PDO::FETCH_ASSOC) ?: [];

@@ -79,11 +79,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     const params = new URLSearchParams(location.search);
     const dateParam = params.get('date') || params.get('open_date');
     const viewParam = params.get('view');
+    const userParam = params.get('user_id');
 
     if (viewParam === 'calendar') {
       setViewMode('calendar');
     } else if (viewParam === 'list') {
       setViewMode('list');
+    }
+
+    if (userParam) {
+      setFilterUser(userParam);
     }
 
     if (dateParam) {
@@ -416,6 +421,30 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   });
   const [filterUser, setFilterUser] = useState<string>(isSales ? String(user?.id) : 'all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const isViewingSelf = Boolean(user?.id) && String(filterUser) === String(user?.id);
+
+  const userSelectOptions = useMemo(() => {
+    const opts: Array<{ value: string; label: string; avatar?: string }> = [
+      { value: 'all', label: isMobile ? t('Tất cả NV') : t('Tất cả nhân viên') }
+    ];
+    if (user?.id) {
+      opts.push({
+        value: String(user.id),
+        label: `⭐ ${t('Cá nhân (tôi)')} - ${user.name || (user as any)?.full_name || t('Tôi')}`,
+        avatar: resolveAttachmentUrl(user.avatar_url || (user as any)?.avatar)
+      });
+    }
+    consultants
+      .filter(c => String(c.id) !== String(user?.id))
+      .forEach(c => {
+        opts.push({
+          value: String(c.id),
+          label: c.name,
+          avatar: resolveAttachmentUrl(c.avatar_url || c.avatar)
+        });
+      });
+    return opts;
+  }, [consultants, user, isMobile, t]);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -1099,25 +1128,41 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             </button>
           </div>
 
-          {/* User Select (If Admin / Supervisor) */}
+          {/* User Select & Quick Toggle (If Admin / Supervisor / Manager) */}
           {canSelectUser && (
-            <div style={{ width: isMobile ? '100%' : '170px', flex: isMobile ? '1 1 100%' : 'none' }}>
-              <CustomSelect
-                options={[
-                  { value: 'all', label: isMobile ? t('Tất cả NV') : t('Tất cả nhân viên') },
-                  ...consultants.map(c => ({ 
-                    value: String(c.id), 
-                    label: c.name,
-                    avatar: resolveAttachmentUrl(c.avatar_url || c.avatar)
-                  }))
-                ]}
-                value={filterUser}
-                onChange={(val) => setFilterUser(String(val))}
-                width="100%"
-                size={isMobile ? 'xs' : 'sm'}
-                searchable={true}
-                showAvatars={true}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: isMobile ? '100%' : 'auto', flex: isMobile ? '1 1 100%' : 'none' }}>
+              <div style={{ width: isMobile ? 'calc(100% - 92px)' : '170px', flex: isMobile ? 1 : 'none' }}>
+                <CustomSelect
+                  options={userSelectOptions}
+                  value={filterUser}
+                  onChange={(val) => setFilterUser(String(val))}
+                  width="100%"
+                  size={isMobile ? 'xs' : 'sm'}
+                  searchable={true}
+                  showAvatars={true}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterUser(prev => prev === String(user?.id) ? 'all' : String(user?.id))}
+                className={`btn ${isViewingSelf ? 'primary' : 'outline'}`}
+                style={{
+                  height: isMobile ? '32px' : '36px',
+                  padding: isMobile ? '0 8px' : '0 10px',
+                  fontSize: isMobile ? '0.72rem' : '0.8rem',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-md)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+                title={isViewingSelf ? t('Chuyển sang xem toàn bộ nhân viên') : t('Xem bảng chấm công và lịch cá nhân của tôi')}
+              >
+                <Users size={13} />
+                <span>{isViewingSelf ? t('Xem cả phòng') : t('Của tôi')}</span>
+              </button>
             </div>
           )}
 
@@ -1438,7 +1483,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             let bg = isApproved ? (checkInLate ? 'rgba(0, 122, 255, 0.06)' : 'rgba(16, 185, 129, 0.08)') : isPending ? 'rgba(245, 158, 11, 0.06)' : 'rgba(239, 68, 68, 0.06)';
                             let border = isApproved ? (checkInLate ? 'rgba(0, 122, 255, 0.15)' : 'rgba(16, 185, 129, 0.15)') : isPending ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)';
                             let txtColor = isApproved ? (checkInLate ? '#007aff' : '#10b981') : isPending ? '#d97706' : '#ef4444';
-                            let tagLabel = isSales ? (isSupplementary ? (isMobile ? t('C.công') : t('Cập nhật công')) : (isMobile ? t('CI') : t('Check-in'))) : c.user_name;
+                            let tagLabel = (isSales || isViewingSelf) ? (isSupplementary ? (isMobile ? t('C.công') : t('Cập nhật công')) : (isMobile ? t('CI') : t('Check-in'))) : c.user_name;
 
                             if (isSupplementary) {
                               bg = 'rgba(139, 92, 246, 0.08)';
@@ -1447,7 +1492,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             }
 
                             const inTimeStr = c.check_in_time ? c.check_in_time.substring(0, 5) : '';
-                            const outTimeStr = c.check_out_time ? (c.check_out_time.substring(11, 16) || c.check_out_time.substring(0, 5)) : '';
+                            const outTimeStr = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)) : '';
 
                             return (
                               <div
@@ -1491,7 +1536,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                     justifyContent: 'space-between',
                                     gap: '4px'
                                   }}>
-                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80px' }}>
+                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: (isSales || isViewingSelf) ? '62px' : '80px' }}>
                                       {tagLabel}
                                     </span>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
@@ -3873,25 +3918,41 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             />
           </div>
 
-          {/* User Select */}
+          {/* User Select & Quick Toggle (If Admin / Supervisor / Manager) */}
           {canSelectUser && (
-            <div style={{ width: isMobile ? '100%' : '170px', flex: isMobile ? '1 1 100%' : 'none' }}>
-              <CustomSelect
-                options={[
-                  { value: 'all', label: isMobile ? t('Tất cả NV') : t('Tất cả nhân viên') },
-                  ...consultants.map(c => ({ 
-                    value: String(c.id), 
-                    label: c.name,
-                    avatar: resolveAttachmentUrl(c.avatar_url || c.avatar)
-                  }))
-                ]}
-                value={filterUser}
-                onChange={(val) => setFilterUser(String(val))}
-                width="100%"
-                size={isMobile ? 'xs' : 'sm'}
-                searchable={true}
-                showAvatars={true}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: isMobile ? '100%' : 'auto', flex: isMobile ? '1 1 100%' : 'none' }}>
+              <div style={{ width: isMobile ? 'calc(100% - 92px)' : '170px', flex: isMobile ? 1 : 'none' }}>
+                <CustomSelect
+                  options={userSelectOptions}
+                  value={filterUser}
+                  onChange={(val) => setFilterUser(String(val))}
+                  width="100%"
+                  size={isMobile ? 'xs' : 'sm'}
+                  searchable={true}
+                  showAvatars={true}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterUser(prev => prev === String(user?.id) ? 'all' : String(user?.id))}
+                className={`btn ${isViewingSelf ? 'primary' : 'outline'}`}
+                style={{
+                  height: isMobile ? '32px' : '36px',
+                  padding: isMobile ? '0 8px' : '0 10px',
+                  fontSize: isMobile ? '0.72rem' : '0.8rem',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-md)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+                title={isViewingSelf ? t('Chuyển sang xem toàn bộ nhân viên') : t('Xem bảng chấm công và lịch cá nhân của tôi')}
+              >
+                <Users size={13} />
+                <span>{isViewingSelf ? t('Xem cả phòng') : t('Của tôi')}</span>
+              </button>
             </div>
           )}
 
@@ -4104,7 +4165,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               </div>
                               {row.check_out_time && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: row.early_minutes > 0 ? '#f59e0b' : 'var(--color-text-muted)' }}>
-                                  <span>{t('Ra:')} {row.check_out_time.substring(11, 16)}</span>
+                                  <span>{t('Ra:')} {row.check_out_time.length > 8 ? row.check_out_time.substring(11, 16) : row.check_out_time.substring(0, 5)}</span>
                                   {row.early_minutes > 0 && (
                                     <span style={{ fontSize: '0.65rem', fontWeight: 500, backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 5px', borderRadius: '4px' }}>
                                       {t('Về sớm')} {row.early_minutes}m
@@ -4573,7 +4634,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 }}
               >
                 <FileText size={isMobile ? 12 : 14} />
-                {(isSales && filterUser === String(user?.id)) ? t('Yêu cầu') : t('Bảng công')}
+                {(isSales || isViewingSelf) ? t('Yêu cầu') : t('Bảng công')}
               </button>
 
               {(() => {
@@ -4885,7 +4946,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               ) : modalTab === 'fingerprint' ? (
                 /* Sub-tab 2: Fingerprint Excel / Supplementary Form */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  {(isSales && filterUser === String(user?.id)) ? (() => {
+                  {(isSales || isViewingSelf) ? (() => {
                     const todayStr = new Date().toISOString().slice(0, 10);
                     const detailCheckIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
                     const pendingCheckIn = detailCheckIns.find(c => c.status === 'pending_approval');

@@ -1079,8 +1079,9 @@ export const Header = ({
           <div className="responsive-hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px' }}>
             {(() => {
               const activeCheckIn = todayCheckIn || headerCheckIn;
-              const isNotCheckedIn = !activeCheckIn || activeCheckIn.status === 'rejected';
-              const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd;
+              const isPendingApproval = activeCheckIn && (activeCheckIn.status === 'pending_approval' || Boolean(activeCheckIn.pending_explanation_today));
+              const isNotCheckedIn = (!activeCheckIn || activeCheckIn.status === 'rejected') && !isPendingApproval;
+              const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd && !activeCheckIn?.pending_explanation_today;
 
               if (isPastShiftEndWithoutCheckIn) {
                 const todayStr = new Date().toISOString().split('T')[0];
@@ -1117,7 +1118,7 @@ export const Header = ({
                     onMouseEnter={prewarmSmartCheckInGPS}
                     onTouchStart={prewarmSmartCheckInGPS}
                     onClick={() => {
-                      navigate('/attendance');
+                      navigate('/attendance?user_id=' + (user?.id || ''));
                     }}
                     style={{ 
                       display: 'flex', 
@@ -1147,15 +1148,15 @@ export const Header = ({
                 );
               }
 
-              if (headerCheckIn && headerCheckIn.status === 'pending_approval') {
+              if (activeCheckIn && (activeCheckIn.status === 'pending_approval' || activeCheckIn.pending_explanation_today)) {
                 return (
                   <div 
-                    onClick={() => navigate('/attendance')}
+                    onClick={() => navigate('/attendance?user_id=' + (user?.id || ''))}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', borderRadius: '8px', padding: '4px 10px', height: '36px', fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
                     title={t('Click để Xem bảng chấm công cá nhân')}
                   >
                     <Clock size={12} />
-                    <span>{`${t('Chờ duyệt trễ')} (${headerCheckIn.check_in_time.substring(0, 5)})`}</span>
+                    <span>{activeCheckIn.check_in_time ? `${t('Chờ duyệt')} (${activeCheckIn.check_in_time.substring(0, 5)})` : t('Chờ duyệt công')}</span>
                   </div>
                 );
               }
@@ -2543,24 +2544,26 @@ export const Header = ({
           `}</style>
           {(() => {
             const activeCheckIn = todayCheckIn || headerCheckIn;
-            const isNotCheckedIn = !activeCheckIn || activeCheckIn.status === 'rejected';
-            const isPendingApproval = activeCheckIn && activeCheckIn.status === 'pending_approval';
+            const isPendingApproval = activeCheckIn && (activeCheckIn.status === 'pending_approval' || Boolean(activeCheckIn.pending_explanation_today));
+            const isNotCheckedIn = (!activeCheckIn || activeCheckIn.status === 'rejected') && !isPendingApproval;
             const isApprovedCheckIn = activeCheckIn && (activeCheckIn.status === 'approved' || Boolean(activeCheckIn.check_in_time));
             const needsCheckOut = requireCheckout && isApprovedCheckIn && !activeCheckIn.check_out_time;
             const isCompletedCheckIn = isApprovedCheckIn && (!requireCheckout || Boolean(activeCheckIn.check_out_time));
 
             // Quá giờ tan ca hôm nay mà cả ngày chưa chấm công (trừ ngày nghỉ)
-            const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd;
+            const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd && !activeCheckIn?.pending_explanation_today;
 
             const handleClick = () => {
               if (isPastShiftEndWithoutCheckIn) {
                 const todayStr = new Date().toISOString().split('T')[0];
                 navigate(`/approvals?create=attendance_bulk&date=${todayStr}`);
+              } else if (isPendingApproval) {
+                navigate('/attendance?user_id=' + (user?.id || ''));
               } else if (isNotCheckedIn || needsCheckOut) {
                 prewarmSmartCheckInGPS();
                 window.dispatchEvent(new CustomEvent('trigger-checkin-modal'));
               } else {
-                navigate('/attendance');
+                navigate('/attendance?user_id=' + (user?.id || ''));
               }
             };
 

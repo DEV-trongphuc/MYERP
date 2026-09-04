@@ -11,38 +11,110 @@ class CheckInController {
     public function index(array $auth): void {
         // Option to check only today's check-in for the logged-in user (useful for dashboard/buttons)
         if (isset($_GET['today_only']) && $_GET['today_only'] == '1') {
+            $today = date('Y-m-d');
+            $row = null;
             try {
                 $stmt = $this->db->prepare("
-                    SELECT c.*, IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time, u.full_name as user_name
+                    SELECT c.*, 
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time,
+                           u.full_name as user_name
                     FROM check_ins c
                     JOIN users u ON c.user_id = u.id
                     WHERE c.user_id = ? AND c.check_in_date = ?
                 ");
-                $stmt->execute([$auth['user_id'], date('Y-m-d')]);
-                $row = $stmt->fetch();
-                respond(200, $row ?: null, 'Lấy thông tin check-in hôm nay thành công');
+                $stmt->execute([$auth['user_id'], $today]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
             } catch (\Throwable $e) {
-                $stmt = $this->db->prepare("
-                    SELECT c.*, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1) AS work_start_time, u.full_name as user_name
-                    FROM check_ins c
-                    JOIN users u ON c.user_id = u.id
-                    WHERE c.user_id = ? AND c.check_in_date = ?
-                ");
-                $stmt->execute([$auth['user_id'], date('Y-m-d')]);
-                $row = $stmt->fetch();
-                respond(200, $row ?: null, 'Lấy thông tin check-in hôm nay thành công');
+                try {
+                    $stmt = $this->db->prepare("
+                        SELECT c.*, 
+                               (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1) AS work_start_time,
+                               (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1) AS work_end_time,
+                               u.full_name as user_name
+                        FROM check_ins c
+                        JOIN users u ON c.user_id = u.id
+                        WHERE c.user_id = ? AND c.check_in_date = ?
+                    ");
+                    $stmt->execute([$auth['user_id'], $today]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                } catch (\Throwable $e2) {}
             }
+
+            // If no check_ins record exists or status is rejected, check if user submitted an attendance update for today that is pending approval
+            if (!$row || $row['status'] === 'rejected') {
+                try {
+                    // Check bulk requests
+                    $bulkStmt = $this->db->prepare("
+                        SELECT d.id, d.suggested_check_in, d.suggested_check_out, r.id as request_id, r.status
+                        FROM attendance_bulk_request_details d
+                        JOIN attendance_bulk_requests r ON d.request_id = r.id
+                        WHERE r.user_id = ? AND d.date = ? AND r.status IN ('pending_manager', 'pending_hr', 'pending')
+                        ORDER BY r.id DESC LIMIT 1
+                    ");
+                    $bulkStmt->execute([$auth['user_id'], $today]);
+                    $bulkDetail = $bulkStmt->fetch(PDO::FETCH_ASSOC);
+
+                    if ($bulkDetail) {
+                        $row = [
+                            'id' => 0,
+                            'user_id' => $auth['user_id'],
+                            'check_in_date' => $today,
+                            'check_in_time' => $bulkDetail['suggested_check_in'] ?? null,
+                            'check_out_time' => $bulkDetail['suggested_check_out'] ?? null,
+                            'status' => 'pending_approval',
+                            'pending_explanation_today' => true,
+                            'is_bulk_pending' => true,
+                            'bulk_request_id' => $bulkDetail['request_id'],
+                            'work_start_time' => '08:00',
+                            'work_end_time' => '17:00',
+                            'user_name' => $auth['full_name'] ?? ''
+                        ];
+                    } else {
+                        // Check single attendance requests
+                        $reqStmt = $this->db->prepare("
+                            SELECT id, status, requested_time
+                            FROM attendance_requests
+                            WHERE user_id = ? AND date = ? AND status = 'pending'
+                            ORDER BY id DESC LIMIT 1
+                        ");
+                        $reqStmt->execute([$auth['user_id'], $today]);
+                        $singleReq = $reqStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($singleReq) {
+                            $row = [
+                                'id' => 0,
+                                'user_id' => $auth['user_id'],
+                                'check_in_date' => $today,
+                                'check_in_time' => $singleReq['requested_time'] ?? null,
+                                'check_out_time' => null,
+                                'status' => 'pending_approval',
+                                'pending_explanation_today' => true,
+                                'request_id' => $singleReq['id'],
+                                'work_start_time' => '08:00',
+                                'work_end_time' => '17:00',
+                                'user_name' => $auth['full_name'] ?? ''
+                            ];
+                        }
+                    }
+                } catch (\Throwable $e3) {}
+            }
+
+            respond(200, $row ?: null, 'Lấy thông tin check-in hôm nay thành công');
         }
 
         $isManager = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'hr'], true);
         
         try {
-            $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time
+            $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, 
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_start_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1)) AS work_start_time,
+                           IF(COALESCE(u.use_custom_work_hours, 0) = 1, u.work_end_time, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1)) AS work_end_time
                     FROM check_ins c
                     JOIN users u ON c.user_id = u.id
                     WHERE u.tenant_id = ?";
         } catch (\Throwable $e) {
-            $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1) AS work_start_time
+            $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, 
+                           (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_start_time' LIMIT 1) AS work_start_time,
+                           (SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_end_time' LIMIT 1) AS work_end_time
                     FROM check_ins c
                     JOIN users u ON c.user_id = u.id
                     WHERE u.tenant_id = ?";
