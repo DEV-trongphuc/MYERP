@@ -2449,15 +2449,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {renderInteractionInfo(c)}
                                 <div 
+                                  className="custom-scrollbar"
+                                  onClick={e => e.stopPropagation()}
                                   style={{ 
                                     fontSize: '0.725rem', 
                                     color: c.last_interaction ? 'var(--color-text)' : 'var(--color-text-muted)',
                                     fontWeight: c.last_interaction ? 500 : 400,
                                     minWidth: '200px',
                                     maxWidth: '350px',
+                                    maxHeight: '70px',
+                                    overflowY: 'auto',
                                     whiteSpace: 'normal',
                                     wordBreak: 'break-word',
-                                    lineHeight: '1.4'
+                                    lineHeight: '1.4',
+                                    paddingRight: '4px'
                                   }}
                                   title={cleanInteractionText(c.last_interaction) || undefined}
                                 >
