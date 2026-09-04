@@ -673,9 +673,12 @@ class DealController {
             }
         }
 
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing'], true) || $isMarketing) {
+        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true) || $isMarketing) {
             if (($isMarketing || strtolower($auth['role'] ?? '') === 'marketing') && $action === 'delete') {
                 return 'none';
+            }
+            if (in_array(strtolower($auth['role'] ?? ''), ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true) && $action === 'delete') {
+                return 'own';
             }
             return 'all';
         }
@@ -719,6 +722,9 @@ class DealController {
         }
         if ($role === 'marketing') {
             return 'all';
+        }
+        if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+            return $action === 'delete' ? 'own' : 'all';
         }
 
         return 'none';

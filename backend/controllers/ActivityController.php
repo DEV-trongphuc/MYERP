@@ -236,7 +236,7 @@ class ActivityController {
             return false;
         }
 
-        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin'], true)) {
+        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
             return true;
         }
 

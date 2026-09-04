@@ -52,7 +52,7 @@ class ProjectController {
         $stmtProj->execute([$projectId]);
         $proj = $stmtProj->fetch(PDO::FETCH_ASSOC);
         
-        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing'], true);
+        $isAuthorized = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true);
         if ($proj) {
             if ($proj['created_by'] && (int)$proj['created_by'] === (int)$auth['user_id']) {
                 $isAuthorized = true;
@@ -227,7 +227,7 @@ class ProjectController {
     }
 
     public function store(array $auth): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director']);
+        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien']);
         $b = getBody();
         $name = trim($b['name'] ?? '');
         $code = trim($b['code'] ?? '');

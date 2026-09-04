@@ -67,7 +67,7 @@ if (!function_exists('getModulePermissionScope')) {
             if (in_array($module, ['companies', 'lecturers'], true)) {
                 return 'all';
             }
-            if (in_array($module, ['leads', 'contacts', 'students', 'deals', 'projects', 'campaigns', 'files', 'users', 'schedules', 'expenses'], true)) {
+            if (in_array($module, ['leads', 'contacts', 'students', 'deals', 'projects', 'campaigns', 'files', 'users', 'schedules', 'expenses', 'activities'], true)) {
                 return $action === 'delete' ? 'own' : 'all';
             }
             if (in_array($module, ['settings', 'hrm', 'finance', 'deposits', 'gatekeeper', 'rounds', 'rules', 'integrations'], true)) {
@@ -163,6 +163,20 @@ if (!function_exists('getActionModuleAndType')) {
             $module = 'settings';
         } else if (in_array($action, ['get_ticket_settings', 'save_ticket_settings', 'ai_chat', 'custom_fields'])) {
             $module = 'settings';
+        } else if (strpos($action, 'activity') !== false || strpos($action, 'activities') !== false) {
+            $module = 'activities';
+        } else if (strpos($action, 'contact') !== false || strpos($action, 'student') !== false) {
+            $module = 'contacts';
+        } else if (strpos($action, 'deal') !== false) {
+            $module = 'deals';
+        } else if (strpos($action, 'project') !== false) {
+            $module = 'projects';
+        } else if (strpos($action, 'company') !== false || strpos($action, 'companies') !== false) {
+            $module = 'companies';
+        } else if (strpos($action, 'schedule') !== false) {
+            $module = 'schedules';
+        } else if (strpos($action, 'expense') !== false) {
+            $module = 'expenses';
         }
         
         return [$module, $actionType];

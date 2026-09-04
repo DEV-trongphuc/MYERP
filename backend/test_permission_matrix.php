@@ -7,7 +7,7 @@ require_once __DIR__ . '/permission_matrix_helper.php';
 echo "🚀 BẮT ĐẦU KIỂM THỬ KHÉP KÍN BẢNG PHÂN QUYỀN (RBAC MATRIX AUDIT)\n";
 echo "==================================================================\n\n";
 
-$roles = ['superadmin', 'admin', 'hr', 'accountant', 'marketing', 'director', 'manager', 'assistant', 'sale', 'sales', 'viewer', 'unknown'];
+$roles = ['superadmin', 'admin', 'hr', 'accountant', 'marketing', 'academic', 'director', 'manager', 'assistant', 'sale', 'sales', 'viewer', 'unknown'];
 $modules = ['hrm', 'attendance', 'users', 'expenses', 'settings', 'deals', 'deposits', 'finance', 'invoices', 'quotes', 'leads', 'campaigns', 'projects', 'tickets'];
 $actions = ['read', 'write', 'delete'];
 
@@ -45,6 +45,19 @@ function getExpectedScope($role, $module, $action) {
             return 'all';
         }
         if ($module === 'settings') {
+            return 'none';
+        }
+        return 'own';
+    }
+
+    if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+        if (in_array($module, ['companies', 'lecturers'], true)) {
+            return 'all';
+        }
+        if (in_array($module, ['leads', 'contacts', 'students', 'deals', 'projects', 'campaigns', 'files', 'users', 'schedules', 'expenses', 'activities'], true)) {
+            return $action === 'delete' ? 'own' : 'all';
+        }
+        if (in_array($module, ['settings', 'hrm', 'finance', 'deposits', 'gatekeeper', 'rounds', 'rules', 'integrations'], true)) {
             return 'none';
         }
         return 'own';

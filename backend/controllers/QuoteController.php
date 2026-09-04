@@ -422,7 +422,7 @@ class QuoteController {
             $permissionsJson = json_decode($resQ['permissions_json'], true);
         }
 
-        if (in_array($auth['role'], ['admin', 'superadmin', 'super_admin'], true)) {
+        if (in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
             return 'all';
         }
 
@@ -462,6 +462,9 @@ class QuoteController {
         }
         if ($role === 'viewer') {
             return $action === 'read' ? 'all' : 'none';
+        }
+        if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+            return $action === 'delete' ? 'own' : 'all';
         }
 
         return 'none';

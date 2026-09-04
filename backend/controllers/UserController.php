@@ -82,7 +82,7 @@ class UserController {
         $this->show($auth, $newId);
     }
     public function show(array $auth,int $id): void {
-        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'sales', 'sale', 'assistant', 'viewer', 'hr', 'sale_admin', 'saleadmin', 'accountant', 'marketing'], true)) {
+        if (!in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'manager', 'sales', 'sale', 'assistant', 'viewer', 'hr', 'sale_admin', 'saleadmin', 'accountant', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
             respond(403, null, 'Quyền truy cập không đủ', false);
         }
         try {

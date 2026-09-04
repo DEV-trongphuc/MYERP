@@ -326,6 +326,18 @@ function getModulePermissionScope($conn, $auth, $module, $action)
         }
         return 'own';
     }
+    if (in_array($role, ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+        if (in_array($module, ['companies', 'lecturers'], true)) {
+            return 'all';
+        }
+        if (in_array($module, ['leads', 'contacts', 'students', 'deals', 'projects', 'campaigns', 'files', 'users', 'schedules', 'expenses', 'activities'], true)) {
+            return $action === 'delete' ? 'own' : 'all';
+        }
+        if (in_array($module, ['settings', 'hrm', 'finance', 'deposits', 'gatekeeper', 'rounds', 'rules', 'integrations'], true)) {
+            return 'none';
+        }
+        return 'own';
+    }
     if ($role === 'director') {
         if ($module === 'settings') {
             return 'none';
@@ -794,6 +806,7 @@ if (!in_array($action, $publicActions)) {
     // Read-only configuration and own-data lookups called by Layout, Dashboard, SalePortal, PersonalAccount, and Attendance pages
     // We allow any authenticated user (all roles) to query these endpoints.
     if (in_array($action, [
+        'get_sse_updates',
         'get_settings',
         'get_unique_sources',
         'get_calendar_stats',
