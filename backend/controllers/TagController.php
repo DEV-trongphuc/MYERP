@@ -9,8 +9,13 @@ class TagController {
     public function index($auth) {
         $tid = $auth['tenant_id'];
         
-        // Lấy tất cả tags (loại trừ các tag trạng thái cũ đã bãi bỏ)
-        $stmt = $this->db->prepare("SELECT * FROM tags WHERE tenant_id = ? AND LOWER(TRIM(name)) NOT IN ('new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified') ORDER BY name ASC");
+        // Dọn dẹp các tag rác đã bãi bỏ (bao gồm Junk)
+        try {
+            $this->db->exec("DELETE FROM tags WHERE tenant_id = " . (int)$tid . " AND LOWER(TRIM(name)) IN ('junk', 'new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified')");
+        } catch (\Throwable $e) {}
+
+        // Lấy tất cả tags (loại trừ các tag trạng thái cũ đã bãi bỏ và junk)
+        $stmt = $this->db->prepare("SELECT * FROM tags WHERE tenant_id = ? AND LOWER(TRIM(name)) NOT IN ('new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified', 'junk') ORDER BY name ASC");
         $stmt->execute([$tid]);
         $tags = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -35,6 +40,9 @@ class TagController {
         if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true)) respond(403, null, 'Chỉ admin mới có quyền quản lý tags', false);
         $data = getBody();
         if (empty($data['name'])) respond(400, null, 'Tên tag không được để trống', false);
+        if (in_array(strtolower(trim($data['name'])), ['junk', 'new', 'unqualified', 'needed', 'considering', 'badtiming', 'bad timing', 'bad_timing', 'qualified'], true)) {
+            respond(400, null, 'Tag này đã bị bãi bỏ khỏi hệ thống', false);
+        }
 
         $stmt = $this->db->prepare("
             INSERT INTO tags (tenant_id, name, color, entity_type)

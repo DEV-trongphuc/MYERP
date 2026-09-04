@@ -2136,6 +2136,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     return pipelineStages[0] || DEFAULT_PIPELINE_STAGES[0];
   };
 
+  const scrollToActiveStage = (smooth = true) => {
+    if (!pipelineContainerRef.current) return;
+    const container = pipelineContainerRef.current;
+    const activeEl = container.querySelector('[data-pipeline-active="true"]') as HTMLElement;
+    if (activeEl) {
+      const containerWidth = container.clientWidth;
+      const elOffsetLeft = activeEl.offsetLeft;
+      const elWidth = activeEl.offsetWidth;
+      const targetScrollLeft = elOffsetLeft - (containerWidth / 2) + (elWidth / 2);
+      container.scrollTo({
+        left: Math.max(0, targetScrollLeft),
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+    }
+  };
+
   const checkScrollable = () => {
     if (pipelineContainerRef.current) {
       const { scrollWidth, clientWidth } = pipelineContainerRef.current;
@@ -2145,15 +2161,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   useEffect(() => {
     if (isOpen) {
-      const timer = setTimeout(checkScrollable, 200);
-      return () => clearTimeout(timer);
+      const timer1 = setTimeout(() => {
+        checkScrollable();
+        scrollToActiveStage(false);
+      }, 80);
+
+      const timer2 = setTimeout(() => {
+        checkScrollable();
+        scrollToActiveStage(true);
+      }, 320);
+
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
     }
-  }, [pipelineStages, isOpen, formData.pipeline_status]);
+  }, [pipelineStages, isOpen, formData.pipeline_status, contact?.id]);
 
   useEffect(() => {
     if (isOpen) {
-      window.addEventListener('resize', checkScrollable);
-      return () => window.removeEventListener('resize', checkScrollable);
+      const handleResize = () => {
+        checkScrollable();
+        scrollToActiveStage(false);
+      };
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
     }
   }, [isOpen]);
   const [contacts, setContacts] = useState<any[]>([]);
@@ -3919,7 +3951,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setFormData(normalizedContact);
       setIsPartnerSource(!!normalizedContact.company_id);
       const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
-      const cleanedLoadedTags = (normalizedContact.tags || []).map((tag: string) => tag.replace(cleanRegex, '').trim()).filter(Boolean);
+      const cleanedLoadedTags = (normalizedContact.tags || [])
+        .map((tag: string) => tag.replace(cleanRegex, '').trim())
+        .filter((t: string) => Boolean(t) && t.toLowerCase() !== 'junk');
       const uniqueLoadedTags: string[] = Array.from(new Set(cleanedLoadedTags)) as string[];
       setTags(uniqueLoadedTags);
       setBaseData(normalizedContact);
@@ -5577,7 +5611,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           </button>
         )}
 
-        <div ref={pipelineContainerRef} id="pipeline-scroll-container" className="no-scrollbar" style={{ display: 'flex', padding: isMobileOrTablet ? '0.625rem 0.75rem' : (showScrollArrows ? '0.625rem 3rem' : '0.625rem 1.25rem'), gap: '10px', overflowX: 'auto', flex: 1, scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none', position: 'relative', alignItems: 'center' }}>
+        <div ref={pipelineContainerRef} id="pipeline-scroll-container" className="no-scrollbar" style={{ display: 'flex', padding: isMobileOrTablet ? '0.625rem 0.75rem' : (showScrollArrows ? '0.625rem 3rem' : '0.625rem 1.25rem'), gap: '10px', overflowX: 'auto', flex: 1, scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none', position: 'relative', alignItems: 'center', scrollSnapType: 'x proximity' }}>
           <style dangerouslySetInnerHTML={{ __html: `#pipeline-scroll-container::-webkit-scrollbar { display: none; }` }} />
           {(() => {
             const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
@@ -5593,6 +5627,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               return (
                 <div
                   key={st.id}
+                  data-pipeline-active={isCurrent ? 'true' : undefined}
                   onClick={() => {
                     if (isCurrent || isPrecedingOfHocVien) return;
                     handleStageTransition(String(st.id), st.name, 'active');
@@ -5601,7 +5636,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     flex: '1 0 auto', minWidth: '135px', position: 'relative', height: '32px', 
                     cursor: (isCurrent || isPrecedingOfHocVien) ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', transition: 'all 0.3s',
-                    opacity: isPrecedingOfHocVien ? 0.6 : (isBackward ? 0.75 : 1)
+                    opacity: isPrecedingOfHocVien ? 0.6 : (isBackward ? 0.75 : 1),
+                    scrollSnapAlign: 'center'
                   }}
                 >
                   <div style={{
@@ -8220,15 +8256,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <div>
                           <label className="form-label" style={{ fontWeight: 700, marginBottom: '1rem', display: 'block', fontSize: '0.9375rem' }}>Gắn thẻ thông minh</label>
                           {(() => {
-                            const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified'];
+                            const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
                             const cleanTags = allTags.filter(t => !deprecatedTags.includes(String(t.name || '').trim().toLowerCase()));
-                            const availableTags = cleanTags.filter(t => !tags.includes(t.name));
+                            const availableTags = cleanTags.filter(t => !tags.some(tag => tag.toLowerCase() === (t.name || '').toLowerCase()));
 
                             return (
                               <>
                                 <TagInput
-                                  tags={tags}
-                                  onChange={setTags}
+                                  tags={tags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase()))}
+                                  onChange={(newTags) => setTags(newTags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase())))}
                                   suggestions={cleanTags.map(t => t.name)}
                                   placeholder="Chọn thẻ tag..."
                                 />
@@ -8239,7 +8275,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       {availableTags.map(t => (
                                         <button
                                           key={t.id}
-                                          onClick={() => !tags.includes(t.name) && setTags([...tags, t.name])}
+                                          onClick={() => !tags.includes(t.name) && setTags([...tags.filter(tg => tg.toLowerCase() !== 'junk'), t.name])}
                                           className="btn ghost sm"
                                           style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
                                         >
