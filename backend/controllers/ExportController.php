@@ -79,6 +79,11 @@ class ExportController {
             $studentSubTab = $_GET['student_sub_tab'] ?? '';
             $teamId        = $_GET['team_id'] ?? '';
             $dataType      = $_GET['data_type'] ?? '';
+            $leadStatus    = trim((string)($_GET['lead_status'] ?? ''));
+            $leadStatusOp  = strtolower(trim((string)($_GET['lead_status_op'] ?? 'in')));
+            $showLost      = isset($_GET['show_lost']) && in_array(strtolower((string)$_GET['show_lost']), ['1', 'true', 'yes'], true);
+            $stageOp       = strtolower(trim((string)($_GET['stage_op'] ?? 'in')));
+            $statusOp      = strtolower(trim((string)($_GET['status_op'] ?? 'in')));
 
             $where  = ['t.tenant_id = ?', 't.deleted_at IS NULL'];
             $params = [$auth['tenant_id']];
@@ -107,10 +112,43 @@ class ExportController {
                 $params[] = "%$search%";
                 $params[] = is_numeric($search) ? (int)$search : 0;
             }
-            if ($status) { $where[] = 't.status = ?'; $params[] = $status; }
+
+            // Filter by Lead Status (active, nurture, lost) or default hide lost
+            if ($leadStatus !== '') {
+                $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
+                if (!empty($statuses)) {
+                    $placeholders = implode(',', array_fill(0, count($statuses), '?'));
+                    if ($leadStatusOp === 'not_in') {
+                        $where[] = "(t.lead_status NOT IN ($placeholders) OR t.lead_status IS NULL)";
+                    } else {
+                        $where[] = "t.lead_status IN ($placeholders)";
+                    }
+                    foreach ($statuses as $st) {
+                        $params[] = $st;
+                    }
+                }
+            } elseif (!$showLost) {
+                $where[] = "(t.lead_status != 'lost' OR t.lead_status IS NULL)";
+            }
+
+            if ($status) {
+                if ($statusOp === 'not_in') {
+                    $where[] = 't.status != ?';
+                } else {
+                    $where[] = 't.status = ?';
+                }
+                $params[] = $status;
+            }
             if ($source) { $where[] = 't.source = ?'; $params[] = $source; }
             if ($owner)  { $where[] = 't.owner_id = ?'; $params[] = (int)$owner; }
-            if ($stage)  { $where[] = 't.stage_id = ?'; $params[] = (int)$stage; }
+            if ($stage)  {
+                if ($stageOp === 'not_in') {
+                    $where[] = 't.stage_id != ?';
+                } else {
+                    $where[] = 't.stage_id = ?';
+                }
+                $params[] = (int)$stage;
+            }
             if ($companyId) { $where[] = 't.company_id = ?'; $params[] = (int)$companyId; }
             if ($projectId !== '') { $where[] = 't.project_id = ?'; $params[] = (int)$projectId; }
             if ($campaignId !== '') { $where[] = 't.campaign_id = ?'; $params[] = (int)$campaignId; }

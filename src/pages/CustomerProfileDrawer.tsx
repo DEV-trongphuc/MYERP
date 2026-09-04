@@ -1146,6 +1146,11 @@ const TimelineItem = React.memo<TimelineItemProps>(({
           const linkMatch = ev.note ? ev.note.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m) : null;
           const linkUrl = linkMatch ? linkMatch[1].trim() : (ev.expense_image_url || '');
           let displayNoteText = linkMatch ? ev.note.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim() : (ev.note || '');
+          displayNoteText = displayNoteText
+            .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
+            .replace(/\s*\|\s*Lý do lost:.*$/si, '')
+            .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+            .trim();
           let currentBody = displayNoteText.trim();
           let wasParsed = false;
           while (currentBody.startsWith('{"erp_task"') || currentBody.startsWith('{"erp_task":')) {
@@ -3560,7 +3565,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             if (wasParsed) {
               description = currentBody;
             } else {
-              description = a.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
+              description = a.body
+                .replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '')
+                .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
+                .replace(/\s*\|\s*Lý do lost:.*$/si, '')
+                .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+                .trim();
             }
           }
           return {

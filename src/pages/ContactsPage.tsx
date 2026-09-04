@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, Mail, Eye, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Eye, EyeOff, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -31,6 +31,15 @@ const PAGE_SIZE = 10;
 
 const STATUS_LABEL: Record<string,string> = { lead:'Lead mới', qualified:'Đủ điều kiện', customer:'Học viên', churned:'Đã rời' };
 const STATUS_CLASS: Record<string,string> = { lead:'info', qualified:'warning', customer:'success', churned:'danger' };
+
+const cleanInteractionText = (text: string) => {
+  if (!text) return text;
+  return text
+    .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
+    .replace(/\s*\|\s*Lý do lost:.*$/si, '')
+    .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+    .trim();
+};
 
 const getInteractionTime = (lastContact: string | null, updatedAt: string, createdAt: string) => {
   if (!lastContact) return updatedAt || createdAt;
@@ -293,9 +302,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [creating, setCreating] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
 
+  // Quick Filter state (Lost & Nurture)
+  const [showLost, setShowLost] = useState<boolean>(false);
+  const [quickLeadStatus, setQuickLeadStatus] = useState<string>(''); // '' (all/active), 'nurture', 'lost'
+
   // Advanced Filter state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterStageOp, setFilterStageOp] = useState<'in' | 'not_in'>('in');
+  const [filterLeadStatus, setFilterLeadStatus] = useState('');
+  const [filterLeadStatusOp, setFilterLeadStatusOp] = useState<'in' | 'not_in'>('in');
+  const [filterShowLost, setFilterShowLost] = useState(false);
   const [filterSource, setFilterSource] = useState('');
   const [filterDataType, setFilterDataType] = useState('');
   const [filterOwnerId, setFilterOwnerId] = useState('');
@@ -329,6 +346,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
   const [activeFilters, setActiveFilters] = useState({
     status: '',
+    stageOp: 'in' as 'in' | 'not_in',
+    leadStatus: '',
+    leadStatusOp: 'in' as 'in' | 'not_in',
+    showLost: false,
     source: '',
     ownerId: '',
     projectId: '',
@@ -347,6 +368,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const activeFiltersCount = useMemo(() => {
     return [
       activeFilters.status,
+      activeFilters.leadStatus,
+      activeFilters.showLost ? 'show_lost' : '',
       activeFilters.source,
       activeFilters.ownerId,
       activeFilters.projectId,
@@ -544,10 +567,26 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       if (activeFilters.status) {
         if (/^\d+$/.test(activeFilters.status)) {
           params.stage_id = activeFilters.status;
+          if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
         } else {
           params.status = activeFilters.status;
+          if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
         }
       }
+
+      // Lead Status filter (active, nurture, lost)
+      const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
+      const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
+
+      if (effectiveLeadStatus) {
+        params.lead_status = effectiveLeadStatus;
+        params.lead_status_op = effectiveLeadStatusOp;
+      }
+
+      if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost') {
+        params.show_lost = 1;
+      }
+
       if (activeFilters.source) params.source = activeFilters.source;
       if (activeFilters.ownerId) params.owner_id = activeFilters.ownerId;
       if (activeFilters.projectId) params.project_id = activeFilters.projectId;
@@ -590,7 +629,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (initialMetadataLoaded) {
       fetchData();
     }
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded]);
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -687,6 +726,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
     setActiveFilters({
       status: filterStatus,
+      stageOp: filterStageOp,
+      leadStatus: filterLeadStatus,
+      leadStatusOp: filterLeadStatusOp,
+      showLost: filterShowLost,
       source: filterSource,
       ownerId: filterOwnerId,
       projectId: filterProjectId,
@@ -706,6 +749,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   const handleResetFilters = () => {
     setFilterStatus('');
+    setFilterStageOp('in');
+    setFilterLeadStatus('');
+    setFilterLeadStatusOp('in');
+    setFilterShowLost(false);
+    setShowLost(false);
+    setQuickLeadStatus('');
     setFilterSource('');
     setFilterOwnerId('');
     setFilterProjectId('');
@@ -720,6 +769,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     setPage(1);
     setActiveFilters({
       status: '',
+      stageOp: 'in',
+      leadStatus: '',
+      leadStatusOp: 'in',
+      showLost: false,
       source: '',
       ownerId: '',
       projectId: '',
@@ -791,9 +844,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (activeFilters.status) {
       if (/^\d+$/.test(activeFilters.status)) {
         params.stage_id = activeFilters.status;
+        if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
       } else {
         params.status = activeFilters.status;
+        if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
       }
+    }
+
+    const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
+    const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
+
+    if (effectiveLeadStatus) {
+      params.lead_status = effectiveLeadStatus;
+      params.lead_status_op = effectiveLeadStatusOp;
+    }
+
+    if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost') {
+      params.show_lost = 1;
     }
     if (activeFilters.source) params.source = activeFilters.source;
     if (activeFilters.ownerId) params.owner_id = activeFilters.ownerId;
@@ -1348,10 +1415,110 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   </span>
                 )}
               </button>
+
+              <button 
+                onClick={() => { setShowLost(!showLost); setPage(1); }}
+                style={{
+                  height: '38px',
+                  padding: '0 0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  border: showLost ? '1px solid #ef4444' : '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  background: showLost ? 'rgba(239, 68, 68, 0.08)' : 'var(--color-surface)',
+                  color: showLost ? '#ef4444' : 'var(--color-text-muted)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s',
+                  boxShadow: 'var(--shadow-sm)',
+                  whiteSpace: 'nowrap'
+                }}
+                title={showLost ? "Đang hiện data Lost. Nhấn để ẩn đi" : "Mặc định đang ẩn data Lost. Nhấn để hiện data Lost"}
+              >
+                {showLost ? <Eye size={14} /> : <EyeOff size={14} />}
+                <span>{showLost ? 'Đang hiện Lost' : 'Hiện Lost'}</span>
+              </button>
             </div>
  
             {/* Row 2: Chọn nhanh, Sort Select & View Mode switchers */}
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', width: isMobile ? '100%' : 'auto', flexShrink: 0, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+
+              {/* Quick lead status pills */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-bg-alt, rgba(0,0,0,0.03))', padding: '3px', borderRadius: '8px', border: '1px solid var(--color-border-light)', overflowX: 'auto', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => { setQuickLeadStatus(''); setPage(1); }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: quickLeadStatus === '' ? 'var(--color-surface)' : 'transparent',
+                    color: quickLeadStatus === '' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    boxShadow: quickLeadStatus === '' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Hiện tất cả khách hàng (mặc định ẩn data Lost)"
+                >
+                  Tất cả
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setQuickLeadStatus(quickLeadStatus === 'nurture' ? '' : 'nurture'); setPage(1); }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: quickLeadStatus === 'nurture' ? '#0284c7' : 'transparent',
+                    color: quickLeadStatus === 'nurture' ? '#ffffff' : 'var(--color-text-muted)',
+                    boxShadow: quickLeadStatus === 'nurture' ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Chỉ hiện các Lead đang trong diện Nuôi dưỡng (Nurture)"
+                >
+                  <span>🕒</span>
+                  <span>Chỉ Nurture</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setQuickLeadStatus(quickLeadStatus === 'lost' ? '' : 'lost'); setPage(1); }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: quickLeadStatus === 'lost' ? '#ef4444' : 'transparent',
+                    color: quickLeadStatus === 'lost' ? '#ffffff' : 'var(--color-text-muted)',
+                    boxShadow: quickLeadStatus === 'lost' ? '0 1px 3px rgba(239, 68, 68, 0.3)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Chỉ hiện các Lead đã Lost (Không tiếp tục)"
+                >
+                  <span>🚫</span>
+                  <span>Chỉ Lost</span>
+                </button>
+              </div>
 
               {!isMobile && <div style={{ flex: 1 }} />}
               
@@ -1473,14 +1640,105 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   Thông tin khách hàng
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  {/* Trạng thái */}
+                  {/* Trạng thái Lead (Active / Nurture / Lost) */}
                   <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Trạng thái</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', margin: 0 }}>Trạng thái Lead</label>
+                      <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg-alt, rgba(0,0,0,0.05))', padding: '2px', borderRadius: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setFilterLeadStatusOp('in')}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            background: filterLeadStatusOp === 'in' ? 'var(--color-primary)' : 'transparent',
+                            color: filterLeadStatusOp === 'in' ? '#fff' : 'var(--color-text-muted)',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          Lọc theo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFilterLeadStatusOp('not_in')}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            background: filterLeadStatusOp === 'not_in' ? 'var(--color-danger, #ef4444)' : 'transparent',
+                            color: filterLeadStatusOp === 'not_in' ? '#fff' : 'var(--color-text-muted)',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          Loại trừ
+                        </button>
+                      </div>
+                    </div>
+                    <CustomSelect
+                      value={filterLeadStatus}
+                      onChange={v => setFilterLeadStatus(v)}
+                      options={[
+                        { value: '', label: 'Tất cả trạng thái Lead' },
+                        { value: 'active', label: '🟢 Đang hoạt động (Active)' },
+                        { value: 'nurture', label: '🕒 Nuôi dưỡng (Nurture)' },
+                        { value: 'lost', label: '🚫 Không tiếp tục (Lost)' }
+                      ]}
+                    />
+                  </div>
+
+                  {/* Giai đoạn Pipeline */}
+                  <div className="form-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', margin: 0 }}>Giai đoạn Pipeline</label>
+                      <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg-alt, rgba(0,0,0,0.05))', padding: '2px', borderRadius: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setFilterStageOp('in')}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            background: filterStageOp === 'in' ? 'var(--color-primary)' : 'transparent',
+                            color: filterStageOp === 'in' ? '#fff' : 'var(--color-text-muted)',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          Lọc theo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFilterStageOp('not_in')}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '0.68rem',
+                            fontWeight: 600,
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            background: filterStageOp === 'not_in' ? 'var(--color-danger, #ef4444)' : 'transparent',
+                            color: filterStageOp === 'not_in' ? '#fff' : 'var(--color-text-muted)',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          Loại trừ
+                        </button>
+                      </div>
+                    </div>
                     <CustomSelect
                       value={filterStatus}
                       onChange={v => setFilterStatus(v)}
                       options={[
-                        { value: '', label: 'Tất cả trạng thái' },
+                        { value: '', label: 'Tất cả giai đoạn' },
                         { value: 'not_contacted', label: 'Chưa liên hệ' },
                         ...(pipelineStages.length > 0 
                           ? pipelineStages.map(s => ({ value: String(s.id), label: s.name }))
@@ -1689,22 +1947,34 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                <button
-                  className="btn outline sm"
-                  onClick={handleResetFilters}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
-                >
-                  Đặt lại
-                </button>
-                <button
-                  className="btn primary sm"
-                  onClick={handleApplyFilters}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
-                >
-                  Lọc kết quả
-                </button>
+              {/* Action Buttons & Quick Options */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border-light)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={filterShowLost} 
+                    onChange={e => setFilterShowLost(e.target.checked)} 
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--color-primary)', cursor: 'pointer' }}
+                  />
+                  <span>Bao gồm data Lost trong kết quả (Mặc định ẩn)</span>
+                </label>
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    className="btn outline sm"
+                    onClick={handleResetFilters}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
+                  >
+                    Đặt lại
+                  </button>
+                  <button
+                    className="btn primary sm"
+                    onClick={handleApplyFilters}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', fontWeight: 600 }}
+                  >
+                    Lọc kết quả
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -2119,9 +2389,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   wordBreak: 'break-word',
                                   lineHeight: '1.4'
                                 }}
-                                title={c.last_interaction || undefined}
+                                title={cleanInteractionText(c.last_interaction) || undefined}
                               >
-                                {c.last_interaction || 'Chưa có tương tác'}
+                                {cleanInteractionText(c.last_interaction) || 'Chưa có tương tác'}
                               </div>
                             ) : c.owner_name ? (() => {
                               const collabs = (c.collaborator_ids || '')
