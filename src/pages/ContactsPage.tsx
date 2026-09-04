@@ -2185,7 +2185,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     {columns.find(c => c.id === 'company')?.visible && !columns.find(c => c.id === 'name')?.visible && (
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Công ty</th>
                     )}
-                    {columns.find(c => c.id === 'tags')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Phân loại (Tags)</th>}
+                    {columns.find(c => c.id === 'tags')?.visible && (
+                      <th style={{ width: '100px', maxWidth: '120px', padding: '1rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Tags
+                      </th>
+                    )}
                     {columns.find(c => c.id === 'status')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Trạng thái</th>}
                     {columns.find(c => c.id === 'contact')?.visible && !columns.find(c => c.id === 'owner')?.visible && (
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên lạc cuối</th>
@@ -2291,7 +2295,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
 
                         {columns.find(col => col.id === 'tags')?.visible && (
-                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: '100px', maxWidth: '120px', padding: '1rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
                             {(() => {
                               const rawTagList = typeof c.tags === 'string' 
                                 ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
@@ -2307,7 +2311,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
                               
                               return (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '240px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '120px' }}>
                                   {uniqueTags.map((tag: string, idx: number) => {
                                     const lowerTag = tag.toLowerCase();
                                     const isProgramTag = lowerTag.includes('mba') || 
@@ -2594,11 +2598,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.35 }}>
                                   <div style={{ fontWeight: 600 }}>{dateStr}</div>
                                   <div style={{ fontSize: '0.725rem', opacity: 0.85 }}>{timeStr}</div>
-                                  {Boolean(c.distributed_at && new Date(c.distributed_at).getTime() > (new Date(c.created_at).getTime() + 86400000)) && (
-                                    <div style={{ fontSize: '0.675rem', color: '#d97706', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap' }}>
-                                      Giao: {new Date(c.distributed_at).toLocaleDateString('vi-VN')}
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    if (!c.distributed_at) return null;
+                                    const distDate = new Date(c.distributed_at).toLocaleDateString('vi-VN');
+                                    const createDate = c.created_at ? new Date(c.created_at).toLocaleDateString('vi-VN') : '';
+                                    if (createDate && distDate !== createDate) {
+                                      return (
+                                        <div style={{ fontSize: '0.675rem', color: '#d97706', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap' }}>
+                                          Giao lại: {distDate}
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
                               );
                             })() : '—'}
