@@ -445,4 +445,145 @@ class CloudFileController {
 
         respond(200, null, 'Đã xóa tệp tin vĩnh viễn');
     }
+
+    public function downloadContactZip(array $auth, int $contactId): void {
+        $tid = (int)$auth['tenant_id'];
+        if ($contactId <= 0) {
+            respond(400, null, 'ID khách hàng không hợp lệ', false);
+        }
+
+        // 1. Check contact exists
+        $stmtContact = $this->db->prepare("SELECT id, full_name FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $stmtContact->execute([$contactId, $tid]);
+        $contact = $stmtContact->fetch(PDO::FETCH_ASSOC);
+        if (!$contact) {
+            respond(404, null, 'Không tìm thấy thông tin khách hàng', false);
+        }
+
+        // 2. Collect files
+        $filesToZip = [];
+
+        // 2a. Files from cloud_files
+        $stmtFiles = $this->db->prepare("SELECT id, name, file_path, category FROM cloud_files WHERE contact_id = ? AND tenant_id = ?");
+        $stmtFiles->execute([$contactId, $tid]);
+        $cloudFiles = $stmtFiles->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($cloudFiles as $cf) {
+            $filesToZip[] = [
+                'name' => $cf['name'] ?: basename($cf['file_path']),
+                'path' => $cf['file_path'],
+                'folder' => (!empty($cf['category']) && $cf['category'] !== 'general') ? $cf['category'] : 'Tài liệu chung'
+            ];
+        }
+
+        // 2b. Deposits UNC proofs
+        try {
+            $stmtMilestones = $this->db->prepare("
+                SELECT m.id, m.name, m.unc_file_path 
+                FROM deposit_milestones m 
+                JOIN deposits d ON m.deposit_id = d.id 
+                WHERE d.contact_id = ? AND d.tenant_id = ? AND (m.unc_file_path IS NOT NULL AND m.unc_file_path != '')
+            ");
+            $stmtMilestones->execute([$contactId, $tid]);
+            $milestones = $stmtMilestones->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($milestones as $ms) {
+                $filesToZip[] = [
+                    'name' => basename($ms['unc_file_path']),
+                    'path' => $ms['unc_file_path'],
+                    'folder' => 'Chứng từ thanh toán & UNC'
+                ];
+            }
+        } catch (Throwable $e) {}
+
+        // 2c. Cooperation slips attachments
+        try {
+            $stmtCoop = $this->db->prepare("SELECT attachment_url FROM cooperation_slips WHERE contact_id = ? AND tenant_id = ? AND deleted_at IS NULL");
+            $stmtCoop->execute([$contactId, $tid]);
+            $coopSlips = $stmtCoop->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($coopSlips as $cs) {
+                if (!empty($cs['attachment_url'])) {
+                    $urls = array_filter(array_map('trim', explode(',', $cs['attachment_url'])));
+                    foreach ($urls as $u) {
+                        $filesToZip[] = [
+                            'name' => basename($u),
+                            'path' => $u,
+                            'folder' => 'Tài liệu Hợp tác & Hoa hồng'
+                        ];
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
+
+        if (empty($filesToZip)) {
+            respond(404, null, 'Khách hàng này hiện chưa có tài liệu nào để nén và tải về', false);
+        }
+
+        if (!class_exists('ZipArchive')) {
+            respond(500, null, 'Hệ thống máy chủ chưa bật thư viện ZipArchive PHP', false);
+        }
+
+        $safeCustomerName = preg_replace('/[^\p{L}\p{N}\s_-]/u', '', $contact['full_name'] ?? 'Khach_hang');
+        $safeCustomerName = trim(preg_replace('/\s+/', ' ', $safeCustomerName));
+        if (empty($safeCustomerName)) $safeCustomerName = 'Khach_hang_' . $contactId;
+
+        $zipFileName = $safeCustomerName . ' - Ho so tai lieu.zip';
+        $tmpZip = tempnam(sys_get_temp_dir(), 'ct_zip_');
+        $zip = new ZipArchive();
+        if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            respond(500, null, 'Không thể khởi tạo tập tin ZIP trên máy chủ', false);
+        }
+
+        $baseUploadDir = defined('UPLOAD_DIR') ? UPLOAD_DIR : (__DIR__ . '/../uploads');
+        $addedCount = 0;
+        $seenPaths = [];
+
+        foreach ($filesToZip as $f) {
+            $p = $f['path'];
+            if (empty($p) || isset($seenPaths[$p])) continue;
+            $seenPaths[$p] = true;
+
+            // Resolve physical path
+            $cleanRel = ltrim(str_replace(['/uploads/', 'uploads/'], '', $p), '/\\');
+            $candidates = [
+                rtrim($baseUploadDir, '/\\') . '/' . $cleanRel,
+                __DIR__ . '/../' . ltrim($p, '/\\'),
+                __DIR__ . '/../../' . ltrim($p, '/\\'),
+                rtrim($baseUploadDir, '/\\') . '/' . basename($p)
+            ];
+
+            $resolvedFile = null;
+            foreach ($candidates as $cand) {
+                if (file_exists($cand) && is_file($cand)) {
+                    $resolvedFile = $cand;
+                    break;
+                }
+            }
+
+            if ($resolvedFile) {
+                $folder = trim($f['folder'] ?? '', '/\\');
+                $origName = $f['name'] ?: basename($resolvedFile);
+                $zipEntry = ($folder ? $folder . '/' : '') . $origName;
+                $zip->addFile($resolvedFile, $zipEntry);
+                $addedCount++;
+            }
+        }
+
+        $zip->close();
+
+        if ($addedCount === 0) {
+            @unlink($tmpZip);
+            respond(404, null, 'Không tìm thấy tệp vật lý nào trên máy chủ để nén', false);
+        }
+
+        // Send ZIP download
+        while (ob_get_level()) { ob_end_clean(); }
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . rawurlencode($zipFileName) . '"; filename*=UTF-8\'\'' . rawurlencode($zipFileName));
+        header('Content-Length: ' . filesize($tmpZip));
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        readfile($tmpZip);
+        @unlink($tmpZip);
+        exit;
+    }
 }

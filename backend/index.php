@@ -1150,7 +1150,8 @@ switch ($resource) {
     case 'cloud-files':
         $auth = requireAuth();
         $ctrl = new CloudFileController($db);
-        if     (!$resourceId && $method === 'GET')    $ctrl->index($auth);
+        if     ($resourceId === 'download-contact-zip' && $method === 'GET') $ctrl->downloadContactZip($auth, (int)($_GET['contact_id'] ?? 0));
+        elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);

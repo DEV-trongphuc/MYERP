@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink } from 'lucide-react';
+import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download } from 'lucide-react';
+import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
 import { TagInput } from '../components/ui/TagInput';
@@ -2362,6 +2363,97 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   const [docs, setDocs] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
+  const [downloadingZip, setDownloadingZip] = useState<boolean>(false);
+
+  const handleDownloadAllZip = async () => {
+    if (!contact?.id) return;
+    if (!docs || docs.length === 0) {
+      addToast('Khách hàng chưa có hồ sơ tài liệu nào để tải về.', 'warning');
+      return;
+    }
+
+    setDownloadingZip(true);
+    addToast('Đang chuẩn bị nén ZIP toàn bộ hồ sơ tài liệu...', 'info');
+
+    const rawName = contact.full_name || formData.full_name || 'Khach_hang';
+    const safeName = rawName.replace(/[^\p{L}\p{N}\s_-]/gu, '').trim() || `Khach_hang_${contact.id}`;
+    const zipFileName = `${safeName} - Ho so tai lieu.zip`;
+
+    // 1. First attempt: Fast streaming ZIP from backend
+    try {
+      const response = await api.get(`/cloud-files/download-contact-zip?contact_id=${contact.id}`, {
+        responseType: 'blob',
+        timeout: 60000
+      });
+
+      if (response.data && response.data.size > 200) {
+        const blob = new Blob([response.data], { type: 'application/zip' });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = zipFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+        addToast('Đã tải xuống thành công toàn bộ hồ sơ dạng ZIP!', 'success');
+        setDownloadingZip(false);
+        return;
+      }
+    } catch (serverErr) {
+      console.warn("Backend zip streaming fallback to client JSZip:", serverErr);
+    }
+
+    // 2. Second attempt: Client-side JSZip packaging of all files in docs
+    try {
+      const zip = new JSZip();
+      let count = 0;
+
+      const promises = docs.map(async (doc: any) => {
+        const fileUrl = resolveAttachmentUrl(doc.path);
+        if (!fileUrl || doc.type === 'link' || fileUrl.includes('drive.google.com')) {
+          return;
+        }
+
+        try {
+          const res = await fetch(fileUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            const folderName = (!doc.category || doc.category === 'general') ? 'Tài liệu chung' : doc.category;
+            const folder = zip.folder(folderName) || zip;
+            folder.file(doc.name, blob);
+            count++;
+          }
+        } catch (fetchErr) {
+          console.error(`Không thể tải tệp ${doc.name}:`, fetchErr);
+        }
+      });
+
+      await Promise.all(promises);
+
+      if (count === 0) {
+        addToast('Không thể gom tệp tin để nén ZIP. Vui lòng thử tải trực tiếp từng tệp.', 'warning');
+        setDownloadingZip(false);
+        return;
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const downloadUrl = window.URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = zipFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+      addToast(`Đã nén và tải xuống ${count} tài liệu thành công!`, 'success');
+    } catch (clientErr) {
+      console.error("Lỗi khi tạo tệp ZIP client:", clientErr);
+      addToast('Có lỗi xảy ra khi tạo tệp ZIP tài liệu.', 'error');
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
 
   const isOwnerOrAdmin = useMemo(() => {
     const scope = getModulePermissionScope(currentUser, 'leads', 'write');
@@ -11390,15 +11482,51 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   {activeTab === 'docs' && (
                     <div className="animate-fade">
                       {/* Spaced and styled Title block */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border-light)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border-light)', flexWrap: 'wrap', gap: '12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <h3 style={{ fontWeight: 800, fontSize: '1.25rem', color: 'var(--color-text)', margin: 0 }}>Hồ sơ & Tài liệu</h3>
                           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                             Quản lý hợp đồng, CMND/CCCD hoặc báo giá của khách hàng theo thư mục
                           </span>
                         </div>
-                        {isOwnerOrAdmin && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={handleDownloadAllZip}
+                            disabled={downloadingZip || !docs || docs.length === 0}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 16px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontSize: '0.825rem',
+                              fontWeight: 700,
+                              cursor: (downloadingZip || !docs || docs.length === 0) ? 'not-allowed' : 'pointer',
+                              opacity: (downloadingZip || !docs || docs.length === 0) ? 0.6 : 1,
+                              transition: 'all 0.2s',
+                              height: '36px',
+                              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                            }}
+                            className="hover-lift"
+                            title="Tải toàn bộ hồ sơ, tài liệu và chứng từ của khách hàng thành tệp ZIP"
+                          >
+                            {downloadingZip ? (
+                              <>
+                                <Loader2 size={16} className="animate-spin" /> Đang tạo ZIP...
+                              </>
+                            ) : (
+                              <>
+                                <Archive size={16} /> Tải toàn bộ (ZIP)
+                              </>
+                            )}
+                          </button>
+
+                          {isOwnerOrAdmin && (
+                            <>
                             <button
                               onClick={() => {
                                 showConfirm({
@@ -11543,8 +11671,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }} />
                               <Plus size={16} /> Upload file
                             </label>
-                          </div>
+                          </>
                         )}
+                        </div>
                       </div>
 
                       {/* Folder Breadcrumb Navigation */}
@@ -11997,6 +12126,35 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   )}
                                   <p className="text-xs text-light mt-1">Tải lên: {doc.date} • {isLink ? 'Google Drive Link' : doc.size}</p>
                                 </div>
+                                {!isLink && fileUrl && (
+                                  <a
+                                    href={fileUrl}
+                                    download={doc.name}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                      background: 'rgba(16, 185, 129, 0.08)',
+                                      color: '#059669',
+                                      border: '1px solid rgba(16, 185, 129, 0.2)',
+                                      padding: '6px 10px',
+                                      borderRadius: '8px',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      height: '30px',
+                                      textDecoration: 'none',
+                                      transition: 'all 0.2s',
+                                      flexShrink: 0
+                                    }}
+                                    className="hover-lift"
+                                    title="Tải tệp này về máy"
+                                  >
+                                    <Download size={13} /> Tải về
+                                  </a>
+                                )}
                                 {isOwnerOrAdmin && !doc.isCoopAttachment && (
                                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
                                     <button

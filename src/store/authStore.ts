@@ -75,7 +75,7 @@ export const getModulePermissionScope = (
   if (!user) return 'none';
   if (user.role === 'admin' || user.role === 'superadmin') return 'all';
   if (user.role === 'sale_admin' || user.role === 'saleadmin') {
-    if (module === 'leads') return 'none';
+    if (['settings', 'hrm', 'attendance'].includes(module)) return 'none';
     return 'all';
   }
   

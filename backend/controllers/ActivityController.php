@@ -236,7 +236,7 @@ class ActivityController {
             return false;
         }
 
-        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
             return true;
         }
 
@@ -435,7 +435,7 @@ class ActivityController {
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
-        } else if ($auth['role'] === 'director') {
+        } else if (in_array($auth['role'], ['director', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
             $where[] = '(
                 NOT (
                     (
@@ -481,8 +481,7 @@ class ActivityController {
         }
         if ($relType && $relId) {
             if ($relType === 'contact') {
-                $where[] = '((a.related_type = ? AND a.related_id = ?) OR a.contact_id = ?)';
-                $params[] = 'contact';
+                $where[] = '((a.related_type IN (\'contact\', \'lead\') AND a.related_id = ?) OR a.contact_id = ?)';
                 $params[] = (int)$relId;
                 $params[] = (int)$relId;
             } else {
