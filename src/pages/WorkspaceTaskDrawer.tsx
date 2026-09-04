@@ -5,7 +5,7 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle
 } from 'lucide-react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
@@ -642,6 +642,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   // Validation and approval modals state
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showApprovalSuccessModal, setShowApprovalSuccessModal] = useState<string | null>(null);
+  const [showUnsavedNewTaskPrompt, setShowUnsavedNewTaskPrompt] = useState(false);
 
   // Participants modal state
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
@@ -866,6 +867,24 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   }, [isOpen, embedMode]);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        if (showUnsavedNewTaskPrompt) {
+          setShowUnsavedNewTaskPrompt(false);
+        } else if (showValidationModal) {
+          setShowValidationModal(false);
+        } else if (showApprovalSuccessModal) {
+          setShowApprovalSuccessModal(null);
+        } else {
+          handleCloseDrawer();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, showUnsavedNewTaskPrompt, showValidationModal, showApprovalSuccessModal, formData, erpMeta, task]);
+
+  useEffect(() => {
     if (task) {
       const isSaleRole = currentUser?.role as string === 'sale';
       const defaultUserId = task.user_id || (isSaleRole ? currentUser.id : null);
@@ -1070,7 +1089,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     });
   };
 
-  const handleSaveMeta = async (updatedMeta: any) => {
+  const handleSaveMeta = async (updatedMeta: any, overrideProgress?: number) => {
     if (!task) return;
 
     // Recurrence validation
@@ -1081,8 +1100,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       return;
     }
 
+    const currentProgress = overrideProgress !== undefined ? overrideProgress : (formData.progress ?? 0);
+
     if (task.id === 'new') {
       setErpMeta(updatedMeta);
+      if (overrideProgress !== undefined) {
+        setFormData((prev: any) => ({ ...prev, progress: overrideProgress }));
+      }
       return;
     }
     try {
@@ -1127,7 +1151,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const payload: any = {
         body: bodyPayload,
         tags: finalTags,
-        progress: formData.progress,
+        progress: currentProgress,
         priority: formData.priority,
         status: formData.status,
         due_date: formData.due_date,
@@ -1141,6 +1165,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       const res = await api.put(`/activities/${task.id}`, payload);
       if (res.data && res.data.success) {
         setErpMeta(updatedMeta);
+        const updatedFormData = overrideProgress !== undefined ? { ...formData, progress: overrideProgress } : formData;
+        if (overrideProgress !== undefined) {
+          setFormData((prev: any) => ({ ...prev, progress: overrideProgress }));
+        }
         
         const cleanObj = (obj: any) => {
           const clean: any = {};
@@ -1154,7 +1182,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           return clean;
         };
         setOriginalHash(JSON.stringify({
-          formData: cleanObj(formData),
+          formData: cleanObj(updatedFormData),
           erpMeta: cleanObj(updatedMeta)
         }));
 
@@ -1305,6 +1333,20 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   };
 
   const handleCloseDrawer = () => {
+    if (task?.id === 'new') {
+      const hasDraftContent = Boolean(
+        formData.subject?.trim() ||
+        (erpMeta?.description && erpMeta.description.replace(/<[^>]*>/g, '').trim() !== '') ||
+        (erpMeta?.checklist && erpMeta.checklist.length > 0) ||
+        (erpMeta?.links && erpMeta.links.length > 0)
+      );
+
+      if (hasDraftContent) {
+        setShowUnsavedNewTaskPrompt(true);
+        return;
+      }
+    }
+
     if (formData.require_approval === 1 && !formData.approver_id) {
       setShowValidationModal(true);
       return;
@@ -1414,7 +1456,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
     const newChecklist = [...(erpMeta.checklist || []), ...newItems];
     const updatedMeta = { ...erpMeta, checklist: newChecklist };
-    handleSaveMeta(updatedMeta);
+    const totalItems = newChecklist.length;
+    const completedItems = newChecklist.filter((x: any) => x.done).length;
+    const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    handleSaveMeta(updatedMeta, newProgress);
 
     const nextString = currentParticipantIds.join(',');
     if (formData.participant_ids !== nextString) {
@@ -1444,13 +1489,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     });
 
     const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
-    handleSaveMeta(updatedMeta);
+    const totalItems = updatedChecklist.length;
+    const completedItems = updatedChecklist.filter((x: any) => x.done).length;
+    const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    handleSaveMeta(updatedMeta, newProgress);
   };
 
   const handleDeleteChecklistItem = (itemId: string) => {
     const updatedChecklist = erpMeta.checklist.filter((item: any) => item.id !== itemId);
     const updatedMeta = { ...erpMeta, checklist: updatedChecklist };
-    handleSaveMeta(updatedMeta);
+    const totalItems = updatedChecklist.length;
+    const completedItems = updatedChecklist.filter((x: any) => x.done).length;
+    const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    handleSaveMeta(updatedMeta, newProgress);
     toast.success(t('Đã xóa việc con'));
   };
 
@@ -2702,34 +2753,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)' }}>
                         {t('Tiến độ việc con:')} <strong style={{ color: 'var(--color-success)' }}>{completed}/{total}</strong> {t('đã xong')} ({percent}%)
                       </span>
-                      {showSuggestion && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData((prev: any) => ({ ...prev, progress: percent }));
-                            toast.success(t('Đã cập nhật tiến độ công việc chính thành ') + percent + '%');
-                          }}
-                          style={{
-                            background: 'rgba(16, 185, 129, 0.08)',
-                            color: 'var(--color-success)',
-                            border: '1px solid rgba(16, 185, 129, 0.15)',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '0.68rem',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.15)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.08)';
-                          }}
-                        >
-                          {t('Đồng bộ tiến độ chính')}
-                        </button>
-                      )}
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        color: 'var(--color-success)',
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <Check size={12} /> {t('Tự động đồng bộ')}
+                      </span>
                     </div>
                     <div style={{
                       width: '100%',
@@ -6032,6 +6068,141 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   >
                     {t('Đã hiểu, quay lại chọn')}
                   </button>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Unsaved New Task Confirmation Modal */}
+          <AnimatePresence>
+            {showUnsavedNewTaskPrompt && (
+              <div 
+                className="overlay-backdrop" 
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000500 }} 
+                onClick={() => setShowUnsavedNewTaskPrompt(false)}
+              >
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+                  animate={{ opacity: 1, scale: 1, y: 0 }} 
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  onClick={e => e.stopPropagation()}
+                  style={{ 
+                    background: 'var(--color-surface)', 
+                    width: '92%', 
+                    maxWidth: '430px', 
+                    borderRadius: 'var(--radius-xl)', 
+                    padding: '1.75rem 1.5rem', 
+                    boxShadow: 'var(--shadow-2xl)', 
+                    border: '1px solid var(--color-border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    gap: '1rem'
+                  }}
+                >
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    color: '#f59e0b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <AlertTriangle size={28} />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
+                      {t('Công việc chưa được tạo!')}
+                    </h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
+                      {t('Bạn đang tạo công việc mới mà chưa bấm tạo thật sự. Bạn muốn thoát luôn hay tạo ngay bây giờ?')}
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '0.25rem' }}>
+                    {/* Tạo ngay */}
+                    <button 
+                      type="button"
+                      className="btn primary" 
+                      onClick={async () => {
+                        if (!formData.subject?.trim()) {
+                          toast.error(t('Vui lòng nhập tên công việc trước khi tạo!'));
+                          setShowUnsavedNewTaskPrompt(false);
+                          const titleInput = document.querySelector('input[placeholder*="tên công việc"]') as HTMLInputElement;
+                          if (titleInput) titleInput.focus();
+                          return;
+                        }
+                        setShowUnsavedNewTaskPrompt(false);
+                        await handleManualSave();
+                      }}
+                      style={{ 
+                        width: '100%', 
+                        padding: '11px 16px', 
+                        borderRadius: '10px', 
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Save size={16} />
+                      {t('Tạo ngay')}
+                    </button>
+
+                    {/* Thoát luôn */}
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowUnsavedNewTaskPrompt(false);
+                        onClose();
+                      }}
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 16px', 
+                        borderRadius: '10px', 
+                        fontWeight: 700,
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        color: 'var(--color-danger, #ef4444)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                    >
+                      <X size={16} />
+                      {t('Thoát luôn')}
+                    </button>
+
+                    {/* Tiếp tục chỉnh sửa */}
+                    <button 
+                      type="button"
+                      onClick={() => setShowUnsavedNewTaskPrompt(false)}
+                      style={{ 
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--color-text-muted)',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: '6px 12px'
+                      }}
+                    >
+                      {t('Tiếp tục chỉnh sửa')}
+                    </button>
+                  </div>
                 </motion.div>
               </div>
             )}

@@ -664,9 +664,11 @@ function getContactIdByPhoneOrEmail($conn, $phone, $email = null)
 {
     if (!empty($phone)) {
         $cleanPhone = normalizePhone($phone);
-        $stmt = $conn->prepare("SELECT id FROM contacts WHERE phone = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+        $noLeadingZero = ltrim($cleanPhone, '0');
+        $withLeadingZero = '0' . $noLeadingZero;
+        $stmt = $conn->prepare("SELECT id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
         if ($stmt) {
-            $stmt->bind_param("s", $cleanPhone);
+            $stmt->bind_param("ss", $withLeadingZero, $noLeadingZero);
             $stmt->execute();
             $r = $stmt->get_result()->fetch_assoc();
             $stmt->close();
@@ -3904,9 +3906,11 @@ function ensurePersonAndContact($conn, $leadId) {
     }
 
     // Get Person ID
-    $stmtGet = $conn->prepare("SELECT id FROM persons WHERE phone = ? LIMIT 1");
+    $noZeroPhone = ltrim($phone, '0');
+    $withZeroPhone = '0' . $noZeroPhone;
+    $stmtGet = $conn->prepare("SELECT id FROM persons WHERE (phone = ? OR phone = ?) LIMIT 1");
     if (!$stmtGet) return;
-    $stmtGet->bind_param("s", $phone);
+    $stmtGet->bind_param("ss", $withZeroPhone, $noZeroPhone);
     $stmtGet->execute();
     $person = $stmtGet->get_result()->fetch_assoc();
     $stmtGet->close();
@@ -3998,9 +4002,11 @@ function ensurePersonAndContact($conn, $leadId) {
 
         // Tìm tiếp qua phone nếu person_id chưa có contact để tránh tạo trùng
         if (empty($existingContacts) && !empty($phone)) {
-            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE phone = ? AND deleted_at IS NULL ORDER BY id DESC");
+            $noZeroP = ltrim($phone, '0');
+            $withZeroP = '0' . $noZeroP;
+            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
             if ($stmtExistPhone) {
-                $stmtExistPhone->bind_param("s", $phone);
+                $stmtExistPhone->bind_param("ss", $withZeroP, $noZeroP);
                 $stmtExistPhone->execute();
                 $resExistPhone = $stmtExistPhone->get_result();
                 while ($rowExistP = $resExistPhone->fetch_assoc()) {
