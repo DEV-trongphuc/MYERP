@@ -1798,6 +1798,45 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       onClose();
     }
   }, [hasChanges, onClose, showConfirm, handleSave]);
+
+  const canDeleteContact = useMemo(() => {
+    if (!contact) return false;
+    const role = (currentUser?.role || '').toLowerCase();
+    if (['admin', 'superadmin', 'super_admin', 'director'].includes(role)) return true;
+    const isOwnerOrCreator = (
+      Number(contact.owner_id) === Number(currentUser?.id) || 
+      Number(contact.created_by) === Number(currentUser?.id) ||
+      Number(formData.owner_id) === Number(currentUser?.id) ||
+      Number(formData.created_by) === Number(currentUser?.id)
+    );
+    const src = (contact.source || formData.source || '').toLowerCase();
+    const isSelfEntered = ['ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other'].includes(src) || (
+      !contact.dl_status && !formData.dl_status &&
+      !['facebook', 'google', 'google_lp', 'website', 'mkt_webhook', 'capi', 'campaign'].includes(src)
+    );
+    return isOwnerOrCreator && isSelfEntered;
+  }, [contact, currentUser, formData.owner_id, formData.created_by, formData.source, formData.dl_status]);
+
+  const handleDeleteContact = useCallback(() => {
+    if (!contact) return;
+    showConfirm({
+      title: `Xóa khách hàng "${contact.full_name || formData.full_name || 'này'}"?`,
+      message: 'Bạn có chắc chắn muốn xóa khách hàng này? Thao tác này sẽ chuyển khách hàng vào thùng rác.',
+      isDanger: true,
+      confirmText: 'Xác nhận xóa',
+      cancelText: 'Hủy',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/contacts/${contact.id}`);
+          addToast('Đã xóa khách hàng thành công', 'success');
+          onUpdate?.(null);
+          onClose();
+        } catch (e: any) {
+          addToast(e?.response?.data?.message || 'Không thể xóa khách hàng. Vui lòng thử lại sau.', 'error');
+        }
+      }
+    });
+  }, [contact, formData.full_name, showConfirm, addToast, onUpdate, onClose]);
   const [showCallLogger, setShowCallLogger] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [meetingToComplete, setMeetingToComplete] = useState<any | null>(null);
@@ -6074,30 +6113,53 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       ) : null}
                     </h3>
                   </div>
-                  <button
-                    disabled={isSubmitting}
-                    onClick={handleSave}
-                    className="btn success sm"
-                    style={{
-                      padding: isMobileOrTablet ? '6px 12px' : '6px 14px',
-                      borderRadius: '10px',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      height: isMobileOrTablet ? '36px' : '32px',
-                      width: isMobileOrTablet ? '44px' : undefined,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: isMobileOrTablet ? '0' : '6px',
-                      background: 'var(--color-primary)',
-                      borderColor: 'var(--color-primary)',
-                      color: 'white',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Save size={isMobileOrTablet ? 16 : 14} />
-                    {!isMobileOrTablet && <span>Lưu</span>}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {canDeleteContact && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteContact}
+                        title="Xóa khách hàng"
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '10px',
+                          height: isMobileOrTablet ? '36px' : '32px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#dc2626',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                    <button
+                      disabled={isSubmitting}
+                      onClick={handleSave}
+                      className="btn success sm"
+                      style={{
+                        padding: isMobileOrTablet ? '6px 12px' : '6px 14px',
+                        borderRadius: '10px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        height: isMobileOrTablet ? '36px' : '32px',
+                        width: isMobileOrTablet ? '44px' : undefined,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: isMobileOrTablet ? '0' : '6px',
+                        background: 'var(--color-primary)',
+                        borderColor: 'var(--color-primary)',
+                        color: 'white',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Save size={isMobileOrTablet ? 16 : 14} />
+                      {!isMobileOrTablet && <span>Lưu</span>}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 /* ── Desktop Profile Header ── */
@@ -6467,6 +6529,39 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       >
                         <LeadScoreRing score={score} size={44} showLabel={true} />
                       </div>
+
+                      {canDeleteContact && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteContact}
+                          title="Xóa khách hàng này"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 14px',
+                            borderRadius: '10px',
+                            height: '40px',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#dc2626';
+                            e.currentTarget.style.color = '#fff';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                            e.currentTarget.style.color = '#dc2626';
+                          }}
+                        >
+                          <Trash2 size={15} /> Xóa
+                        </button>
+                      )}
 
                       <button
                         disabled={isSubmitting}

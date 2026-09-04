@@ -1874,7 +1874,7 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
     }
 }
 
-function logDistribution($conn, $leadId, $assignedTo, $roundId, $status, $message, $triggerSync = true, $customDate = null)
+function logDistribution($conn, $leadId, $assignedTo, $roundId, $status, $message, $triggerSync = true, $customDate = null, $notifySale = true)
 {
     if ($customDate) {
         $stmt = $conn->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at) VALUES (?, ?, ?, ?, ?, ?)");
@@ -1891,7 +1891,7 @@ function logDistribution($conn, $leadId, $assignedTo, $roundId, $status, $messag
     }
 
     // Directly notify the assigned Sale via Zalo & Email
-    if (in_array($status, ['assigned', 'compensation']) && $assignedTo > 0) {
+    if ($notifySale && in_array($status, ['assigned', 'compensation']) && $assignedTo > 0) {
         sendDirectSaleLeadNotification($conn, $leadId, $assignedTo, $roundId);
     }
 
@@ -3867,7 +3867,7 @@ function sendNewLeadApiNotificationToAdmins($conn, $connData, $leadId, $customer
     return true;
 }
 
-function ensurePersonAndContact($conn, $leadId) {
+function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
     // 1. Get lead info
     $stmt = $conn->prepare("SELECT phone, email, name, source, type, note, assigned_to, is_accepted, target_round_id FROM leads WHERE id = ?");
     if (!$stmt) return;
@@ -4114,7 +4114,10 @@ function ensurePersonAndContact($conn, $leadId) {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?, ?, ?, ?)
             ");
             if ($stmtContact) {
-                $createdBy = 1;
+                $createdBy = !empty($creatorUserId) ? (int)$creatorUserId : 1;
+                if (empty($creatorUserId) && ($source === 'gioi_thieu' || $source === 'ca_nhan')) {
+                    $createdBy = $ownerUserId ?: 1;
+                }
                 if ($projectId !== null) {
                     $chkExists = $conn->query("SELECT id FROM projects WHERE id = " . (int)$projectId);
                     if (!$chkExists || $chkExists->num_rows === 0) {

@@ -1317,8 +1317,26 @@ class ContactController {
 
     public function destroy(array $auth, int $id): void {
         $scope = $this->getScope($auth, 'leads', 'delete');
-        if ($scope === 'none') {
-            respond(403, null, 'Bạn không có quyền xóa liên hệ', false);
+        
+        $stmtC = $this->db->prepare("SELECT id, owner_id, created_by, source FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmtC->execute([$id, $auth['tenant_id']]);
+        $cRow = $stmtC->fetch(PDO::FETCH_ASSOC);
+
+        if (!$cRow) {
+            respond(404, null, 'Không tìm thấy liên hệ hoặc liên hệ đã bị xóa', false);
+        }
+
+        $src = strtolower($cRow['source'] ?? '');
+        $isSelfEntered = in_array($src, ['ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other'], true) || 
+                         !in_array($src, ['facebook', 'google', 'google_lp', 'website', 'mkt_webhook', 'capi', 'campaign'], true);
+
+        $isOwnSelfEntered = (
+            ((int)$cRow['created_by'] === (int)$auth['user_id']) ||
+            ((int)$cRow['owner_id'] === (int)$auth['user_id'] && $isSelfEntered)
+        );
+
+        if ($scope === 'none' && !$isOwnSelfEntered) {
+            respond(403, null, 'Bạn chỉ có quyền xóa khách hàng do bạn tự tạo hoặc tự nhập', false);
         }
         
         $sql = "UPDATE contacts SET deleted_at=NOW() WHERE id=? AND tenant_id=?";
@@ -1335,6 +1353,7 @@ class ContactController {
             $sql .= " AND owner_id=?";
             $p[] = $auth['user_id'];
         }
+
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
         if (!$stmt->rowCount()) respond(404, null, 'Không tìm thấy liên hệ hoặc không có quyền xóa', false);
@@ -1348,9 +1367,6 @@ class ContactController {
 
     public function bulkDelete(array $auth): void {
         $scope = $this->getScope($auth, 'leads', 'delete');
-        if ($scope === 'none') {
-            respond(403, null, 'Bạn không có quyền xóa liên hệ', false);
-        }
         $b = getBody();
         $ids = $b['ids'] ?? [];
         if (empty($ids)) respond(400, null, 'Danh sách ID không hợp lệ', false);
@@ -1370,16 +1386,25 @@ class ContactController {
         } else if ($scope === 'own') {
             $where .= " AND owner_id=?";
             $params[] = $auth['user_id'];
+        } else if ($scope === 'none') {
+            $where .= " AND (created_by=? OR (owner_id=? AND (source IN ('ca_nhan', 'gioi_thieu', 'databank', 'self_assign', 'other') OR source NOT IN ('facebook', 'google', 'google_lp', 'website', 'mkt_webhook', 'capi', 'campaign'))))";
+            $params[] = $auth['user_id'];
+            $params[] = $auth['user_id'];
         }
         
         $sql = "UPDATE contacts SET deleted_at=NOW() WHERE $where";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         
+        $deletedCount = $stmt->rowCount();
+        if ($deletedCount === 0 && $scope === 'none') {
+            respond(403, null, 'Bạn chỉ có quyền xóa khách hàng do bạn tự tạo hoặc tự nhập', false);
+        }
+        
         $this->restorePersonsPublicStatusBatch($ids, $auth['tenant_id']);
         
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'BULK_DELETE', 'contact', null, json_encode(['ids' => $ids]));
-        respond(200, null, "Đã xóa " . $stmt->rowCount() . " liên hệ");
+        respond(200, null, "Đã xóa " . $deletedCount . " liên hệ");
     }
 
     private function getSetting(string $key, string $default): string {

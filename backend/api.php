@@ -1129,6 +1129,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
         return ['success' => false, 'message' => 'Chỉ có Sale hoặc Manager dạng Sale mới được phép tự nhận chăm sóc (Self-assign) data.'];
     }
 
+    $isSelfEntered = false;
     if ($decodedUser['role'] === 'sale' || $distribution_mode === 'self_assign') {
         $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
         $stmtC->bind_param("s", $decodedUser['email']);
@@ -1143,6 +1144,22 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
         $distribution_mode = 'auto_round';
         if ($source !== 'gioi_thieu') {
             $source = 'ca_nhan';
+        }
+        $isSelfEntered = true;
+    } else if (!empty($override_consultant_id)) {
+        if ((int)$override_consultant_id === (int)($decodedUser['user_id'] ?? 0) || (int)$override_consultant_id === (int)($decodedUser['id'] ?? 0)) {
+            $isSelfEntered = true;
+        } else {
+            $stmtMe = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
+            if ($stmtMe) {
+                $stmtMe->bind_param("s", $decodedUser['email']);
+                $stmtMe->execute();
+                $meRow = $stmtMe->get_result()->fetch_assoc();
+                $stmtMe->close();
+                if ($meRow && (int)$meRow['id'] === (int)$override_consultant_id) {
+                    $isSelfEntered = true;
+                }
+            }
         }
     }
 
@@ -1707,7 +1724,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
                         $updAccepted->execute();
                         $updAccepted->close();
 
-                        ensurePersonAndContact($conn, $leadId);
+                        ensurePersonAndContact($conn, $leadId, $decodedUser['id'] ?? $decodedUser['user_id'] ?? null);
                     }
                     if ($aiScreenerResult) {
                         $updAi = $conn->prepare("UPDATE leads SET ai_screener_status = ?, ai_evaluation = ? WHERE id = ?");
@@ -1722,7 +1739,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
                     $roundName = $stmtRound->get_result()->fetch_assoc()['round_name'] ?? 'Không rõ';
                     $stmtRound->close();
 
-                    logDistribution($conn, $leadId, $consultantId, $assignedRoundId, $status, $logMsg, false);
+                    logDistribution($conn, $leadId, $consultantId, $assignedRoundId, $status, $logMsg, false, null, !$isSelfEntered);
 
                     $conn->commit();
                     $inTransaction = false;
@@ -1802,72 +1819,6 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
                             }
                         } catch (Exception $notifyEx) {
                             error_log("Error preparing skipped compensation notifications: " . $notifyEx->getMessage());
-                        }
-                    }
-
-                    // Fire notification using Mailer and Zalo ONLY if within working hours
-                    if (!$isOutsideWorkHours) {
-                        try {
-                            require_once __DIR__ . '/mailer.php';
-                            require_once __DIR__ . '/zalo_bot.php';
-
-                            $stmtC = $conn->prepare("SELECT name, email FROM consultants WHERE id = ?");
-                            $stmtC->bind_param("i", $consultantId);
-                            $stmtC->execute();
-                            $cRes = $stmtC->get_result();
-                            if ($cRes->num_rows > 0) {
-                                $c = $cRes->fetch_assoc();
-                                $ccEmails = '';
-                                $stmtQ = $conn->prepare("SELECT cc_emails FROM distribution_rounds WHERE id = ?");
-                                $stmtQ->bind_param("i", $assignedRoundId);
-                                $stmtQ->execute();
-                                $qRound = $stmtQ->get_result();
-                                if ($qRound && $qRound->num_rows > 0) {
-                                    $ccEmails = $qRound->fetch_assoc()['cc_emails'] ?? '';
-                                }
-                                $stmtQ->close();
-
-                                $fName = trim($name) !== '' ? $name : 'Khách hàng ẩn danh';
-
-                                try {
-                                    sendLeadAssignedEmailToSale(
-                                        $c['email'],
-                                        $c['name'],
-                                        $fName,
-                                        $phone ?: '',
-                                        $note ?: '',
-                                        $source ?: '',
-                                        $ccEmails,
-                                        $roundName,
-                                        $leadId,
-                                        $consultantId,
-                                        $assignedRoundId
-                                    );
-                                } catch (Exception $eEx) {
-                                    error_log("Error sending manual insert assignment email: " . $eEx->getMessage());
-                                }
-
-                                try {
-                                    sendLeadAssignedZaloMessageToSale(
-                                        $consultantId,
-                                        $c['name'],
-                                        $fName,
-                                        $phone ?: '',
-                                        $note ?: '',
-                                        $source ?: '',
-                                        $roundName,
-                                        $leadId,
-                                        $assignedRoundId,
-                                        $email,
-                                        $type
-                                    );
-                                } catch (Exception $zEx) {
-                                    error_log("Error sending manual insert assignment Zalo: " . $zEx->getMessage());
-                                }
-                            }
-                            $stmtC->close();
-                        } catch (Exception $notifyEx) {
-                            error_log("Error preparing manual assignment notifications: " . $notifyEx->getMessage());
                         }
                     }
 

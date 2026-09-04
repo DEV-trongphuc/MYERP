@@ -2108,7 +2108,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 {b.label}
               </button>
             ))}
-            {['admin', 'superadmin', 'super_admin'].includes(user?.role || '') && (
+            {!['viewer'].includes(user?.role || '') && (
               <button onClick={bulkDelete}
                 style={{ padding:'0.375rem 0.875rem', background:'rgba(239,68,68,0.8)', border:'none', borderRadius:'var(--radius-lg)', color:'white', fontWeight:700, fontSize:'0.8125rem', cursor:'pointer' }}>
                 Xóa
