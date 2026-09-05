@@ -5723,8 +5723,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 if (wsPriority) count++;
                 if (wsStatus && wsStatus !== 'planned') count++;
                 if (wsDatePreset && wsDatePreset !== 'all') count++;
-                if (wsTeamId) count++;
+                if (wsTeamId && wsTeamId !== 'all_teams_bypass') count++;
                 if (wsUserId) count++;
+                if (wsActivityType && wsActivityType !== 'task') count++;
+                if (wsRelatedType) count++;
                 return count > 0 ? (
                   <span style={{
                     background: 'var(--color-primary)',
@@ -6012,7 +6014,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       setWsDatePreset('all');
                       setWsStartDate('');
                       setWsEndDate('');
-                      setWsTeamId('');
+                      setWsTeamId('all_teams_bypass');
                       setWsUserId('');
                       setWsActivityType('task');
                       setWsRelatedType('');
