@@ -69,9 +69,27 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
   const bgColor = color ? color : (name ? getColorFromName(name) : 'var(--color-primary)');
 
   let resolvedSrc = src;
-  if (src && src.startsWith('uploads/')) {
-    const apiBase = import.meta.env.VITE_API_URL || '/backend';
-    resolvedSrc = `${apiBase}/${src}`;
+  if (src) {
+    if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+      resolvedSrc = src;
+    } else {
+      let cleanPath = src.replace(/^\/+/, '');
+      if (cleanPath.includes('storage/uploads/')) {
+        cleanPath = cleanPath.replace('storage/uploads/', 'uploads/');
+      }
+      if (cleanPath.startsWith('backend/')) {
+        cleanPath = cleanPath.substring('backend/'.length);
+      }
+      if (cleanPath.startsWith('deposits/')) {
+        cleanPath = 'uploads/' + cleanPath;
+      }
+      const apiBase = import.meta.env.VITE_API_URL || 'https://myerp.ideas.edu.vn/backend';
+      let baseUrl = apiBase.split('api.php')[0].replace(/\/+$/, '');
+      if (!baseUrl.startsWith('http')) {
+        baseUrl = 'https://myerp.ideas.edu.vn/backend';
+      }
+      resolvedSrc = `${baseUrl}/${cleanPath}`;
+    }
   }
 
   // Nếu name là "Hệ thống" / "System" / "HT" / "Hệ thống quy trình IDEAS" và không có ảnh avatar cụ thể, gán ảnh LOGO mặc định

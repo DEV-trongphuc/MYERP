@@ -315,6 +315,19 @@ class ActivityController {
         if (!in_array($sortBy, $allowedSort)) $sortBy = 'due_date';
         if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'ASC';
 
+        $managedTeamIds = [];
+        $managedUserIds = [];
+        if (in_array($auth['role'], ['manager', 'director', 'sale_admin', 'saleadmin'], true)) {
+            $mTeamsStmt = $this->db->prepare("SELECT id FROM teams WHERE tenant_id = ? AND (leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))");
+            $mTeamsStmt->execute([$tid, $auth['user_id'], $auth['user_id']]);
+            $managedTeamIds = $mTeamsStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($managedTeamIds)) {
+                $inTeams = implode(',', array_map('intval', $managedTeamIds));
+                $uStmt = $this->db->query("SELECT id FROM users WHERE tenant_id = $tid AND team_id IN ($inTeams)");
+                $managedUserIds = $uStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            }
+        }
+
         if (in_array($auth['role'], ['sales', 'sale'], true)) {
             $where[] = '(
                 a.user_id = ? 
@@ -370,70 +383,57 @@ class ActivityController {
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
         } else if ($auth['role'] === 'manager') {
-            $where[] = '(
+            $teamUserClause = !empty($managedUserIds) ? "a.user_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "1=0";
+            $teamCtClause = !empty($managedUserIds) ? "OR ct.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "";
+            $teamDClause = !empty($managedUserIds) ? "OR d.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ") OR ct.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "";
+
+            $where[] = "(
                 a.user_id = ? 
                 OR a.created_by = ?
                 OR a.approver_id = ?
                 OR FIND_IN_SET(?, a.participant_ids)
                 OR (
-                    a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
+                    $teamUserClause
                     AND NOT (
-                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
-                        OR (COALESCE(a.tags, \'\') LIKE \'%ca_nhan%\' OR COALESCE(a.tags, \'\') LIKE \'%personal%\')
+                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = '' OR a.participant_ids = CONCAT(a.user_id, '')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = '' OR a.related_type = 'personal' OR a.related_id IS NULL OR a.related_id = 0))
+                        OR (COALESCE(a.tags, '') LIKE '%ca_nhan%' OR COALESCE(a.tags, '') LIKE '%personal%')
                     )
                 )
-                OR (a.related_type = \'contact\' AND EXISTS (
-                    SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (ct.owner_id = ? OR ct.owner_id IN (
-                        SELECT id FROM users WHERE team_id IN (
-                            SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                        )
-                    ))
+                OR (a.related_type = 'contact' AND EXISTS (
+                    SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (ct.owner_id = ? $teamCtClause)
                 )) 
-                OR (a.related_type = \'deal\' AND EXISTS (
+                OR (a.related_type = 'deal' AND EXISTS (
                     SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
-                        d.owner_id = ? OR ct.owner_id = ? OR d.owner_id IN (
-                            SELECT id FROM users WHERE team_id IN (
-                                SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                            )
-                        ) OR ct.owner_id IN (
-                            SELECT id FROM users WHERE team_id IN (
-                                SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                            )
-                        )
+                        d.owner_id = ? OR ct.owner_id = ? $teamDClause
                     )
                 ))
-                OR (a.related_type = \'project\' AND EXISTS (
+                OR (a.related_type = 'project' AND EXISTS (
                     SELECT 1 FROM project_roster pr WHERE pr.project_id = a.related_id AND pr.user_id = ?
                 ))
-                OR (a.related_type = \'campaign\' AND EXISTS (
+                OR (a.related_type = 'campaign' AND EXISTS (
                     SELECT 1 FROM marketing_campaigns mc WHERE mc.id = a.related_id AND (FIND_IN_SET(?, mc.user_ids) OR FIND_IN_SET(?, mc.manager_ids) OR mc.created_by = ?)
                 ))
-                OR (a.tags LIKE \'internal_%\' AND (
+                OR (a.tags LIKE 'internal_%' AND (
                     (
-                        a.user_id IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))))
+                        $teamUserClause
                         AND NOT (
-                            (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
-                            OR (COALESCE(a.tags, \'\') LIKE \'%ca_nhan%\' OR COALESCE(a.tags, \'\') LIKE \'%personal%\')
+                            (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = '' OR a.participant_ids = CONCAT(a.user_id, '')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = '' OR a.related_type = 'personal' OR a.related_id IS NULL OR a.related_id = 0))
+                            OR (COALESCE(a.tags, '') LIKE '%ca_nhan%' OR COALESCE(a.tags, '') LIKE '%personal%')
                         )
                     )
-                    OR a.body LIKE \'%"scope":"global"%\'
+                    OR a.body LIKE '%\"scope\":\"global\"%'
                 ))
-            )';
+            )";
+            $params[] = $auth['user_id'];
+            $params[] = $auth['user_id'];
+            $params[] = $auth['user_id'];
+            $params[] = (string)$auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
+            $params[] = (string)$auth['user_id'];
+            $params[] = (string)$auth['user_id'];
             $params[] = $auth['user_id'];
         } else if (in_array($auth['role'], ['director', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
             $where[] = '(

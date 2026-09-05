@@ -5,7 +5,7 @@ import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search,
 import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
-import { TagInput } from '../components/ui/TagInput';
+import { TagInput, getTagColor } from '../components/ui/TagInput';
 import { CallLoggerModal } from '../components/ui/CallLoggerModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
@@ -777,9 +777,17 @@ const ActivityComments: React.FC<{
               const parentComment = isReply && c.parent_id ? comments.find((pc: any) => pc.id === c.parent_id) : null;
               const isDirectReplyToRoot = parentComment && !parentComment.parent_id;
 
+              const cleanName = (n: string) => (n || '').trim().replace(/\s+/g, '_').toLowerCase();
+              const commUser = users?.find((u: any) => 
+                (c.user_id && Number(u.id) === Number(c.user_id)) || 
+                (cleanName(u.full_name) && cleanName(c.user_name) && cleanName(u.full_name) === cleanName(c.user_name)) ||
+                (cleanName(u.name) && cleanName(c.user_name) && cleanName(u.name) === cleanName(c.user_name))
+              );
+              const avatarUrl = c.avatar_url || c.avatar || (commUser as any)?.avatar_url || (commUser as any)?.avatar;
+
               return (
                 <div key={c.id} id={`comment-${c.id}`} style={{ display: 'flex', gap: '0.75rem', transition: 'all 0.5s ease', borderRadius: '12px', padding: isReply ? '4px 0 4px 12px' : '4px', borderLeft: isReply ? '2px solid var(--color-border-light)' : undefined }}>
-                  <Avatar name={c.user_name} src={c.avatar_url || undefined} size={isReply ? 24 : "sm"} />
+                  <Avatar name={c.user_name} src={avatarUrl || undefined} size={isReply ? 24 : "sm"} />
                   <div style={{ flex: 1, background: isReply ? 'transparent' : 'var(--color-surface)', padding: isReply ? '4px 0' : '0.75rem', borderRadius: isReply ? '0' : '12px', border: isReply ? 'none' : '1px solid var(--color-border-light)', boxShadow: isReply ? 'none' : 'var(--shadow-sm)', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                       <strong style={{ fontSize: isReply ? '0.75rem' : '0.8125rem', color: 'var(--color-text)' }}>
@@ -1336,6 +1344,16 @@ const TimelineItem = React.memo<TimelineItemProps>(({
          prevProps.index === nextProps.index;
 });
 
+// Global in-memory cache for static/semi-static metadata to avoid redundant network requests on drawer open
+let globalUsersCache: any[] | null = null;
+let globalTagsCache: any[] | null = null;
+let globalProjectsCache: any[] | null = null;
+let globalCompaniesCache: any[] | null = null;
+let globalStagesCache: any[] | null = null;
+let globalCampaignsCache: any[] | null = null;
+let globalTeamsCache: any[] | null = null;
+let globalSettingsCache: any | null = null;
+
 export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contact, onUpdate, initialTab, zIndex }) => {
   const { addToast, showConfirm, showCall } = useUIStore();
   const navigate = useNavigate();
@@ -1695,6 +1713,25 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [tags, setTags] = useState<string[]>([]);
   const [baseData, setBaseData] = useState<any>(contact || {});
   const [baseTags, setBaseTags] = useState<string[]>(contact?.tags || []);
+  const [isInitialNotesExpanded, setIsInitialNotesExpanded] = useState(true);
+
+  const handleUpdateTagsAndPersist = async (newTags: string[]) => {
+    const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
+    const filtered = newTags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase()));
+    setTags(filtered);
+    setBaseTags(filtered);
+    setFormData((prev: any) => ({ ...prev, tags: filtered }));
+    setBaseData((prev: any) => ({ ...prev, tags: filtered }));
+    if (contact?.id) {
+      try {
+        await api.put(`/contacts/${contact.id}`, { tags: filtered });
+        onUpdate?.({ ...formData, tags: filtered });
+        window.dispatchEvent(new CustomEvent('contact-updated'));
+      } catch (e) {
+        console.error('Failed to sync tags:', e);
+      }
+    }
+  };
 
 
   const hasChanges = useMemo(() => {
@@ -1856,8 +1893,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [editingNote, setEditingNote] = useState<any>(null);
   const [editingActivity, setEditingActivity] = useState<any>(null);
   const [editingDealId, setEditingDealId] = useState<number | null>(null);
-  const [projectsList, setProjectsList] = useState<any[]>([]);
-  const [companiesList, setCompaniesList] = useState<any[]>([]);
+  const [projectsList, setProjectsList] = useState<any[]>(() => globalProjectsCache || []);
+  const [companiesList, setCompaniesList] = useState<any[]>(() => globalCompaniesCache || []);
   const [contactsList, setContactsList] = useState<any[]>([]);
   const [isPartnerSource, setIsPartnerSource] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -2077,11 +2114,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [isOpen, activeTab, notes, searchParams, setSearchParams]);
   const [tasks, setTasks] = useState<any[]>([]);
-  const [allowedProjects, setAllowedProjects] = useState<any[]>([]);
-  const [allowedCampaigns, setAllowedCampaigns] = useState<any[]>([]);
+  const [allowedProjects, setAllowedProjects] = useState<any[]>(() => globalProjectsCache || []);
+  const [allowedCampaigns, setAllowedCampaigns] = useState<any[]>(() => globalCampaignsCache || []);
   const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
-  const [allowedTeams, setAllowedTeams] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [allowedTeams, setAllowedTeams] = useState<any[]>(() => globalTeamsCache || []);
+  const [users, setUsers] = useState<any[]>(() => globalUsersCache || []);
   const [pipelineModal, setPipelineModal] = useState<{
     isOpen: boolean;
     targetId: string;
@@ -2120,7 +2157,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       }
     }
   }, [showDealModal, users]);
-  const [allTags, setAllTags] = useState<any[]>([]);
+  const [allTags, setAllTags] = useState<any[]>(() => globalTagsCache || []);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [draggedOverIndex, setDraggedOverIndex] = useState<number | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
@@ -2128,11 +2165,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [zaloSource, setZaloSource] = useState<'primary' | 'secondary' | 'none'>('none');
   const [loadingContactDetails, setLoadingContactDetails] = useState(false);
 
-  if (isOpen && contact?.id && contact.id !== prevContactId && !loadingContactDetails) {
-    setLoadingContactDetails(true);
-  }
-
-  const [pipelineStages, setPipelineStages] = useState<any[]>(DEFAULT_PIPELINE_STAGES);
+  const [pipelineStages, setPipelineStages] = useState<any[]>(() => globalStagesCache || DEFAULT_PIPELINE_STAGES);
   const [showScrollArrows, setShowScrollArrows] = useState(false);
   const pipelineContainerRef = useRef<HTMLDivElement>(null);
 
@@ -2812,139 +2845,34 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  const fetchCoopSlip = async () => {
+  const fetchCoopSlip = async (forceLoadDetails = false) => {
     if (!contact?.id) return;
     setCoopLoading(true);
     setCoopError('');
     try {
-      const usersEndpoint = 'users?all=1';
-      const [resSlips, resUsers, resDocs, resDeposits] = await Promise.all([
-        fetchAPI('cooperation-slips'),
-        fetchAPI(usersEndpoint),
-        api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`).catch(() => ({ data: { data: { items: [] } } })),
-        api.get(`/deposits?contact_id=${contact.id}`).catch(() => ({ data: { data: [] } }))
-      ]);
-      
-      const docsData = resDocs?.data?.data?.items || [];
-      const mappedDocs = docsData.map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        category: d.category || d.folder || 'general',
-        folder: d.folder || d.category || 'general',
-        path: d.file_path,
-        date: d.created_at ? new Date(d.created_at).toLocaleDateString('vi-VN') : '—',
-        type: d.name ? d.name.split('.').pop() : 'file'
-      }));
+      // 1. Fetch only this contact's cooperation slip (fast indexed lookup)
+      const resSlips = await fetchAPI(`cooperation-slips?contact_id=${contact.id}`);
 
-      const depositsData = resDeposits?.data?.data || [];
-      const depositsList = (Array.isArray(depositsData) ? depositsData : []).map((d: any) => ({
-        ...d,
-        id: d.id,
-        title: d.unit_code && d.unit_code !== '—' && d.unit_code !== '-' && d.unit_code.trim() !== '' 
-          ? `${d.project_name} - Căn ${d.unit_code}` 
-          : d.project_name,
-        value: d.price,
-        stage: (() => {
-          if (d.status === 'pending_admin') {
-            const hasPaidMilestone = d.milestones && Array.isArray(d.milestones) && d.milestones.some((m: any) => m.status === 'paid');
-            return hasPaidMilestone ? 'Chờ duyệt cọc' : 'Đang giao dịch';
-          }
-          if (d.status === 'approved') return 'Hoàn tất cọc';
-          if (d.status === 'cancelled') return 'Đã bể cọc';
-          return d.status;
-        })(),
-        stage_id: d.status,
-        prob: 100,
-        close: d.created_at,
-        description: d.cancelled_reason || '',
-        priority: 'high',
-        stage_color: d.status === 'approved' ? '#10b981' : d.status === 'cancelled' ? '#ef4444' : '#f59e0b',
-        unit_code: d.unit_code,
-        price: d.price,
-        expected_commission: d.expected_commission,
-        project_name: d.project_name,
-        project_id: d.project_id,
-        milestones: d.milestones || [],
-        contact_id: d.contact_id,
-        full_name: d.full_name,
-        phone: d.phone,
-        avatar_url: d.avatar_url,
-        created_at: d.created_at,
-        created_by: d.created_by,
-        contact_owner_id: d.contact_owner_id
-      }));
+      const slipsList = resSlips?.success && Array.isArray(resSlips.data) 
+        ? resSlips.data 
+        : (resSlips?.data ? [resSlips.data] : []);
+      const found = slipsList.find((s: any) => Number(s.contact_id) === Number(contact.id)) || slipsList[0] || null;
 
-      // Merge deposit milestone payment proofs (UNC) into docs
-      depositsList.forEach((dep: any) => {
-        const milestones = dep.milestones || [];
-        milestones.forEach((m: any) => {
-          const fileUrl = m.unc_file_path || m.attachment_url;
-          if (fileUrl) {
-            const filename = (() => {
-              const base = fileUrl.split('/').pop() || `${m.name || 'Cọc'}_UNC`;
-              try { return decodeURIComponent(base); } catch (e) { return base; }
-            })();
-            const fileExt = filename.split('.').pop() || 'png';
-            const exists = mappedDocs.some((d: any) => d.path === fileUrl);
-            if (!exists) {
-              mappedDocs.push({
-                id: `milestone_attachment_${m.id}`,
-                name: filename,
-                date: m.updated_at ? new Date(m.updated_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-                size: '—',
-                type: fileExt,
-                path: fileUrl,
-                category: 'Đặt cọc',
-                folder: 'Đặt cọc',
-                isMilestoneAttachment: true
-              });
-            }
-          }
-        });
-      });
+      setCoopSlip(found || null);
+      setIsRequestingChange(false);
+      setChangeReason('');
 
-      setDocs(mappedDocs);
-      setDeals(depositsList);
-
-      if (resSlips.success) {
-        const found = (resSlips.data || []).find((s: any) => Number(s.contact_id) === Number(contact.id));
-        setCoopSlip(found || null);
-        setIsRequestingChange(false);
-        setChangeReason('');
-        if (found) {
-          const initialShares = found.shareholders.map((s: any) => ({
-            user_id: String(s.user_id),
-            percentage: String(s.percentage)
-          }));
-          setCoopShares(initialShares);
-
-          // Merge coop slip attachment files into docs if any
-          if (found.attachment_url) {
-            const coopFiles = found.attachment_url.split(',').map((s: string) => s.trim()).filter(Boolean);
-            coopFiles.forEach((fileUrl: string, idx: number) => {
-              const filename = fileUrl.split('/').pop() || 'coop_file';
-              const exists = mappedDocs.some((d: any) => d.path === fileUrl);
-              if (!exists) {
-                mappedDocs.push({
-                  id: `coop_slip_attachment_${idx}`,
-                  name: filename,
-                  date: found.created_at ? new Date(found.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-                  size: '—',
-                  type: filename.split('.').pop() || 'file',
-                  path: fileUrl,
-                  category: 'Tài liệu Hợp tác & Hoa hồng',
-                  folder: 'Tài liệu Hợp tác & Hoa hồng',
-                  isCoopAttachment: true
-                });
-              }
-            });
-            setDocs([...mappedDocs]);
-          }
-        }
+      if (found) {
+        const initialShares = (found.shareholders || []).map((s: any) => ({
+          user_id: String(s.user_id),
+          percentage: String(s.percentage)
+        }));
+        setCoopShares(initialShares);
       }
 
-      if (resUsers.success) {
-        const mapped = (resUsers.data || []).map((u: any) => ({
+      // 2. Reuse global users cache or fetch asynchronously
+      if (globalUsersCache && globalUsersCache.length > 0) {
+        const mapped = globalUsersCache.map((u: any) => ({
           ...u,
           value: String(u.id),
           label: u.full_name || u.name,
@@ -2952,6 +2880,130 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           role: u.role || 'sale'
         }));
         setSalesUsers(mapped);
+      } else {
+        fetchAPI('users?all=1').then(resUsers => {
+          if (resUsers?.success) {
+            const mapped = (resUsers.data || []).map((u: any) => ({
+              ...u,
+              value: String(u.id),
+              label: u.full_name || u.name,
+              full_name: u.full_name || u.name,
+              role: u.role || 'sale'
+            }));
+            setSalesUsers(mapped);
+          }
+        }).catch(() => {});
+      }
+
+      // 3. Only fetch cloud-files & deposits if this contact has a coop slip, or if requested for deals/docs tab
+      if (found || forceLoadDetails) {
+        const [resDocs, resDeposits] = await Promise.all([
+          api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`).catch(() => ({ data: { data: { items: [] } } })),
+          api.get(`/deposits?contact_id=${contact.id}`).catch(() => ({ data: { data: [] } }))
+        ]);
+
+        const docsData = resDocs?.data?.data?.items || [];
+        const mappedDocs = docsData.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          category: d.category || d.folder || 'general',
+          folder: d.folder || d.category || 'general',
+          path: d.file_path,
+          date: d.created_at ? new Date(d.created_at).toLocaleDateString('vi-VN') : '—',
+          type: d.name ? d.name.split('.').pop() : 'file'
+        }));
+
+        const depositsData = resDeposits?.data?.data || [];
+        const depositsList = (Array.isArray(depositsData) ? depositsData : []).map((d: any) => ({
+          ...d,
+          id: d.id,
+          title: d.unit_code && d.unit_code !== '—' && d.unit_code !== '-' && d.unit_code.trim() !== '' 
+            ? `${d.project_name} - Căn ${d.unit_code}` 
+            : d.project_name,
+          value: d.price,
+          stage: (() => {
+            if (d.status === 'pending_admin') {
+              const hasPaidMilestone = d.milestones && Array.isArray(d.milestones) && d.milestones.some((m: any) => m.status === 'paid');
+              return hasPaidMilestone ? 'Chờ duyệt cọc' : 'Đang giao dịch';
+            }
+            if (d.status === 'approved') return 'Hoàn tất cọc';
+            if (d.status === 'cancelled') return 'Đã bể cọc';
+            return d.status;
+          })(),
+          stage_id: d.status,
+          prob: 100,
+          close: d.created_at,
+          description: d.cancelled_reason || '',
+          priority: 'high',
+          stage_color: d.status === 'approved' ? '#10b981' : d.status === 'cancelled' ? '#ef4444' : '#f59e0b',
+          unit_code: d.unit_code,
+          price: d.price,
+          expected_commission: d.expected_commission,
+          project_name: d.project_name,
+          project_id: d.project_id,
+          milestones: d.milestones || [],
+          contact_id: d.contact_id,
+          full_name: d.full_name,
+          phone: d.phone,
+          avatar_url: d.avatar_url,
+          created_at: d.created_at,
+          created_by: d.created_by,
+          contact_owner_id: d.contact_owner_id
+        }));
+
+        // Merge deposit milestone payment proofs (UNC) into docs
+        depositsList.forEach((dep: any) => {
+          const milestones = dep.milestones || [];
+          milestones.forEach((m: any) => {
+            const fileUrl = m.unc_file_path || m.attachment_url;
+            if (fileUrl) {
+              const filename = (() => {
+                const base = fileUrl.split('/').pop() || `${m.name || 'Cọc'}_UNC`;
+                try { return decodeURIComponent(base); } catch (e) { return base; }
+              })();
+              const fileExt = filename.split('.').pop() || 'png';
+              const exists = mappedDocs.some((d: any) => d.path === fileUrl);
+              if (!exists) {
+                mappedDocs.push({
+                  id: `milestone_attachment_${m.id}`,
+                  name: filename,
+                  date: m.updated_at ? new Date(m.updated_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
+                  size: '—',
+                  type: fileExt,
+                  path: fileUrl,
+                  category: 'Đặt cọc',
+                  folder: 'Đặt cọc',
+                  isMilestoneAttachment: true
+                });
+              }
+            }
+          });
+        });
+
+        // Merge coop slip attachment files into docs if any
+        if (found && found.attachment_url) {
+          const coopFiles = found.attachment_url.split(',').map((s: string) => s.trim()).filter(Boolean);
+          coopFiles.forEach((fileUrl: string, idx: number) => {
+            const filename = fileUrl.split('/').pop() || 'coop_file';
+            const exists = mappedDocs.some((d: any) => d.path === fileUrl);
+            if (!exists) {
+              mappedDocs.push({
+                id: `coop_slip_attachment_${idx}`,
+                name: filename,
+                date: found.created_at ? new Date(found.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
+                size: '—',
+                type: filename.split('.').pop() || 'file',
+                path: fileUrl,
+                category: 'Tài liệu Hợp tác & Hoa hồng',
+                folder: 'Tài liệu Hợp tác & Hoa hồng',
+                isCoopAttachment: true
+              });
+            }
+          });
+        }
+
+        setDocs(mappedDocs);
+        setDeals(depositsList);
       }
     } catch (e: any) {
       setCoopError(e.message || 'Lỗi tải dữ liệu hợp tác');
@@ -3624,11 +3676,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     try {
       const shouldFetchContact = forceFreshContact || !targetTab || contact.id !== lastLoadedContactIdRef.current;
       const isTaskOrTimelineTab = tabToLoad === 'tasks' || tabToLoad === 'timeline';
-      const needNotes = tabToLoad === 'timeline' || tabToLoad === 'tags';
-      const needProjects = tabToLoad === 'info' && projectsList.length === 0;
-      const needCompanies = tabToLoad === 'info' && companiesList.length === 0;
+      const needNotes = shouldFetchContact || tabToLoad === 'timeline' || tabToLoad === 'tags';
+      const needProjects = tabToLoad === 'info' && (!globalProjectsCache || globalProjectsCache.length === 0) && projectsList.length === 0;
+      const needCompanies = tabToLoad === 'info' && (!globalCompaniesCache || globalCompaniesCache.length === 0) && companiesList.length === 0;
       const needContacts = tabToLoad === 'info' && contactsList.length === 0;
-      const needStages = stages.length === 0;
+      const needStages = (!globalStagesCache || globalStagesCache.length === 0) && stages.length === 0;
 
       // 1. Thực thi đồng thời tất cả các truy vấn dữ liệu độc lập qua Promise.all (Cắt giảm 70% thời gian chờ mạng)
       const [
@@ -3646,7 +3698,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         needCompanies ? api.get('/companies?limit=2000') : Promise.resolve(null),
         needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
         needNotes ? api.get(`/notes?entity_type=contact&entity_id=${contact.id}`) : Promise.resolve(null),
-        api.get(`/activities?related_type=contact&related_id=${contact.id}`)
+        (shouldFetchContact || isTaskOrTimelineTab) ? api.get(`/activities?related_type=contact&related_id=${contact.id}`) : Promise.resolve(null)
       ]);
 
       // 2. Xử lý Fresh Contact Details
@@ -3676,18 +3728,25 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           : [];
         if (clean14.length === 14) {
           clean14.sort((a: any, b: any) => standard14Slugs.indexOf(a.system_slug) - standard14Slugs.indexOf(b.system_slug));
+          globalStagesCache = clean14;
           setPipelineStages(clean14);
         } else {
+          globalStagesCache = DEFAULT_PIPELINE_STAGES;
           setPipelineStages(DEFAULT_PIPELINE_STAGES);
         }
       }
 
       // 4. Xử lý Projects, Companies, Contacts caching
       if (projectsRes) {
-        setProjectsList(projectsRes.data?.data || projectsRes.data || []);
+        const data = projectsRes.data?.data || projectsRes.data || [];
+        globalProjectsCache = data;
+        setProjectsList(data);
+        setAllowedProjects(data);
       }
       if (companiesRes) {
-        setCompaniesList(companiesRes.data?.data?.items || companiesRes.data?.data || []);
+        const data = companiesRes.data?.data?.items || companiesRes.data?.data || [];
+        globalCompaniesCache = data;
+        setCompaniesList(data);
       }
       if (contactsRes) {
         setContactsList(contactsRes.data?.data?.items || contactsRes.data?.data || []);
@@ -3791,24 +3850,26 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }));
       }
 
-      if (tabToLoad === 'deals' || tabToLoad === 'cooperation' || tabToLoad === 'info' || !tabToLoad) {
-        api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`)
-          .then(res => {
-            const docsData = res.data.data?.items || [];
-            const mappedDocs = docsData.map((d: any) => ({
-              id: d.id,
-              name: d.name,
-              category: d.category || d.folder || 'general',
-              folder: d.folder || d.category || 'general',
-              path: d.file_path,
-              date: d.created_at ? new Date(d.created_at).toLocaleDateString('vi-VN') : '—',
-              type: d.name ? d.name.split('.').pop() : 'file'
-            }));
-            setDocs(mappedDocs);
-          })
-          .catch(err => console.error("Error pre-fetching cloud-files for cooperation check:", err));
+      if (tabToLoad === 'deals' || tabToLoad === 'cooperation') {
+        if (tabToLoad === 'cooperation') {
+          api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`)
+            .then(res => {
+              const docsData = res.data.data?.items || [];
+              const mappedDocs = docsData.map((d: any) => ({
+                id: d.id,
+                name: d.name,
+                category: d.category || d.folder || 'general',
+                folder: d.folder || d.category || 'general',
+                path: d.file_path,
+                date: d.created_at ? new Date(d.created_at).toLocaleDateString('vi-VN') : '—',
+                type: d.name ? d.name.split('.').pop() : 'file'
+              }));
+              setDocs(mappedDocs);
+            })
+            .catch(err => console.error("Error pre-fetching cloud-files for cooperation check:", err));
+        }
 
-        const depositsRes = await api.get(`/deposits?contact_id=${contact.id}`);
+        const depositsRes = await api.get(`/deposits?contact_id=${contact.id}`).catch(() => ({ data: { data: [] } }));
         const depositsList = (depositsRes.data.data || []).map((d: any) => ({
           ...d,
           id: d.id,
@@ -3913,9 +3974,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         let activeCoopSlip = coopSlip;
         if (!activeCoopSlip) {
           try {
-            const resSlips = await fetchAPI('cooperation-slips');
+            const resSlips = await fetchAPI(`cooperation-slips?contact_id=${contact.id}`);
             if (resSlips.success) {
-              activeCoopSlip = (resSlips.data || []).find((s: any) => Number(s.contact_id) === Number(contact.id)) || null;
+              const slipsList = Array.isArray(resSlips.data) ? resSlips.data : (resSlips.data ? [resSlips.data] : []);
+              activeCoopSlip = slipsList.find((s: any) => Number(s.contact_id) === Number(contact.id)) || slipsList[0] || null;
             }
           } catch (coopErr) {
             console.error("Lỗi khi tải thông tin hợp tác cho tài liệu:", coopErr);
@@ -4136,112 +4198,161 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
   }, [allowedCampaigns, formData.campaign_id, formData.project_id]);
 
+  const applySettingsData = useCallback((data: any) => {
+    if (!data) return;
+    if (data.temperature_decay_days !== undefined) {
+      const val = parseInt(data.temperature_decay_days, 10);
+      if (!isNaN(val) && val > 0) setDecayDays(val);
+    }
+    if (data.temp_suggestion_call_duration_seconds !== undefined) {
+      const val = parseInt(data.temp_suggestion_call_duration_seconds, 10);
+      if (!isNaN(val) && val > 0) setTempSuggestionCallDuration(val);
+    }
+    if (data.temp_suggestion_required_notes !== undefined) {
+      const val = parseInt(data.temp_suggestion_required_notes, 10);
+      if (!isNaN(val) && val > 0) setTempSuggestionRequiredNotes(val);
+    }
+    if (data.allow_pipeline_backward !== undefined) {
+      setAllowPipelineBackward(data.allow_pipeline_backward === '1' || data.allow_pipeline_backward === 1);
+    }
+    if (data.allow_pipeline_skip !== undefined) {
+      setAllowPipelineSkip(data.allow_pipeline_skip === '1' || data.allow_pipeline_skip === 1);
+    }
+    if (data.coop_eligible_statuses) {
+      try {
+        setCoopEligibleStatuses(JSON.parse(data.coop_eligible_statuses));
+      } catch (e) {
+        setCoopEligibleStatuses(data.coop_eligible_statuses.split(',').map((s: string) => s.trim()).filter(Boolean));
+      }
+    }
+    if (data.coop_default_files) {
+      try {
+        setCoopDefaultFiles(JSON.parse(data.coop_default_files));
+      } catch (e) {
+        setCoopDefaultFiles(data.coop_default_files.split(',').map((s: string) => s.trim()).filter(Boolean));
+      }
+    }
+    if (data.pipeline_status_hierarchy && data.pipeline_status_labels) {
+      try {
+        const hierarchy = JSON.parse(data.pipeline_status_hierarchy);
+        const labels = JSON.parse(data.pipeline_status_labels);
+        const isNew14Stages = Array.isArray(hierarchy) && (hierarchy.includes('new_lead') || hierarchy.length >= 10);
+        if (isNew14Stages) {
+          const mappedStages = hierarchy.map((slug: string, idx: number) => {
+            const defaultStage = DEFAULT_PIPELINE_STAGES.find(s => s.id === slug || s.system_slug === slug);
+            return {
+              id: slug,
+              name: labels[slug] || defaultStage?.name || slug,
+              system_slug: slug,
+              color: defaultStage?.color || '#3b82f6',
+              order_index: idx,
+              definition: defaultStage?.definition || '',
+              target_goal: defaultStage?.target_goal || '',
+              sales_actions: defaultStage?.sales_actions || '',
+              exit_criteria: defaultStage?.exit_criteria || ''
+            };
+          });
+          globalStagesCache = mappedStages;
+          setPipelineStages(mappedStages);
+        } else {
+          setPipelineStages(DEFAULT_PIPELINE_STAGES);
+        }
+      } catch (e) {
+        setPipelineStages(DEFAULT_PIPELINE_STAGES);
+      }
+    } else {
+      setPipelineStages(DEFAULT_PIPELINE_STAGES);
+    }
+    if (data.lead_scoring_rules) {
+      try {
+        setScoringRules(JSON.parse(data.lead_scoring_rules));
+      } catch(e) {}
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
-      api.get('/users?all=1').then(r => {
-        const d = r.data.data;
-        const list = Array.isArray(d) ? d : (d?.items || []);
-        const team = list.map((u: any) => ({
-          ...u,
-          id: u.id,
-          full_name: u.full_name || u.name,
-          avatar_url: u.avatar || u.avatar_url
-        }));
-        setUsers(team);
-      }).catch(() => {});
-      api.get('/tags').then(r => setAllTags(r.data.data || [])).catch(() => { });
-      // api.get('/contacts?limit=1000') removed for performance. TicketDrawer fetches contacts dynamically.
-      const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
-      const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
-      api.get(`/projects${bypassProj}`).then(r => setAllowedProjects(r.data.data || r.data || [])).catch(() => {});
-      api.get('/marketing-campaigns').then(r => setAllowedCampaigns(r.data.data?.items || r.data.data || [])).catch(() => {});
-      api.get('/teams').then(r => setAllowedTeams(r.data.data || r.data || [])).catch(() => {});
+      // 1. Users cache check
+      if (globalUsersCache && globalUsersCache.length > 0) {
+        setUsers(globalUsersCache);
+      } else {
+        api.get('/users?all=1').then(r => {
+          const d = r.data.data;
+          const list = Array.isArray(d) ? d : (d?.items || []);
+          const team = list.map((u: any) => ({
+            ...u,
+            id: u.id,
+            full_name: u.full_name || u.name,
+            avatar_url: u.avatar || u.avatar_url
+          }));
+          globalUsersCache = team;
+          setUsers(team);
+        }).catch(() => {});
+      }
 
-      // Fetch dynamic business configurations (decay days & pipeline status hierarchy)
-      fetchAPI('get_settings')
-        .then(res => {
-          if (res && res.success && res.data) {
-            if (res.data.temperature_decay_days !== undefined) {
-              const val = parseInt(res.data.temperature_decay_days, 10);
-              if (!isNaN(val) && val > 0) {
-                setDecayDays(val);
-              }
-            }
-            if (res.data.temp_suggestion_call_duration_seconds !== undefined) {
-              const val = parseInt(res.data.temp_suggestion_call_duration_seconds, 10);
-              if (!isNaN(val) && val > 0) {
-                setTempSuggestionCallDuration(val);
-              }
-            }
-            if (res.data.temp_suggestion_required_notes !== undefined) {
-              const val = parseInt(res.data.temp_suggestion_required_notes, 10);
-              if (!isNaN(val) && val > 0) {
-                setTempSuggestionRequiredNotes(val);
-              }
-            }
-            if (res.data.allow_pipeline_backward !== undefined) {
-              setAllowPipelineBackward(res.data.allow_pipeline_backward === '1' || res.data.allow_pipeline_backward === 1);
-            }
-            if (res.data.allow_pipeline_skip !== undefined) {
-              setAllowPipelineSkip(res.data.allow_pipeline_skip === '1' || res.data.allow_pipeline_skip === 1);
-            }
-            if (res.data.coop_eligible_statuses) {
-              try {
-                setCoopEligibleStatuses(JSON.parse(res.data.coop_eligible_statuses));
-              } catch (e) {
-                setCoopEligibleStatuses(res.data.coop_eligible_statuses.split(',').map((s: string) => s.trim()).filter(Boolean));
-              }
-            }
-            if (res.data.coop_default_files) {
-              try {
-                setCoopDefaultFiles(JSON.parse(res.data.coop_default_files));
-              } catch (e) {
-                setCoopDefaultFiles(res.data.coop_default_files.split(',').map((s: string) => s.trim()).filter(Boolean));
-              }
-            }
-            if (res.data.pipeline_status_hierarchy && res.data.pipeline_status_labels) {
-              try {
-                const hierarchy = JSON.parse(res.data.pipeline_status_hierarchy);
-                const labels = JSON.parse(res.data.pipeline_status_labels);
-                const isNew14Stages = Array.isArray(hierarchy) && (hierarchy.includes('new_lead') || hierarchy.length >= 10);
-                if (isNew14Stages) {
-                  const mappedStages = hierarchy.map((slug: string, idx: number) => {
-                    const defaultStage = DEFAULT_PIPELINE_STAGES.find(s => s.id === slug || s.system_slug === slug);
-                    return {
-                      id: slug,
-                      name: labels[slug] || defaultStage?.name || slug,
-                      system_slug: slug,
-                      color: defaultStage?.color || '#3b82f6',
-                      order_index: idx,
-                      definition: defaultStage?.definition || '',
-                      target_goal: defaultStage?.target_goal || '',
-                      sales_actions: defaultStage?.sales_actions || '',
-                      exit_criteria: defaultStage?.exit_criteria || ''
-                    };
-                  });
-                  setPipelineStages(mappedStages);
-                } else {
-                  // Always prioritize the standardized 14 IDEAS Pipeline Stages
-                  setPipelineStages(DEFAULT_PIPELINE_STAGES);
-                }
-              } catch (e) {
-                console.error('Failed to parse pipeline stages from settings', e);
-                setPipelineStages(DEFAULT_PIPELINE_STAGES);
-              }
-            } else {
-              setPipelineStages(DEFAULT_PIPELINE_STAGES);
-            }
-            if (res.data.lead_scoring_rules) {
-              try {
-                setScoringRules(JSON.parse(res.data.lead_scoring_rules));
-              } catch(e) {}
-            }
-          }
-        })
-        .catch(() => {});
+      // 2. Tags cache check
+      if (globalTagsCache && globalTagsCache.length > 0) {
+        setAllTags(globalTagsCache);
+      } else {
+        api.get('/tags').then(r => {
+          const data = r.data.data || [];
+          globalTagsCache = data;
+          setAllTags(data);
+        }).catch(() => {});
+      }
 
+      // 3. Projects cache check
+      if (globalProjectsCache && globalProjectsCache.length > 0) {
+        setAllowedProjects(globalProjectsCache);
+        setProjectsList(globalProjectsCache);
+      } else {
+        const isRosterRestricted = ['sale', 'sales', 'manager', 'director'].includes(currentUser?.role || '');
+        const bypassProj = isRosterRestricted ? '' : '?bypass_roster=1';
+        api.get(`/projects${bypassProj}`).then(r => {
+          const data = r.data.data || r.data || [];
+          globalProjectsCache = data;
+          setAllowedProjects(data);
+          setProjectsList(data);
+        }).catch(() => {});
+      }
+
+      // 4. Campaigns cache check
+      if (globalCampaignsCache && globalCampaignsCache.length > 0) {
+        setAllowedCampaigns(globalCampaignsCache);
+      } else {
+        api.get('/marketing-campaigns').then(r => {
+          const data = r.data.data?.items || r.data.data || [];
+          globalCampaignsCache = data;
+          setAllowedCampaigns(data);
+        }).catch(() => {});
+      }
+
+      // 5. Teams cache check
+      if (globalTeamsCache && globalTeamsCache.length > 0) {
+        setAllowedTeams(globalTeamsCache);
+      } else {
+        api.get('/teams').then(r => {
+          const data = r.data.data || r.data || [];
+          globalTeamsCache = data;
+          setAllowedTeams(data);
+        }).catch(() => {});
+      }
+
+      // 6. Settings cache check
+      if (globalSettingsCache) {
+        applySettingsData(globalSettingsCache);
+      } else {
+        fetchAPI('get_settings')
+          .then(res => {
+            if (res && res.success && res.data) {
+              globalSettingsCache = res.data;
+              applySettingsData(res.data);
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, applySettingsData, currentUser?.role]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -6687,8 +6798,24 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               {!isMobileOrTablet && pipelineStepperBar}
 
               {/* ── Layout Split: Left Sidebar Tabs & Content ── */}
-              <div className={styles.drawerBody}>
-                {!drawerOpenComplete || loadingContactDetails ? (
+              <div className={styles.drawerBody} style={{ position: 'relative' }}>
+                {loadingContactDetails && (
+                  <div 
+                    title="Đang đồng bộ dữ liệu mới nhất..."
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: '2.5px',
+                      background: 'linear-gradient(90deg, #3b82f6, #6366f1, #10b981, #3b82f6)',
+                      backgroundSize: '200% 100%',
+                      animation: 'skeletonShimmer 1.4s ease-in-out infinite',
+                      zIndex: 100
+                    }} 
+                  />
+                )}
+                {(!formData?.id && !contact?.id) ? (
                   <DrawerSkeleton />
                 ) : (
                   <>
@@ -7464,6 +7591,58 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         </div>
                       </div>
 
+                      {/* Ghi chú học viên / ban đầu (Dạng Toggle, mặc định mở) */}
+                      <div className="card-panel" style={{ marginBottom: '1.25rem', overflow: 'hidden' }}>
+                        <div 
+                          onClick={() => setIsInitialNotesExpanded(!isInitialNotesExpanded)}
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between', 
+                            cursor: 'pointer',
+                            userSelect: 'none'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <FileText size={18} style={{ color: '#eab308' }} />
+                            <h4 className="panel-title" style={{ margin: 0 }}>Ghi chú học viên / ban đầu</h4>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                            <span>{isInitialNotesExpanded ? 'Thu gọn' : 'Mở rộng'}</span>
+                            {isInitialNotesExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </div>
+                        </div>
+                        <AnimatePresence>
+                          {isInitialNotesExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2 }}
+                              style={{ marginTop: '0.75rem' }}
+                            >
+                              <div 
+                                style={{ 
+                                  background: '#fefce8', 
+                                  border: '1px solid #fef08a',
+                                  color: '#713f12', 
+                                  borderRadius: '8px',
+                                  padding: '16px',
+                                  fontSize: '0.875rem',
+                                  lineHeight: '1.6',
+                                  fontFamily: 'inherit',
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02), 0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                                  minHeight: '120px'
+                                }}
+                              >
+                                {formData.notes || 'Không có ghi chú ban đầu'}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
 
                       <div className="card-panel">
                         <div className="flex items-center justify-between mb-4">
@@ -7940,34 +8119,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           )}
                         </div>
                       </div>
-
-                      <div className="card-panel" style={{ marginTop: '1.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-                          <FileText size={18} style={{ color: '#eab308' }} />
-                          <h4 className="panel-title" style={{ margin: 0 }}>Ghi chú học viên / ban đầu</h4>
-                        </div>
-                        <div 
-                          style={{ 
-                            background: '#fefce8', 
-                            border: '1px solid #fef08a',
-                            color: '#713f12', 
-                            borderRadius: '8px',
-                            padding: '16px',
-                            fontSize: '0.875rem',
-                            lineHeight: '1.6',
-                            fontFamily: 'inherit',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02), 0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                            minHeight: '200px'
-                          }}
-                        >
-                          {formData.notes || 'Không có ghi chú ban đầu'}
-                        </div>
-                      </div>
-
-
-
                     </div>
                   )}
 
@@ -8451,7 +8602,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               <>
                                 <TagInput
                                   tags={tags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase()))}
-                                  onChange={(newTags) => setTags(newTags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase())))}
+                                  onChange={handleUpdateTagsAndPersist}
                                   suggestions={cleanTags.map(t => t.name)}
                                   placeholder="Chọn thẻ tag..."
                                 />
@@ -8462,7 +8613,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       {availableTags.map(t => (
                                         <button
                                           key={t.id}
-                                          onClick={() => !tags.includes(t.name) && setTags([...tags.filter(tg => tg.toLowerCase() !== 'junk'), t.name])}
+                                          type="button"
+                                          onClick={() => !tags.includes(t.name) && handleUpdateTagsAndPersist([...tags.filter(tg => tg.toLowerCase() !== 'junk'), t.name])}
                                           className="btn ghost sm"
                                           style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
                                         >
@@ -10372,6 +10524,51 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               </>
                             )}
                           </>
+                        </div>
+                      </div>
+
+                      {/* BÊ NGUYÊN CỤC GẮN THẺ THÔNG MINH QUA NHẬT KÝ TƯƠNG TÁC */}
+                      <div className="card-panel" style={{ padding: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', marginBottom: '1.25rem', borderRadius: '12px' }}>
+                        <div>
+                          <label className="form-label" style={{ fontWeight: 700, marginBottom: '1rem', display: 'block', fontSize: '0.9375rem' }}>Gắn thẻ thông minh</label>
+                          {(() => {
+                            const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
+                            const cleanTags = allTags.filter(t => !deprecatedTags.includes(String(t.name || '').trim().toLowerCase()));
+                            const availableTags = cleanTags.filter(t => !tags.some(tag => tag.toLowerCase() === (t.name || '').toLowerCase()));
+
+                            return (
+                              <>
+                                <TagInput
+                                  tags={tags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase()))}
+                                  onChange={handleUpdateTagsAndPersist}
+                                  suggestions={cleanTags.map(t => t.name)}
+                                  placeholder="Chọn thẻ tag..."
+                                />
+                                {availableTags.length > 0 && (
+                                  <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', width: '100%' }}>Các tag trong hệ thống:</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
+                                      {availableTags.map(t => (
+                                        <button
+                                          key={t.id}
+                                          type="button"
+                                          onClick={() => {
+                                            if (!tags.includes(t.name)) {
+                                              handleUpdateTagsAndPersist([...tags.filter(tg => tg.toLowerCase() !== 'junk'), t.name]);
+                                            }
+                                          }}
+                                          className="btn ghost sm"
+                                          style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
+                                        >
+                                          + {t.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
 

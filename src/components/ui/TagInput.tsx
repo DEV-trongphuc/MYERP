@@ -2,11 +2,11 @@ import React, { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const TAG_COLORS = [
-  '#BD1D2D', '#BD1D2D', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'
+export const TAG_COLORS = [
+  '#BD1D2D', '#e11d48', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6'
 ];
 
-const getTagColor = (tag: string): string => {
+export const getTagColor = (tag: string): string => {
   let h = 0;
   for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % TAG_COLORS.length;
   return TAG_COLORS[Math.abs(h)];

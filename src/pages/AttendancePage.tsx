@@ -460,7 +460,215 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   // Selected date for detail modal
   const [selectedDateForDetail, setSelectedDateForDetail] = useState<string | null>(null);
   const hasCheckIn = selectedDateForDetail ? calendarCheckIns.some(c => c.check_in_date === selectedDateForDetail) : false;
-  const [modalTab, setModalTab] = useState<'checkin' | 'fingerprint' | 'night_duty' | 'activities'>('checkin');
+  const [modalTab, setModalTab] = useState<'checkin' | 'fingerprint' | 'night_duty' | 'requests' | 'activities'>('checkin');
+  const [exceptionFilter, setExceptionFilter] = useState<'all' | 'leave' | 'late' | 'early' | 'supplementary' | 'overtime'>('all');
+
+  // Aggregated exceptions & requests for the selected day in detail modal
+  const dayExceptions = useMemo(() => {
+    if (!selectedDateForDetail) return [];
+    const items: any[] = [];
+
+    // 1. Leaves & WFH
+    const dayLeaves = calendarLeaves.filter(l => l.start_date_only <= selectedDateForDetail && l.end_date_only >= selectedDateForDetail);
+    dayLeaves.forEach(lv => {
+      const isHalfDay = Number(lv.total_days) === 0.5;
+      let sessionLabel = t('Cả ngày');
+      if (isHalfDay) {
+        sessionLabel = (lv.start_time && lv.start_time < '12:00') ? t('Nửa buổi sáng') : t('Nửa buổi chiều');
+      } else if (Number(lv.total_days) > 1) {
+        sessionLabel = `${lv.total_days} ${t('ngày')} (${lv.start_date_only} → ${lv.end_date_only})`;
+      }
+
+      const isWFH = lv.leave_type === 'remote_work';
+      const isLateEarly = lv.leave_type === 'late_early';
+      
+      let typeName = isHalfDay ? t('Nghỉ nửa buổi') : t('Nghỉ phép');
+      let typeColor = isHalfDay ? '#ea580c' : '#f43f5e';
+      let typeBg = isHalfDay ? 'rgba(234, 88, 12, 0.1)' : 'rgba(244, 63, 94, 0.1)';
+      let typeBorder = isHalfDay ? 'rgba(234, 88, 12, 0.25)' : 'rgba(244, 63, 94, 0.25)';
+      
+      if (isWFH) {
+        typeName = t('Làm việc từ xa (WFH)');
+        typeColor = '#10b981';
+        typeBg = 'rgba(16, 185, 129, 0.1)';
+        typeBorder = 'rgba(16, 185, 129, 0.25)';
+      } else if (isLateEarly) {
+        typeName = t('Đơn Đi muộn / Về sớm');
+        typeColor = '#f59e0b';
+        typeBg = 'rgba(245, 158, 11, 0.1)';
+        typeBorder = 'rgba(245, 158, 11, 0.25)';
+      } else if (lv.leave_type === 'sick') {
+        typeName = t('Nghỉ ốm');
+        typeColor = '#06b6d4';
+        typeBg = 'rgba(6, 182, 212, 0.1)';
+        typeBorder = 'rgba(6, 182, 212, 0.25)';
+      } else if (lv.leave_type === 'unpaid') {
+        typeName = t('Nghỉ không lương');
+        typeColor = '#64748b';
+        typeBg = 'rgba(100, 116, 139, 0.1)';
+        typeBorder = 'rgba(100, 116, 139, 0.25)';
+      }
+
+      items.push({
+        id: `leave-${lv.id}`,
+        originalId: lv.id,
+        category: 'leave',
+        subType: lv.leave_type,
+        user_id: lv.user_id,
+        user_name: lv.user_name,
+        user_avatar: lv.user_avatar,
+        user_email: lv.user_email,
+        typeName,
+        typeColor,
+        typeBg,
+        typeBorder,
+        detailTime: sessionLabel + (lv.start_time && lv.end_time ? ` (${lv.start_time} - ${lv.end_time})` : ''),
+        reason: lv.reason || t('Không có lý do chi tiết'),
+        status: lv.status || (Number(lv.approved) === 1 ? 'approved' : 'pending'),
+        created_at: lv.created_at,
+        raw: lv
+      });
+    });
+
+    // 2. Check-ins with Late Check-in or Reason or Supplementary or Early Checkout
+    const dayCIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
+    dayCIns.forEach(c => {
+      const isLate = c.check_in_time > (c.work_start_time || '08:00');
+      const isSupplementary = !c.selfie_url;
+
+      if (isSupplementary) {
+        items.push({
+          id: `supp-${c.id}`,
+          originalId: c.id,
+          category: 'supplementary',
+          subType: 'supplementary',
+          user_id: c.user_id,
+          user_name: c.user_name,
+          user_avatar: c.user_avatar,
+          user_email: c.user_email,
+          typeName: t('Bổ sung công / Quên chấm'),
+          typeColor: '#8b5cf6',
+          typeBg: 'rgba(139, 92, 246, 0.1)',
+          typeBorder: 'rgba(139, 92, 246, 0.25)',
+          detailTime: `${t('Giờ đề xuất')}: ${c.check_in_time || '08:00'}${c.check_out_time ? ` → ${c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)}` : ''}`,
+          reason: c.reason || t('Quên check-in, yêu cầu cập nhật bổ sung công'),
+          status: c.status,
+          created_at: c.created_at,
+          raw: c
+        });
+      } else if (isLate) {
+        let lateDesc = '';
+        try {
+          const [inH, inM] = c.check_in_time.split(':').map(Number);
+          const [stdH, stdM] = (c.work_start_time || '08:00').split(':').map(Number);
+          const diffM = (inH * 60 + inM) - (stdH * 60 + stdM);
+          if (diffM > 0) {
+            const h = Math.floor(diffM / 60);
+            const m = diffM % 60;
+            lateDesc = h > 0 ? `${t('Trễ')} ${h}h ${m}p` : `${t('Trễ')} ${m} ${t('phút')}`;
+          }
+        } catch (e) {}
+
+        items.push({
+          id: `late-${c.id}`,
+          originalId: c.id,
+          category: 'late',
+          subType: 'late',
+          user_id: c.user_id,
+          user_name: c.user_name,
+          user_avatar: c.user_avatar,
+          user_email: c.user_email,
+          typeName: t('Đi muộn (Check-in trễ)'),
+          typeColor: '#ea580c',
+          typeBg: 'rgba(234, 88, 12, 0.1)',
+          typeBorder: 'rgba(234, 88, 12, 0.25)',
+          detailTime: `${t('Vào ca')}: ${c.check_in_time} (Quy định: ${c.work_start_time || '08:00'})${lateDesc ? ` • ${lateDesc}` : ''}`,
+          reason: c.reason ? c.reason : t('Chưa có giải trình lý do'),
+          status: c.status,
+          created_at: c.created_at,
+          raw: c
+        });
+      }
+
+      // Check early checkout if exists
+      const outTime = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)) : '';
+      const stdEndTime = c.work_end_time || '17:30';
+      if (outTime && outTime < stdEndTime && !isSupplementary) {
+        let earlyDesc = '';
+        try {
+          const [outH, outM] = outTime.split(':').map(Number);
+          const [endH, endM] = stdEndTime.split(':').map(Number);
+          const diffM = (endH * 60 + endM) - (outH * 60 + outM);
+          if (diffM >= 10) {
+            const h = Math.floor(diffM / 60);
+            const m = diffM % 60;
+            earlyDesc = h > 0 ? `${t('Sớm')} ${h}h ${m}p` : `${t('Sớm')} ${m} ${t('phút')}`;
+            items.push({
+              id: `early-${c.id}`,
+              originalId: c.id,
+              category: 'early',
+              subType: 'early',
+              user_id: c.user_id,
+              user_name: c.user_name,
+              user_avatar: c.user_avatar,
+              user_email: c.user_email,
+              typeName: t('Về sớm (Check-out sớm)'),
+              typeColor: '#d946ef',
+              typeBg: 'rgba(217, 70, 239, 0.1)',
+              typeBorder: 'rgba(217, 70, 239, 0.25)',
+              detailTime: `${t('Ra ca')}: ${outTime} (Quy định: ${stdEndTime}) • ${earlyDesc}`,
+              reason: c.reason_checkout || c.reason || t('Check-out trước giờ tan ca'),
+              status: c.status,
+              created_at: c.created_at,
+              raw: c
+            });
+          }
+        } catch (e) {}
+      }
+    });
+
+    // 3. Overtime shifts
+    const dayShifts = calendarShifts.filter(s => s.shift_date === selectedDateForDetail && s.shift_type === 'overtime');
+    dayShifts.forEach(s => {
+      const isAppr = Number(s.approved) === 1 || s.status === 'approved';
+      let displayReason = s.reason || '';
+      if (displayReason) {
+        const match = displayReason.match(/Lý do:\s*(.*)$/i);
+        if (match && match[1] && match[1].trim()) displayReason = match[1].trim();
+      }
+      items.push({
+        id: `ot-${s.id}`,
+        originalId: s.id,
+        category: 'overtime',
+        subType: 'overtime',
+        user_id: s.user_id,
+        user_name: s.user_name,
+        user_avatar: s.user_avatar,
+        user_email: s.user_email,
+        typeName: t('Đăng ký Tăng ca (OT)'),
+        typeColor: '#7c3aed',
+        typeBg: 'rgba(124, 58, 237, 0.1)',
+        typeBorder: 'rgba(124, 58, 237, 0.25)',
+        detailTime: `${t('Thời gian')}: ${s.start_time || '17:00'} - ${s.end_time || '19:00'}${s.total_days ? ` (${s.total_days} ${t('công OT')})` : ''}`,
+        reason: displayReason || t('Tăng ca xử lý công việc'),
+        status: isAppr ? 'approved' : 'pending',
+        created_at: s.created_at,
+        raw: s
+      });
+    });
+
+    return items;
+  }, [selectedDateForDetail, calendarLeaves, calendarCheckIns, calendarShifts]);
+
+  const filteredDayExceptions = useMemo(() => {
+    if (exceptionFilter === 'all') return dayExceptions;
+    if (exceptionFilter === 'leave') return dayExceptions.filter(e => e.category === 'leave');
+    if (exceptionFilter === 'late') return dayExceptions.filter(e => e.category === 'late');
+    if (exceptionFilter === 'early') return dayExceptions.filter(e => e.category === 'early');
+    if (exceptionFilter === 'supplementary') return dayExceptions.filter(e => e.category === 'supplementary');
+    if (exceptionFilter === 'overtime') return dayExceptions.filter(e => e.category === 'overtime');
+    return dayExceptions;
+  }, [dayExceptions, exceptionFilter]);
 
   // Shift registration approval states
   const [registrations, setRegistrations] = useState<any[]>([]);
@@ -648,10 +856,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
   const downloadDayExcel = (date: string) => {
     const dayCheckIns = calendarCheckIns.filter(c => c.check_in_date === date);
-    const headers = 'STT,Nhân viên,Email,Giờ quy định,Giờ check-in,Trạng thái,Lý do trễ\n';
+    const headers = 'STT,Nhân viên,Email,Giờ quy định,Giờ check-in,Giờ check-out,Trạng thái,Lý do trễ\n';
     const rows = dayCheckIns.map((c, i) => {
       const statusText = c.status === 'approved' ? 'Hợp lệ/Đúng giờ' : (c.status === 'pending_approval' ? 'Chờ duyệt đi trễ' : 'Từ chối');
-      return `${i + 1},${c.user_name},${c.user_email},${c.work_start_time || '08:00'},${c.check_in_time},${statusText},"${c.reason || ''}"`;
+      const checkOut = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 19) : c.check_out_time) : '';
+      return `${i + 1},${c.user_name},${c.user_email},${c.work_start_time || '08:00'},${c.check_in_time || ''},${checkOut},${statusText},"${c.reason || ''}"`;
     }).join('\n');
     
     const csvContent = '\uFEFF' + headers + rows;
@@ -703,23 +912,45 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   };
 
   const fetchCalendarCheckIns = async () => {
-    setCalendarLoading(true);
+    const cacheKey = `cached_att_cal_${currentYear}_${currentMonth}_${filterStatus}_${filterUser}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    let hasLoadedFromCache = false;
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed.check_ins)) {
+          setCalendarCheckIns(parsed.check_ins);
+          setCalendarShifts(parsed.shifts || []);
+          setCalendarLeaves(parsed.leaves || []);
+          hasLoadedFromCache = true;
+        }
+      } catch (e) {}
+    }
+
+    if (!hasLoadedFromCache) {
+      setCalendarLoading(true);
+    }
+
     try {
       const query = `check-ins&year=${currentYear}&month=${currentMonth}&status=${filterStatus}&user_id=${filterUser}&include_shifts=1`;
       const res = await fetchAPI(query);
       if (res.success) {
-        if (res.data && res.data.check_ins) {
-          setCalendarCheckIns(res.data.check_ins || []);
-          setCalendarShifts(res.data.shifts || []);
-          setCalendarLeaves(res.data.leaves || []);
-        } else {
-          setCalendarCheckIns(res.data || []);
-          setCalendarShifts([]);
-          setCalendarLeaves([]);
-        }
+        const checkIns = (res.data && res.data.check_ins) ? res.data.check_ins : (res.data || []);
+        const shifts = (res.data && res.data.shifts) ? res.data.shifts : [];
+        const leaves = (res.data && res.data.leaves) ? res.data.leaves : [];
+
+        setCalendarCheckIns(checkIns);
+        setCalendarShifts(shifts);
+        setCalendarLeaves(leaves);
+
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({
+            check_ins: checkIns,
+            shifts,
+            leaves
+          }));
+        } catch (e) {}
       }
-
-
     } catch (err: any) {
       console.error('Error fetching calendar check-ins:', err);
     } finally {
@@ -887,6 +1118,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       toast.error(err.response?.data?.message || t('Lỗi: ') + err.message);
     } finally {
       setActionSubmittingId(null);
+    }
+  };
+
+  const handleApproveRejectLeave = async (id: number, status: 'approved' | 'rejected') => {
+    try {
+      const res = await fetchAPI('hrm/leaves', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status })
+      });
+      if (res && (res.success || res.status === 200 || !res.error)) {
+        toast.success(status === 'approved' ? t('Đã duyệt đơn xin phép thành công!') : t('Đã từ chối đơn xin phép.'));
+        fetchLeaves();
+        fetchCalendarCheckIns();
+        fetchCheckInsList();
+        window.dispatchEvent(new Event('refresh-pending-counts'));
+      } else {
+        toast.error(res?.message || t('Lỗi xử lý đơn xin phép.'));
+      }
+    } catch (err: any) {
+      toast.error(err?.message || t('Lỗi kết nối máy chủ.'));
     }
   };
 
@@ -1100,8 +1352,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <ChevronLeft size={isMobile ? 14 : 16} />
               </button>
               
-              <span style={{ fontSize: isMobile ? '0.78rem' : '0.875rem', fontWeight: 700, padding: isMobile ? '0 4px' : '0 10px', minWidth: isMobile ? '0' : '110px', textAlign: 'center', color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: isMobile ? '0.78rem' : '0.875rem', fontWeight: 700, padding: isMobile ? '0 4px' : '0 10px', minWidth: isMobile ? '0' : '110px', textAlign: 'center', color: 'var(--color-text)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 {t('Tháng {month} / {year}').replace('{month}', String(currentMonth)).replace('{year}', String(currentYear))}
+                {calendarLoading && <Loader2 size={13} className="spin" style={{ color: 'var(--color-primary)' }} />}
               </span>
 
               <button
@@ -1321,7 +1574,21 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', width: '100%', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border-light)' }} className="custom-scrollbar">
+        <div style={{ overflowX: 'auto', width: '100%', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--color-border-light)', position: 'relative' }} className="custom-scrollbar">
+          {calendarLoading && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '3px',
+              zIndex: 10,
+              overflow: 'hidden',
+              backgroundColor: 'rgba(189, 29, 45, 0.12)'
+            }}>
+              <div className="calendar-top-loader-bar" />
+            </div>
+          )}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
@@ -1425,7 +1692,43 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '2px' : '4px', marginTop: isMobile ? '2px' : '4px' }}>
                   {calendarLoading && cell.isCurrentMonth ? (
-                    <div style={{ height: '4px', backgroundColor: 'var(--color-border-light)', borderRadius: '2px', animation: 'pulse 1.5s infinite' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '4px' : '6px', marginTop: isMobile ? '2px' : '4px', padding: '2px 0' }}>
+                      {/* Shimmer skeleton avatars */}
+                      <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '2px' }}>
+                        <div className="skeleton-pulse" style={{
+                          width: isMobile ? 16 : 22,
+                          height: isMobile ? 16 : 22,
+                          borderRadius: '50%',
+                          border: '2px solid var(--color-surface)',
+                          flexShrink: 0
+                        }} />
+                        <div className="skeleton-pulse" style={{
+                          width: isMobile ? 16 : 22,
+                          height: isMobile ? 16 : 22,
+                          borderRadius: '50%',
+                          border: '2px solid var(--color-surface)',
+                          marginLeft: isMobile ? -5 : -8,
+                          flexShrink: 0,
+                          animationDelay: '0.15s'
+                        }} />
+                        <div className="skeleton-pulse" style={{
+                          width: isMobile ? 16 : 22,
+                          height: isMobile ? 16 : 22,
+                          borderRadius: '50%',
+                          border: '2px solid var(--color-surface)',
+                          marginLeft: isMobile ? -5 : -8,
+                          flexShrink: 0,
+                          animationDelay: '0.3s'
+                        }} />
+                      </div>
+                      {/* Shimmer skeleton pill badge */}
+                      <div className="skeleton-pulse" style={{
+                        height: isMobile ? '8px' : '14px',
+                        width: isMobile ? '70%' : '80%',
+                        borderRadius: '4px',
+                        animationDelay: '0.2s'
+                      }} />
+                    </div>
                   ) : cell.dateStr ? (
                     <>
                       {/* 1. Render Check-ins */}
@@ -1473,17 +1776,17 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 width: isMobile ? '18px' : '24px',
                                 height: isMobile ? '18px' : '24px',
                                 borderRadius: '50%',
-                                backgroundColor: 'var(--color-bg-light)',
+                                backgroundColor: '#BD1D2D',
                                 border: '2px solid var(--color-surface)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 fontSize: isMobile ? '0.55rem' : '0.65rem',
                                 fontWeight: 800,
-                                color: 'var(--color-text-muted)',
+                                color: '#ffffff',
                                 marginLeft: isMobile ? '-6px' : '-8px',
-                                zIndex: 1,
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                zIndex: 6,
+                                boxShadow: '0 2px 4px rgba(189, 29, 45, 0.3)'
                               }}>
                                 +{dayCheckIns.length - (isMobile ? 3 : 5)}
                               </div>
@@ -1664,8 +1967,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                     <ShiftIcon size={isMobile ? 8 : 10} />
                                     {label}
                                   </span>
-                                  <span style={{ fontSize: isMobile ? '0.58rem' : '0.625rem', opacity: 0.8, fontWeight: 800 }}>
-                                    {isAppr ? '✓' : '?'}
+                                  <span style={{
+                                    fontSize: isMobile ? '0.5rem' : '0.58rem',
+                                    padding: '1px 4px',
+                                    borderRadius: '3px',
+                                    fontWeight: 700,
+                                    backgroundColor: isAppr ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.18)',
+                                    color: isAppr ? '#10b981' : '#d97706',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {isAppr ? (isMobile ? '✓' : t('Duyệt')) : (isMobile ? '⏳' : t('Chờ'))}
                                   </span>
                                 </div>
                               );
@@ -1680,12 +1991,15 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           {dayLeaves.map(lv => {
                             const isAppr = Number(lv.approved) === 1 || lv.status === 'approved';
                             const isWFH = lv.leave_type === 'remote_work';
+                            const isHalfDay = Number(lv.total_days) === 0.5;
                             const lvLabel = isWFH 
                               ? (isMobile ? t('WFH') : t('Làm từ xa (WFH)'))
+                              : isHalfDay
+                              ? (isMobile ? t('Nửa buổi') : (lv.start_time && lv.start_time < '12:00' ? t('Nghỉ sáng') : t('Nghỉ chiều')))
                               : (isMobile ? t('Nghỉ phép') : t('Nghỉ phép'));
-                            const lvColor = isWFH ? '#10b981' : '#f43f5e';
-                            const lvBg = isWFH ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)';
-                            const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)';
+                            const lvColor = isWFH ? '#10b981' : (isHalfDay ? '#ea580c' : '#f43f5e');
+                            const lvBg = isWFH ? 'rgba(16, 185, 129, 0.08)' : (isHalfDay ? 'rgba(234, 88, 12, 0.08)' : 'rgba(244, 63, 94, 0.08)');
+                            const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : (isHalfDay ? 'rgba(234, 88, 12, 0.25)' : 'rgba(244, 63, 94, 0.25)');
 
                             return (
                               <div key={`lv-${lv.id}`} style={{
@@ -1700,12 +2014,20 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 color: lvColor,
                                 fontWeight: 600
                               }} title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '70px' : '110px' }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '65px' : '95px' }}>
                                   {isWFH ? <MapPin size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
                                   {lvLabel}
                                 </span>
-                                <span style={{ fontSize: isMobile ? '0.58rem' : '0.625rem', opacity: 0.8, fontWeight: 800 }}>
-                                  {isAppr ? '✓' : '?'}
+                                <span style={{
+                                  fontSize: isMobile ? '0.5rem' : '0.58rem',
+                                  padding: '1px 4px',
+                                  borderRadius: '3px',
+                                  fontWeight: 700,
+                                  backgroundColor: isAppr ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.18)',
+                                  color: isAppr ? '#10b981' : '#d97706',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {isAppr ? (isMobile ? '✓' : t('Duyệt')) : (isMobile ? '⏳' : t('Chờ'))}
                                 </span>
                               </div>
                             );
@@ -1730,6 +2052,28 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: .5; }
+          }
+          @keyframes calendarShimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
+          @keyframes topLoaderSlide {
+            0% { left: -35%; width: 30%; }
+            50% { left: 35%; width: 50%; }
+            100% { left: 100%; width: 30%; }
+          }
+          .calendar-top-loader-bar {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(90deg, #BD1D2D, #f59e0b, #BD1D2D);
+            animation: topLoaderSlide 1.2s infinite ease-in-out;
+            box-shadow: 0 0 10px rgba(189, 29, 45, 0.6);
+            border-radius: 3px;
+          }
+          .skeleton-pulse {
+            background: linear-gradient(90deg, var(--color-bg-light) 25%, var(--color-border-light) 50%, var(--color-bg-light) 75%);
+            background-size: 200% 100%;
+            animation: calendarShimmer 1.4s infinite linear;
           }
           .calendar-day-cell {
             transition: all 0.2s ease-in-out;
@@ -3871,173 +4215,222 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
       {/* Stats row - Ultra-compact Micro-Cards */}
       {/* Stats row - Ultra-compact Micro-Cards (Employee-Centric) */}
-      <div className="responsive-grid-4" style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-        gap: isMobile ? '6px' : '1rem'
-      }}>
-        {/* Card 1: Work Days & On-time performance */}
-        <div className="stat-card hover-lift" style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '1px solid var(--color-border-light)',
-          padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-          borderRadius: isMobile ? '8px' : '14px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
-          position: 'relative',
-          overflow: 'hidden',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}>
-          {!isMobile && (
-            <div className="decor-svg" style={{ color: '#3b82f6' }}>
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                <path d="M25 40 H 75 M 40 20 V 30 M 60 20 V 30" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#3b82f6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-              {viewMode === 'calendar' ? t(`CÔNG THÁNG ${currentMonth}`) : t('NGÀY CÔNG')}
-            </span>
-            <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', flexShrink: 0 }}>
-              <Calendar size={isMobile ? 12 : 16} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
-            <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
-              {workDaysCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ngày')}</span>
-            </div>
-            <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-              <span>{t('Đúng')}: <strong style={{ color: '#10b981' }}>{onTimeDays}</strong></span>
-              <span>{t('Chuẩn')}: <strong style={{ color: onTimeRate >= 90 ? '#10b981' : onTimeRate >= 75 ? '#f59e0b' : '#ef4444' }}>{onTimeRate}%</strong></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Lateness & Delay Minutes */}
-        <div className="stat-card hover-lift" style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '1px solid var(--color-border-light)',
-          padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-          borderRadius: isMobile ? '8px' : '14px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
-          position: 'relative',
-          overflow: 'hidden',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}>
-          {!isMobile && (
-            <div className="decor-svg" style={{ color: lateDays > 0 ? '#f59e0b' : '#10b981' }}>
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                <path d="M50 28 V 50 L 64 58" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-              </svg>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: lateDays > 0 ? '#f59e0b' : '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-              {t('ĐI MUỘN & PHÚT TRỄ')}
-            </span>
-            <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: lateDays > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: lateDays > 0 ? '#f59e0b' : '#10b981', flexShrink: 0 }}>
-              <Clock size={isMobile ? 12 : 16} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
-            <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: lateDays > 0 ? '#f59e0b' : 'var(--color-text)', lineHeight: 1.1 }}>
-              {lateDays} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('lần')}</span>
-            </div>
-            <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-              <span>{t('Trễ')}: <strong style={{ color: totalLateMinutes > 0 ? '#ef4444' : '#10b981' }}>{totalLateMinutes}p</strong></span>
-              <span>{t('Chờ duyệt')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Leave Requests & Status */}
-        <div className="stat-card hover-lift" style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '1px solid var(--color-border-light)',
-          padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-          borderRadius: isMobile ? '8px' : '14px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
-          position: 'relative',
-          overflow: 'hidden',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}>
-          {!isMobile && (
-            <div className="decor-svg" style={{ color: '#10b981' }}>
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                <path d="M30 50 L 45 65 L 75 35" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-              {t('ĐƠN TỪ & DUYỆT')}
-            </span>
-            <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', flexShrink: 0 }}>
-              <CheckCircle size={isMobile ? 12 : 16} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
-            <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: '#10b981', lineHeight: 1.1 }}>
-              {approvedCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('hợp lệ')}</span>
-            </div>
-            <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
-              <span>{t('Chờ')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
-              <span>{t('Từ chối')}: <strong style={{ color: '#ef4444' }}>{rejectedCount}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Shifts & Overtime */}
-        <div className="stat-card hover-lift" style={{
-          backgroundColor: 'var(--color-surface)',
-          border: '1px solid var(--color-border-light)',
-          padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
-          borderRadius: isMobile ? '8px' : '14px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
-          position: 'relative',
-          overflow: 'hidden',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}>
-          {!isMobile && (
-            <div className="decor-svg" style={{ color: '#8b5cf6' }}>
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <path d="M50 20 C 35 20, 25 32, 25 47 C 25 62, 35 74, 50 74 C 65 74, 75 62, 75 47 C 60 47, 50 37, 50 20 Z" stroke="currentColor" strokeWidth="2" opacity="0.3" fill="none" />
-              </svg>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#8b5cf6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-              {t('CA TRỰC & TĂNG CA')}
-            </span>
-            <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', flexShrink: 0 }}>
-              <Moon size={isMobile ? 12 : 16} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
-            <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
-              {totalShiftsCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ca')}</span>
-            </div>
-            <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              <span>{t('Đêm')}: <strong style={{ color: '#8b5cf6' }}>{nightShiftsCount}</strong></span>
-              <span>{t('Tuần')}: <strong style={{ color: '#d97706' }}>{weekendShiftsCount}</strong></span>
-              {overtimeShiftsCount > 0 && (
-                <span>{t('OT')}: <strong style={{ color: '#a855f7' }}>{overtimeShiftsCount}</strong></span>
+      {(() => {
+        const isStatsLoading = (viewMode === 'calendar' ? calendarLoading : loading) && (activeCheckIns.length === 0);
+        return (
+          <div className="responsive-grid-4" style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+            gap: isMobile ? '6px' : '1rem'
+          }}>
+            {/* Card 1: Work Days & On-time performance */}
+            <div className="stat-card hover-lift" style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
+              borderRadius: isMobile ? '8px' : '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              position: 'relative',
+              overflow: 'hidden',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              {!isMobile && (
+                <div className="decor-svg" style={{ color: '#3b82f6' }}>
+                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+                    <rect x="25" y="25" width="50" height="50" rx="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                    <path d="M25 40 H 75 M 40 20 V 30 M 60 20 V 30" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </div>
               )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#3b82f6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  {viewMode === 'calendar' ? t(`CÔNG THÁNG ${currentMonth}`) : t('NGÀY CÔNG')}
+                </span>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', flexShrink: 0 }}>
+                  <Calendar size={isMobile ? 12 : 16} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
+                {isStatsLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isMobile ? '20px' : '28px' }}>
+                    <div className="skeleton-pulse" style={{ width: isMobile ? '40px' : '55px', height: isMobile ? '18px' : '24px', borderRadius: '4px' }} />
+                    <div className="skeleton-pulse" style={{ width: '25px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                    {workDaysCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ngày')}</span>
+                  </div>
+                )}
+                {isStatsLoading ? (
+                  <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                ) : (
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
+                    <span>{t('Đúng')}: <strong style={{ color: '#10b981' }}>{onTimeDays}</strong></span>
+                    <span>{t('Chuẩn')}: <strong style={{ color: onTimeRate >= 90 ? '#10b981' : onTimeRate >= 75 ? '#f59e0b' : '#ef4444' }}>{onTimeRate}%</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Card 2: Lateness & Delay Minutes */}
+            <div className="stat-card hover-lift" style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
+              borderRadius: isMobile ? '8px' : '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              position: 'relative',
+              overflow: 'hidden',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              {!isMobile && (
+                <div className="decor-svg" style={{ color: lateDays > 0 ? '#f59e0b' : '#10b981' }}>
+                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+                    <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                    <path d="M50 28 V 50 L 64 58" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: lateDays > 0 ? '#f59e0b' : '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  {t('ĐI MUỘN & PHÚT TRỄ')}
+                </span>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: lateDays > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: lateDays > 0 ? '#f59e0b' : '#10b981', flexShrink: 0 }}>
+                  <Clock size={isMobile ? 12 : 16} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
+                {isStatsLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isMobile ? '20px' : '28px' }}>
+                    <div className="skeleton-pulse" style={{ width: isMobile ? '40px' : '55px', height: isMobile ? '18px' : '24px', borderRadius: '4px' }} />
+                    <div className="skeleton-pulse" style={{ width: '25px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: lateDays > 0 ? '#f59e0b' : 'var(--color-text)', lineHeight: 1.1 }}>
+                    {lateDays} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('lần')}</span>
+                  </div>
+                )}
+                {isStatsLoading ? (
+                  <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                ) : (
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
+                    <span>{t('Trễ')}: <strong style={{ color: totalLateMinutes > 0 ? '#ef4444' : '#10b981' }}>{totalLateMinutes}p</strong></span>
+                    <span>{t('Chờ duyệt')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Card 3: Leave Requests & Status */}
+            <div className="stat-card hover-lift" style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
+              borderRadius: isMobile ? '8px' : '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              position: 'relative',
+              overflow: 'hidden',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              {!isMobile && (
+                <div className="decor-svg" style={{ color: '#10b981' }}>
+                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+                    <circle cx="50" cy="50" r="35" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                    <path d="M30 50 L 45 65 L 75 35" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#10b981', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  {t('ĐƠN TỪ & DUYỆT')}
+                </span>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', flexShrink: 0 }}>
+                  <CheckCircle size={isMobile ? 12 : 16} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
+                {isStatsLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isMobile ? '20px' : '28px' }}>
+                    <div className="skeleton-pulse" style={{ width: isMobile ? '40px' : '55px', height: isMobile ? '18px' : '24px', borderRadius: '4px' }} />
+                    <div className="skeleton-pulse" style={{ width: '35px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: '#10b981', lineHeight: 1.1 }}>
+                    {approvedCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('hợp lệ')}</span>
+                  </div>
+                )}
+                {isStatsLoading ? (
+                  <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                ) : (
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px' }}>
+                    <span>{t('Chờ')}: <strong style={{ color: '#f59e0b' }}>{pendingCount}</strong></span>
+                    <span>{t('Từ chối')}: <strong style={{ color: '#ef4444' }}>{rejectedCount}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Card 4: Shifts & Overtime */}
+            <div className="stat-card hover-lift" style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              padding: isMobile ? '6px 10px' : '0.875rem 1.125rem',
+              borderRadius: isMobile ? '8px' : '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
+              position: 'relative',
+              overflow: 'hidden',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              {!isMobile && (
+                <div className="decor-svg" style={{ color: '#8b5cf6' }}>
+                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+                    <path d="M50 20 C 35 20, 25 32, 25 47 C 25 62, 35 74, 50 74 C 65 74, 75 62, 75 47 C 60 47, 50 37, 50 20 Z" stroke="currentColor" strokeWidth="2" opacity="0.3" fill="none" />
+                  </svg>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: isMobile ? '0.625rem' : '0.7rem', color: '#8b5cf6', fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  {t('CA TRỰC & TĂNG CA')}
+                </span>
+                <div style={{ width: isMobile ? '20px' : '32px', height: isMobile ? '20px' : '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', flexShrink: 0 }}>
+                  <Moon size={isMobile ? 12 : 16} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: isMobile ? '2px' : '4px' }}>
+                {isStatsLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isMobile ? '20px' : '28px' }}>
+                    <div className="skeleton-pulse" style={{ width: isMobile ? '40px' : '55px', height: isMobile ? '18px' : '24px', borderRadius: '4px' }} />
+                    <div className="skeleton-pulse" style={{ width: '25px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: isMobile ? '1.25rem' : '1.625rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                    {totalShiftsCount} <span style={{ fontSize: isMobile ? '0.65rem' : '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('ca')}</span>
+                  </div>
+                )}
+                {isStatsLoading ? (
+                  <div className="skeleton-pulse" style={{ width: isMobile ? '60px' : '85px', height: isMobile ? '12px' : '14px', borderRadius: '4px' }} />
+                ) : (
+                  <div style={{ fontSize: isMobile ? '0.625rem' : '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <span>{t('Đêm')}: <strong style={{ color: '#8b5cf6' }}>{nightShiftsCount}</strong></span>
+                    <span>{t('Tuần')}: <strong style={{ color: '#d97706' }}>{weekendShiftsCount}</strong></span>
+                    {overtimeShiftsCount > 0 && (
+                      <span>{t('OT')}: <strong style={{ color: '#a855f7' }}>{overtimeShiftsCount}</strong></span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Filter Bar */}
       {viewMode === 'list' && (
@@ -4741,7 +5134,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               borderRadius: '10px',
               marginBottom: '1rem', 
               gap: '3px',
-              width: '100%'
+              width: '100%',
+              overflowX: 'auto'
             }}>
               <button
                 type="button"
@@ -4760,7 +5154,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flex: 1,
+                  flex: isMobile ? '0 0 auto' : 1,
+                  whiteSpace: 'nowrap',
                   gap: '4px'
                 }}
               >
@@ -4795,12 +5190,49 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flex: 1,
+                  flex: isMobile ? '0 0 auto' : 1,
+                  whiteSpace: 'nowrap',
                   gap: '4px'
                 }}
               >
                 <FileText size={isMobile ? 12 : 14} />
                 {(isSales || isViewingSelf) ? t('Yêu cầu') : t('Bảng công')}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalTab('requests')}
+                style={{
+                  padding: isMobile ? '6px 4px' : '6px 12px',
+                  fontSize: isMobile ? '0.75rem' : '0.8125rem',
+                  fontWeight: 700,
+                  color: modalTab === 'requests' ? 'var(--color-primary)' : 'var(--color-text-light)',
+                  border: 'none',
+                  background: modalTab === 'requests' ? 'var(--color-surface)' : 'transparent',
+                  borderRadius: '7px',
+                  boxShadow: modalTab === 'requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flex: isMobile ? '0 0 auto' : 1,
+                  whiteSpace: 'nowrap',
+                  gap: '4px'
+                }}
+              >
+                <AlertCircle size={isMobile ? 12 : 14} />
+                {t('Đơn & Biến động')}
+                <span style={{
+                  fontSize: '0.625rem',
+                  padding: '1px 5px',
+                  borderRadius: '8px',
+                  background: dayExceptions.length > 0 ? (modalTab === 'requests' ? '#BD1D2D' : 'rgba(189, 29, 45, 0.12)') : (modalTab === 'requests' ? 'var(--color-primary-light)' : 'var(--color-border-light)'),
+                  color: dayExceptions.length > 0 ? (modalTab === 'requests' ? '#ffffff' : '#BD1D2D') : (modalTab === 'requests' ? 'var(--color-primary)' : 'var(--color-text-muted)'),
+                  fontWeight: 700
+                }}>
+                  {dayExceptions.length}
+                </span>
               </button>
 
               {(() => {
@@ -5299,30 +5731,35 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('STT')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Nhân viên')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Giờ Check-in')}</th>
+                                <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Giờ Check-out')}</th>
                                 <th style={{ padding: '6px 8px', fontWeight: 600, borderBottom: '1px solid var(--color-border)', fontSize: '0.625rem' }}>{t('Trạng thái')}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).length === 0 ? (
                                 <tr>
-                                  <td colSpan={4} style={{ textAlign: 'center', padding: '12px', fontStyle: 'italic', fontSize: '0.65rem' }}>
+                                  <td colSpan={5} style={{ textAlign: 'center', padding: '12px', fontStyle: 'italic', fontSize: '0.65rem' }}>
                                     {t('Trống')}
                                   </td>
                                 </tr>
                               ) : (
-                                calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).map((c, i) => (
-                                  <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                    <td style={{ padding: '6px 8px', fontSize: '0.625rem' }}>{i + 1}</td>
-                                    <td style={{ padding: '6px 8px', fontSize: '0.625rem', color: 'var(--color-text)', fontWeight: 500 }}>{c.user_name}</td>
-                                    <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace' }}>{c.check_in_time}</td>
-                                    <td style={{ padding: '6px 8px', fontSize: '0.625rem' }}>
-                                      <span style={{
-                                        color: c.status === 'approved' ? 'var(--color-success)' : (c.status === 'pending_approval' ? 'var(--color-warning)' : 'var(--color-danger)'),
-                                        fontWeight: 600
-                                      }}>{c.status === 'approved' ? t('Hợp lệ') : (c.status === 'pending_approval' ? t('Chờ duyệt') : t('Từ chối'))}</span>
-                                    </td>
-                                  </tr>
-                                ))
+                                calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).map((c, i) => {
+                                  const outTime = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 19) : c.check_out_time) : '—';
+                                  return (
+                                    <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem' }}>{i + 1}</td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', color: 'var(--color-text)', fontWeight: 500 }}>{c.user_name}</td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace' }}>{c.check_in_time || '—'}</td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem', fontFamily: 'monospace', color: outTime !== '—' ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{outTime}</td>
+                                      <td style={{ padding: '6px 8px', fontSize: '0.625rem' }}>
+                                        <span style={{
+                                          color: c.status === 'approved' ? 'var(--color-success)' : (c.status === 'pending_approval' ? 'var(--color-warning)' : 'var(--color-danger)'),
+                                          fontWeight: 600
+                                        }}>{c.status === 'approved' ? t('Hợp lệ') : (c.status === 'pending_approval' ? t('Chờ duyệt') : t('Từ chối'))}</span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
                               )}
                             </tbody>
                           </table>
@@ -5357,8 +5794,227 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   )}
                 </div>
 
+              ) : modalTab === 'requests' ? (
+                /* Sub-tab 3: Attendance Exceptions & Leave Requests Log */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {/* Filter chips bar */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    overflowX: 'auto',
+                    paddingBottom: '4px',
+                    fontSize: '0.75rem'
+                  }}>
+                    {[
+                      { id: 'all', label: t('Tất cả'), count: dayExceptions.length },
+                      { id: 'leave', label: t('Nghỉ phép & WFH'), count: dayExceptions.filter(e => e.category === 'leave').length },
+                      { id: 'late', label: t('Đi muộn'), count: dayExceptions.filter(e => e.category === 'late').length },
+                      { id: 'early', label: t('Về sớm'), count: dayExceptions.filter(e => e.category === 'early').length },
+                      { id: 'supplementary', label: t('Bổ sung công'), count: dayExceptions.filter(e => e.category === 'supplementary').length },
+                      { id: 'overtime', label: t('Tăng ca (OT)'), count: dayExceptions.filter(e => e.category === 'overtime').length },
+                    ].map(tab => {
+                      const isActive = exceptionFilter === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setExceptionFilter(tab.id as any)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '20px',
+                            border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                            backgroundColor: isActive ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                            color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: isActive ? 700 : 500,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            fontSize: '0.71875rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <span>{tab.label}</span>
+                          <span style={{
+                            fontSize: '0.625rem',
+                            fontWeight: 700,
+                            padding: '0 5px',
+                            borderRadius: '10px',
+                            backgroundColor: isActive ? 'var(--color-primary)' : 'var(--color-bg-light)',
+                            color: isActive ? '#fff' : 'var(--color-text-muted)'
+                          }}>
+                            {tab.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* List of items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
+                    {filteredDayExceptions.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--color-text-muted)' }}>
+                        <CheckCircle size={36} style={{ display: 'block', margin: '0 auto 10px', color: 'var(--color-success)', opacity: 0.8 }} />
+                        <h4 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '0 0 4px', color: 'var(--color-text)' }}>
+                          {t('Không có biến động nào')}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', margin: 0 }}>
+                          {exceptionFilter === 'all'
+                            ? t('Ngày làm việc chuẩn chỉnh: Không phát sinh đơn nghỉ phép, đi muộn, về sớm hay bổ sung công.')
+                            : t('Không có bản ghi nào phù hợp với bộ lọc này.')}
+                        </p>
+                      </div>
+                    ) : (
+                      filteredDayExceptions.map((item) => {
+                        const isApproved = item.status === 'approved';
+                        const isPending = item.status === 'pending' || item.status === 'pending_approval';
+
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              padding: '12px 14px',
+                              background: 'var(--color-bg-light)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: '10px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {/* Card Header: User & Type Tag */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                <Avatar src={resolveAttachmentUrl(item.user_avatar)} name={item.user_name} size={32} />
+                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                  <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {item.user_name}
+                                  </span>
+                                  <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-light)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {item.user_email || '—'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                {/* Type Badge */}
+                                <span style={{
+                                  fontSize: '0.6875rem',
+                                  fontWeight: 700,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: item.typeBg,
+                                  color: item.typeColor,
+                                  border: `1px solid ${item.typeBorder}`,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  {item.typeName}
+                                </span>
+
+                                {/* Status Badge */}
+                                <span style={{
+                                  fontSize: '0.65rem',
+                                  fontWeight: 700,
+                                  padding: '3px 8px',
+                                  borderRadius: '20px',
+                                  backgroundColor: isApproved ? 'rgba(16, 185, 129, 0.1)' : isPending ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                  color: isApproved ? 'var(--color-success)' : isPending ? 'var(--color-warning)' : 'var(--color-danger)',
+                                  border: isApproved ? '1px solid rgba(16, 185, 129, 0.25)' : isPending ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)'
+                                }}>
+                                  {isApproved ? t('Đã duyệt') : isPending ? t('Chờ duyệt') : t('Từ chối')}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Time Details Row */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text)' }}>
+                              <Clock size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                              <span style={{ fontWeight: 500 }}>{item.detailTime}</span>
+                            </div>
+
+                            {/* Reason / Giải trình Box */}
+                            {item.reason && (
+                              <div style={{
+                                background: 'var(--color-surface)',
+                                borderLeft: `3px solid ${item.typeColor}`,
+                                borderRadius: '0 6px 6px 0',
+                                padding: '6px 10px',
+                                fontSize: '0.75rem',
+                                color: 'var(--color-text-muted)',
+                                lineHeight: 1.4,
+                                wordBreak: 'break-word'
+                              }}>
+                                <strong style={{ color: 'var(--color-text)', marginRight: '4px' }}>💬 {t('Lý do / Giải trình')}:</strong>
+                                <span>{item.reason}</span>
+                              </div>
+                            )}
+
+                            {/* Action Buttons for Manager / Admin */}
+                            {(!isSales && !isViewingSelf && isPending) && (
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px', borderTop: '1px dashed var(--color-border)' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (item.category === 'leave') {
+                                      handleApproveRejectLeave(item.originalId, 'approved');
+                                    } else if (item.category === 'overtime') {
+                                      handleApproveRegistration(item.originalId, 'overtime');
+                                    } else {
+                                      handleUpdateStatus(item.originalId, 'approved');
+                                    }
+                                  }}
+                                  className="btn success sm"
+                                  style={{ padding: '3px 10px', fontSize: '0.7rem', height: 'auto', borderRadius: '6px' }}
+                                >
+                                  <Check size={12} /> {t('Phê duyệt')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    showConfirm({
+                                      title: t('Từ chối yêu cầu'),
+                                      message: t('Vui lòng nhập lý do từ chối yêu cầu này:'),
+                                      requirePromptInput: true,
+                                      promptPlaceholder: t('Nhập lý do từ chối...'),
+                                      confirmText: t('Từ chối'),
+                                      cancelText: t('Hủy'),
+                                      isDanger: true,
+                                      onConfirm: (reason) => {
+                                        if (item.category === 'leave') {
+                                          handleApproveRejectLeave(item.originalId, 'rejected');
+                                        } else if (item.category === 'overtime') {
+                                          handleRejectRegistration(item.originalId, 'overtime');
+                                        } else {
+                                          if (reason && reason.trim()) {
+                                            return handleUpdateStatus(item.originalId, 'rejected', reason.trim());
+                                          } else {
+                                            toast.error(t('Lý do từ chối là bắt buộc'));
+                                          }
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  className="btn danger sm"
+                                  style={{ padding: '3px 10px', fontSize: '0.7rem', height: 'auto', borderRadius: '6px' }}
+                                >
+                                  <X size={12} /> {t('Từ chối')}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
               ) : (
-                /* Sub-tab 3: Duty Shift Log */
+                /* Sub-tab 4: Duty Shift Log */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }}>
                     {(() => {

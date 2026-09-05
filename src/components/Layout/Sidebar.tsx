@@ -284,6 +284,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const navContainerRef = useRef<HTMLDivElement>(null);
 
   // Poll pending counts every 60s
   useEffect(() => {
@@ -420,6 +421,51 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       window.removeEventListener('refresh-approvals', fetchPending);
     };
   }, [user]);
+
+  // Auto scroll/snap to active sidebar menu item
+  const scrollToActiveItem = (behavior: ScrollBehavior = 'smooth') => {
+    const container = navContainerRef.current;
+    if (!container) return;
+
+    const activeEl = container.querySelector<HTMLElement>('.sidebar-nav-item.active');
+    if (!activeEl) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = activeEl.getBoundingClientRect();
+
+    // Active element's top position relative to container's scroll content
+    const relativeTop = (activeRect.top - containerRect.top) + container.scrollTop;
+
+    // Center the active item vertically within the container
+    const targetScrollTop = relativeTop - (container.clientHeight / 2) + (activeRect.height / 2);
+
+    // If already comfortably centered (within 8px diff), skip to avoid jitter
+    if (Math.abs(container.scrollTop - targetScrollTop) < 8) return;
+
+    container.scrollTo({
+      top: Math.max(0, targetScrollTop),
+      behavior
+    });
+  };
+
+  useEffect(() => {
+    // Initial quick snap
+    scrollToActiveItem('auto');
+
+    // Smooth snap after rendering / animations / layout settles
+    const timer1 = setTimeout(() => {
+      scrollToActiveItem('smooth');
+    }, 120);
+
+    const timer2 = setTimeout(() => {
+      scrollToActiveItem('smooth');
+    }, 350);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [location.pathname, location.search, isCollapsed, isMobileOpen, user?.role]);
 
   let visibleGroups = SIDEBAR_GROUPS.map(group => {
     let items = [...group.items];
@@ -689,7 +735,17 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         </button>
 
         {/* Nav */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', scrollbarWidth: 'none' }}>
+        <div
+          ref={navContainerRef}
+          className="sidebar-nav-container"
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarWidth: 'none',
+            scrollBehavior: 'smooth'
+          }}
+        >
           <div style={{ position: 'relative', padding: '1rem 0', display: 'flex', flexDirection: 'column' }}>
 
             {visibleGroups.map((group, groupIdx) => (
@@ -739,6 +795,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                       key={name + href}
                       to={effectiveHref}
                       end={end}
+                      id={isActive ? 'sidebar-active-item' : undefined}
+                      data-active={isActive ? 'true' : 'false'}
                       className={() => `sidebar-nav-item ${isActive ? 'active' : ''}`}
                       title={isCollapsed ? displayName : undefined}
                       onClick={(e) => {
@@ -747,6 +805,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                           window.dispatchEvent(new CustomEvent('refresh-page', { detail: { path: targetPath } }));
                         }
                         if (onMobileClose) onMobileClose();
+                        setTimeout(() => scrollToActiveItem('smooth'), 50);
                       }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '0.75rem',
@@ -825,8 +884,21 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
 
 
-        {/* Pulse animation */}
-        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }`}</style>
+        {/* Pulse animation and scroll styling */}
+        <style>{`
+          @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+          .sidebar-nav-container {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            scroll-behavior: smooth;
+          }
+          .sidebar-nav-container::-webkit-scrollbar {
+            display: none;
+          }
+          .sidebar-nav-item {
+            scroll-margin: 50px 0;
+          }
+        `}</style>
       </aside>
     </>
   );

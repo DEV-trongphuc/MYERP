@@ -107,6 +107,27 @@ const renderInteractionInfo = (c: any) => {
   );
 };
 
+const isLeadUncontacted = (c: any) => {
+  if (!c) return false;
+
+  const interactionText = cleanInteractionText(c.last_interaction) || (c.notes ? c.notes.trim() : '');
+  const hasInteraction = Boolean(
+    interactionText && 
+    interactionText !== 'Chưa có tương tác' && 
+    interactionText !== '—' && 
+    !interactionText.startsWith('Tái phân bổ') && 
+    !interactionText.startsWith('Giao lại')
+  );
+
+  // Nếu đã có tương tác thực tế hoặc có thời điểm liên lạc -> KHÔNG tô vàng
+  if (hasInteraction || c.last_contact) {
+    return false;
+  }
+
+  // Lead hoàn toàn chưa có bất kỳ tương tác nào -> TÔ VÀNG
+  return true;
+};
+
 const calcScore = (c: any, rules: any, decayDays = 5) => {
   if (!c) return 0;
   const r = rules || {
@@ -277,6 +298,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       window.removeEventListener('uncontacted-count-changed', handleUncontactedCountChanged);
     };
   }, []);
+
+  useEffect(() => {
+    // Preload CustomerProfileDrawer in idle background so drawer opens instantaneously
+    const timer = setTimeout(() => {
+      import('./CustomerProfileDrawer');
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [contacts, setContacts] = useState<any[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [studentSubTab, setStudentSubTab] = useState<'le_phi' | 'chinh_thuc' | 'nop_ho_so'>(() => {
@@ -532,11 +562,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [dateFilterActive, setDateFilterActive] = useState(false);
   
   const [columns, setColumns] = useState<ColumnDef[]>(() => {
-    const saved = localStorage.getItem('contacts_page_columns');
+    const savedKey = `contacts_page_columns_v5_${isSale ? 'sale' : 'admin'}`;
+    const saved = localStorage.getItem(savedKey) || localStorage.getItem('contacts_page_columns_v4');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // If non-sale, ensure created_at is visible
+          if (!isSale) {
+            const hasCreatedAt = parsed.some((c: any) => c.id === 'created_at');
+            if (hasCreatedAt) {
+              return parsed.map((c: any) => c.id === 'created_at' ? { ...c, visible: true } : c);
+            }
+          }
           return parsed;
         }
       } catch (e) {
@@ -544,7 +582,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       }
     }
     return [
-      { id: 'name', label: 'Tên liên hệ', visible: true },
+      { id: 'name', label: 'Họ tên', visible: true },
       { id: 'email', label: 'Email', visible: true },
       { id: 'phone', label: 'SĐT', visible: true },
       { id: 'company', label: 'Công ty', visible: false },
@@ -556,7 +594,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       { id: 'distribution', label: 'Nguồn phân bổ', visible: false },
       { id: 'ticket_action', label: 'Helpdesk (Ticket)', visible: false },
       { id: 'updated_at', label: 'Ngày cập nhật', visible: true },
-      { id: 'created_at', label: 'Ngày tạo', visible: true },
+      { id: 'created_at', label: 'Ngày tạo', visible: !isSale },
       { id: 'score', label: 'Lead Score', visible: false },
       { id: 'source', label: 'Nguồn khách hàng', visible: false },
       { id: 'job_title', label: 'Chức danh', visible: false },
@@ -567,8 +605,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   });
 
   useEffect(() => {
-    localStorage.setItem('contacts_page_columns', JSON.stringify(columns));
-  }, [columns]);
+    const savedKey = `contacts_page_columns_v5_${isSale ? 'sale' : 'admin'}`;
+    localStorage.setItem(savedKey, JSON.stringify(columns));
+  }, [columns, isSale]);
+
+  useEffect(() => {
+    if (!isSale) {
+      setColumns(prev => {
+        const createdAtCol = prev.find(c => c.id === 'created_at');
+        if (createdAtCol && !createdAtCol.visible) {
+          return prev.map(c => c.id === 'created_at' ? { ...c, visible: true } : c);
+        }
+        return prev;
+      });
+    }
+  }, [isSale]);
   const [showColumns, setShowColumns] = useState(false);
   const [dbTags, setDbTags] = useState<any[]>([]);
 
@@ -2125,6 +2176,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 [data-theme="dark"] .table-wrap .table-row-hover:hover {
                   background: rgba(255, 255, 255, 0.02) !important;
                 }
+                .table-wrap .lead-uncontacted-highlight {
+                  background: #fef9c3 !important;
+                }
+                .table-wrap .lead-uncontacted-highlight:hover {
+                  background: #fef08a !important;
+                }
+                [data-theme="dark"] .table-wrap .lead-uncontacted-highlight {
+                  background: rgba(245, 158, 11, 0.18) !important;
+                }
+                [data-theme="dark"] .table-wrap .lead-uncontacted-highlight:hover {
+                  background: rgba(245, 158, 11, 0.28) !important;
+                }
                 .table-wrap th {
                   font-size: 0.7rem !important;
                   font-weight: 700 !important;
@@ -2167,19 +2230,27 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         />
                       </th>
                     )}
-                    {columns.find(c => c.id === 'name')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên hệ</th>}
+                    {columns.find(c => c.id === 'name')?.visible && (
+                      <th style={{ width: '150px', maxWidth: '180px', padding: '0.85rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                        Họ tên
+                      </th>
+                    )}
                     {(columns.find(c => c.id === 'email')?.visible || columns.find(c => c.id === 'phone')?.visible) && (
-                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên lạc</th>
+                      <th style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên lạc</th>
                     )}
                     {columns.find(c => c.id === 'company')?.visible && !columns.find(c => c.id === 'name')?.visible && (
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Công ty</th>
                     )}
                     {columns.find(c => c.id === 'tags')?.visible && (
-                      <th style={{ width: '100px', maxWidth: '120px', padding: '1rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                      <th style={{ width: '230px', maxWidth: '290px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         Tags
                       </th>
                     )}
-                    {columns.find(c => c.id === 'status')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Trạng thái</th>}
+                    {columns.find(c => c.id === 'status')?.visible && (
+                      <th style={{ width: '135px', maxWidth: '150px', padding: '0.85rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Trạng thái
+                      </th>
+                    )}
                     {columns.find(c => c.id === 'contact')?.visible && !columns.find(c => c.id === 'owner')?.visible && (
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Liên lạc cuối</th>
                     )}
@@ -2195,7 +2266,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Cập nhật</th>
                     )}
                     {columns.find(c => c.id === 'created_at')?.visible && (
-                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                      <th style={{ width: '130px', maxWidth: '160px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         {segment === 'customer' ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <span>Ngày chốt</span>
@@ -2220,10 +2291,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   {paged.map(c => {
                     const days = AGO_DAYS(c.last_contact);
                     const fullName = c.full_name || '';
+                    const isUncontacted = isLeadUncontacted(c);
                     return (
                       <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                          style={{ transition: 'background 0.2s', cursor: 'pointer' }}
-                         className="table-row-hover"
+                         className={`table-row-hover ${isUncontacted ? 'lead-uncontacted-highlight' : ''}`}
+                         title={isUncontacted ? 'Lead mới giao hoặc giao lại chưa có tương tác mới' : undefined}
                          onClick={() => setProfileContact(c)}>
                         {isMultiSelectMode && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }} onClick={e => e.stopPropagation()}>
@@ -2234,24 +2307,24 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {columns.find(col => col.id === 'name')?.visible && (
-                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <Avatar name={fullName} size={36} />
-                              <div>
-                                <p style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center' }}>
-                                  {fullName}
+                          <td style={{ width: '150px', maxWidth: '180px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <Avatar name={fullName} size={32} />
+                              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                <p style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={fullName}>{fullName}</span>
                                   {c.dl_status === 'databank_claim' || c.source === 'databank' ? (
-                                    <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                                      <Layers size={13} />
+                                    <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '4px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                      <Layers size={12} />
                                     </span>
                                   ) : (!c.dl_status && c.source !== 'databank') || (c.source === 'ca_nhan' || c.source === 'gioi_thieu') ? (
-                                    <span title="Khách hàng cá nhân" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                                      <User size={13} />
+                                    <span title="Khách hàng cá nhân" style={{ display: 'inline-flex', marginLeft: '4px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                      <User size={12} />
                                     </span>
                                   ) : null}
                                 </p>
                                 {columns.find(col => col.id === 'company')?.visible && c.company_name && (
-                                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap' }}>
+                                  <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {c.company_name} {c.job_title ? `• ${c.job_title}` : ''}
                                   </p>
                                 )}
@@ -2260,16 +2333,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {(columns.find(col => col.id === 'email')?.visible || columns.find(col => col.id === 'phone')?.visible) && (
-                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <td style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>
                               {columns.find(col => col.id === 'phone')?.visible && c.phone ? (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <PhoneLink phone={c.phone} style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }} />
+                                  <PhoneLink phone={c.phone} style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }} />
                                 </div>
                               ) : null}
                               {columns.find(col => col.id === 'email')?.visible && c.email ? (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>{c.email}</span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+                                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.email}>{c.email}</span>
                                 </div>
                               ) : null}
                             </div>
@@ -2284,7 +2357,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
 
                         {columns.find(col => col.id === 'tags')?.visible && (
-                          <td style={{ width: '100px', maxWidth: '120px', padding: '1rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: '230px', maxWidth: '290px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}>
                             {(() => {
                               const rawTagList = typeof c.tags === 'string' 
                                 ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
@@ -2300,7 +2373,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
                               
                               return (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '120px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '290px' }}>
                                   {uniqueTags.map((tag: string, idx: number) => {
                                     const lowerTag = tag.toLowerCase();
                                     const isProgramTag = lowerTag.includes('mba') || 
@@ -2350,7 +2423,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
 
                         {columns.find(col => col.id === 'status')?.visible && (
-                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: '135px', maxWidth: '150px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                             {c.is_error_ticket ? (
                               <span 
                                 className="badge danger"
@@ -2577,7 +2650,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {columns.find(col => col.id === 'created_at')?.visible && (
-                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: '130px', maxWidth: '160px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                             {(segment === 'customer' ? (c.closed_date || c.created_at) : c.created_at) ? (() => {
                               const d = new Date(segment === 'customer' ? (c.closed_date || c.created_at) : c.created_at);
                               const pad = (n: number) => String(n).padStart(2, '0');

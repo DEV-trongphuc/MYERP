@@ -351,7 +351,11 @@ class ContactController {
                    COALESCE(
                        (SELECT n.body FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
                        (SELECT COALESCE(a.body, a.subject) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
-                   ) as last_interaction
+                   ) as last_interaction,
+                   COALESCE(
+                       (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
+                       (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
+                   ) as last_interaction_at
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id

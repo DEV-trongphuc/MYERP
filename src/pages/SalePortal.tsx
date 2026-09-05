@@ -291,9 +291,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
     });
 
-    // Preload WorkspaceTaskDrawer on idle so opening task drawer is instant
+    // Preload WorkspaceTaskDrawer and CustomerProfileDrawer on idle so opening drawers is instant
     const timer = setTimeout(() => {
       import('./WorkspaceTaskDrawer');
+      import('./CustomerProfileDrawer');
     }, 1200);
     return () => clearTimeout(timer);
   }, []);
@@ -579,6 +580,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   }, [wsSearch]);
   const [wsPriority, setWsPriority] = useState('');
   const [wsStatus, setWsStatus] = useState('planned'); // Default: hide completed
+  const [showDoneTasks, setShowDoneTasks] = useState(false);
   const [wsViewMode, setWsViewMode] = useState<'grid' | 'kanban' | 'focus'>('grid');
   const [hideWorkspaceAlerts, setHideWorkspaceAlerts] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
@@ -630,7 +632,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [callsModalPageSize] = useState(5);
   const [wsStartDate, setWsStartDate] = useState('');
   const [wsEndDate, setWsEndDate] = useState('');
-  const [wsTasks, setWsTasks] = useState<any[]>([]);
+  const [wsTasks, setWsTasks] = useState<any[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('cached_ws_tasks');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [wsTeamId, setWsTeamId] = useState('all_teams_bypass');
   const stripHtml = (html: string) => html ? html.replace(/<[^>]*>/g, '').trim() : '';
   const [wsUserId, setWsUserId] = useState('');
@@ -1190,8 +1199,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         if (!task.is_hidden || Number(task.is_hidden) !== 1) return false;
       } else {
         if (task.is_hidden && Number(task.is_hidden) === 1) return false;
-        // Filter by Status
-        if (wsStatus && wsStatus !== 'all' && task.status !== wsStatus) return false;
+        // Filter by Status: hide completed tasks unless showDoneTasks or explicitly filtered by wsStatus === 'done'
+        if (!showDoneTasks && wsStatus !== 'done' && (task.status === 'done' || task.status === 'completed')) return false;
+        if (wsStatus && wsStatus !== 'all' && !showDoneTasks && task.status !== wsStatus) return false;
       }
 
       // 2. Filter by Priority
@@ -1275,7 +1285,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (!aPinned && bPinned) return 1;
       return 0;
     });
-  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, wsDatePreset, pinnedTaskIds]);
+  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds]);
 
   const workspaceStats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -2364,8 +2374,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     setLoadingWsTasks(true);
     try {
       let url = '/activities?limit=1000';
-      if (wsStatus && wsStatus !== 'all' && wsStatus !== 'hidden') {
-        url += `&status=${wsStatus}`;
+      const effectiveStatus = showDoneTasks ? 'all' : wsStatus;
+      if (effectiveStatus && effectiveStatus !== 'all' && effectiveStatus !== 'hidden') {
+        url += `&status=${effectiveStatus}`;
       }
       if (wsActivityType && wsActivityType !== 'all') {
         if (wsActivityType === 'task') {
@@ -2388,17 +2399,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
       const { start, end } = getPresetDates(wsDatePreset);
 
-      const res = await api.get(url);
-      if (res.data && res.data.data) {
-        let rawTasks = res.data.data.items || res.data.data || [];
-        if (wsActivityType === 'task') {
-          rawTasks = rawTasks.filter((item: any) => item.type === 'task' || (item.type === 'meeting' && item.status === 'planned'));
-        }
-        setWsTasks(rawTasks);
-        triggerRecurrenceCheck(rawTasks);
-      }
-
-      // Fetch completed calls count
+      // Fetch completed calls count in parallel
       let callsUrl = '/activities?type=call&status=done&limit=1';
       let callsStart = wsDatePreset === 'all' ? '' : start;
       let callsEnd = wsDatePreset === 'all' ? '' : end;
@@ -2411,8 +2412,24 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         callsUrl += `&user_id=${currentUser?.id}`;
       }
 
-      const callsRes = await api.get(callsUrl);
-      if (callsRes.data && callsRes.data.data) {
+      const [res, callsRes] = await Promise.all([
+        api.get(url),
+        api.get(callsUrl).catch(() => ({ data: { data: { total: 0 } } }))
+      ]);
+
+      if (res.data && res.data.data) {
+        let rawTasks = res.data.data.items || res.data.data || [];
+        if (wsActivityType === 'task') {
+          rawTasks = rawTasks.filter((item: any) => item.type === 'task' || (item.type === 'meeting' && (item.status === 'planned' || showDoneTasks)));
+        }
+        setWsTasks(rawTasks);
+        try {
+          sessionStorage.setItem('cached_ws_tasks', JSON.stringify(rawTasks));
+        } catch {}
+        triggerRecurrenceCheck(rawTasks);
+      }
+
+      if (callsRes?.data?.data) {
         setCompletedCallsCount(callsRes.data.data.total || 0);
       }
     } catch (e) {
@@ -2465,7 +2482,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     if (activeTab === 'workspace') {
       fetchWorkspaceTasks();
     }
-  }, [activeTab, wsPriority, wsStatus, wsDatePreset, wsStartDate, wsEndDate, wsTeamId, wsUserId, wsActivityType, wsRelatedType, wsSubTab]);
+  }, [activeTab, wsPriority, wsStatus, showDoneTasks, wsDatePreset, wsStartDate, wsEndDate, wsTeamId, wsUserId, wsActivityType, wsRelatedType, wsSubTab]);
 
   useEffect(() => {
     if (activeTab === 'workspace') {
@@ -2990,9 +3007,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   // Fetch portal data when token is valid
   const loadPortalData = async (isSilent = false) => {
     if (!token) return;
-    const activePaths = ['/', '/workspace', '/account', '/calendar', '/databank', '/fair-share'];
+    const activePaths = ['/', '/account', '/calendar', '/databank', '/fair-share'];
     if (!activePaths.includes(loc.pathname)) return;
-    if (!isSilent && !data?.consultant_profile && loc.pathname !== '/account') setLoading(true);
+    if (!isSilent && !data?.consultant_profile && loc.pathname !== '/account' && loc.pathname !== '/workspace') setLoading(true);
     fetchPortalTasks();
     fetchPortalCoops();
 
@@ -5747,6 +5764,40 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               })()}
             </button>
 
+            {/* Toggle Switch Hiện việc đã xong */}
+            <div
+              onClick={() => setShowDoneTasks(prev => !prev)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '32px',
+                padding: '0 8px',
+                borderRadius: '6px',
+                border: showDoneTasks ? '1.5px solid #10b981' : '1px solid var(--color-border)',
+                background: showDoneTasks ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+                cursor: 'pointer',
+                userSelect: 'none',
+                flexShrink: 0,
+                transition: 'all 0.2s'
+              }}
+              title={showDoneTasks ? t('Đang hiện việc đã hoàn thành. Bấm để ẩn') : t('Bấm để hiển thị cả việc đã xong')}
+            >
+              <ToggleSwitch
+                checked={showDoneTasks}
+                onChange={setShowDoneTasks}
+                small={true}
+              />
+              <span style={{
+                fontSize: '0.78rem',
+                fontWeight: showDoneTasks ? 700 : 600,
+                color: showDoneTasks ? '#10b981' : 'var(--color-text)',
+                whiteSpace: 'nowrap'
+              }}>
+                {t('Hiện việc đã xong')}
+              </span>
+            </div>
+
             {/* View Mode Switcher */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', flexShrink: 0 }}>
               {!isMobile && (
@@ -6192,7 +6243,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           </div>
         ) : (
           <>
-            {wsViewMode !== 'focus' && loadingWsTasks ? (
+            {wsViewMode !== 'focus' && loadingWsTasks && wsTasks.length === 0 ? (
               wsViewMode === 'kanban' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }}>
                   {[1, 2, 3].map((col) => (
