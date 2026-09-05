@@ -97,16 +97,20 @@ export default function InventoryPage() {
   const [defaultSupplierId, setDefaultSupplierId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    if (location.state?.activeTab) {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'purchase_orders' || tabParam === 'history' || tabParam === 'batches') {
+      setActiveTab(tabParam as any);
+    } else if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
     }
-    if (location.state?.openPOCreate) {
+    if (location.state?.openPOCreate || params.get('create_po') === '1') {
       setShowPOModal(true);
-      if (location.state?.defaultSupplierId) {
-        setDefaultSupplierId(String(location.state.defaultSupplierId));
+      if (location.state?.defaultSupplierId || params.get('supplier_id')) {
+        setDefaultSupplierId(String(location.state?.defaultSupplierId || params.get('supplier_id')));
       }
     }
-  }, [location.state]);
+  }, [location.state, location.search]);
 
   useEffect(() => {
     if (!showPOModal) {

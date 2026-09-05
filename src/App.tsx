@@ -86,9 +86,18 @@ const AppTabs = () => {
 
   // Route protection mapping
   const adminPaths = ['/consultants', '/rounds', '/tickets', '/rules', '/integrations', '/settings', '/accounts', '/gatekeeper', '/capi', '/ai-training', '/hrm'];
-  const userPaths = ['/', '/workspace', '/feed', '/data', '/calendar', '/personal-calendar', '/contacts', '/students', '/companies', '/deals', '/quotes', '/activities', '/products', '/expenses', '/reports-crm', '/suppliers', '/files', '/inventory', '/projects', '/deposits', '/cash-flow', '/support-tickets', '/attendance', '/fair-share', '/account', '/my-payslips', '/approvals', '/financial-dashboard', '/schedules'];
+  const userPaths = ['/', '/workspace', '/feed', '/data', '/calendar', '/personal-calendar', '/contacts', '/students', '/companies', '/deals', '/quotes', '/activities', '/products', '/expenses', '/reports-crm', '/suppliers', '/files', '/inventory', '/purchase-orders', '/sales-orders', '/projects', '/deposits', '/cash-flow', '/support-tickets', '/attendance', '/fair-share', '/account', '/my-payslips', '/approvals', '/financial-dashboard', '/schedules'];
   const allPaths = [...userPaths, ...adminPaths];
   const isAdminPath = adminPaths.includes(currentPath);
+
+  // Aliases redirection
+  if (currentPath === '/purchase-orders') {
+    const searchStr = location.search ? (location.search.includes('tab=') ? location.search : location.search + '&tab=purchase_orders') : '?tab=purchase_orders';
+    return <Navigate to={`/inventory${searchStr}`} replace />;
+  }
+  if (currentPath === '/sales-orders') {
+    return <Navigate to="/companies" replace />;
+  }
 
   // Fallback for unrecognized paths
   if (!allPaths.includes(currentPath)) {

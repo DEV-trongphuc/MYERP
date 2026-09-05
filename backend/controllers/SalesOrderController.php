@@ -277,6 +277,21 @@ class SalesOrderController {
             }
 
             $this->db->commit();
+
+            // Dispatch notification to management/accountant about new SO
+            try {
+                require_once __DIR__ . '/../NotificationService.php';
+                NotificationService::send($this->db, $tenantId, 'SO_WAITING_APPROVAL', [
+                    'so_id' => $soId,
+                    'so_number' => $soNumber,
+                    'total' => $total,
+                    'creator_id' => $userId,
+                    'creator_name' => $auth['full_name'] ?? 'Nhân viên kinh doanh'
+                ]);
+            } catch (\Throwable $soNotifEx) {
+                error_log("SO Notification Error: " . $soNotifEx->getMessage());
+            }
+
             respond(201, ['id' => $soId, 'so_number' => $soNumber, 'total' => $total], 'Tạo đơn bán hàng thành công');
         } catch (\Throwable $e) {
             if ($e instanceof \Exception && (get_class($e) === 'ResponseException' || get_class($e) === 'RespondException')) {
@@ -306,6 +321,19 @@ class SalesOrderController {
 
         $update = $this->db->prepare("UPDATE sales_orders SET status = 'approved' WHERE id = ?");
         $update->execute([$id]);
+
+        // Dispatch approval notification to SO creator
+        try {
+            require_once __DIR__ . '/../NotificationService.php';
+            NotificationService::send($this->db, (int)$auth['tenant_id'], 'SO_APPROVED', [
+                'so_id' => $id,
+                'so_number' => $so['so_number'],
+                'target_user_id' => (int)$so['created_by'],
+                'approver_name' => $auth['full_name'] ?? 'Quản lý'
+            ]);
+        } catch (\Throwable $soAppEx) {
+            error_log("SO Approve Notification Error: " . $soAppEx->getMessage());
+        }
 
         respond(200, ['id' => $id, 'status' => 'approved'], 'Phê duyệt đơn bán hàng thành công');
     }

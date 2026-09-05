@@ -1921,18 +1921,7 @@ class ActivityController {
 
             $tenantId = (int)($u['tenant_id'] ?: 1);
 
-            // 1. Direct In-App Bell Notification
-            try {
-                $insNotif = $this->db->prepare("
-                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
-                ");
-                $insNotif->execute([$userId, $tenantId, $title, $body, $type, $link]);
-            } catch (\Throwable $notifEx) {
-                error_log("Direct in-app notif error: " . $notifEx->getMessage());
-            }
-
-            // 2. Multi-channel Notification (Zalo / Telegram / Email)
+            // Multi-channel Notification (In-App Bell + Zalo / Telegram / Email via NotificationService)
             require_once __DIR__ . '/../NotificationService.php';
             if (in_array($type, ['task_assignment', 'task_assigned', 'assignment', 'approval_request', 'participant_added', 'task_status'], true)) {
                 NotificationService::send($this->db, $tenantId, 'WORKFLOW_TASK_ASSIGNED', [
@@ -1960,6 +1949,17 @@ class ActivityController {
                     'link' => $link
                 ]);
             } else {
+                // Direct In-App Bell Notification for custom uncategorized types
+                try {
+                    $insNotif = $this->db->prepare("
+                        INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
+                    ");
+                    $insNotif->execute([$userId, $tenantId, $title, $body, $type, $link]);
+                } catch (\Throwable $notifEx) {
+                    error_log("Direct in-app notif error: " . $notifEx->getMessage());
+                }
+
                 if (!empty($u['email'])) {
                     require_once __DIR__ . '/../mailer.php';
                     $stmtFe = $this->db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");

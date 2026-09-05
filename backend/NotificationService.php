@@ -1632,7 +1632,7 @@ class NotificationService {
                     'title' => "Yêu cầu phê duyệt đơn nhập hàng",
                     'body' => "Đơn nhập hàng " . $poNumber . " đang chờ bạn phê duyệt Cấp " . $currentLevel,
                     'type' => "purchase_order",
-                    'link' => "/purchase-orders?open_id=" . $poId,
+                    'link' => "/inventory?tab=purchase_orders&open_id=" . $poId,
                     'zalo_msg' => "📦 [ YÊU CẦU PHÊ DUYỆT ĐƠN NHẬP HÀNG ]\n\n"
                         . "Đơn nhập hàng $poNumber đang chờ bạn phê duyệt Cấp $currentLevel.\n"
                         . "  • Mã đơn: $poNumber\n"
@@ -1664,7 +1664,7 @@ class NotificationService {
                     'title' => $isApproved ? "Đơn nhập hàng đã được phê duyệt" : "Đơn nhập hàng bị từ chối",
                     'body' => "$approverName đã $statusText đơn nhập hàng $poNumber của bạn." . (!empty($reason) ? " Lý do: \"$reason\"" : ""),
                     'type' => "purchase_order",
-                    'link' => "/purchase-orders?open_id=" . $poId,
+                    'link' => "/inventory?tab=purchase_orders&open_id=" . $poId,
                     'zalo_msg' => "$icon [ ĐƠN NHẬP HÀNG $poNumber ]\n\n"
                         . "$approverName đã $statusText đơn nhập hàng $poNumber của bạn.\n"
                         . (!empty($reason) ? "  • Lý do: \"$reason\"\n" : "")
@@ -1679,6 +1679,62 @@ class NotificationService {
                         . "<strong>$approverName</strong> đã <strong>$statusText</strong> đơn nhập hàng <strong>$poNumber</strong> của bạn.<br/>"
                         . (!empty($reason) ? "Lý do: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "")
                         . "Vui lòng truy cập hệ thống IDEAS ERP để kiểm tra."
+                ];
+
+            case 'SO_WAITING_APPROVAL':
+                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? 0));
+                if (empty($recipients)) {
+                    $recipients = self::getApproversForEvent($db, $tenantId, 'finance', (int)($payload['creator_id'] ?? 0));
+                }
+                $soNumber = $payload['so_number'] ?? '';
+                $soId = $payload['so_id'] ?? 0;
+                $creatorName = $payload['creator_name'] ?? 'Nhân viên kinh doanh';
+                $totalText = !empty($payload['total']) ? number_format((float)$payload['total'], 0, ',', '.') . 'đ' : '';
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Yêu cầu duyệt đơn bán hàng $soNumber",
+                    'body' => "$creatorName vừa tạo đơn bán hàng $soNumber ($totalText) cần bạn phê duyệt.",
+                    'type' => "sales_order",
+                    'link' => "/companies",
+                    'zalo_msg' => "📑 [ YÊU CẦU DUYỆT ĐƠN BÁN HÀNG ]\n\n"
+                        . "$creatorName vừa tạo đơn bán hàng $soNumber:\n"
+                        . "  • Mã SO: $soNumber\n"
+                        . "  • Giá trị: $totalText\n\n"
+                        . "Vui lòng truy cập hệ thống để kiểm tra và phê duyệt.",
+                    'tg_msg' => "📑 <b>[ YÊU CẦU DUYỆT ĐƠN BÁN HÀNG ]</b>\n\n"
+                        . "<b>$creatorName</b> vừa tạo đơn bán hàng <code>$soNumber</code>:\n"
+                        . "  • Mã SO: <code>$soNumber</code>\n"
+                        . "  • Giá trị: <b>$totalText</b>\n\n"
+                        . "Vui lòng truy cập hệ thống để kiểm tra và phê duyệt.",
+                    'email_subject' => "[IDEAS] Đơn bán hàng $soNumber cần duyệt - $creatorName",
+                    'email_title' => "DUYỆT ĐƠN BÁN HÀNG",
+                    'email_content' => "Chào bạn,<br/><br/>"
+                        . "<strong>$creatorName</strong> vừa tạo đơn bán hàng <strong>$soNumber</strong> (Giá trị: <strong>$totalText</strong>).<br/>"
+                        . "Vui lòng truy cập hệ thống để phê duyệt."
+                ];
+
+            case 'SO_APPROVED':
+                $recipients = self::getRecipientById($db, (int)($payload['target_user_id'] ?? $payload['creator_id'] ?? 0));
+                $soNumber = $payload['so_number'] ?? '';
+                $soId = $payload['so_id'] ?? 0;
+                $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Quản lý';
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Đơn bán hàng $soNumber đã được phê duyệt",
+                    'body' => "$approverName đã phê duyệt đơn bán hàng $soNumber của bạn.",
+                    'type' => "sales_order",
+                    'link' => "/companies",
+                    'zalo_msg' => "✅ [ ĐƠN BÁN HÀNG $soNumber ]\n\n"
+                        . "$approverName đã phê duyệt đơn bán hàng $soNumber của bạn.\n"
+                        . "Vui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                    'tg_msg' => "✅ <b>[ ĐƠN BÁN HÀNG <code>$soNumber</code> ]</b>\n\n"
+                        . "<b>$approverName</b> đã phê duyệt đơn bán hàng <code>$soNumber</code> của bạn.\n"
+                        . "Vui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                    'email_subject' => "[IDEAS] Đơn bán hàng $soNumber đã được duyệt",
+                    'email_title' => "ĐƠN BÁN HÀNG ĐÃ ĐƯỢC DUYỆT",
+                    'email_content' => "Chào bạn,<br/><br/>"
+                        . "<strong>$approverName</strong> đã phê duyệt đơn bán hàng <strong>$soNumber</strong> của bạn.<br/>"
+                        . "Bạn có thể tiến hành xuất hóa đơn hoặc giao hàng."
                 ];
 
             case 'COOP_SLIP_APPROVED':
