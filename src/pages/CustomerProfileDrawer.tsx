@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download } from 'lucide-react';
+import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap } from 'lucide-react';
 import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
@@ -1732,7 +1732,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     'Chứng chỉ Giám đốc Marketing (CMO)'
   ]);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
-  const [isQuickSavingProgram, setIsQuickSavingProgram] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
   const programDropdownMobileRef = useRef<HTMLDivElement>(null);
 
@@ -1760,44 +1759,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         .catch(() => {});
     }
   }, [isOpen]);
-
-  const saveProgramOrAdmissionDate = async (newProgram?: string, newDate?: string) => {
-    if (!contact?.id) return;
-    const prog = newProgram !== undefined ? newProgram : formData.program;
-    const adm = newDate !== undefined ? newDate : formData.admission_date;
-
-    setFormData((prev: any) => ({
-      ...prev,
-      program: prog,
-      admission_date: adm
-    }));
-
-    setIsQuickSavingProgram(true);
-    try {
-      await api.put(`/contacts/${contact.id}`, {
-        program: prog || null,
-        admission_date: adm || null
-      });
-      addToast('Đã lưu thông tin chương trình & ngày nhập học!', 'success');
-      onUpdate?.({ ...formData, program: prog, admission_date: adm });
-      window.dispatchEvent(new CustomEvent('contact-updated'));
-
-      if (prog && prog.trim()) {
-        const trimmed = prog.trim();
-        setProgramSuggestions(prev => {
-          if (!prev.some(p => p.toLowerCase() === trimmed.toLowerCase())) {
-            return [trimmed, ...prev];
-          }
-          return prev;
-        });
-      }
-    } catch (e: any) {
-      console.error('Error saving program/admission_date:', e);
-      addToast('Lỗi khi lưu chương trình: ' + (e.response?.data?.message || e.message), 'error');
-    } finally {
-      setIsQuickSavingProgram(false);
-    }
-  };
 
   const handleUpdateTagsAndPersist = async (newTags: string[]) => {
     const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
@@ -1827,7 +1788,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       'mobile', 'job_title', 'department', 'source', 'status', 'notes',
       'birthday', 'address', 'city', 'ward', 'expected_revenue', 'win_probability', 'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range',
       'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data', 'citizen_id', 'passport',
-      'program', 'admission_date'
+      'program', 'admission_date', 'student_id'
     ];
 
     const cleanObject = (obj: any) => {
@@ -1868,7 +1829,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range', 'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data',
       'stage_id', 'pipeline_status', 'temperature', 'suggested_temperature', 'collaborator_ids', 'citizen_id', 'passport',
       'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
-      'program', 'admission_date'
+      'program', 'admission_date', 'student_id'
     ];
     const payload: Record<string, any> = {};
     allowedFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
@@ -1894,6 +1855,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setBaseTags(updated.tags || []);
       onUpdate?.(updated);
       window.dispatchEvent(new CustomEvent('contact-updated'));
+      if (formData.program && String(formData.program).trim()) {
+        const trimmed = String(formData.program).trim();
+        setProgramSuggestions(prev => {
+          if (!prev.some(p => p.toLowerCase() === trimmed.toLowerCase())) {
+            return [trimmed, ...prev];
+          }
+          return prev;
+        });
+      }
       addToast(`Đã lưu thông tin hồ sơ của khách hàng ${fullName || ''} thành công!`, 'success');
     } catch (e: any) {
       addToast(e?.response?.data?.message || 'Không thể lưu hồ sơ khách hàng. Vui lòng kiểm tra lại dữ liệu đầu vào.', 'error');
@@ -5761,10 +5731,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
     const safeIndex = currentIdx === -1 ? 0 : currentIdx;
 
-    // Guard: Only owner or admin can change pipeline status
+    // Guard: Only owner or admin/sale_admin can change pipeline status
     const isOwner = Number(currentUser?.id) === Number(formData.owner_id || contact?.owner_id);
-    const isAdmin = currentUser?.role && ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'manager'].includes(currentUser.role);
-    if (currentUser?.role === 'sale' && !isOwner && !isAdmin) {
+    const userRole = (currentUser?.role || '').toLowerCase();
+    const isPrivileged = ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'manager', 'sale_admin', 'saleadmin'].includes(userRole);
+    if (userRole === 'sale' && !isOwner && !isPrivileged) {
       const ownerName = formData.owner_name || contact?.owner_name || contact?.consultant_name || 'chủ sở hữu';
       addToast(`Chặn thao tác: Chỉ chủ sở hữu (Owner: ${ownerName}) mới có quyền chuyển trạng thái khách hàng!`, 'error');
       return;
@@ -5779,18 +5750,18 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const isToSuccess = targetStageObj?.name?.toLowerCase()?.includes('hợp đồng') || targetStageObj?.name?.toLowerCase()?.includes('won') || targetStageObj?.name?.toLowerCase()?.includes('thành công') || targetStageObj?.is_won;
     const isCancellation = isFromDeposit && !isToSuccess;
 
-    if (isBackward && !isCancellation && !allowPipelineBackward && initialLeadStatus === 'active') {
+    if (isBackward && !isCancellation && !allowPipelineBackward && initialLeadStatus === 'active' && !isPrivileged) {
       addToast("Không thể di chuyển ngược giai đoạn trên Pipeline.", "error");
       return;
     }
 
-    if (formData.pipeline_status === 'hoc_vien' && isBackward && initialLeadStatus === 'active') {
+    if (formData.pipeline_status === 'hoc_vien' && isBackward && initialLeadStatus === 'active' && !isPrivileged) {
       addToast("Không thể chuyển lùi giai đoạn khi học viên đã nhập học chính thức.", "error");
       return;
     }
 
     const isForwardSkip = (targetIdx !== -1 && targetIdx > safeIndex + 1);
-    if (isForwardSkip && !allowPipelineSkip && initialLeadStatus === 'active') {
+    if (isForwardSkip && !allowPipelineSkip && initialLeadStatus === 'active' && !isPrivileged) {
       addToast("Không được phép nhảy cóc giai đoạn. Tiến trình chuyển giai đoạn phải đi tuần tự từng bước.", "error");
       return;
     }
@@ -5946,11 +5917,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
             const safeIndex = currentIdx === -1 ? 0 : currentIdx;
             const isHocVien = formData.pipeline_status === 'hoc_vien';
+            const userRole = (currentUser?.role || '').toLowerCase();
+            const isPrivileged = ['admin', 'superadmin', 'super_admin', 'assistant', 'director', 'manager', 'sale_admin', 'saleadmin'].includes(userRole);
 
             return pipelineStages.map((st, i) => {
               const isCurrent = i === safeIndex && !isCurrentlyNurture && !isCurrentlyLost;
               const isBackward = i < safeIndex;
-              const isPrecedingOfHocVien = isHocVien && isBackward;
+              const isPrecedingOfHocVien = isHocVien && isBackward && !isPrivileged;
               const stColor = overridePurpleColor(st.color);
               return (
                 <div
@@ -6843,15 +6816,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
                                     setShowProgramDropdown(false);
-                                    saveProgramOrAdmissionDate(formData.program, undefined);
                                   } else if (e.key === 'Escape') {
                                     setShowProgramDropdown(false);
                                   }
-                                }}
-                                onBlur={() => {
-                                  setTimeout(() => {
-                                    saveProgramOrAdmissionDate(formData.program, undefined);
-                                  }, 200);
                                 }}
                                 style={{
                                   width: '100%',
@@ -6923,7 +6890,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       <div
                                         onMouseDown={(e) => {
                                           e.preventDefault();
-                                          saveProgramOrAdmissionDate(currentText, undefined);
+                                          setFormData((prev: any) => ({ ...prev, program: currentText }));
                                           setShowProgramDropdown(false);
                                         }}
                                         style={{
@@ -6960,7 +6927,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             key={pIdx}
                                             onMouseDown={(e) => {
                                               e.preventDefault();
-                                              saveProgramOrAdmissionDate(prog, undefined);
+                                              setFormData((prev: any) => ({ ...prev, program: prog }));
                                               setShowProgramDropdown(false);
                                             }}
                                             style={{
@@ -7015,7 +6982,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
                             onChange={e => {
                               const val = e.target.value;
-                              saveProgramOrAdmissionDate(undefined, val);
+                              setFormData((prev: any) => ({ ...prev, admission_date: val }));
                             }}
                             style={{
                               height: '28px',
@@ -7032,12 +6999,36 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           />
                         </div>
 
-                        {/* Quick saving indicator */}
-                        {isQuickSavingProgram && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: 'var(--color-primary)' }}>
-                            <Loader2 size={12} className="animate-spin" />
-                          </div>
-                        )}
+                        <div style={{ width: '1px', height: '18px', background: 'var(--color-border)', flexShrink: 0 }} />
+
+                        {/* ID Student Input */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '130px' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <GraduationCap size={13} style={{ color: 'var(--color-primary)' }} />
+                            ID Student:
+                          </span>
+                          <input 
+                            type="text"
+                            placeholder="Mã SV..."
+                            value={formData.student_id || ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setFormData((prev: any) => ({ ...prev, student_id: val }));
+                            }}
+                            style={{
+                              width: '100px',
+                              height: '28px',
+                              fontSize: '0.78rem',
+                              fontWeight: 650,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: 'var(--color-surface)',
+                              color: 'var(--color-text)',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -7247,13 +7238,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         if (e.key === 'Enter') {
                                           e.preventDefault();
                                           setShowProgramDropdown(false);
-                                          saveProgramOrAdmissionDate(formData.program, undefined);
+                                        } else if (e.key === 'Escape') {
+                                          setShowProgramDropdown(false);
                                         }
-                                      }}
-                                      onBlur={() => {
-                                        setTimeout(() => {
-                                          saveProgramOrAdmissionDate(formData.program, undefined);
-                                        }, 200);
                                       }}
                                       style={{
                                         width: '100%',
@@ -7320,7 +7307,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                               <div
                                                 onMouseDown={(e) => {
                                                   e.preventDefault();
-                                                  saveProgramOrAdmissionDate(currentText, undefined);
+                                                  setFormData((prev: any) => ({ ...prev, program: currentText }));
                                                   setShowProgramDropdown(false);
                                                 }}
                                                 style={{
@@ -7357,7 +7344,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                                     key={pIdx}
                                                     onMouseDown={(e) => {
                                                       e.preventDefault();
-                                                      saveProgramOrAdmissionDate(prog, undefined);
+                                                      setFormData((prev: any) => ({ ...prev, program: prog }));
                                                       setShowProgramDropdown(false);
                                                     }}
                                                     style={{
@@ -7405,7 +7392,35 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
                                     onChange={e => {
                                       const val = e.target.value;
-                                      saveProgramOrAdmissionDate(undefined, val);
+                                      setFormData((prev: any) => ({ ...prev, admission_date: val }));
+                                    }}
+                                    style={{
+                                      flex: 1,
+                                      height: '30px',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 650,
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--color-border)',
+                                      background: 'var(--color-surface)',
+                                      color: 'var(--color-text)',
+                                      outline: 'none'
+                                    }}
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                    <GraduationCap size={12} style={{ color: 'var(--color-primary)' }} />
+                                    ID Student:
+                                  </span>
+                                  <input 
+                                    type="text"
+                                    placeholder="Nhập ID student / Mã học viên..."
+                                    value={formData.student_id || ''}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, student_id: val }));
                                     }}
                                     style={{
                                       flex: 1,
@@ -8283,7 +8298,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       const val = e.target.value;
                                       setFormData((prev: any) => ({ ...prev, program: val }));
                                     }} 
-                                    onBlur={() => saveProgramOrAdmissionDate(formData.program, undefined)}
                                   />
                                   <datalist id="customer-drawer-program-suggestions">
                                     {programSuggestions.map((prog, pIdx) => (
@@ -8305,7 +8319,23 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     onChange={e => {
                                       const val = e.target.value;
                                       setFormData((prev: any) => ({ ...prev, admission_date: val }));
-                                      saveProgramOrAdmissionDate(undefined, val);
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+                              <div style={{ flex: 1, minWidth: '160px' }}>
+                                <label className="form-label">ID Student</label>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                    <GraduationCap size={16} />
+                                  </div>
+                                  <input 
+                                    className="form-input form-input-icon-left" 
+                                    placeholder="Nhập ID Student / Mã học viên..." 
+                                    value={formData.student_id || ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, student_id: val }));
                                     }} 
                                   />
                                 </div>
@@ -11163,51 +11193,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               </>
                             )}
                           </>
-                        </div>
-                      </div>
-
-                      {/* BÊ NGUYÊN CỤC GẮN THẺ THÔNG MINH QUA NHẬT KÝ TƯƠNG TÁC */}
-                      <div className="card-panel" style={{ padding: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', marginBottom: '1.25rem', borderRadius: '12px' }}>
-                        <div>
-                          <label className="form-label" style={{ fontWeight: 700, marginBottom: '1rem', display: 'block', fontSize: '0.9375rem' }}>Gắn thẻ thông minh</label>
-                          {(() => {
-                            const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
-                            const cleanTags = allTags.filter(t => !deprecatedTags.includes(String(t.name || '').trim().toLowerCase()));
-                            const availableTags = cleanTags.filter(t => !tags.some(tag => tag.toLowerCase() === (t.name || '').toLowerCase()));
-
-                            return (
-                              <>
-                                <TagInput
-                                  tags={tags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase()))}
-                                  onChange={handleUpdateTagsAndPersist}
-                                  suggestions={cleanTags.map(t => t.name)}
-                                  placeholder="Chọn thẻ tag..."
-                                />
-                                {availableTags.length > 0 && (
-                                  <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', width: '100%' }}>Các tag trong hệ thống:</span>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
-                                      {availableTags.map(t => (
-                                        <button
-                                          key={t.id}
-                                          type="button"
-                                          onClick={() => {
-                                            if (!tags.includes(t.name)) {
-                                              handleUpdateTagsAndPersist([...tags.filter(tg => tg.toLowerCase() !== 'junk'), t.name]);
-                                            }
-                                          }}
-                                          className="btn ghost sm"
-                                          style={{ borderRadius: '10px', fontSize: '0.75rem', padding: '4px 12px', border: '1px dashed var(--color-border)' }}
-                                        >
-                                          + {t.name}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
                         </div>
                       </div>
 

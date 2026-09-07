@@ -765,14 +765,17 @@ class ContactController {
                 $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong';
                 $isCancellation = $isFromDeposit && !$isToSuccess;
 
-                // Enforce forward-only
-                if ($newIdx < $currIdx) {
+                $userRole = strtolower($auth['role'] ?? '');
+                $isPrivileged = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin'], true);
+
+                // Enforce forward-only (Sale Admin & Admins have full rights to transition state)
+                if ($newIdx < $currIdx && !$isPrivileged) {
                     if (!$isCancellation && !$allowBackward) {
                         respond(400, null, "Không được phép chuyển lùi trạng thái từ '$currStatus' về '$newStatus'", false);
                     }
                 }
-                // Enforce no skipping stages
-                if ($newIdx > $currIdx + 1 && !$allowSkip) {
+                // Enforce no skipping stages (Sale Admin & Admins have full rights to transition state)
+                if ($newIdx > $currIdx + 1 && !$allowSkip && !$isPrivileged) {
                     respond(400, null, "Không được phép nhảy cóc trạng thái từ '$currStatus' sang '$newStatus' (Phải đi tuần tự)", false);
                 }
 
@@ -822,7 +825,7 @@ class ContactController {
             'form_name', 'zalo_phone', 'facebook_link',
             'lead_status', 'lead_temperature', 'next_action', 'next_followup_date',
             'expected_decision_date', 'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id',
-            'program', 'admission_date'
+            'program', 'admission_date', 'student_id'
         ];
         $sets = []; $params = [];
         
@@ -1198,14 +1201,17 @@ class ContactController {
         $isToSuccess = strpos(strtolower($newStatus), 'success') !== false || strpos(strtolower($newStatus), 'enrolled') !== false || strpos(strtolower($newStatus), 'thanh_cong') !== false || $newStatus === 'dong_deal' || $newStatus === 'thanh_cong';
         $isCancellation = $isFromDeposit && !$isToSuccess;
 
-        // Enforce forward-only
-        if ($newIdx < $currIdx && $targetLeadStatus === 'active') {
+        $userRole = strtolower($auth['role'] ?? '');
+        $isPrivileged = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin'], true);
+
+        // Enforce forward-only (Sale Admin & Admins have full rights to transition state)
+        if ($newIdx < $currIdx && $targetLeadStatus === 'active' && !$isPrivileged) {
             if (!$isCancellation && !$allowBackward) {
                 respond(400, null, "Không được phép chuyển lùi trạng thái từ '$currStatus' về '$newStatus'", false);
             }
         }
-        // Enforce no skipping stages
-        if ($newIdx > $currIdx + 1 && $targetLeadStatus === 'active' && !$allowSkip) {
+        // Enforce no skipping stages (Sale Admin & Admins have full rights to transition state)
+        if ($newIdx > $currIdx + 1 && $targetLeadStatus === 'active' && !$allowSkip && !$isPrivileged) {
             respond(400, null, "Không được phép nhảy cóc trạng thái từ '$currStatus' sang '$newStatus' (Phải đi tuần tự)", false);
         }
 
