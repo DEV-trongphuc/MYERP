@@ -217,6 +217,22 @@ class NoteController {
 
             $this->db->prepare($updateSql)->execute($updateParams);
 
+            // Check if note is non-automated to auto-advance from new_lead to contact_attempted
+            $noteBodyStr = (string)($b['body'] ?? '');
+            $isAutoNote = (
+                str_starts_with($noteBodyStr, '[Tự động]') || 
+                str_starts_with($noteBodyStr, '[Phân bổ]') || 
+                str_starts_with($noteBodyStr, '[Giao data]') || 
+                str_starts_with($noteBodyStr, '[Auto]') || 
+                str_starts_with($noteBodyStr, '[Import]') || 
+                str_starts_with($noteBodyStr, '[Tái phân bổ]') || 
+                str_starts_with($noteBodyStr, 'Tái phân bổ') || 
+                str_starts_with($noteBodyStr, 'Giao lại')
+            );
+            if (!$isAutoNote) {
+                autoAdvanceContactOnInteraction($this->db, (int)$auth['tenant_id'], (int)$entityId, (int)$auth['user_id']);
+            }
+
             $stmtOwner = $this->db->prepare("SELECT owner_id FROM contacts WHERE id = ?");
             $stmtOwner->execute([$entityId]);
             $ownerId = $stmtOwner->fetchColumn();

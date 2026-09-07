@@ -279,6 +279,80 @@ function logInteraction(PDO $db, $tid, $uid, string $type, string $subject, ?str
     }
 }
 
+function autoAdvanceContactOnInteraction(PDO $db, int $tenantId, int $contactId, int $userId): bool {
+    if ($contactId <= 0) return false;
+    try {
+        // Check current stage of the contact
+        $stmt = $db->prepare("
+            SELECT c.id, c.stage_id, c.pipeline_status, c.lead_status, ps.system_slug, ps.order_index
+            FROM contacts c
+            LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+            WHERE c.id = ? AND c.tenant_id = ?
+        ");
+        $stmt->execute([$contactId, $tenantId]);
+        $contact = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$contact) return false;
+
+        $isNewLead = (
+            $contact['pipeline_status'] === 'new_lead' ||
+            ($contact['system_slug'] ?? '') === 'new_lead' ||
+            (int)($contact['order_index'] ?? 0) === 1 ||
+            (int)($contact['stage_id'] ?? 0) === 1 ||
+            empty($contact['stage_id'])
+        );
+
+        // Don't auto-move if contact is marked as lost or nurture
+        if ($isNewLead && !in_array($contact['lead_status'] ?? '', ['lost', 'nurture'], true)) {
+            // Find stage 2: contact_attempted
+            $sStmt = $db->prepare("
+                SELECT id FROM pipeline_stages 
+                WHERE tenant_id = ? AND system_slug = 'contact_attempted'
+                LIMIT 1
+            ");
+            $sStmt->execute([$tenantId]);
+            $stage2Id = $sStmt->fetchColumn();
+
+            if (!$stage2Id) {
+                // Fallback to order_index = 2
+                $sStmt2 = $db->prepare("
+                    SELECT id FROM pipeline_stages 
+                    WHERE tenant_id = ? AND order_index = 2
+                    LIMIT 1
+                ");
+                $sStmt2->execute([$tenantId]);
+                $stage2Id = $sStmt2->fetchColumn() ?: 2;
+            }
+
+            $stage2Id = (int)$stage2Id;
+
+            // Update contact to Stage 2: Contact Attempted
+            $upStmt = $db->prepare("
+                UPDATE contacts 
+                SET stage_id = ?, pipeline_status = 'contact_attempted', last_contact = NOW() 
+                WHERE id = ? AND tenant_id = ?
+            ");
+            $upStmt->execute([$stage2Id, $contactId, $tenantId]);
+
+            // Log stage move activity
+            logActivity(
+                $db, $tenantId, $userId, 'MOVE_STAGE', 'contact', $contactId, 
+                json_encode([
+                    'from_stage' => 'new_lead', 
+                    'to_stage' => 'contact_attempted', 
+                    'stage_id' => $stage2Id,
+                    'pipeline_status' => 'contact_attempted',
+                    'reason' => 'Tự động chuyển từ 01 – New Lead sang 02 – Contact Attempted khi phát sinh tương tác'
+                ], JSON_UNESCAPED_UNICODE)
+            );
+
+            return true;
+        }
+    } catch (Throwable $e) {
+        error_log("autoAdvanceContactOnInteraction Error: " . $e->getMessage());
+    }
+    return false;
+}
+
 function getCustomFields(PDO $db, int $tenant_id, int $entity_id, string $entity_type): array {
     $stmt = $db->prepare("
         SELECT cf.id, cf.field_key, cf.label, cf.field_type, cf.options, cf.is_required, 

@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 244;
+$targetVersion = 245;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2533,8 +2533,51 @@ try {
         $logMsg("Nâng cấp lên phiên bản 244 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 245: TỰ ĐỘNG CHUYỂN TOÀN BỘ NEW LEAD ĐÃ CÓ TƯƠNG TÁC SANG 02 – CONTACT ATTEMPTED
+    // ==========================================
+    if ($currentVersion < 245 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 245: Chuyển các New Lead đã có tương tác sang 02 – Contact Attempted...", "info");
+        try {
+            $updateSql = "
+                UPDATE contacts c
+                JOIN pipeline_stages ps2 ON ps2.tenant_id = c.tenant_id AND ps2.system_slug = 'contact_attempted'
+                LEFT JOIN pipeline_stages ps1 ON ps1.id = c.stage_id
+                SET c.stage_id = ps2.id,
+                    c.pipeline_status = 'contact_attempted'
+                WHERE (c.pipeline_status = 'new_lead' OR ps1.system_slug = 'new_lead' OR ps1.order_index = 1 OR c.stage_id = 1 OR c.stage_id IS NULL)
+                  AND (c.lead_status != 'lost' OR c.lead_status IS NULL)
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM activities a 
+                          WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
+                            AND a.deleted_at IS NULL
+                      )
+                      OR EXISTS (
+                          SELECT 1 FROM notes n 
+                          WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                            AND n.body NOT LIKE '[Tự động]%' 
+                            AND n.body NOT LIKE '[Phân bổ]%' 
+                            AND n.body NOT LIKE '[Giao data]%'
+                            AND n.body NOT LIKE '[Auto]%'
+                            AND n.body NOT LIKE '[Import]%'
+                            AND n.body NOT LIKE '[Tái phân bổ]%'
+                            AND n.body NOT LIKE 'Tái phân bổ%'
+                            AND n.body NOT LIKE 'Giao lại%'
+                      )
+                  )
+            ";
+            $conn->query($updateSql);
+            $affectedRows = $conn->affected_rows;
+            $logMsg("Đã chuyển thành công $affectedRows khách hàng từ 01 – New Lead sang 02 – Contact Attempted do đã có nhật ký tương tác.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 245: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 245 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '244') ON DUPLICATE KEY UPDATE setting_value = '244'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '245') ON DUPLICATE KEY UPDATE setting_value = '245'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 
