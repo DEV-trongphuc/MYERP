@@ -325,10 +325,10 @@ function autoAdvanceContactOnInteraction(PDO $db, int $tenantId, int $contactId,
 
             $stage2Id = (int)$stage2Id;
 
-            // Update contact to Stage 2: Contact Attempted
+            // Update contact to Stage 2: Contact Attempted (do not overwrite last_contact)
             $upStmt = $db->prepare("
                 UPDATE contacts 
-                SET stage_id = ?, pipeline_status = 'contact_attempted', last_contact = NOW() 
+                SET stage_id = ?, pipeline_status = 'contact_attempted'
                 WHERE id = ? AND tenant_id = ?
             ");
             $upStmt->execute([$stage2Id, $contactId, $tenantId]);

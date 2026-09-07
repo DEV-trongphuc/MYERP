@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 245;
+$targetVersion = 246;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2576,8 +2576,26 @@ try {
         $logMsg("Nâng cấp lên phiên bản 245 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 246: KHÔI PHỤC THỜI GIAN TƯƠNG TÁC THỰC TẾ CHO CONTACTS
+    // ==========================================
+    if ($currentVersion < 246 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 246: Khôi phục lại thời gian tương tác thực tế cho contacts...", "info");
+        try {
+            $conn->query("
+                UPDATE contacts c
+                SET c.updated_at = COALESCE(c.last_contact, c.created_at)
+                WHERE c.last_contact IS NOT NULL AND c.updated_at > c.last_contact
+            ");
+            $logMsg("Đã khôi phục thành công thời gian tương tác (updated_at/last_contact) theo đúng lịch sử thực tế.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 246: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 246 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '245') ON DUPLICATE KEY UPDATE setting_value = '245'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '246') ON DUPLICATE KEY UPDATE setting_value = '246'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

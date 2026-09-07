@@ -42,14 +42,20 @@ const cleanInteractionText = (text: string) => {
     .trim();
 };
 
-const getInteractionTime = (lastContact: string | null, updatedAt: string, createdAt: string, distributedAt?: string | null) => {
+const getInteractionTime = (lastInteractionAt: string | null, lastContact: string | null, createdAt: string, distributedAt?: string | null) => {
   const parseTime = (t: string | null | undefined) => {
     if (!t) return 0;
     const ms = new Date(t).getTime();
     return isNaN(ms) ? 0 : ms;
   };
-  const maxMs = Math.max(parseTime(lastContact), parseTime(updatedAt), parseTime(createdAt), parseTime(distributedAt));
-  return maxMs > 0 ? new Date(maxMs).toISOString() : (lastContact || updatedAt || createdAt);
+  // Ưu tiên thời điểm của nhật ký tương tác thực tế hoặc last_contact
+  const maxMs = Math.max(parseTime(lastInteractionAt), parseTime(lastContact));
+  if (maxMs > 0) {
+    return new Date(maxMs).toISOString();
+  }
+  // Nếu chưa từng có tương tác, hiển thị theo thời điểm phân bổ hoặc ngày tạo lead
+  const fallbackMs = Math.max(parseTime(distributedAt), parseTime(createdAt));
+  return fallbackMs > 0 ? new Date(fallbackMs).toISOString() : (lastContact || createdAt);
 };
 
 const isLeadUncontacted = (c: any) => {
@@ -65,7 +71,7 @@ const isLeadUncontacted = (c: any) => {
   );
 
   // Nếu đã có tương tác thực tế hoặc có thời điểm liên lạc -> không phải chưa tương tác
-  if (hasInteraction || c.last_contact) {
+  if (hasInteraction || c.last_contact || c.last_interaction_at) {
     return false;
   }
 
@@ -74,7 +80,7 @@ const isLeadUncontacted = (c: any) => {
 };
 
 const renderInteractionInfo = (c: any) => {
-  const interactionTime = getInteractionTime(c.last_contact, c.updated_at, c.created_at, c.distributed_at);
+  const interactionTime = getInteractionTime(c.last_interaction_at, c.last_contact, c.created_at, c.distributed_at);
   const timeText = formatTimeAgo(interactionTime);
   const isUncontacted = isLeadUncontacted(c);
   const isReassigned = Boolean(
