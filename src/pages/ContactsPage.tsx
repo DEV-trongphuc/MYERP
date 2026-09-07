@@ -1174,9 +1174,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const handleCreateContact = async () => {
     if (!createForm.full_name.trim()) { addToast('Vui lòng nhập họ tên', 'error'); return; }
     
-    // Yêu cầu ít nhất email hoặc số điện thoại
-    if (!createForm.email.trim() && !createForm.phone.trim()) {
-      addToast('Vui lòng cung cấp ít nhất Email hoặc Số điện thoại', 'error');
+    // Yêu cầu ít nhất email hoặc số điện thoại (trừ nguồn Giới thiệu và Cá nhân tự khai thác)
+    const isReferralOrPersonal = createForm.source === 'gioi_thieu' || createForm.source === 'ca_nhan';
+    if (!isReferralOrPersonal && !createForm.email.trim() && !createForm.phone.trim()) {
+      addToast('Vui lòng cung cấp ít nhất Email hoặc Số điện thoại (trừ nguồn Giới thiệu / Cá nhân)', 'error');
       return;
     }
 
