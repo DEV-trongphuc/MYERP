@@ -1978,20 +1978,36 @@ class ContactController {
 
             $defaults = [
                 'MBA High Quality',
-                'Thạc sĩ Quản trị Kinh doanh (MBA)',
-                'Tiến sĩ Quản trị Kinh doanh (DBA)',
-                'Cử nhân Quản trị Kinh doanh (BBA)',
+                'MBA Standard',
+                'MBA',
                 'Executive MBA',
                 'Mini MBA',
-                'Thạc sĩ Tài chính Ngân hàng (MFB)',
-                'Thạc sĩ Quản trị Công nghệ & Đổi mới (MSTI)',
-                'Chứng chỉ Giám đốc Điều hành (CEO)',
-                'Chứng chỉ Giám đốc Tài chính (CFO)',
-                'Chứng chỉ Giám đốc Nhân sự (CHRO)',
-                'Chứng chỉ Giám đốc Marketing (CMO)'
+                'DBA',
+                'BBA',
+                'MFB',
+                'MSTI',
+                'CEO',
+                'CFO',
+                'CHRO',
+                'CMO'
             ];
 
-            $combined = array_values(array_unique(array_filter(array_merge($rows, $defaults))));
+            $filteredRows = [];
+            foreach ($rows as $r) {
+                $trimmed = trim($r);
+                if (empty($trimmed)) continue;
+                // Extract acronym inside parentheses if exists, e.g. "Thạc sĩ Quản trị Kinh doanh (MBA)" -> "MBA"
+                if (preg_match('/\(([A-Za-z0-9\s\-]+)\)/u', $trimmed, $m)) {
+                    $trimmed = trim($m[1]);
+                }
+                // Discard any remaining entries containing Vietnamese letters / diacritics
+                if (preg_match('/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/ui', $trimmed)) {
+                    continue;
+                }
+                $filteredRows[] = $trimmed;
+            }
+
+            $combined = array_values(array_unique(array_filter(array_merge($defaults, $filteredRows))));
             respond(200, $combined, 'Danh sách gợi ý chương trình');
         } catch (\Throwable $e) {
             respond(500, null, 'Lỗi lấy gợi ý chương trình: ' . $e->getMessage(), false);

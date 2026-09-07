@@ -1719,11 +1719,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   // Program & Admission Date state & suggestions
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([
+    'MBA High Quality',
+    'MBA Standard',
     'MBA',
-    'BBA',
-    'DBA',
-    'EMBA',
+    'Executive MBA',
     'Mini MBA',
+    'DBA',
+    'BBA',
     'MFB',
     'MSTI',
     'CEO',
@@ -1732,8 +1734,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     'CMO'
   ]);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
+  const [showBodyProgramDropdown, setShowBodyProgramDropdown] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
   const programDropdownMobileRef = useRef<HTMLDivElement>(null);
+  const bodyProgramDropdownRef = useRef<HTMLDivElement>(null);
   const [duplicatePhoneModal, setDuplicatePhoneModal] = useState<{
     isOpen: boolean;
     phone: string;
@@ -1750,9 +1754,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const handleClickOutside = (e: MouseEvent) => {
       if (
         programDropdownRef.current && !programDropdownRef.current.contains(e.target as Node) &&
-        programDropdownMobileRef.current && !programDropdownMobileRef.current.contains(e.target as Node)
+        programDropdownMobileRef.current && !programDropdownMobileRef.current.contains(e.target as Node) &&
+        bodyProgramDropdownRef.current && !bodyProgramDropdownRef.current.contains(e.target as Node)
       ) {
         setShowProgramDropdown(false);
+        setShowBodyProgramDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -1764,7 +1770,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       api.get('/contacts/programs')
         .then(res => {
           if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-            setProgramSuggestions(res.data.data);
+            const vnRegex = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+            const cleaned = res.data.data
+              .map((p: string) => {
+                const match = p.match(/\(([A-Za-z0-9\s\-]+)\)/);
+                return match ? match[1].trim() : p.trim();
+              })
+              .filter((p: string) => !vnRegex.test(p) && p.length > 0);
+            if (cleaned.length > 0) {
+              setProgramSuggestions(Array.from(new Set([...cleaned])));
+            }
           }
         })
         .catch(() => {});
@@ -8502,7 +8517,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               gridTemplateColumns: isMobileOrTablet ? '1fr' : '1.4fr 1fr 1fr',
                               gap: '12px'
                             }}>
-                              <div>
+                              <div ref={bodyProgramDropdownRef} style={{ position: 'relative' }}>
                                 <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Chương trình học</label>
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                   <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
@@ -8511,44 +8526,125 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   <input 
                                     className="form-input form-input-icon-left" 
                                     placeholder="Chọn tag hoặc nhập..." 
-                                    list="customer-drawer-program-suggestions"
                                     value={formData.program || ''} 
+                                    onFocus={() => setShowBodyProgramDropdown(true)}
                                     onChange={e => {
                                       const val = e.target.value;
                                       setFormData((prev: any) => ({ ...prev, program: val }));
-                                    }} 
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        setShowBodyProgramDropdown(false);
+                                      } else if (e.key === 'Escape') {
+                                        setShowBodyProgramDropdown(false);
+                                      }
+                                    }}
+                                    style={{ paddingRight: '32px' }}
                                   />
-                                  <datalist id="customer-drawer-program-suggestions">
-                                    {programSuggestions.map((prog, pIdx) => (
-                                      <option key={pIdx} value={prog} />
-                                    ))}
-                                  </datalist>
+                                  <div 
+                                    onClick={() => setShowBodyProgramDropdown(!showBodyProgramDropdown)}
+                                    style={{ position: 'absolute', right: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', height: '100%' }}
+                                  >
+                                    <ChevronDown size={14} style={{ transform: showBodyProgramDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
-                                  {programSuggestions.map((prog, pIdx) => {
-                                    const isSelected = (formData.program || '').trim().toLowerCase() === prog.toLowerCase();
-                                    return (
-                                      <button
-                                        key={pIdx}
-                                        type="button"
-                                        onClick={() => setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }))}
-                                        style={{
-                                          padding: '2px 8px',
-                                          borderRadius: '12px',
-                                          fontSize: '0.72rem',
-                                          fontWeight: 700,
-                                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                          background: isSelected ? 'var(--color-primary)' : 'var(--color-surface)',
-                                          color: isSelected ? '#ffffff' : 'var(--color-text)',
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease'
-                                        }}
-                                      >
-                                        {prog}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+
+                                {/* Dropdown menu: Only appears when dropdown is open */}
+                                {showBodyProgramDropdown && (
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      top: 'calc(100% + 4px)',
+                                      left: 0,
+                                      width: '100%',
+                                      minWidth: '280px',
+                                      maxWidth: '380px',
+                                      background: 'var(--color-surface)',
+                                      border: '1px solid var(--color-border)',
+                                      borderRadius: '12px',
+                                      boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.05)',
+                                      zIndex: 1200,
+                                      overflow: 'hidden'
+                                    }}
+                                  >
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '8px 12px',
+                                      background: 'var(--color-bg)',
+                                      borderBottom: '1px solid var(--color-border-light)'
+                                    }}>
+                                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        <TagIcon size={12} style={{ color: 'var(--color-primary)' }} />
+                                        Tag chương trình
+                                      </span>
+                                      {formData.program && (
+                                        <button
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            setFormData((prev: any) => ({ ...prev, program: '' }));
+                                          }}
+                                          style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            fontSize: '0.7rem',
+                                            color: 'var(--color-danger)',
+                                            cursor: 'pointer',
+                                            fontWeight: 600,
+                                            padding: '1px 6px'
+                                          }}
+                                        >
+                                          Xóa tag
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <div style={{ padding: '10px', display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                                      {programSuggestions.map((prog, pIdx) => {
+                                        const currentVal = (formData.program || '').trim().toLowerCase();
+                                        const isSelected = currentVal === prog.toLowerCase();
+                                        return (
+                                          <button
+                                            key={pIdx}
+                                            type="button"
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }));
+                                              setShowBodyProgramDropdown(false);
+                                            }}
+                                            style={{
+                                              padding: '4px 10px',
+                                              borderRadius: '16px',
+                                              fontSize: '0.75rem',
+                                              fontWeight: 700,
+                                              cursor: 'pointer',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              transition: 'all 0.15s ease',
+                                              border: isSelected 
+                                                ? '1px solid var(--color-primary)' 
+                                                : '1px solid var(--color-border)',
+                                              background: isSelected 
+                                                ? 'linear-gradient(135deg, #bd1d2d 0%, #e63946 100%)' 
+                                                : 'var(--color-surface)',
+                                              color: isSelected 
+                                                ? '#ffffff' 
+                                                : 'var(--color-text)',
+                                              boxShadow: isSelected ? '0 2px 6px rgba(189, 29, 45, 0.25)' : 'none'
+                                            }}
+                                          >
+                                            {prog}
+                                            {isSelected && <Check size={11} />}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               <div>
