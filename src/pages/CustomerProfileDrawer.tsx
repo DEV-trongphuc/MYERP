@@ -1711,9 +1711,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [formData, setFormData] = useState<any>(() => contact || {});
   const [showScoringSystemModal, setShowScoringSystemModal] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [baseTags, setBaseTags] = useState<string[]>([]);
   const [baseData, setBaseData] = useState<any>(contact || {});
-  const [baseTags, setBaseTags] = useState<string[]>(contact?.tags || []);
   const [isInitialNotesExpanded, setIsInitialNotesExpanded] = useState(true);
+  const [isEditingInitialNotes, setIsEditingInitialNotes] = useState(false);
 
   const handleUpdateTagsAndPersist = async (newTags: string[]) => {
     const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
@@ -7594,22 +7595,57 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       {/* Ghi chú học viên / ban đầu (Dạng Toggle, mặc định mở) */}
                       <div className="card-panel" style={{ marginBottom: '1.25rem', overflow: 'hidden' }}>
                         <div 
-                          onClick={() => setIsInitialNotesExpanded(!isInitialNotesExpanded)}
                           style={{ 
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'space-between', 
-                            cursor: 'pointer',
                             userSelect: 'none'
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div 
+                            onClick={() => setIsInitialNotesExpanded(!isInitialNotesExpanded)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}
+                          >
                             <FileText size={18} style={{ color: '#eab308' }} />
                             <h4 className="panel-title" style={{ margin: 0 }}>Ghi chú học viên / ban đầu</h4>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                            <span>{isInitialNotesExpanded ? 'Thu gọn' : 'Mở rộng'}</span>
-                            {isInitialNotesExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isEditingInitialNotes) {
+                                  setIsEditingInitialNotes(false);
+                                  handleSave();
+                                } else {
+                                  setIsEditingInitialNotes(true);
+                                  if (!isInitialNotesExpanded) setIsInitialNotesExpanded(true);
+                                }
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--color-border)',
+                                background: isEditingInitialNotes ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                                color: isEditingInitialNotes ? 'var(--color-primary)' : 'var(--color-text)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Pencil size={12} />
+                              <span>{isEditingInitialNotes ? 'Xong' : 'Chỉnh sửa'}</span>
+                            </button>
+                            <div 
+                              onClick={() => setIsInitialNotesExpanded(!isInitialNotesExpanded)}
+                              style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              <span>{isInitialNotesExpanded ? 'Thu gọn' : 'Mở rộng'}</span>
+                              {isInitialNotesExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </div>
                           </div>
                         </div>
                         <AnimatePresence>
@@ -7621,24 +7657,49 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               transition={{ duration: 0.2 }}
                               style={{ marginTop: '0.75rem' }}
                             >
-                              <div 
-                                style={{ 
-                                  background: '#fefce8', 
-                                  border: '1px solid #fef08a',
-                                  color: '#713f12', 
-                                  borderRadius: '8px',
-                                  padding: '16px',
-                                  fontSize: '0.875rem',
-                                  lineHeight: '1.6',
-                                  fontFamily: 'inherit',
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word',
-                                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02), 0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                                  minHeight: '120px'
-                                }}
-                              >
-                                {formData.notes || 'Không có ghi chú ban đầu'}
-                              </div>
+                              {isEditingInitialNotes ? (
+                                <textarea
+                                  className="form-input custom-scrollbar"
+                                  rows={6}
+                                  value={formData.notes || ''}
+                                  onChange={e => setFormData((prev: any) => ({ ...prev, notes: e.target.value }))}
+                                  placeholder="Nhập ghi chú học viên / ban đầu..."
+                                  style={{
+                                    width: '100%',
+                                    background: '#fefce8',
+                                    border: '1.5px solid #eab308',
+                                    color: '#713f12',
+                                    borderRadius: '8px',
+                                    padding: '12px 16px',
+                                    fontSize: '0.875rem',
+                                    lineHeight: '1.6',
+                                    fontFamily: 'inherit',
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
+                              ) : (
+                                <div 
+                                  onClick={() => setIsEditingInitialNotes(true)}
+                                  title="Nhấp để chỉnh sửa ghi chú ban đầu"
+                                  style={{ 
+                                    background: '#fefce8', 
+                                    border: '1px solid #fef08a',
+                                    color: '#713f12', 
+                                    borderRadius: '8px',
+                                    padding: '16px',
+                                    fontSize: '0.875rem',
+                                    lineHeight: '1.6',
+                                    fontFamily: 'inherit',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02), 0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                                    minHeight: '120px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {formData.notes || 'Không có ghi chú ban đầu (Nhấp để thêm)'}
+                                </div>
+                              )}
                             </motion.div>
                           )}
                         </AnimatePresence>

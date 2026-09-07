@@ -1864,7 +1864,7 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
     }
 }
 
-function logDistribution($conn, $leadId, $assignedTo, $roundId, $status, $message, $triggerSync = true, $customDate = null, $notifySale = true)
+function logDistribution($conn, $leadId, $assignedTo, $roundId, $status, $message, $triggerSync = true, $customDate = null, $notifySale = false)
 {
     if ($customDate) {
         $stmt = $conn->prepare("INSERT INTO distribution_logs (lead_id, assigned_to, round_id, status, message, received_at) VALUES (?, ?, ?, ?, ?, ?)");
@@ -3979,6 +3979,20 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
             }
         }
 
+        $firstStageId = 31;
+        $firstStageSlug = 'new_lead';
+        $chkStage = $conn->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC LIMIT 1");
+        if ($chkStage) {
+            $chkStage->bind_param("i", $tenantId);
+            $chkStage->execute();
+            $sRes = $chkStage->get_result()->fetch_assoc();
+            $chkStage->close();
+            if ($sRes) {
+                $firstStageId = (int)$sRes['id'];
+                $firstStageSlug = $sRes['system_slug'] ?: 'new_lead';
+            }
+        }
+
         // Get all active contacts for this person
         $existingContacts = [];
         $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
@@ -4014,20 +4028,21 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
             $alreadyOwned = ((int)$primaryContact['owner_id'] === (int)$ownerUserId);
 
             if ($alreadyOwned) {
-                // Đã thuộc Sale này -> Cập nhật thông tin và nối thêm ghi chú
+                // Đã thuộc Sale này -> Cập nhật thông tin, nối thêm ghi chú, giữ nguyên pipeline cũ (nếu chưa có pipeline thì mới gán bước 1)
                 $stmtUpContact = $conn->prepare("
                     UPDATE contacts 
                     SET full_name = IF(? != '' AND (full_name = '' OR full_name IS NULL), ?, full_name),
                         email = IF(? != '' AND (email = '' OR email IS NULL), ?, email),
                         phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
+                        stage_id = IF(stage_id IS NULL OR stage_id = 0, ?, stage_id),
+                        pipeline_status = IF(pipeline_status IS NULL OR pipeline_status = '' OR pipeline_status = 'chua_xac_dinh', ?, pipeline_status),
                         notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách hàng nhắc lại / tương tác mới]\n')), ?)),
                         customer_type = IF(? != '', ?, customer_type),
-                        last_contact = NOW(),
                         updated_at = NOW()
                     WHERE id = ?
                 ");
                 if ($stmtUpContact) {
-                    $stmtUpContact->bind_param("ssssssssssi", $fullName, $fullName, $email, $email, $phone, $phone, $note, $note, $type, $type, $primaryContactId);
+                    $stmtUpContact->bind_param("ssssssississi", $fullName, $fullName, $email, $email, $phone, $phone, $firstStageId, $firstStageSlug, $note, $note, $type, $type, $primaryContactId);
                     $stmtUpContact->execute();
                     $stmtUpContact->close();
                 }
@@ -4047,23 +4062,25 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
                             source = IF(? != '' AND ? != 'other', ?, source),
                             status = 'lead',
-                            pipeline_status = ?,
+                            pipeline_status = IF(pipeline_status IS NULL OR pipeline_status = '' OR pipeline_status = 'chua_xac_dinh', ?, pipeline_status),
+                            stage_id = IF(stage_id IS NULL OR stage_id = 0, ?, stage_id),
                             security_expires_at = ?,
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),
-                            last_contact = NOW(),
+                            last_contact = NULL,
                             updated_at = NOW()
                         WHERE id = ?
                     ");
                     if ($stmtTransfer) {
-                        $stmtTransfer->bind_param("iisssssssssssssssi", 
+                        $stmtTransfer->bind_param("iissssssssssiissssi", 
                             $ownerUserId, 
                             $person_id,
                             $fullName, $fullName, 
                             $email, $email, 
                             $phone, $phone, 
                             $source, $source, $source,
-                            $triggerStatus, 
+                            $firstStageSlug,
+                            $firstStageId,
                             $secExpiresTime, 
                             $note, $note, 
                             $type, $type, 
@@ -4081,7 +4098,6 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách đăng ký lại (Giữ nguyên Sale do đã ở bước Hồ sơ)]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),
-                            last_contact = NOW(),
                             updated_at = NOW()
                         WHERE id = ?
                     ");
@@ -4100,8 +4116,8 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
             }
 
             $stmtContact = $conn->prepare("
-                INSERT INTO contacts (tenant_id, person_id, project_id, owner_id, created_by, full_name, email, phone, source, status, pipeline_status, security_expires_at, notes, customer_type, temperature, suggested_temperature)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?, ?, ?, ?)
+                INSERT INTO contacts (tenant_id, person_id, project_id, owner_id, created_by, full_name, email, phone, source, status, pipeline_status, stage_id, security_expires_at, notes, customer_type, temperature, suggested_temperature)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?, ?, ?, ?, ?)
             ");
             if ($stmtContact) {
                 $createdBy = !empty($creatorUserId) ? (int)$creatorUserId : 1;
@@ -4114,7 +4130,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                         $projectId = null;
                     }
                 }
-                $stmtContact->bind_param("iiiiissssssssss", $tenantId, $person_id, $projectId, $ownerUserId, $createdBy, $fullName, $email, $phone, $source, $triggerStatus, $secExpiresTime, $note, $type, $initTemp, $initTemp);
+                $stmtContact->bind_param("iiiiisssssisssss", $tenantId, $person_id, $projectId, $ownerUserId, $createdBy, $fullName, $email, $phone, $source, $firstStageSlug, $firstStageId, $secExpiresTime, $note, $type, $initTemp, $initTemp);
                 $stmtContact->execute();
                 $stmtContact->close();
             }

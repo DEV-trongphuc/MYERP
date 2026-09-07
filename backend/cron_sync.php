@@ -794,9 +794,12 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                         $logMsg .= "Không có Sale hoạt động khác trong vòng hoặc Admin fallback. Lead chuyển về Chờ xử lý.";
                     }
                     
-                    // Update lead table
-                    $upLead = $conn->prepare("UPDATE leads SET assigned_to = ? WHERE id = ?");
-                    $upLead->bind_param("ii", $assignedConsultantId, $row['lead_id']);
+                    // Update lead table & ensure automatic acceptance when assigned to active consultant
+                    $isAcceptedVal = ($assignedConsultantId > 0 && $newStatus !== 'pending_work_hours') ? 1 : 0;
+                    $acceptedAtSql = ($isAcceptedVal === 1) ? "COALESCE(accepted_at, NOW())" : "NULL";
+
+                    $upLead = $conn->prepare("UPDATE leads SET assigned_to = ?, last_interaction_date = NOW(), is_accepted = ?, accepted_at = " . $acceptedAtSql . " WHERE id = ?");
+                    $upLead->bind_param("iii", $assignedConsultantId, $isAcceptedVal, $row['lead_id']);
                     $upLead->execute();
                     $upLead->close();
                     
@@ -832,6 +835,11 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                     
                     $conn->commit();
                     
+                    if ($isAcceptedVal === 1) {
+                        require_once __DIR__ . '/webhook_logic.php';
+                        ensurePersonAndContact($conn, $row['lead_id']);
+                    }
+
                     // Post-commit: trigger live write-back
                     triggerTwoWaySync($conn, $row['lead_id']);
                     
@@ -1074,9 +1082,20 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                     $stmtUp->execute();
                     $affected = $stmtUp->affected_rows;
                     $stmtUp->close();
+
+                    if ($affected > 0) {
+                        $upLead = $conn->prepare("UPDATE leads SET is_accepted = 1, accepted_at = COALESCE(accepted_at, NOW()), last_interaction_date = NOW() WHERE id = ?");
+                        $upLead->bind_param("i", $row['lead_id']);
+                        $upLead->execute();
+                        $upLead->close();
+                    }
+
                     $conn->commit();
                     
                     if ($affected > 0) {
+                        require_once __DIR__ . '/webhook_logic.php';
+                        ensurePersonAndContact($conn, $row['lead_id']);
+
                         // Post-commit: kích hoạt đồng bộ 2 chiều lên Google Sheets
                         triggerTwoWaySync($conn, $row['lead_id']);
  

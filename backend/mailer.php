@@ -78,6 +78,30 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         // Xóa tính năng gửi đồng bộ để chống kẹt tiến trình (Bottleneck)
         // Thay vào đó, lưu vào bảng mail_queue để tiến trình ngầm (cron_mailer.php) xử lý
         $lId = ($leadId > 0) ? $leadId : null;
+
+        // Prevent duplicate email notifications for the same lead and recipient within 5 minutes
+        if ($leadId > 0) {
+            if ($db instanceof PDO) {
+                $chk = $db->prepare("SELECT id FROM mail_queue WHERE lead_id = ? AND to_email = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) LIMIT 1");
+                $chk->execute([$leadId, $to]);
+                if ($chk->fetchColumn()) {
+                    return true;
+                }
+            } elseif ($db instanceof mysqli) {
+                $chk = $db->prepare("SELECT id FROM mail_queue WHERE lead_id = ? AND to_email = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) LIMIT 1");
+                if ($chk) {
+                    $chk->bind_param("is", $leadId, $to);
+                    $chk->execute();
+                    $chk->store_result();
+                    if ($chk->num_rows > 0) {
+                        $chk->close();
+                        return true;
+                    }
+                    $chk->close();
+                }
+            }
+        }
+
         if ($db instanceof PDO) {
             $stmt = $db->prepare("INSERT INTO mail_queue (to_email, cc_email, subject, body_html, status, lead_id) VALUES (?, ?, ?, ?, 'pending', ?)");
             $result = $stmt->execute([$to, $ccEmailString, $subject, $htmlBody, $lId]);

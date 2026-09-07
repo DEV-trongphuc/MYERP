@@ -359,7 +359,7 @@ class ContactController {
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
-            LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+            LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
             LEFT JOIN leads l ON l.id = COALESCE(
                 (SELECT MAX(id) FROM leads WHERE c.person_id IS NOT NULL AND person_id = c.person_id),
                 (SELECT MAX(id) FROM leads WHERE c.phone IS NOT NULL AND phone = c.phone),
@@ -627,7 +627,7 @@ class ContactController {
             FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
-            LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+            LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
             LEFT JOIN leads l ON l.id = (
                 SELECT MAX(id) FROM leads WHERE person_id = c.person_id
             )
@@ -711,8 +711,14 @@ class ContactController {
         }
 
         // Synchronize stage_id and pipeline_status if only one is updated
-        $reqStageId = array_key_exists('stage_id', $b) ? (int)$b['stage_id'] : null;
-        $reqStatus = array_key_exists('pipeline_status', $b) ? $b['pipeline_status'] : null;
+        $reqStageId = array_key_exists('stage_id', $b) && !empty($b['stage_id']) ? (int)$b['stage_id'] : null;
+        $reqStatus = array_key_exists('pipeline_status', $b) && !empty($b['pipeline_status']) ? (string)$b['pipeline_status'] : null;
+
+        if ($reqStatus !== null && is_numeric($reqStatus)) {
+            $reqStageId = (int)$reqStatus;
+            $b['stage_id'] = $reqStageId;
+            $reqStatus = null;
+        }
 
         if ($reqStageId !== null && $reqStatus === null) {
             $computedStatus = $this->getSlugFromStageId($reqStageId, $auth['tenant_id']);
@@ -1079,7 +1085,7 @@ class ContactController {
             FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
-            LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+            LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
             WHERE c.id=? AND c.tenant_id=? AND c.deleted_at IS NULL";
         
         $stmt = $this->db->prepare($sql);

@@ -11,6 +11,7 @@ import { TagDisplay } from '../components/ui/TagInput';
 import { Pagination } from '../components/ui/Pagination';
 import { ColumnCustomizer, type ColumnDef } from '../components/ui/ColumnCustomizer';
 import { ImportExportModal } from '../components/ui/ImportExportModal';
+import { QuickAddLeadModal } from '../components/QuickAddLeadModal';
 import { CustomModal } from '../components/ui/CustomModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
@@ -29,7 +30,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const PAGE_SIZE = 10;
 
-const STATUS_LABEL: Record<string,string> = { lead:'Lead mới', qualified:'Đủ điều kiện', customer:'Học viên', churned:'Đã rời' };
+const STATUS_LABEL: Record<string,string> = { lead:'Lead mới', qualified:'Tiềm năng', customer:'Học viên', churned:'Đã rời' };
 const STATUS_CLASS: Record<string,string> = { lead:'info', qualified:'warning', customer:'success', churned:'danger' };
 
 const cleanInteractionText = (text: string) => {
@@ -51,9 +52,31 @@ const getInteractionTime = (lastContact: string | null, updatedAt: string, creat
   return maxMs > 0 ? new Date(maxMs).toISOString() : (lastContact || updatedAt || createdAt);
 };
 
+const isLeadUncontacted = (c: any) => {
+  if (!c) return false;
+
+  const interactionText = cleanInteractionText(c.last_interaction);
+  const hasInteraction = Boolean(
+    interactionText && 
+    interactionText !== 'Chưa có tương tác' && 
+    interactionText !== '—' && 
+    !interactionText.startsWith('Tái phân bổ') && 
+    !interactionText.startsWith('Giao lại')
+  );
+
+  // Nếu đã có tương tác thực tế hoặc có thời điểm liên lạc -> không phải chưa tương tác
+  if (hasInteraction || c.last_contact) {
+    return false;
+  }
+
+  // Lead hoàn toàn chưa có bất kỳ tương tác nào
+  return true;
+};
+
 const renderInteractionInfo = (c: any) => {
   const interactionTime = getInteractionTime(c.last_contact, c.updated_at, c.created_at, c.distributed_at);
   const timeText = formatTimeAgo(interactionTime);
+  const isUncontacted = isLeadUncontacted(c);
   const isReassigned = Boolean(
     c.notes?.includes('Tái phân bổ') || 
     c.notes?.includes('giao lại') || 
@@ -68,6 +91,7 @@ const renderInteractionInfo = (c: any) => {
       c.notes?.includes('đăng ký lại') || 
       c.notes?.includes('Đăng ký lại') || 
       c.dl_status === 'duplicate' ||
+      c.dl_status === 'reminder' ||
       c.round_name?.toLowerCase().includes('nhắc lại')
     )
   );
@@ -77,6 +101,19 @@ const renderInteractionInfo = (c: any) => {
       <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
         Tương tác: {timeText}
       </span>
+      {isUncontacted && (
+        <span style={{ 
+          fontSize: '0.625rem', 
+          fontWeight: 700, 
+          padding: '1px 5px', 
+          borderRadius: '4px', 
+          background: 'rgba(239, 68, 68, 0.12)', 
+          color: '#dc2626',
+          lineHeight: '1.2'
+        }}>
+          Chưa tương tác
+        </span>
+      )}
       {isReassigned && (
         <span style={{ 
           fontSize: '0.625rem', 
@@ -107,25 +144,94 @@ const renderInteractionInfo = (c: any) => {
   );
 };
 
-const isLeadUncontacted = (c: any) => {
-  if (!c) return false;
-
-  const interactionText = cleanInteractionText(c.last_interaction) || (c.notes ? c.notes.trim() : '');
-  const hasInteraction = Boolean(
-    interactionText && 
-    interactionText !== 'Chưa có tương tác' && 
-    interactionText !== '—' && 
-    !interactionText.startsWith('Tái phân bổ') && 
-    !interactionText.startsWith('Giao lại')
-  );
-
-  // Nếu đã có tương tác thực tế hoặc có thời điểm liên lạc -> KHÔNG tô vàng
-  if (hasInteraction || c.last_contact) {
-    return false;
+const getContactStage = (c: any, stages: any[]) => {
+  if (c.lost_reason || c.status === 'lost') {
+    return { isLost: true };
+  }
+  // 1. Direct stage_name from backend
+  if (c.stage_name) {
+    const isEnrolled = c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled';
+    return {
+      name: c.stage_name,
+      color: isEnrolled ? '#0891b2' : (c.stage_color || '#3b82f6'),
+      bgColor: `${isEnrolled ? '#06b6d4' : (c.stage_color || '#3b82f6')}1a`,
+      borderColor: `${isEnrolled ? '#06b6d4' : (c.stage_color || '#3b82f6')}33`,
+      isEnrolled
+    };
+  }
+  // 2. Lookup in pipelineStages by stage_id or pipeline_status (numeric or slug)
+  if (stages && stages.length > 0) {
+    const found = stages.find((s: any) => 
+      (c.stage_id && String(s.id) === String(c.stage_id)) ||
+      (c.pipeline_status && (String(s.id) === String(c.pipeline_status) || s.system_slug === c.pipeline_status))
+    );
+    if (found) {
+      const isEnrolled = found.system_slug === 'enrolled' || found.name === 'Học viên' || found.name === '14 – Enrolled';
+      return {
+        name: found.name,
+        color: isEnrolled ? '#0891b2' : (found.color || '#3b82f6'),
+        bgColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}1a`,
+        borderColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}33`,
+        isEnrolled
+      };
+    }
+  }
+  // 3. Check notes or last_interaction for explicit transfer: [Chuyển Pipeline sang: ...]
+  const match = (c.notes || c.last_interaction || '').match(/\[Chuyển Pipeline sang:\s*([^\]]+)\]/i);
+  if (match && match[1]) {
+    const extractedName = match[1].trim();
+    if (stages && stages.length > 0) {
+      const found = stages.find((s: any) => s.name?.toLowerCase() === extractedName.toLowerCase() || s.name?.includes(extractedName));
+      if (found) {
+        const isEnrolled = found.system_slug === 'enrolled' || found.name === 'Học viên' || found.name === '14 – Enrolled';
+        return {
+          name: found.name,
+          color: isEnrolled ? '#0891b2' : (found.color || '#3b82f6'),
+          bgColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}1a`,
+          borderColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}33`,
+          isEnrolled
+        };
+      }
+    }
+    const isEnrolled = extractedName.includes('Enrolled') || extractedName.includes('Học viên');
+    return {
+      name: extractedName,
+      color: isEnrolled ? '#0891b2' : '#8b5cf6',
+      bgColor: isEnrolled ? '#06b6d41a' : '#8b5cf61a',
+      borderColor: isEnrolled ? '#06b6d433' : '#8b5cf633',
+      isEnrolled
+    };
   }
 
-  // Lead hoàn toàn chưa có bất kỳ tương tác nào -> TÔ VÀNG
-  return true;
+  // 4. If customer / student
+  if (c.status === 'customer') {
+    return {
+      name: 'Học viên',
+      color: '#ec4899',
+      bgColor: 'rgba(236, 72, 153, 0.1)',
+      borderColor: 'rgba(236, 72, 153, 0.2)'
+    };
+  }
+
+  // 5. If churned
+  if (c.status === 'churned') {
+    return {
+      name: 'Đã rời',
+      color: 'var(--color-danger)',
+      bgColor: 'rgba(239, 68, 68, 0.12)',
+      borderColor: 'rgba(239, 68, 68, 0.3)'
+    };
+  }
+
+  // 6. Default to first active stage ('01 – New Lead') instead of raw 'Đủ điều kiện'
+  const firstStage = stages && stages.length > 0 ? stages[0] : null;
+  return {
+    name: firstStage ? firstStage.name : '01 – New Lead',
+    color: firstStage?.color || 'var(--color-primary)',
+    bgColor: `${firstStage?.color || '#3b82f6'}1a`,
+    borderColor: `${firstStage?.color || '#3b82f6'}33`,
+    isEnrolled: false
+  };
 };
 
 const calcScore = (c: any, rules: any, decayDays = 5) => {
@@ -280,6 +386,17 @@ interface ContactsPageProps {
 export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'tiem_nang' }) => {
   const { user } = useAuth();
   const isSale = user?.role === 'sale';
+  const canAddOrAssign = useMemo(() => {
+    const role = (user?.role as string) || '';
+    return (
+      user?.email === 'dinhthanh@ideas.edu.vn' ||
+      role === 'marketing' ||
+      role === 'admin' ||
+      role === 'manager' ||
+      role === 'director' ||
+      role === 'leader'
+    );
+  }, [user]);
   const navigate = useNavigate();
   const { addToast, showConfirm, closeConfirm } = useUIStore();
   const [uncontactedCount, setUncontactedCount] = useState(() => {
@@ -1159,23 +1276,59 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           )}
         </div>
         
-        {/* Render export buttons only if not on mobile */}
-        {!isMobile && (
-          <div className="flex gap-2">
-            {user?.role !== 'viewer' && !isSale && (
-              <button className="btn outline" onClick={() => setShowImportExport(true)} title="Nhập/Xuất Dữ liệu">
-                <Download size={14}/>
-                <span className="hide-on-mobile"> Nhập/Xuất Dữ liệu</span>
+        {/* Render header action buttons */}
+        <div className="flex gap-2" style={{ alignItems: 'center' }}>
+          {canAddOrAssign && (
+            <>
+              <button 
+                className="btn primary sm" 
+                onClick={() => setShowCreateModal(true)} 
+                title="Thêm data mới"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', borderRadius: '8px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 700 }}
+              >
+                <Plus size={15} />
+                <span>Thêm data</span>
               </button>
-            )}
-            {user?.role !== 'viewer' && user?.role !== 'sale' && (
-              <button className="btn outline" onClick={bulkExport} title="Xuất dữ liệu theo bộ lọc">
-                <Download size={14}/>
-                <span> Xuất theo bộ lọc</span>
+              <button 
+                className="btn outline sm" 
+                onClick={() => window.dispatchEvent(new CustomEvent('open-quick-add-lead'))} 
+                title="Giao data / chia data nhanh cho Sales"
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  whiteSpace: 'nowrap',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  background: 'rgba(219, 39, 119, 0.08)',
+                  borderColor: 'rgba(219, 39, 119, 0.3)',
+                  color: '#be185d'
+                }}
+              >
+                <UserCheck size={15} />
+                <span>Giao data</span>
               </button>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {!isMobile && (
+            <>
+              {user?.role !== 'viewer' && !isSale && (
+                <button className="btn outline" onClick={() => setShowImportExport(true)} title="Nhập/Xuất Dữ liệu">
+                  <Download size={14}/>
+                  <span className="hide-on-mobile"> Nhập/Xuất Dữ liệu</span>
+                </button>
+              )}
+              {user?.role !== 'viewer' && user?.role !== 'sale' && (
+                <button className="btn outline" onClick={bulkExport} title="Xuất dữ liệu theo bộ lọc">
+                  <Download size={14}/>
+                  <span> Xuất theo bộ lọc</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
 
@@ -1465,7 +1618,60 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           <span>{mode === 'list' ? 'Dạng danh sách' : 'Dạng ô vuông'}</span>
                         </button>
                       ))}
- 
+                      {canAddOrAssign && (
+                        <>
+                          <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
+                          <button
+                            onClick={() => {
+                              setShowCreateModal(true);
+                              setShowMobileActions(false);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--color-primary)',
+                              borderRadius: '8px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              textAlign: 'left',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Plus size={14} />
+                            <span>Thêm data mới</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent('open-quick-add-lead'));
+                              setShowMobileActions(false);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#be185d',
+                              borderRadius: '8px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              textAlign: 'left',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <UserCheck size={14} />
+                            <span>Giao data cho Sale</span>
+                          </button>
+                        </>
+                      )}
+
                       {(user?.role as string) !== 'viewer' && (!isSale || user?.role !== 'sale') && (
                         <>
                           <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
@@ -2176,18 +2382,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 [data-theme="dark"] .table-wrap .table-row-hover:hover {
                   background: rgba(255, 255, 255, 0.02) !important;
                 }
-                .table-wrap .lead-uncontacted-highlight {
-                  background: #fef9c3 !important;
-                }
-                .table-wrap .lead-uncontacted-highlight:hover {
-                  background: #fef08a !important;
-                }
-                [data-theme="dark"] .table-wrap .lead-uncontacted-highlight {
-                  background: rgba(245, 158, 11, 0.18) !important;
-                }
-                [data-theme="dark"] .table-wrap .lead-uncontacted-highlight:hover {
-                  background: rgba(245, 158, 11, 0.28) !important;
-                }
                 .table-wrap th {
                   font-size: 0.7rem !important;
                   font-weight: 700 !important;
@@ -2295,7 +2489,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     return (
                       <motion.tr key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                          style={{ transition: 'background 0.2s', cursor: 'pointer' }}
-                         className={`table-row-hover ${isUncontacted ? 'lead-uncontacted-highlight' : ''}`}
+                         className="table-row-hover"
                          title={isUncontacted ? 'Lead mới giao hoặc giao lại chưa có tương tác mới' : undefined}
                          onClick={() => setProfileContact(c)}>
                         {isMultiSelectMode && (
@@ -2469,29 +2663,41 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <Ban size={11} />
                                 <span>Lost</span>
                               </span>
-                            ) : c.stage_name ? (
-                              <span 
-                                className="badge" 
-                                style={{ 
-                                  backgroundColor: `${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}1a`, 
-                                  color: c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#0891b2' : (c.stage_color || 'var(--color-primary)'), 
-                                  border: `1px solid ${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}33`
-                                }}
-                              >
-                                {c.stage_name}
-                              </span>
-                            ) : (
-                              <span 
-                                className={`badge ${STATUS_CLASS[c.status] || 'info'}`}
-                                style={c.status === 'customer' ? {
-                                  backgroundColor: 'rgba(236, 72, 153, 0.1)',
-                                  color: '#ec4899',
-                                  border: '1px solid rgba(236, 72, 153, 0.2)'
-                                } : undefined}
-                              >
-                                {STATUS_LABEL[c.status] || c.status}
-                              </span>
-                            )}
+                            ) : (() => {
+                              const stageInfo = getContactStage(c, pipelineStages);
+                              if (stageInfo.isLost) {
+                                return (
+                                  <span 
+                                    className="badge" 
+                                    style={{ 
+                                      backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                      color: '#dc2626', 
+                                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px'
+                                    }}
+                                  >
+                                    <Ban size={11} />
+                                    <span>Lost</span>
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span 
+                                  className="badge" 
+                                  style={{ 
+                                    backgroundColor: stageInfo.bgColor, 
+                                    color: stageInfo.color, 
+                                    border: `1px solid ${stageInfo.borderColor}`
+                                  }}
+                                >
+                                  {stageInfo.name}
+                                </span>
+                              );
+                            })()}
                           </td>
                         )}
 
@@ -2532,7 +2738,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   }}
                                   title={cleanInteractionText(c.last_interaction) || undefined}
                                 >
-                                  {cleanInteractionText(c.last_interaction) || (c.notes ? c.notes.trim().split('\n').pop() : 'Chưa có tương tác')}
+                                  {cleanInteractionText(c.last_interaction) || 'Chưa có tương tác'}
                                 </div>
                               </div>
                             ) : c.owner_name ? (() => {
@@ -2907,26 +3113,31 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                   <Clock size={11} />
                                   <span>Nurture</span>
                                 </span>
-                              ) : c.lead_status === 'lost' ? (
-                                <span 
-                                  className="badge" 
-                                  style={{ 
-                                    borderRadius: '8px', 
-                                    padding: '4px 8px', 
-                                    fontSize: '0.72rem', 
-                                    fontWeight: 700,
-                                    backgroundColor: 'rgba(239, 68, 68, 0.12)', 
-                                    color: '#dc2626', 
-                                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                  }}
-                                >
-                                  <Ban size={11} />
-                                  <span>Lost</span>
-                                </span>
-                              ) : c.stage_name ? (
+                              ) : (() => {
+                                const stageInfo = getContactStage(c, pipelineStages);
+                                if (stageInfo.isLost) {
+                                  return (
+                                    <span 
+                                      className="badge" 
+                                      style={{ 
+                                        borderRadius: '8px', 
+                                        padding: '4px 8px', 
+                                        fontSize: '0.72rem', 
+                                        fontWeight: 700,
+                                        backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                        color: '#dc2626', 
+                                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <Ban size={11} />
+                                      <span>Lost</span>
+                                    </span>
+                                  );
+                                }
+                                return (
                                   <span 
                                     className="badge" 
                                     style={{ 
@@ -2934,31 +3145,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       padding: '4px 8px', 
                                       fontSize: '0.72rem', 
                                       fontWeight: 700,
-                                      backgroundColor: `${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}1a`, 
-                                      color: c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#0891b2' : (c.stage_color || 'var(--color-primary)'), 
-                                      border: `1px solid ${c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' ? '#06b6d4' : (c.stage_color || '#3b82f6')}33`
+                                      backgroundColor: stageInfo.bgColor, 
+                                      color: stageInfo.color, 
+                                      border: `1px solid ${stageInfo.borderColor}`
                                     }}
                                   >
-                                    {c.stage_name}
+                                    {stageInfo.name}
                                   </span>
-                                ) : (
-                                  <span 
-                                    className={`badge ${STATUS_CLASS[c.status] || 'info'}`} 
-                                    style={{ 
-                                      borderRadius: '8px', 
-                                      padding: '4px 8px', 
-                                      fontSize: '0.72rem', 
-                                      fontWeight: 700,
-                                      ...(c.status === 'customer' ? {
-                                        backgroundColor: 'rgba(236, 72, 153, 0.1)',
-                                        color: '#ec4899',
-                                        border: '1px solid rgba(236, 72, 153, 0.2)'
-                                      } : {})
-                                    }}
-                                  >
-                                    {STATUS_LABEL[c.status] || c.status}
-                                  </span>
-                                )}
+                                );
+                              })()}
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Đánh giá:</span>
                                 <span style={{ 
@@ -3299,6 +3494,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         )}
       </AnimatePresence>
     , document.body)}
+
+      {/* Quick Add / Distribute Lead Modal */}
+      <QuickAddLeadModal />
     </div>
   );
 };
