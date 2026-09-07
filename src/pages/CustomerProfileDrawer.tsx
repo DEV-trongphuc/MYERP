@@ -2697,9 +2697,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     );
 
     if (!currentStage || !targetStage) {
-      return ['deposit_tuition_payment', 'dong_le_phi_ho_so', 'hoc_vien', 'enrolled', 'application_completed'].includes(currentStatus);
+      return ['deposit_tuition_payment', 'dong_le_phi_ho_so', 'hoc_vien', 'enrolled'].includes(currentStatus);
     }
-    return currentStage.order_index >= targetStage.order_index || currentStage.system_slug === 'application_completed' || currentStage.system_slug === 'dong_le_phi_ho_so';
+    return currentStage.order_index >= targetStage.order_index || currentStage.system_slug === 'dong_le_phi_ho_so';
   }, [formData.pipeline_status, contact?.pipeline_status, formData.stage_id, contact?.stage_id, pipelineStages, deals]);
 
   useEffect(() => {

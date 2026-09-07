@@ -188,13 +188,13 @@ class ExportController {
             if ($segment === 'customer' && $studentSubTab !== '') {
                 if ($studentSubTab === 'le_phi') {
                     $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so'))
-                        OR t.pipeline_status IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so')
+                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
+                        OR t.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
                     )";
                 } elseif ($studentSubTab === 'nop_ho_so') {
                     $where[] = "(
-                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
-                        OR t.pipeline_status IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so')
+                        EXISTS (SELECT 1 FROM pipeline_stages ps2 WHERE ps2.id = t.stage_id AND ps2.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
+                        OR t.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
                     )";
                 } elseif ($studentSubTab === 'chinh_thuc') {
                     $where[] = "(

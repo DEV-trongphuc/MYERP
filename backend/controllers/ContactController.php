@@ -51,11 +51,11 @@ class ContactController {
             }
             $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.order_index >= " . (int)$minOrderIndex . ")";
         } elseif ($role === 'accountant') {
-            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'application_started', 'dong_le_phi_ho_so', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
             $minOrderIndex = $stmtStage->fetchColumn();
             if ($minOrderIndex === false) {
-                $minOrderIndex = 9;
+                $minOrderIndex = 13;
             }
             $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.order_index >= " . (int)$minOrderIndex . ")";
         }
@@ -221,13 +221,13 @@ class ContactController {
         if ($segment === 'customer' && $studentSubTab !== '') {
             if ($studentSubTab === 'le_phi') {
                 $where[] = "(
-                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so'))
-                    OR c.pipeline_status IN ('deposit_tuition_payment', 'application_completed', 'dong_le_phi_ho_so')
+                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
+                    OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
                 )";
             } elseif ($studentSubTab === 'nop_ho_so') {
                 $where[] = "(
-                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
-                    OR c.pipeline_status IN ('application_started', 'admission_approved', 'offer_accepted', 'nop_ho_so')
+                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
+                    OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
                 )";
             } elseif ($studentSubTab === 'chinh_thuc') {
                 $where[] = "(
