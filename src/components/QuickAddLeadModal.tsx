@@ -1325,30 +1325,6 @@ export const QuickAddLeadModal = () => {
         
         {activeTab === 'single' ? (
           <>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <textarea
-                className="form-textarea"
-                rows={3}
-                style={{
-                  resize: 'none',
-                  fontSize: '0.875rem',
-                  lineHeight: 1.5,
-                  background: theme === 'dark' ? 'var(--color-bg)' : 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '10px',
-                  padding: '12px 14px',
-                  width: '100%',
-                  outline: 'none',
-                  transition: 'border-color 0.2s',
-                  color: 'var(--color-text)',
-                  minHeight: '84px',
-                  boxSizing: 'border-box'
-                }}
-                placeholder={t("Ví dụ: Trần Văn Hiền - 0364200518 - tìm hiểu liên thông - FB_Ads")}
-                value={quickInput}
-                onChange={handleQuickInputChange}
-              />
-            </div>
 
             {!isSale && distributionMode === 'auto_round' && (
               <div className="quick-add-preview-box" style={{ background: theme === 'dark' ? 'var(--color-bg)' : '#f8fafc', padding: '1rem', borderRadius: 12, border: theme === 'dark' ? '1px solid var(--color-border)' : '1px solid #e2e8f0', marginBottom: '1.25rem' }}>
@@ -1504,8 +1480,8 @@ export const QuickAddLeadModal = () => {
                   <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Nguồn (Source)')}</label>
                   <CustomSelect
                     options={[
-                      { value: 'ca_nhan', label: t('Tự khai thác (ca_nhan)') },
-                      { value: 'gioi_thieu', label: t('Khách giới thiệu (gioi_thieu)') }
+                      { value: 'ca_nhan', label: t('Tự khai thác') },
+                      { value: 'gioi_thieu', label: t('Khách giới thiệu') }
                     ]}
                     value={manualData.source || 'ca_nhan'}
                     onChange={val => setManualData({ ...manualData, source: val })}
@@ -1574,8 +1550,8 @@ export const QuickAddLeadModal = () => {
                 </div>
               )}
               <div>
-                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Loại (Type)')}</label>
-                <input className="form-input" placeholder={t("VD: Mua nhà")} value={manualData.type} onChange={e => setManualData({ ...manualData, type: e.target.value })} />
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Loại / Chương trình')}</label>
+                <input className="form-input" placeholder={t("VD: MBA, Thạc sĩ, Cử nhân...")} value={manualData.type} onChange={e => setManualData({ ...manualData, type: e.target.value })} />
               </div>
               {manualData.source === 'gioi_thieu' && (
                 <div style={{
