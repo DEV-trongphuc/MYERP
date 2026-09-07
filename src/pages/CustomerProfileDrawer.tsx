@@ -1716,6 +1716,89 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [isInitialNotesExpanded, setIsInitialNotesExpanded] = useState(true);
   const [isEditingInitialNotes, setIsEditingInitialNotes] = useState(false);
 
+  // Program & Admission Date state & suggestions
+  const [programSuggestions, setProgramSuggestions] = useState<string[]>([
+    'MBA High Quality',
+    'Thạc sĩ Quản trị Kinh doanh (MBA)',
+    'Tiến sĩ Quản trị Kinh doanh (DBA)',
+    'Cử nhân Quản trị Kinh doanh (BBA)',
+    'Executive MBA',
+    'Mini MBA',
+    'Thạc sĩ Tài chính Ngân hàng (MFB)',
+    'Thạc sĩ Quản trị Công nghệ & Đổi mới (MSTI)',
+    'Chứng chỉ Giám đốc Điều hành (CEO)',
+    'Chứng chỉ Giám đốc Tài chính (CFO)',
+    'Chứng chỉ Giám đốc Nhân sự (CHRO)',
+    'Chứng chỉ Giám đốc Marketing (CMO)'
+  ]);
+  const [showProgramDropdown, setShowProgramDropdown] = useState(false);
+  const [isQuickSavingProgram, setIsQuickSavingProgram] = useState(false);
+  const programDropdownRef = useRef<HTMLDivElement>(null);
+  const programDropdownMobileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        programDropdownRef.current && !programDropdownRef.current.contains(e.target as Node) &&
+        programDropdownMobileRef.current && !programDropdownMobileRef.current.contains(e.target as Node)
+      ) {
+        setShowProgramDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      api.get('/contacts/programs')
+        .then(res => {
+          if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+            setProgramSuggestions(res.data.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  const saveProgramOrAdmissionDate = async (newProgram?: string, newDate?: string) => {
+    if (!contact?.id) return;
+    const prog = newProgram !== undefined ? newProgram : formData.program;
+    const adm = newDate !== undefined ? newDate : formData.admission_date;
+
+    setFormData((prev: any) => ({
+      ...prev,
+      program: prog,
+      admission_date: adm
+    }));
+
+    setIsQuickSavingProgram(true);
+    try {
+      await api.put(`/contacts/${contact.id}`, {
+        program: prog || null,
+        admission_date: adm || null
+      });
+      addToast('Đã lưu thông tin chương trình & ngày nhập học!', 'success');
+      onUpdate?.({ ...formData, program: prog, admission_date: adm });
+      window.dispatchEvent(new CustomEvent('contact-updated'));
+
+      if (prog && prog.trim()) {
+        const trimmed = prog.trim();
+        setProgramSuggestions(prev => {
+          if (!prev.some(p => p.toLowerCase() === trimmed.toLowerCase())) {
+            return [trimmed, ...prev];
+          }
+          return prev;
+        });
+      }
+    } catch (e: any) {
+      console.error('Error saving program/admission_date:', e);
+      addToast('Lỗi khi lưu chương trình: ' + (e.response?.data?.message || e.message), 'error');
+    } finally {
+      setIsQuickSavingProgram(false);
+    }
+  };
+
   const handleUpdateTagsAndPersist = async (newTags: string[]) => {
     const deprecatedTags = ['new', 'needed', 'considering', 'qualified', 'badtiming', 'bad timing', 'bad_timing', 'unqualified', 'junk'];
     const filtered = newTags.filter(t => !deprecatedTags.includes(String(t || '').trim().toLowerCase()));
@@ -1743,7 +1826,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       'company_id', 'company_name', 'owner_id', 'full_name', 'email', 'phone',
       'mobile', 'job_title', 'department', 'source', 'status', 'notes',
       'birthday', 'address', 'city', 'ward', 'expected_revenue', 'win_probability', 'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range',
-      'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data', 'citizen_id', 'passport'
+      'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data', 'citizen_id', 'passport',
+      'program', 'admission_date'
     ];
 
     const cleanObject = (obj: any) => {
@@ -1783,7 +1867,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       'birthday', 'address', 'city', 'ward', 'expected_revenue', 'win_probability', 'last_contact', 'created_at',
       'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range', 'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data',
       'stage_id', 'pipeline_status', 'temperature', 'suggested_temperature', 'collaborator_ids', 'citizen_id', 'passport',
-      'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name'
+      'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform', 'form_name',
+      'program', 'admission_date'
     ];
     const payload: Record<string, any> = {};
     allowedFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
@@ -6719,6 +6804,241 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
                         )}
                       </div>
+
+                      {/* Row 4: Chương trình & Ngày nhập học */}
+                      <div 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '10px', 
+                          marginTop: '8px', 
+                          flexWrap: 'wrap',
+                          padding: '6px 10px',
+                          background: 'var(--color-bg)',
+                          border: '1px solid var(--color-border-light)',
+                          borderRadius: '10px',
+                          width: 'fit-content',
+                          maxWidth: '100%'
+                        }}
+                      >
+                        {/* Chương trình Dropdown */}
+                        <div ref={programDropdownRef} style={{ position: 'relative', minWidth: '220px', maxWidth: '320px', flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <BookOpen size={13} style={{ color: 'var(--color-primary)' }} />
+                              Chương trình:
+                            </span>
+                            <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                              <input 
+                                type="text"
+                                value={formData.program || ''}
+                                placeholder="Nhập / chọn CT học..."
+                                onFocus={() => setShowProgramDropdown(true)}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setFormData((prev: any) => ({ ...prev, program: val }));
+                                  setShowProgramDropdown(true);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    setShowProgramDropdown(false);
+                                    saveProgramOrAdmissionDate(formData.program, undefined);
+                                  } else if (e.key === 'Escape') {
+                                    setShowProgramDropdown(false);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  setTimeout(() => {
+                                    saveProgramOrAdmissionDate(formData.program, undefined);
+                                  }, 200);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  height: '28px',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 650,
+                                  padding: '2px 24px 2px 8px',
+                                  borderRadius: '6px',
+                                  border: showProgramDropdown ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                  background: 'var(--color-surface)',
+                                  color: 'var(--color-text)',
+                                  outline: 'none',
+                                  boxShadow: showProgramDropdown ? '0 0 0 2px rgba(189, 29, 45, 0.15)' : 'none',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              />
+                              <div 
+                                onClick={() => setShowProgramDropdown(!showProgramDropdown)}
+                                style={{ position: 'absolute', right: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)' }}
+                              >
+                                <ChevronDown size={13} style={{ transform: showProgramDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Dropdown UI Style App Đẹp */}
+                          {showProgramDropdown && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: 'calc(100% + 6px)',
+                                left: 0,
+                                minWidth: '280px',
+                                width: '100%',
+                                maxWidth: '380px',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: '12px',
+                                boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.05)',
+                                zIndex: 1200,
+                                overflow: 'hidden'
+                              }}
+                            >
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '8px 12px',
+                                background: 'var(--color-bg)',
+                                borderBottom: '1px solid var(--color-border-light)'
+                              }}>
+                                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <BookOpen size={12} style={{ color: 'var(--color-primary)' }} />
+                                  Gợi ý chương trình
+                                </span>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                                  {programSuggestions.length}
+                                </span>
+                              </div>
+
+                              {(() => {
+                                const currentText = (formData.program || '').trim();
+                                const isExactMatch = programSuggestions.some(p => p.toLowerCase() === currentText.toLowerCase());
+                                const filtered = programSuggestions.filter(p => !currentText || p.toLowerCase().includes(currentText.toLowerCase()));
+
+                                return (
+                                  <div className="custom-scrollbar" style={{ maxHeight: '220px', overflowY: 'auto', padding: '4px' }}>
+                                    {currentText && !isExactMatch && (
+                                      <div
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          saveProgramOrAdmissionDate(currentText, undefined);
+                                          setShowProgramDropdown(false);
+                                        }}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          padding: '8px 10px',
+                                          borderRadius: '8px',
+                                          cursor: 'pointer',
+                                          background: 'rgba(189, 29, 45, 0.06)',
+                                          color: 'var(--color-primary)',
+                                          fontSize: '0.8rem',
+                                          fontWeight: 700,
+                                          marginBottom: '4px',
+                                          border: '1px dashed rgba(189, 29, 45, 0.25)'
+                                        }}
+                                      >
+                                        <Plus size={14} style={{ flexShrink: 0 }} />
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          Sử dụng: "{currentText}"
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {filtered.length === 0 && (!currentText || isExactMatch) ? (
+                                      <div style={{ padding: '12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                                        Không tìm thấy chương trình phù hợp
+                                      </div>
+                                    ) : (
+                                      filtered.map((prog, pIdx) => {
+                                        const isSelected = (formData.program || '').trim().toLowerCase() === prog.toLowerCase();
+                                        return (
+                                          <div
+                                            key={pIdx}
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              saveProgramOrAdmissionDate(prog, undefined);
+                                              setShowProgramDropdown(false);
+                                            }}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'space-between',
+                                              gap: '8px',
+                                              padding: '7px 10px',
+                                              borderRadius: '8px',
+                                              cursor: 'pointer',
+                                              fontSize: '0.8rem',
+                                              fontWeight: isSelected ? 700 : 500,
+                                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                              background: isSelected ? 'var(--color-primary-light, rgba(189, 29, 45, 0.08))' : 'transparent',
+                                              transition: 'background 0.15s ease'
+                                            }}
+                                            onMouseEnter={e => {
+                                              if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)';
+                                            }}
+                                            onMouseLeave={e => {
+                                              if (!isSelected) e.currentTarget.style.background = 'transparent';
+                                            }}
+                                          >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                              <BookOpen size={13} style={{ color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }} />
+                                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {prog}
+                                              </span>
+                                            </div>
+                                            {isSelected && <Check size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ width: '1px', height: '18px', background: 'var(--color-border)', flexShrink: 0 }} />
+
+                        {/* Ngày nhập học Input */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '170px' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Calendar size={13} style={{ color: 'var(--color-primary)' }} />
+                            Ngày nhập học:
+                          </span>
+                          <input 
+                            type="date"
+                            value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              saveProgramOrAdmissionDate(undefined, val);
+                            }}
+                            style={{
+                              height: '28px',
+                              fontSize: '0.78rem',
+                              fontWeight: 650,
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: 'var(--color-surface)',
+                              color: 'var(--color-text)',
+                              outline: 'none',
+                              cursor: 'pointer'
+                            }}
+                          />
+                        </div>
+
+                        {/* Quick saving indicator */}
+                        {isQuickSavingProgram && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: 'var(--color-primary)' }}>
+                            <Loader2 size={12} className="animate-spin" />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Actions Section */}
@@ -6889,6 +7209,217 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   style={{ cursor: 'pointer', flexShrink: 0 }}
                                 >
                                   <LeadScoreRing score={score} size={32} showLabel={true} />
+                                </div>
+                              </div>
+
+                              {/* Row: Chương trình & Ngày nhập học Mobile */}
+                              <div 
+                                style={{ 
+                                  display: 'flex', 
+                                  flexDirection: 'column', 
+                                  gap: '8px', 
+                                  marginTop: '6px', 
+                                  padding: '8px 10px', 
+                                  background: 'var(--color-bg)', 
+                                  borderRadius: '8px', 
+                                  border: '1px solid var(--color-border-light)' 
+                                }}
+                              >
+                                <div ref={programDropdownMobileRef} style={{ position: 'relative', width: '100%' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <BookOpen size={12} style={{ color: 'var(--color-primary)' }} />
+                                      Chương trình học:
+                                    </span>
+                                  </div>
+                                  <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <input 
+                                      type="text"
+                                      value={formData.program || ''}
+                                      placeholder="Nhập hoặc chọn chương trình..."
+                                      onFocus={() => setShowProgramDropdown(true)}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setFormData((prev: any) => ({ ...prev, program: val }));
+                                        setShowProgramDropdown(true);
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          setShowProgramDropdown(false);
+                                          saveProgramOrAdmissionDate(formData.program, undefined);
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        setTimeout(() => {
+                                          saveProgramOrAdmissionDate(formData.program, undefined);
+                                        }, 200);
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        height: '32px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 650,
+                                        padding: '4px 28px 4px 8px',
+                                        borderRadius: '6px',
+                                        border: '1px solid var(--color-border)',
+                                        background: 'var(--color-surface)',
+                                        color: 'var(--color-text)',
+                                        outline: 'none'
+                                      }}
+                                    />
+                                    <div 
+                                      onClick={() => setShowProgramDropdown(!showProgramDropdown)}
+                                      style={{ position: 'absolute', right: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)' }}
+                                    >
+                                      <ChevronDown size={14} style={{ transform: showProgramDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                    </div>
+                                  </div>
+
+                                  {/* Mobile Dropdown UI */}
+                                  {showProgramDropdown && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 6px)',
+                                        left: 0,
+                                        width: '100%',
+                                        background: 'var(--color-surface)',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: '12px',
+                                        boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.08)',
+                                        zIndex: 1200,
+                                        overflow: 'hidden'
+                                      }}
+                                    >
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '8px 12px',
+                                        background: 'var(--color-bg)',
+                                        borderBottom: '1px solid var(--color-border-light)'
+                                      }}>
+                                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                          <BookOpen size={12} style={{ color: 'var(--color-primary)' }} />
+                                          Gợi ý chương trình
+                                        </span>
+                                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                                          {programSuggestions.length}
+                                        </span>
+                                      </div>
+
+                                      {(() => {
+                                        const currentText = (formData.program || '').trim();
+                                        const isExactMatch = programSuggestions.some(p => p.toLowerCase() === currentText.toLowerCase());
+                                        const filtered = programSuggestions.filter(p => !currentText || p.toLowerCase().includes(currentText.toLowerCase()));
+
+                                        return (
+                                          <div className="custom-scrollbar" style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px' }}>
+                                            {currentText && !isExactMatch && (
+                                              <div
+                                                onMouseDown={(e) => {
+                                                  e.preventDefault();
+                                                  saveProgramOrAdmissionDate(currentText, undefined);
+                                                  setShowProgramDropdown(false);
+                                                }}
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: '8px',
+                                                  padding: '8px 10px',
+                                                  borderRadius: '8px',
+                                                  cursor: 'pointer',
+                                                  background: 'rgba(189, 29, 45, 0.06)',
+                                                  color: 'var(--color-primary)',
+                                                  fontSize: '0.8rem',
+                                                  fontWeight: 700,
+                                                  marginBottom: '4px',
+                                                  border: '1px dashed rgba(189, 29, 45, 0.25)'
+                                                }}
+                                              >
+                                                <Plus size={14} style={{ flexShrink: 0 }} />
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                  Sử dụng: "{currentText}"
+                                                </span>
+                                              </div>
+                                            )}
+
+                                            {filtered.length === 0 && (!currentText || isExactMatch) ? (
+                                              <div style={{ padding: '12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                                                Không tìm thấy chương trình phù hợp
+                                              </div>
+                                            ) : (
+                                              filtered.map((prog, pIdx) => {
+                                                const isSelected = (formData.program || '').trim().toLowerCase() === prog.toLowerCase();
+                                                return (
+                                                  <div
+                                                    key={pIdx}
+                                                    onMouseDown={(e) => {
+                                                      e.preventDefault();
+                                                      saveProgramOrAdmissionDate(prog, undefined);
+                                                      setShowProgramDropdown(false);
+                                                    }}
+                                                    style={{
+                                                      display: 'flex',
+                                                      alignItems: 'center',
+                                                      justifyContent: 'space-between',
+                                                      gap: '8px',
+                                                      padding: '7px 10px',
+                                                      borderRadius: '8px',
+                                                      cursor: 'pointer',
+                                                      fontSize: '0.8rem',
+                                                      fontWeight: isSelected ? 700 : 500,
+                                                      color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                                      background: isSelected ? 'var(--color-primary-light, rgba(189, 29, 45, 0.08))' : 'transparent',
+                                                      transition: 'background 0.15s ease'
+                                                    }}
+                                                  >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                                      <BookOpen size={13} style={{ color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }} />
+                                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {prog}
+                                                      </span>
+                                                    </div>
+                                                    {isSelected && (
+                                                      <Check size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                                    )}
+                                                  </div>
+                                                );
+                                              })
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                    <Calendar size={12} style={{ color: 'var(--color-primary)' }} />
+                                    Ngày nhập học:
+                                  </span>
+                                  <input 
+                                    type="date"
+                                    value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      saveProgramOrAdmissionDate(undefined, val);
+                                    }}
+                                    style={{
+                                      flex: 1,
+                                      height: '30px',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 650,
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--color-border)',
+                                      background: 'var(--color-surface)',
+                                      color: 'var(--color-text)',
+                                      outline: 'none'
+                                    }}
+                                  />
                                 </div>
                               </div>
 
@@ -7732,6 +8263,53 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 const val = e.target.value;
                                 setFormData((prev: any) => ({ ...prev, email: val }));
                               }} />
+                            </div>
+                          </div>
+
+                          <div className="form-group">
+                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: isMobileOrTablet ? 'wrap' : 'nowrap' }}>
+                              <div style={{ flex: 1, minWidth: '180px' }}>
+                                <label className="form-label">Chương trình học</label>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                    <BookOpen size={16} />
+                                  </div>
+                                  <input 
+                                    className="form-input form-input-icon-left" 
+                                    placeholder="Nhập hoặc chọn chương trình..." 
+                                    list="customer-drawer-program-suggestions"
+                                    value={formData.program || ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, program: val }));
+                                    }} 
+                                    onBlur={() => saveProgramOrAdmissionDate(formData.program, undefined)}
+                                  />
+                                  <datalist id="customer-drawer-program-suggestions">
+                                    {programSuggestions.map((prog, pIdx) => (
+                                      <option key={pIdx} value={prog} />
+                                    ))}
+                                  </datalist>
+                                </div>
+                              </div>
+                              <div style={{ flex: 1, minWidth: '180px' }}>
+                                <label className="form-label">Ngày nhập học</label>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                    <Calendar size={16} />
+                                  </div>
+                                  <input 
+                                    className="form-input form-input-icon-left" 
+                                    type="date" 
+                                    value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, admission_date: val }));
+                                      saveProgramOrAdmissionDate(undefined, val);
+                                    }} 
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </div>
                           <div className="form-group">

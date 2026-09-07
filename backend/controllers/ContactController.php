@@ -821,7 +821,8 @@ class ContactController {
             'utm_campaign', 'utm_medium', 'utm_content', 'utm_term', 'platform',
             'form_name', 'zalo_phone', 'facebook_link',
             'lead_status', 'lead_temperature', 'next_action', 'next_followup_date',
-            'expected_decision_date', 'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id'
+            'expected_decision_date', 'expected_intake', 'nurture_reason', 'lost_reason', 'lost_stage_id',
+            'program', 'admission_date'
         ];
         $sets = []; $params = [];
         
@@ -854,7 +855,7 @@ class ContactController {
             if (array_key_exists($f, $b)) { 
                 $sets[] = "$f=?"; 
                 // Fix date string & numeric strict mode crashes
-                if (in_array($f, ['birthday', 'dob', 'last_contact', 'leave_start', 'leave_end']) && ($b[$f] === '' || $b[$f] === null || $b[$f] === 'null')) {
+                if (in_array($f, ['birthday', 'dob', 'last_contact', 'leave_start', 'leave_end', 'expected_decision_date', 'admission_date']) && ($b[$f] === '' || $b[$f] === null || $b[$f] === 'null')) {
                     $params[] = null;
                 } else if (in_array($f, ['stage_id', 'project_id', 'campaign_id', 'owner_id', 'company_id']) && (empty($b[$f]) || $b[$f] === 0 || $b[$f] === '0' || $b[$f] === 'null')) {
                     $params[] = null;
@@ -1932,6 +1933,45 @@ class ContactController {
         ];
 
         respond(200, $result, 'Lấy danh sách người hỗ trợ thành công');
+    }
+
+    public function getPrograms(array $auth): void {
+        try {
+            $sql = "
+                SELECT DISTINCT TRIM(program) as name 
+                FROM contacts 
+                WHERE tenant_id = ? AND program IS NOT NULL AND TRIM(program) != ''
+                UNION
+                SELECT DISTINCT TRIM(name) as name
+                FROM projects 
+                WHERE tenant_id = ? AND name IS NOT NULL AND TRIM(name) != ''
+                ORDER BY name ASC
+                LIMIT 100
+            ";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$auth['tenant_id'], $auth['tenant_id']]);
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+            $defaults = [
+                'MBA High Quality',
+                'Thạc sĩ Quản trị Kinh doanh (MBA)',
+                'Tiến sĩ Quản trị Kinh doanh (DBA)',
+                'Cử nhân Quản trị Kinh doanh (BBA)',
+                'Executive MBA',
+                'Mini MBA',
+                'Thạc sĩ Tài chính Ngân hàng (MFB)',
+                'Thạc sĩ Quản trị Công nghệ & Đổi mới (MSTI)',
+                'Chứng chỉ Giám đốc Điều hành (CEO)',
+                'Chứng chỉ Giám đốc Tài chính (CFO)',
+                'Chứng chỉ Giám đốc Nhân sự (CHRO)',
+                'Chứng chỉ Giám đốc Marketing (CMO)'
+            ];
+
+            $combined = array_values(array_unique(array_filter(array_merge($rows, $defaults))));
+            respond(200, $combined, 'Danh sách gợi ý chương trình');
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi lấy gợi ý chương trình: ' . $e->getMessage(), false);
+        }
     }
 }
 

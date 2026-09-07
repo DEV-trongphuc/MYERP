@@ -661,7 +661,8 @@ switch ($resource) {
     case 'contacts':
         $auth = requireAuth();
         $ctrl = new ContactController($db);
-        if ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
+        if ($resourceId === 'programs' && $method === 'GET') $ctrl->getPrograms($auth);
+        elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
