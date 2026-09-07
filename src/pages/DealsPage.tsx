@@ -396,9 +396,40 @@ export const DealsPage: React.FC = () => {
         params.team_id = teamId;
       }
 
-      if (dateFilterType && (filterDateFrom || filterDateTo)) {
-        params.from = filterDateFrom;
-        params.to = filterDateTo;
+      if (dateFilterType) {
+        const today = new Date();
+        const formatDate = (d: Date) => {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+        
+        if (dateFilterType === 'today') {
+          params.from = formatDate(today);
+          params.to = formatDate(today);
+        } else if (dateFilterType === 'yesterday') {
+          const y = new Date(today);
+          y.setDate(y.getDate() - 1);
+          params.from = formatDate(y);
+          params.to = formatDate(y);
+        } else if (dateFilterType === 'this_week') {
+          const start = new Date(today);
+          start.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+          params.from = formatDate(start);
+          params.to = formatDate(today);
+        } else if (dateFilterType === 'this_month') {
+          const start = new Date(today.getFullYear(), today.getMonth(), 1);
+          params.from = formatDate(start);
+          params.to = formatDate(today);
+        } else if (dateFilterType === 'this_year') {
+          const start = new Date(today.getFullYear(), 0, 1);
+          params.from = formatDate(start);
+          params.to = formatDate(today);
+        } else if (dateFilterType === 'custom') {
+          if (filterDateFrom) params.from = filterDateFrom;
+          if (filterDateTo) params.to = filterDateTo;
+        }
       }
 
       const currentUser = useAuthStore.getState().user;
@@ -599,7 +630,7 @@ export const DealsPage: React.FC = () => {
 
   useEffect(() => {
     if (stages.length > 0) fetchData();
-  }, [stageIdsKey, pipelineView, page, debouncedSearch, filterAssignee, filterStage, filterProject, filterCampaign, filterSource, filterDateFrom, filterDateTo, viewMode, effectiveTeamId]);
+  }, [stageIdsKey, pipelineView, page, debouncedSearch, filterAssignee, filterStage, filterProject, filterCampaign, filterSource, dateFilterType, filterDateFrom, filterDateTo, viewMode, effectiveTeamId]);
 
   useEffect(() => {
     const handleRefresh = () => {

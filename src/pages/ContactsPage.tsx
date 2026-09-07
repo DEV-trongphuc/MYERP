@@ -897,7 +897,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       const uniqueItems = Array.from(new Map(items.map((c: any) => [c.id, c])).values());
       setContacts(uniqueItems.map((c: any) => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
       setTotal(data.total || items.length);
-      if (data.stage_counts) {
+      if (data.stage_counts && Object.keys(data.stage_counts).length > 0) {
         setStageCounts(data.stage_counts);
       }
     } catch (e: any) {

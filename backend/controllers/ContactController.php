@@ -243,7 +243,7 @@ class ContactController {
         $baseParams = $params;
 
         $isKanban = !empty($_GET['kanban']);
-        $skipCounts = !empty($_GET['skip_counts']) || !empty($_GET['stage_id']) || $isKanban;
+        $skipCounts = !empty($_GET['skip_counts']) || $isKanban;
 
         // Calculate counts per pipeline stage and lead status for quick status tabs
         $stageCounts = [];
