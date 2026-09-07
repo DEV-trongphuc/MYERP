@@ -242,90 +242,95 @@ class ContactController {
         $baseWhere = $where;
         $baseParams = $params;
 
+        $isKanban = !empty($_GET['kanban']);
+        $skipCounts = !empty($_GET['skip_counts']) || !empty($_GET['stage_id']) || $isKanban;
+
         // Calculate counts per pipeline stage and lead status for quick status tabs
         $stageCounts = [];
-        try {
-            $baseWhereStr = implode(' AND ', $baseWhere);
-
-            // Single unified aggregate query for active stage counts, nurture count, and lost count
-            $aggStmt = $this->db->prepare("
-                SELECT 
-                    CASE 
-                        WHEN c.lead_status = 'lost' THEN 'lost'
-                        WHEN c.lead_status = 'nurture' THEN 'nurture'
-                        ELSE 'active'
-                    END as status_group,
-                    c.stage_id,
-                    COUNT(*) as cnt
-                FROM contacts c
-                WHERE $baseWhereStr
-                GROUP BY status_group, c.stage_id
-            ");
-            $aggStmt->execute($baseParams);
-            $aggRows = $aggStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-            $activeTotal = 0;
-            $nurtureTotal = 0;
-            $lostTotal = 0;
-
-            foreach ($aggRows as $row) {
-                $grp = $row['status_group'];
-                $sId = $row['stage_id'];
-                $cnt = (int)$row['cnt'];
-
-                if ($grp === 'nurture') {
-                    $nurtureTotal += $cnt;
-                } elseif ($grp === 'lost') {
-                    $lostTotal += $cnt;
-                } else {
-                    // Active pipeline leads
-                    if (!empty($sId)) {
-                        $stageCounts[(string)$sId] = ($stageCounts[(string)$sId] ?? 0) + $cnt;
-                    }
-                    $activeTotal += $cnt;
-                }
-            }
-
-            $stageCounts['all'] = $activeTotal;
-            $stageCounts['nurture'] = $nurtureTotal;
-            $stageCounts['lost'] = $lostTotal;
-
-            // Compute uncontacted count (for active pipeline leads only)
+        if (!$skipCounts) {
             try {
-                $unWhere = $baseWhere;
-                $unWhere[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
-                $unWhereStr = implode(' AND ', $unWhere);
+                $baseWhereStr = implode(' AND ', $baseWhere);
 
-                $unStmt = $this->db->prepare("
-                    SELECT COUNT(*) 
-                    FROM contacts c 
-                    WHERE $unWhereStr 
-                      AND (c.last_contact IS NULL OR c.last_contact = '')
-                      AND NOT EXISTS (
-                          SELECT 1 FROM activities a 
-                          WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
-                            AND a.deleted_at IS NULL
-                      )
-                      AND NOT EXISTS (
-                          SELECT 1 FROM notes n 
-                          WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
-                            AND n.body NOT LIKE '[Tự động]%' 
-                            AND n.body NOT LIKE '[Phân bổ]%' 
-                            AND n.body NOT LIKE '[Giao data]%'
-                            AND n.body NOT LIKE '[Auto]%'
-                            AND n.body NOT LIKE '[Import]%'
-                            AND n.body NOT LIKE '[Tái phân bổ]%'
-                            AND n.body NOT LIKE 'Tái phân bổ%'
-                            AND n.body NOT LIKE 'Giao lại%'
-                      )
+                // Single unified aggregate query for active stage counts, nurture count, and lost count
+                $aggStmt = $this->db->prepare("
+                    SELECT 
+                        CASE 
+                            WHEN c.lead_status = 'lost' THEN 'lost'
+                            WHEN c.lead_status = 'nurture' THEN 'nurture'
+                            ELSE 'active'
+                        END as status_group,
+                        c.stage_id,
+                        COUNT(*) as cnt
+                    FROM contacts c
+                    WHERE $baseWhereStr
+                    GROUP BY status_group, c.stage_id
                 ");
-                $unStmt->execute($baseParams);
-                $stageCounts['uncontacted'] = (int)$unStmt->fetchColumn();
-            } catch (\Throwable $e) {
-                $stageCounts['uncontacted'] = 0;
+                $aggStmt->execute($baseParams);
+                $aggRows = $aggStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                $activeTotal = 0;
+                $nurtureTotal = 0;
+                $lostTotal = 0;
+
+                foreach ($aggRows as $row) {
+                    $grp = $row['status_group'];
+                    $sId = $row['stage_id'];
+                    $cnt = (int)$row['cnt'];
+
+                    if ($grp === 'nurture') {
+                        $nurtureTotal += $cnt;
+                    } elseif ($grp === 'lost') {
+                        $lostTotal += $cnt;
+                    } else {
+                        // Active pipeline leads
+                        if (!empty($sId)) {
+                            $stageCounts[(string)$sId] = ($stageCounts[(string)$sId] ?? 0) + $cnt;
+                        }
+                        $activeTotal += $cnt;
+                    }
+                }
+
+                $stageCounts['all'] = $activeTotal;
+                $stageCounts['nurture'] = $nurtureTotal;
+                $stageCounts['lost'] = $lostTotal;
+
+                // Compute uncontacted count (for active pipeline leads only)
+                try {
+                    $unWhere = $baseWhere;
+                    $unWhere[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
+                    $unWhereStr = implode(' AND ', $unWhere);
+
+                    $unStmt = $this->db->prepare("
+                        SELECT COUNT(*) 
+                        FROM contacts c 
+                        WHERE $unWhereStr 
+                          AND (c.last_contact IS NULL OR c.last_contact = '')
+                          AND NOT EXISTS (
+                              SELECT 1 FROM activities a 
+                              WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
+                                AND a.deleted_at IS NULL
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1 FROM notes n 
+                              WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                                AND n.body NOT LIKE '[Tự động]%' 
+                                AND n.body NOT LIKE '[Phân bổ]%' 
+                                AND n.body NOT LIKE '[Giao data]%'
+                                AND n.body NOT LIKE '[Auto]%'
+                                AND n.body NOT LIKE '[Import]%'
+                                AND n.body NOT LIKE '[Tái phân bổ]%'
+                                AND n.body NOT LIKE 'Tái phân bổ%'
+                                AND n.body NOT LIKE 'Giao lại%'
+                          )
+                    ");
+                    $unStmt->execute($baseParams);
+                    $stageCounts['uncontacted'] = (int)$unStmt->fetchColumn();
+                } catch (\Throwable $e) {
+                    $stageCounts['uncontacted'] = 0;
+                }
+            } catch (\Exception $e) {
+                $stageCounts = [];
             }
-        } catch (\Exception $e) {
-            $stageCounts = [];
         }
 
         // Filter by Lead Status (active, nurture, lost) or default hide lost & nurture for active pipeline
@@ -377,6 +382,69 @@ class ContactController {
                       AND n.body NOT LIKE 'Giao lại%'
                 )
             )";
+        }
+
+        if ($isKanban) {
+            $whereStr = implode(' AND ', $where);
+            $limitPerStage = min(100, max(10, (int)($_GET['limit_per_stage'] ?? 30)));
+
+            // 1. Fast stage totals grouped by stage_id
+            $stageTotals = [];
+            $totStmt = $this->db->prepare("
+                SELECT c.stage_id, COUNT(*) as cnt 
+                FROM contacts c 
+                WHERE $whereStr 
+                GROUP BY c.stage_id
+            ");
+            $totStmt->execute($params);
+            while ($row = $totStmt->fetch(PDO::FETCH_ASSOC)) {
+                $sid = (int)($row['stage_id'] ?? 0);
+                if ($sid > 0) {
+                    $stageTotals[$sid] = (int)$row['cnt'];
+                }
+            }
+
+            // 2. Fetch top N contacts per stage using ROW_NUMBER() OVER
+            $kanbanSql = "
+                SELECT t.* FROM (
+                    SELECT c.*,
+                           comp.name as company_name,
+                           u.full_name as owner_name,
+                           u.avatar_url as owner_avatar,
+                           COALESCE(ps.name, ps_fb.name) as stage_name, 
+                           COALESCE(ps.color, ps_fb.color) as stage_color,
+                           ROW_NUMBER() OVER (PARTITION BY c.stage_id ORDER BY c.id DESC) as rn
+                    FROM contacts c
+                    LEFT JOIN companies comp ON c.company_id = comp.id
+                    LEFT JOIN users u ON c.owner_id = u.id
+                    LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+                    LEFT JOIN pipeline_stages ps_fb ON (c.stage_id IS NULL AND ps_fb.system_slug = c.pipeline_status)
+                    WHERE $whereStr
+                ) t
+                WHERE t.rn <= $limitPerStage
+                ORDER BY t.stage_id, t.id DESC
+            ";
+            $kStmt = $this->db->prepare($kanbanSql);
+            $kStmt->execute($params);
+            $data = $kStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            $grouped = [];
+            foreach ($data as &$row) {
+                $row['tags'] = json_decode($row['tags'] ?? '[]');
+                $sid = (int)($row['stage_id'] ?? 0);
+                if (!isset($grouped[$sid])) {
+                    $grouped[$sid] = [];
+                }
+                $grouped[$sid][] = $row;
+            }
+
+            respond(200, [
+                'items' => $data,
+                'grouped' => $grouped,
+                'stage_totals' => $stageTotals,
+                'total' => array_sum($stageTotals)
+            ]);
+            return;
         }
 
         $whereStr = implode(' AND ', $where);
