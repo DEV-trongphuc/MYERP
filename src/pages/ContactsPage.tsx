@@ -3377,15 +3377,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 700 }}>Số điện thoại</label>
                     <div style={{ position: 'relative' }}>
-                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} placeholder="09xx xxx xxx" value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} />
-                      <Phone size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                      <input className="form-input lg" style={{ paddingRight: '2.75rem' }} placeholder="09xx xxx xxx" value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} />
+                      <Phone size={18} style={{ position: 'absolute', right: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7, pointerEvents: 'none' }} />
                     </div>
                   </div>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 700 }}>Email liên hệ</label>
                     <div style={{ position: 'relative' }}>
-                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} type="email" placeholder="email@congty.com" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} />
-                      <Mail size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                      <input className="form-input lg" style={{ paddingRight: '2.75rem' }} type="email" placeholder="email@congty.com" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} />
+                      <Mail size={18} style={{ position: 'absolute', right: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7, pointerEvents: 'none' }} />
                     </div>
                   </div>
                 </div>
@@ -3395,15 +3395,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 700 }}>Công ty / Tổ chức</label>
                     <div style={{ position: 'relative' }}>
-                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} placeholder="Tên công ty..." value={createForm.company_name} onChange={e => setCreateForm(f => ({ ...f, company_name: e.target.value }))} />
-                      <Building2 size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                      <input className="form-input lg" style={{ paddingRight: '2.75rem' }} placeholder="Tên công ty..." value={createForm.company_name} onChange={e => setCreateForm(f => ({ ...f, company_name: e.target.value }))} />
+                      <Building2 size={18} style={{ position: 'absolute', right: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7, pointerEvents: 'none' }} />
                     </div>
                   </div>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 700 }}>Chức vụ</label>
                     <div style={{ position: 'relative' }}>
-                      <input className="form-input lg" style={{ paddingLeft: '3rem' }} placeholder="VD: Giám đốc, Kế toán..." value={createForm.job_title} onChange={e => setCreateForm(f => ({ ...f, job_title: e.target.value }))} />
-                      <Briefcase size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7 }} />
+                      <input className="form-input lg" style={{ paddingRight: '2.75rem' }} placeholder="VD: Giám đốc, Kế toán..." value={createForm.job_title} onChange={e => setCreateForm(f => ({ ...f, job_title: e.target.value }))} />
+                      <Briefcase size={18} style={{ position: 'absolute', right: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', opacity: 0.7, pointerEvents: 'none' }} />
                     </div>
                   </div>
                 </div>
