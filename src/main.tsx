@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-console.log('%cPower by Turniodev (https://fb.com/turni0)', 'color: red; font-weight: bold; font-size: 14px;');
+// Build version: 2026.09.07.1514
+console.log('%cPower by Turniodev (v20260907_1515)', 'color: red; font-weight: bold; font-size: 14px;');
 
 let splashStartTime = Date.now();
 let hideTimer: any = null;
