@@ -3868,13 +3868,13 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
 
     if (!$lead) return;
 
-    $phone = normalizePhone($lead['phone']);
+    $phone = normalizePhone($lead['phone'] ?? '');
     $email = $lead['email'] ?? '';
-    if (isLeadBlocked($conn, $phone, $email)) {
+    $name = $lead['name'] ?? '';
+    if ((!empty($phone) || !empty($email)) && isLeadBlocked($conn, $phone, $email)) {
         return;
     }
-    if (empty($phone)) return;
-    $name = $lead['name'] ?? '';
+    if (empty($phone) && empty($email) && empty($name)) return;
     $assigned_to = $lead['assigned_to'] ?? null;
     $is_accepted = (int)($lead['is_accepted'] ?? 0);
     $source = $lead['source'] ?? 'other';

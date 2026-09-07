@@ -3495,9 +3495,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         )}
       </AnimatePresence>
     , document.body)}
-
-      {/* Quick Add / Distribute Lead Modal */}
-      <QuickAddLeadModal />
     </div>
   );
 };
