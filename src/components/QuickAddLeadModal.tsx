@@ -1145,8 +1145,14 @@ export const QuickAddLeadModal = () => {
     setIsSubmittingManual(true);
     try {
       if (activeTab === 'single') {
-        if (!manualData.phone && !manualData.email) {
+        const isReferralOrPersonal = manualData.source === 'gioi_thieu' || manualData.source === 'ca_nhan';
+        if (!isReferralOrPersonal && !manualData.phone && !manualData.email) {
           toast.error(t('Vui lòng nhập SĐT hoặc Email'));
+          setIsSubmittingManual(false);
+          return;
+        }
+        if (isReferralOrPersonal && !manualData.name.trim()) {
+          toast.error(t('Vui lòng nhập họ và tên khách hàng'));
           setIsSubmittingManual(false);
           return;
         }
@@ -1487,12 +1493,16 @@ export const QuickAddLeadModal = () => {
 
             <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>
-                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Họ tên')}</label>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                  {t('Họ tên')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
                 <input className="form-input" placeholder={t("VD: Nguyễn Văn A")} value={manualData.name} onChange={e => setManualData({ ...manualData, name: e.target.value })} />
               </div>
               <div>
-                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Số điện thoại (*)')}</label>
-                <input className="form-input" placeholder="VD: 0912345678" value={manualData.phone} onChange={e => setManualData({ ...manualData, phone: beautifyPhone(e.target.value) })} />
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                  {t('Số điện thoại')} {manualData.source === 'gioi_thieu' ? <span style={{ color: '#10b981', fontWeight: 600, textTransform: 'none' }}>(Không bắt buộc - Zalo QR)</span> : '(*)'}
+                </label>
+                <input className="form-input" placeholder={manualData.source === 'gioi_thieu' ? "Có thể bổ sung sau..." : "VD: 0912345678"} value={manualData.phone} onChange={e => setManualData({ ...manualData, phone: beautifyPhone(e.target.value) })} />
               </div>
               <div>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Email</label>
@@ -1576,6 +1586,26 @@ export const QuickAddLeadModal = () => {
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Loại (Type)')}</label>
                 <input className="form-input" placeholder={t("VD: Mua nhà")} value={manualData.type} onChange={e => setManualData({ ...manualData, type: e.target.value })} />
               </div>
+              {manualData.source === 'gioi_thieu' && (
+                <div style={{
+                  gridColumn: '1 / -1',
+                  padding: '10px 14px',
+                  background: theme === 'dark' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.08)',
+                  border: theme === 'dark' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: '10px',
+                  color: theme === 'dark' ? '#34d399' : '#047857',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <Lightbulb size={16} style={{ color: '#10b981', flexShrink: 0 }} />
+                  <span>
+                    <strong>Khách giới thiệu:</strong> Không bắt buộc SĐT/Email (kết bạn Zalo qua QR code). Khi nào cập nhật SĐT mà trùng với khách hàng đã có, hệ thống sẽ tự động bật popup đồng bộ.
+                  </span>
+                </div>
+              )}
               <div style={{ gridColumn: '1 / -1' }}>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{t('Ghi chú')}</label>
                 <textarea className="form-textarea" rows={4} style={{ resize: 'vertical', minHeight: '140px', lineHeight: 1.5, padding: '10px 12px' }} placeholder={t("Ghi chú thêm (Hỗ trợ nhiều dòng)...")} value={manualData.note} onChange={e => setManualData({ ...manualData, note: e.target.value })} />

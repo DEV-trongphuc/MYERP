@@ -3882,38 +3882,66 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
     $note = $lead['note'] ?? '';
 
     // 2. Ensure Person
-    $stmtPerson = $conn->prepare("
-        INSERT INTO persons (phone, email, full_name) 
-        VALUES (?, ?, ?) 
-        ON DUPLICATE KEY UPDATE 
-            email = IF(email IS NULL OR email = '', VALUES(email), email), 
-            full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name)
-    ");
-    if ($stmtPerson) {
-        $stmtPerson->bind_param("sss", $phone, $email, $name);
-        $stmtPerson->execute();
-        $stmtPerson->close();
+    $person_id = null;
+    if (!empty($phone) || !empty($email)) {
+        $stmtPerson = $conn->prepare("
+            INSERT INTO persons (phone, email, full_name) 
+            VALUES (?, ?, ?) 
+            ON DUPLICATE KEY UPDATE 
+                email = IF(email IS NULL OR email = '', VALUES(email), email), 
+                full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name)
+        ");
+        if ($stmtPerson) {
+            $stmtPerson->bind_param("sss", $phone, $email, $name);
+            $stmtPerson->execute();
+            $stmtPerson->close();
+        }
+
+        // Get Person ID
+        if (!empty($phone)) {
+            $noZeroPhone = ltrim($phone, '0');
+            $withZeroPhone = '0' . $noZeroPhone;
+            $stmtGet = $conn->prepare("SELECT id FROM persons WHERE (phone = ? OR phone = ?) LIMIT 1");
+            if ($stmtGet) {
+                $stmtGet->bind_param("ss", $withZeroPhone, $noZeroPhone);
+                $stmtGet->execute();
+                $person = $stmtGet->get_result()->fetch_assoc();
+                $stmtGet->close();
+                if ($person) {
+                    $person_id = $person['id'];
+                }
+            }
+        } else if (!empty($email)) {
+            $stmtGetE = $conn->prepare("SELECT id FROM persons WHERE email = ? LIMIT 1");
+            if ($stmtGetE) {
+                $stmtGetE->bind_param("s", $email);
+                $stmtGetE->execute();
+                $personE = $stmtGetE->get_result()->fetch_assoc();
+                $stmtGetE->close();
+                if ($personE) {
+                    $person_id = $personE['id'];
+                }
+            }
+        }
+    } else if (!empty($name)) {
+        // Referral lead with name only (e.g. Zalo QR)
+        $stmtPerson = $conn->prepare("INSERT INTO persons (full_name) VALUES (?)");
+        if ($stmtPerson) {
+            $stmtPerson->bind_param("s", $name);
+            $stmtPerson->execute();
+            $person_id = $stmtPerson->insert_id;
+            $stmtPerson->close();
+        }
     }
 
-    // Get Person ID
-    $noZeroPhone = ltrim($phone, '0');
-    $withZeroPhone = '0' . $noZeroPhone;
-    $stmtGet = $conn->prepare("SELECT id FROM persons WHERE (phone = ? OR phone = ?) LIMIT 1");
-    if (!$stmtGet) return;
-    $stmtGet->bind_param("ss", $withZeroPhone, $noZeroPhone);
-    $stmtGet->execute();
-    $person = $stmtGet->get_result()->fetch_assoc();
-    $stmtGet->close();
-
-    if (!$person) return;
-    $person_id = $person['id'];
-
-    // Update Lead with person_id and fresh interaction date
-    $stmtUpLead = $conn->prepare("UPDATE leads SET person_id = ?, last_interaction_date = NOW() WHERE id = ?");
-    if ($stmtUpLead) {
-        $stmtUpLead->bind_param("ii", $person_id, $leadId);
-        $stmtUpLead->execute();
-        $stmtUpLead->close();
+    if ($person_id) {
+        // Update Lead with person_id and fresh interaction date
+        $stmtUpLead = $conn->prepare("UPDATE leads SET person_id = ?, last_interaction_date = NOW() WHERE id = ?");
+        if ($stmtUpLead) {
+            $stmtUpLead->bind_param("ii", $person_id, $leadId);
+            $stmtUpLead->execute();
+            $stmtUpLead->close();
+        }
     }
 
     // 3. Ensure CRM Contact if assigned and accepted

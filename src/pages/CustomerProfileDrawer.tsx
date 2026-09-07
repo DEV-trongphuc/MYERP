@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap } from 'lucide-react';
+import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap } from 'lucide-react';
 import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
@@ -1734,6 +1734,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
   const programDropdownMobileRef = useRef<HTMLDivElement>(null);
+  const [duplicatePhoneModal, setDuplicatePhoneModal] = useState<{
+    isOpen: boolean;
+    phone: string;
+    duplicateContact: any | null;
+    message: string;
+  }>({
+    isOpen: false,
+    phone: '',
+    duplicateContact: null,
+    message: ''
+  });
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -1866,7 +1877,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       }
       addToast(`Đã lưu thông tin hồ sơ của khách hàng ${fullName || ''} thành công!`, 'success');
     } catch (e: any) {
-      addToast(e?.response?.data?.message || 'Không thể lưu hồ sơ khách hàng. Vui lòng kiểm tra lại dữ liệu đầu vào.', 'error');
+      const errData = e?.response?.data;
+      const dupInfo = errData?.data?.duplicate_contact;
+      const errMsg = errData?.message || e?.message || '';
+      if (errData?.data?.code === 'DUPLICATE_PHONE' || dupInfo || errMsg.includes('đã tồn tại ở')) {
+        setDuplicatePhoneModal({
+          isOpen: true,
+          phone: formData.phone || formData.mobile || '',
+          duplicateContact: dupInfo || null,
+          message: errMsg || 'Số điện thoại này đã tồn tại ở một khách hàng khác trên hệ thống.'
+        });
+      } else {
+        addToast(errMsg || 'Không thể lưu hồ sơ khách hàng. Vui lòng kiểm tra lại dữ liệu đầu vào.', 'error');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -8256,6 +8279,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <h4 className="panel-title" style={{ margin: 0 }}>Thông tin liên hệ & Công việc</h4>
                         </div>
                         <div className="grid grid-2">
+                          {/* Row 1: Họ tên & SĐT chính */}
                           <div className="form-group">
                             <label className="form-label">Họ tên <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -8268,159 +8292,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }} />
                             </div>
                           </div>
-                          <div className="form-group">
-                            <label className="form-label">Email</label>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <Mail size={16} />
-                              </div>
-                              <input className="form-input form-input-icon-left" type="email" placeholder="ví dụ: email@congty.com" value={formData.email || ''} onChange={e => {
-                                const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, email: val }));
-                              }} />
-                            </div>
-                          </div>
 
-                          <div className="form-group">
-                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: isMobileOrTablet ? 'wrap' : 'nowrap' }}>
-                              <div style={{ flex: 1, minWidth: '180px' }}>
-                                <label className="form-label">Chương trình học</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <BookOpen size={16} />
-                                  </div>
-                                  <input 
-                                    className="form-input form-input-icon-left" 
-                                    placeholder="Nhập hoặc chọn chương trình..." 
-                                    list="customer-drawer-program-suggestions"
-                                    value={formData.program || ''} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, program: val }));
-                                    }} 
-                                  />
-                                  <datalist id="customer-drawer-program-suggestions">
-                                    {programSuggestions.map((prog, pIdx) => (
-                                      <option key={pIdx} value={prog} />
-                                    ))}
-                                  </datalist>
-                                </div>
-                              </div>
-                              <div style={{ flex: 1, minWidth: '180px' }}>
-                                <label className="form-label">Ngày nhập học</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <Calendar size={16} />
-                                  </div>
-                                  <input 
-                                    className="form-input form-input-icon-left" 
-                                    type="date" 
-                                    value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, admission_date: val }));
-                                    }} 
-                                  />
-                                </div>
-                              </div>
-                              <div style={{ flex: 1, minWidth: '160px' }}>
-                                <label className="form-label">ID Student</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <GraduationCap size={16} />
-                                  </div>
-                                  <input 
-                                    className="form-input form-input-icon-left" 
-                                    placeholder="Nhập ID Student / Mã học viên..." 
-                                    value={formData.student_id || ''} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, student_id: val }));
-                                    }} 
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="form-group">
-                            <div style={{ display: 'flex', gap: '0.75rem' }}>
-                              <div style={{ flex: 1 }}>
-                                <label className="form-label">Ngày sinh</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <Calendar size={16} />
-                                  </div>
-                                  <input className="form-input form-input-icon-left" type="date" value={formData.birthday || ''} onChange={e => {
-                                    const val = e.target.value;
-                                    setFormData((prev: any) => ({ ...prev, birthday: val }));
-                                  }} />
-                                </div>
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <label className="form-label">Giới tính</label>
-                                <CustomSelect
-                                  options={[
-                                    { value: '', label: '— Chưa chọn —' },
-                                    { value: 'male', label: 'Nam' },
-                                    { value: 'female', label: 'Nữ' },
-                                    { value: 'other', label: 'Khác' }
-                                  ]}
-                                  value={formData.gender || ''}
-                                  onChange={val => setFormData((prev: any) => ({ ...prev, gender: val as string }))}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="form-group">
-                            <div style={{ display: 'flex', gap: '0.75rem' }}>
-                              <div style={{ flex: 1 }}>
-                                <label className="form-label">CCCD</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <CreditCard size={16} />
-                                  </div>
-                                  <input className="form-input form-input-icon-left" placeholder="Nhập số CCCD" value={formData.citizen_id || ''} onChange={e => {
-                                    const val = e.target.value;
-                                    setFormData((prev: any) => ({ ...prev, citizen_id: val }));
-                                  }} />
-                                </div>
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <label className="form-label">Số Passport</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <FileText size={16} />
-                                  </div>
-                                  <input className="form-input form-input-icon-left" placeholder="Nhập số Passport" value={formData.passport || ''} onChange={e => {
-                                    const val = e.target.value;
-                                    setFormData((prev: any) => ({ ...prev, passport: val }));
-                                  }} />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="form-group">
-                            <AddressSelect
-                              label="Địa chỉ"
-                              value={formData.address || ''}
-                              onChange={addr => setFormData((prev: any) => ({ ...prev, address: addr }))}
-                              placeholder="Chọn địa chỉ liên hệ..."
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">Chức danh</label>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <Briefcase size={16} />
-                              </div>
-                              <input className="form-input form-input-icon-left" placeholder="ví dụ: Giám đốc" value={formData.job_title || ''} onChange={e => {
-                                const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, job_title: val }));
-                              }} />
-                            </div>
-                          </div>
                           <div className="form-group">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                               <label className="form-label" style={{ margin: 0 }}>Số điện thoại chính</label>
@@ -8488,6 +8360,21 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }} />
                             </div>
                           </div>
+
+                          {/* Row 2: Email & SĐT phụ */}
+                          <div className="form-group">
+                            <label className="form-label">Email</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <Mail size={16} />
+                              </div>
+                              <input className="form-input form-input-icon-left" type="email" placeholder="ví dụ: email@congty.com" value={formData.email || ''} onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({ ...prev, email: val }));
+                              }} />
+                            </div>
+                          </div>
+
                           <div className="form-group">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                               <label className="form-label" style={{ margin: 0 }}>Số điện thoại phụ</label>
@@ -8555,31 +8442,194 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }} />
                             </div>
                           </div>
+
+                          {/* Row 3: KHÓA HỌC / HỌC VỤ & TUYỂN SINH (Spans full width across card) */}
+                          <div style={{
+                            gridColumn: '1 / -1',
+                            background: 'var(--color-surface-hover, #f8fafc)',
+                            border: '1px solid var(--color-border-light, #e2e8f0)',
+                            borderRadius: '12px',
+                            padding: '14px 16px',
+                            margin: '4px 0'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                              <div style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '6px',
+                                background: 'rgba(189, 29, 45, 0.1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--color-primary)'
+                              }}>
+                                <GraduationCap size={15} />
+                              </div>
+                              <span style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                Thông tin chương trình học & Tuyển sinh
+                              </span>
+                            </div>
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: isMobileOrTablet ? '1fr' : '1.4fr 1fr 1fr',
+                              gap: '12px'
+                            }}>
+                              <div>
+                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Chương trình học</label>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                    <BookOpen size={16} />
+                                  </div>
+                                  <input 
+                                    className="form-input form-input-icon-left" 
+                                    placeholder="Nhập hoặc chọn chương trình..." 
+                                    list="customer-drawer-program-suggestions"
+                                    value={formData.program || ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, program: val }));
+                                    }} 
+                                  />
+                                  <datalist id="customer-drawer-program-suggestions">
+                                    {programSuggestions.map((prog, pIdx) => (
+                                      <option key={pIdx} value={prog} />
+                                    ))}
+                                  </datalist>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Ngày nhập học</label>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                    <Calendar size={16} />
+                                  </div>
+                                  <input 
+                                    className="form-input form-input-icon-left" 
+                                    type="date" 
+                                    value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, admission_date: val }));
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>ID Student</label>
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                    <GraduationCap size={16} />
+                                  </div>
+                                  <input 
+                                    className="form-input form-input-icon-left" 
+                                    placeholder="Mã học viên / ID Student..." 
+                                    value={formData.student_id || ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({ ...prev, student_id: val }));
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Row 4: Ngày sinh & Giới tính */}
                           <div className="form-group">
-                            <label className="form-label">Liên kết Zalo</label>
+                            <label className="form-label">Ngày sinh</label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: '4px' }} alt="Zalo" />
+                                <Calendar size={16} />
                               </div>
-                              <input className="form-input form-input-icon-left" placeholder="https://zalo.me/..." value={formData.zalo_link || ''} onChange={e => {
+                              <input className="form-input form-input-icon-left" type="date" value={formData.birthday || ''} onChange={e => {
                                 const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, zalo_link: val }));
+                                setFormData((prev: any) => ({ ...prev, birthday: val }));
                               }} />
                             </div>
                           </div>
+
                           <div className="form-group">
-                            <label className="form-label">Liên kết Facebook</label>
+                            <label className="form-label">Giới tính</label>
+                            <CustomSelect
+                              options={[
+                                { value: '', label: '— Chưa chọn —' },
+                                { value: 'male', label: 'Nam' },
+                                { value: 'female', label: 'Nữ' },
+                                { value: 'other', label: 'Khác' }
+                              ]}
+                              value={formData.gender || ''}
+                              onChange={val => setFormData((prev: any) => ({ ...prev, gender: val as string }))}
+                            />
+                          </div>
+
+                          {/* Row 5: CCCD & Số Passport */}
+                          <div className="form-group">
+                            <label className="form-label">CCCD / CMND</label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <img src="https://facebook.com/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: '4px' }} alt="Facebook" />
+                                <CreditCard size={16} />
                               </div>
-                              <input className="form-input form-input-icon-left" placeholder="https://facebook.com/..." value={formData.fb_link || ''} onChange={e => {
+                              <input className="form-input form-input-icon-left" placeholder="Nhập số CCCD" value={formData.citizen_id || ''} onChange={e => {
                                 const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, fb_link: val }));
+                                setFormData((prev: any) => ({ ...prev, citizen_id: val }));
                               }} />
                             </div>
                           </div>
+
                           <div className="form-group">
+                            <label className="form-label">Số Passport</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <FileText size={16} />
+                              </div>
+                              <input className="form-input form-input-icon-left" placeholder="Nhập số Passport" value={formData.passport || ''} onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({ ...prev, passport: val }));
+                              }} />
+                            </div>
+                          </div>
+
+                          {/* Row 6: Địa chỉ (Spans full width so it's readable) */}
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                            <AddressSelect
+                              label="Địa chỉ"
+                              value={formData.address || ''}
+                              onChange={addr => setFormData((prev: any) => ({ ...prev, address: addr }))}
+                              placeholder="Chọn địa chỉ liên hệ..."
+                            />
+                          </div>
+
+                          {/* Row 7: Chức danh & Phòng ban */}
+                          <div className="form-group">
+                            <label className="form-label">Chức danh</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <Briefcase size={16} />
+                              </div>
+                              <input className="form-input form-input-icon-left" placeholder="ví dụ: Giám đốc" value={formData.job_title || ''} onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({ ...prev, job_title: val }));
+                              }} />
+                            </div>
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Phòng ban</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <Layers size={16} />
+                              </div>
+                              <input className="form-input form-input-icon-left" placeholder="ví dụ: Kinh doanh" value={formData.department || ''} onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({ ...prev, department: val }));
+                              }} />
+                            </div>
+                          </div>
+
+                          {/* Row 8: Công ty (Liên kết) */}
+                          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                             <label className="form-label">Công ty (Liên kết)</label>
                             <CustomSelect
                               searchable
@@ -8599,19 +8649,33 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }}
                             />
                           </div>
-                           <div className="form-group">
-                            <label className="form-label">Phòng ban</label>
+
+                          {/* Row 9: Zalo & Facebook */}
+                          <div className="form-group">
+                            <label className="form-label">Liên kết Zalo</label>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <Layers size={16} />
+                                <img src="https://stc-zpl.zdn.vn/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: '4px' }} alt="Zalo" />
                               </div>
-                              <input className="form-input form-input-icon-left" placeholder="ví dụ: Kinh doanh" value={formData.department || ''} onChange={e => {
+                              <input className="form-input form-input-icon-left" placeholder="https://zalo.me/..." value={formData.zalo_link || ''} onChange={e => {
                                 const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, department: val }));
+                                setFormData((prev: any) => ({ ...prev, zalo_link: val }));
                               }} />
                             </div>
                           </div>
-                          {/* Interest fields moved to learning tab */}
+
+                          <div className="form-group">
+                            <label className="form-label">Liên kết Facebook</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                                <img src="https://facebook.com/favicon.ico" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: '4px' }} alt="Facebook" />
+                              </div>
+                              <input className="form-input form-input-icon-left" placeholder="https://facebook.com/..." value={formData.fb_link || ''} onChange={e => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({ ...prev, fb_link: val }));
+                              }} />
+                            </div>
+                          </div>
                         </div>
 
                         <div style={{ borderTop: '1px solid var(--color-border-light)', margin: '1.25rem 0', paddingTop: '1.25rem' }}></div>
@@ -16027,6 +16091,126 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               >
                 {savingDriveLink ? 'Đang lưu...' : 'Liên kết'}
               </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
+      {duplicatePhoneModal.isOpen && (
+        <CustomModal
+          isOpen={duplicatePhoneModal.isOpen}
+          onClose={() => setDuplicatePhoneModal(prev => ({ ...prev, isOpen: false }))}
+          title="Trùng số điện thoại trên hệ thống"
+          width="520px"
+          zIndex={zIndex ? zIndex + 50 : 1000150}
+        >
+          <div style={{ padding: '4px 0' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              padding: '16px',
+              borderRadius: '12px',
+              background: 'rgba(239, 68, 68, 0.06)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              marginBottom: '16px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: '#fee2e2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#dc2626',
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={22} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: 800, color: '#991b1b' }}>
+                  Phát hiện số điện thoại đã tồn tại!
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.825rem', color: '#7f1d1d', lineHeight: 1.5 }}>
+                  Số điện thoại <strong style={{ color: '#b91c1c' }}>{duplicatePhoneModal.phone}</strong> đã được lưu trong hệ thống ở một hồ sơ khách hàng khác.
+                </p>
+              </div>
+            </div>
+
+            {duplicatePhoneModal.duplicateContact && (
+              <div style={{
+                background: 'var(--color-surface-hover, #f8fafc)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: '10px', letterSpacing: '0.5px' }}>
+                  Thông tin khách hàng bị trùng
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
+                  <div>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', display: 'block' }}>Họ tên khách:</span>
+                    <strong style={{ color: 'var(--color-text)' }}>{duplicatePhoneModal.duplicateContact.full_name || 'Chưa đặt tên'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', display: 'block' }}>Số điện thoại:</span>
+                    <strong style={{ color: 'var(--color-text)' }}>{duplicatePhoneModal.duplicateContact.phone || duplicatePhoneModal.phone}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', display: 'block' }}>Sale phụ trách:</span>
+                    <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{duplicatePhoneModal.duplicateContact.owner_name || 'Chưa gán / Kho chung'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', display: 'block' }}>Giai đoạn pipeline:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+                      {duplicatePhoneModal.duplicateContact.pipeline_status || duplicatePhoneModal.duplicateContact.status || 'Chưa xác định'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setDuplicatePhoneModal(prev => ({ ...prev, isOpen: false }))}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}
+              >
+                Đóng & Sửa lại SĐT
+              </button>
+              {duplicatePhoneModal.duplicateContact?.id && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    const targetId = duplicatePhoneModal.duplicateContact.id;
+                    setDuplicatePhoneModal(prev => ({ ...prev, isOpen: false }));
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('id', String(targetId));
+                    window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+                    window.dispatchEvent(new CustomEvent('open-contact-drawer', { detail: { contactId: targetId } }));
+                    addToast(`Đang chuyển đến khách hàng trùng ID #${targetId}`, 'info');
+                    onClose();
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    background: 'var(--color-primary)',
+                    color: '#fff',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Eye size={15} /> Xem khách hàng này
+                </button>
+              )}
             </div>
           </div>
         </CustomModal>

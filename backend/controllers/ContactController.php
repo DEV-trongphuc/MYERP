@@ -884,14 +884,32 @@ class ContactController {
             if ($phone !== $currPhone) {
                 $personId = $currentContact['person_id'] ?? null;
                 if ($personId) {
-                    $check = $this->db->prepare("SELECT id FROM contacts WHERE tenant_id=? AND (phone=? OR mobile=?) AND id!=? AND (person_id IS NULL OR person_id != ?) AND deleted_at IS NULL LIMIT 1");
+                    $check = $this->db->prepare("SELECT id, full_name, phone, mobile, owner_id, status, pipeline_status FROM contacts WHERE tenant_id=? AND (phone=? OR mobile=?) AND id!=? AND (person_id IS NULL OR person_id != ?) AND deleted_at IS NULL LIMIT 1");
                     $check->execute([$auth['tenant_id'], $phone, $phone, $id, $personId]);
                 } else {
-                    $check = $this->db->prepare("SELECT id FROM contacts WHERE tenant_id=? AND (phone=? OR mobile=?) AND id!=? AND deleted_at IS NULL LIMIT 1");
+                    $check = $this->db->prepare("SELECT id, full_name, phone, mobile, owner_id, status, pipeline_status FROM contacts WHERE tenant_id=? AND (phone=? OR mobile=?) AND id!=? AND deleted_at IS NULL LIMIT 1");
                     $check->execute([$auth['tenant_id'], $phone, $phone, $id]);
                 }
-                if ($check->fetch()) {
-                    respond(422, null, "Số điện thoại '$phone' đã tồn tại ở một khách hàng khác.", false);
+                $dup = $check->fetch(PDO::FETCH_ASSOC);
+                if ($dup) {
+                    $ownerName = '';
+                    if (!empty($dup['owner_id'])) {
+                        $stmtO = $this->db->prepare("SELECT full_name FROM users WHERE id = ?");
+                        $stmtO->execute([$dup['owner_id']]);
+                        $ownerName = $stmtO->fetchColumn() ?: '';
+                    }
+                    $dupContact = [
+                        'id' => (int)$dup['id'],
+                        'full_name' => $dup['full_name'],
+                        'phone' => $dup['phone'] ?: $dup['mobile'],
+                        'owner_name' => $ownerName,
+                        'status' => $dup['status'],
+                        'pipeline_status' => $dup['pipeline_status']
+                    ];
+                    respond(422, [
+                        'code' => 'DUPLICATE_PHONE',
+                        'duplicate_contact' => $dupContact
+                    ], "Số điện thoại '$phone' đã tồn tại ở khách hàng {$dup['full_name']}." . ($ownerName ? " (Sale phụ trách: {$ownerName})" : ""), false);
                 }
             }
         }

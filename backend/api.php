@@ -1177,10 +1177,16 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
     }
 
     if (empty($phone) && empty($email)) {
-        return ['success' => false, 'message' => 'Vui lòng nhập SĐT hoặc Email'];
+        if ($source === 'gioi_thieu' || $source === 'ca_nhan') {
+            if (empty($name)) {
+                return ['success' => false, 'message' => 'Vui lòng nhập họ và tên khách hàng giới thiệu.'];
+            }
+        } else {
+            return ['success' => false, 'message' => 'Vui lòng nhập SĐT hoặc Email'];
+        }
     }
 
-    if (isLeadBlocked($conn, $phone, $email)) {
+    if ((!empty($phone) || !empty($email)) && isLeadBlocked($conn, $phone, $email)) {
         return ['success' => false, 'message' => 'Liên hệ này đã bị chặn vĩnh viễn trong hệ thống (Blocked).'];
     }
 
