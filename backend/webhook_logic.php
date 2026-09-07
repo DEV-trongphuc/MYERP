@@ -1483,7 +1483,7 @@ function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, 
     $acceptedAtVal = ($assignedConsultantId > 0) ? ($dateVal ?: date('Y-m-d H:i:s')) : null;
 
     $stmt = $conn->prepare("INSERT INTO leads (phone, email, name, source, type, note, last_interaction_date, assigned_to, connection_id, is_accepted, accepted_at) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON DUPLICATE KEY UPDATE 
                                 name = IF(VALUES(name) IS NOT NULL AND VALUES(name) != '' AND (name = '' OR name IS NULL), VALUES(name), name),
                                 email = IF(VALUES(email) IS NOT NULL AND VALUES(email) != '' AND (email = '' OR email IS NULL), VALUES(email), email),
@@ -3886,7 +3886,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
     if (!empty($phone) || !empty($email)) {
         $stmtPerson = $conn->prepare("
             INSERT INTO persons (phone, email, full_name) 
-            VALUES (?, ?, ?) 
+            VALUES (NULLIF(?, ''), NULLIF(?, ''), ?) 
             ON DUPLICATE KEY UPDATE 
                 email = IF(email IS NULL OR email = '', VALUES(email), email), 
                 full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name)
@@ -4145,7 +4145,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
 
             $stmtContact = $conn->prepare("
                 INSERT INTO contacts (tenant_id, person_id, project_id, owner_id, created_by, full_name, email, phone, source, status, pipeline_status, stage_id, security_expires_at, notes, customer_type, temperature, suggested_temperature)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, 'lead', ?, ?, ?, ?, ?, ?, ?)
             ");
             if ($stmtContact) {
                 $createdBy = !empty($creatorUserId) ? (int)$creatorUserId : 1;

@@ -1719,18 +1719,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   // Program & Admission Date state & suggestions
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([
-    'MBA High Quality',
-    'Thạc sĩ Quản trị Kinh doanh (MBA)',
-    'Tiến sĩ Quản trị Kinh doanh (DBA)',
-    'Cử nhân Quản trị Kinh doanh (BBA)',
-    'Executive MBA',
+    'MBA',
+    'BBA',
+    'DBA',
+    'EMBA',
     'Mini MBA',
-    'Thạc sĩ Tài chính Ngân hàng (MFB)',
-    'Thạc sĩ Quản trị Công nghệ & Đổi mới (MSTI)',
-    'Chứng chỉ Giám đốc Điều hành (CEO)',
-    'Chứng chỉ Giám đốc Tài chính (CFO)',
-    'Chứng chỉ Giám đốc Nhân sự (CHRO)',
-    'Chứng chỉ Giám đốc Marketing (CMO)'
+    'MFB',
+    'MSTI',
+    'CEO',
+    'CFO',
+    'CHRO',
+    'CMO'
   ]);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
   const programDropdownRef = useRef<HTMLDivElement>(null);
@@ -6868,16 +6867,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
                           </div>
 
-                          {/* Dropdown UI Style App Đẹp */}
+                          {/* Dropdown UI as Tags */}
                           {showProgramDropdown && (
                             <div
                               style={{
                                 position: 'absolute',
                                 top: 'calc(100% + 6px)',
                                 left: 0,
-                                minWidth: '280px',
-                                width: '100%',
-                                maxWidth: '380px',
+                                minWidth: '260px',
+                                width: '320px',
+                                maxWidth: '360px',
                                 background: 'var(--color-surface)',
                                 border: '1px solid var(--color-border)',
                                 borderRadius: '12px',
@@ -6895,100 +6894,99 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 borderBottom: '1px solid var(--color-border-light)'
                               }}>
                                 <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <BookOpen size={12} style={{ color: 'var(--color-primary)' }} />
-                                  Gợi ý chương trình
+                                  <TagIcon size={12} style={{ color: 'var(--color-primary)' }} />
+                                  Tag chương trình
                                 </span>
-                                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
-                                  {programSuggestions.length}
-                                </span>
+                                {formData.program && (
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setFormData((prev: any) => ({ ...prev, program: '' }));
+                                    }}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      fontSize: '0.7rem',
+                                      color: 'var(--color-danger)',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      padding: '1px 6px'
+                                    }}
+                                  >
+                                    Xóa tag
+                                  </button>
+                                )}
                               </div>
 
-                              {(() => {
-                                const currentText = (formData.program || '').trim();
-                                const isExactMatch = programSuggestions.some(p => p.toLowerCase() === currentText.toLowerCase());
-                                const filtered = programSuggestions.filter(p => !currentText || p.toLowerCase().includes(currentText.toLowerCase()));
+                              <div style={{ padding: '10px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {programSuggestions.map((prog, pIdx) => {
+                                  const currentVal = (formData.program || '').trim().toLowerCase();
+                                  const isSelected = currentVal === prog.toLowerCase();
+                                  return (
+                                    <button
+                                      key={pIdx}
+                                      type="button"
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }));
+                                        setShowProgramDropdown(false);
+                                      }}
+                                      style={{
+                                        padding: '4px 10px',
+                                        borderRadius: '16px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        transition: 'all 0.15s ease',
+                                        border: isSelected 
+                                          ? '1px solid var(--color-primary)' 
+                                          : '1px solid var(--color-border)',
+                                        background: isSelected 
+                                          ? 'linear-gradient(135deg, #bd1d2d 0%, #e63946 100%)' 
+                                          : 'var(--color-surface)',
+                                        color: isSelected 
+                                          ? '#ffffff' 
+                                          : 'var(--color-text)',
+                                        boxShadow: isSelected ? '0 2px 6px rgba(189, 29, 45, 0.25)' : 'none'
+                                      }}
+                                    >
+                                      {prog}
+                                      {isSelected && <Check size={11} />}
+                                    </button>
+                                  );
+                                })}
 
-                                return (
-                                  <div className="custom-scrollbar" style={{ maxHeight: '220px', overflowY: 'auto', padding: '4px' }}>
-                                    {currentText && !isExactMatch && (
+                                {(() => {
+                                  const currentVal = (formData.program || '').trim();
+                                  const isKnown = programSuggestions.some(p => p.toLowerCase() === currentVal.toLowerCase());
+                                  if (currentVal && !isKnown) {
+                                    return (
                                       <div
-                                        onMouseDown={(e) => {
-                                          e.preventDefault();
-                                          setFormData((prev: any) => ({ ...prev, program: currentText }));
-                                          setShowProgramDropdown(false);
-                                        }}
                                         style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '8px',
-                                          padding: '8px 10px',
-                                          borderRadius: '8px',
-                                          cursor: 'pointer',
-                                          background: 'rgba(189, 29, 45, 0.06)',
-                                          color: 'var(--color-primary)',
-                                          fontSize: '0.8rem',
+                                          padding: '4px 10px',
+                                          borderRadius: '16px',
+                                          fontSize: '0.75rem',
                                           fontWeight: 700,
-                                          marginBottom: '4px',
-                                          border: '1px dashed rgba(189, 29, 45, 0.25)'
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          border: '1px solid var(--color-primary)',
+                                          background: 'rgba(189, 29, 45, 0.08)',
+                                          color: 'var(--color-primary)'
                                         }}
                                       >
-                                        <Plus size={14} style={{ flexShrink: 0 }} />
-                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          Sử dụng: "{currentText}"
-                                        </span>
+                                        <span>{currentVal}</span>
+                                        <Check size={11} />
                                       </div>
-                                    )}
-
-                                    {filtered.length === 0 && (!currentText || isExactMatch) ? (
-                                      <div style={{ padding: '12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                                        Không tìm thấy chương trình phù hợp
-                                      </div>
-                                    ) : (
-                                      filtered.map((prog, pIdx) => {
-                                        const isSelected = (formData.program || '').trim().toLowerCase() === prog.toLowerCase();
-                                        return (
-                                          <div
-                                            key={pIdx}
-                                            onMouseDown={(e) => {
-                                              e.preventDefault();
-                                              setFormData((prev: any) => ({ ...prev, program: prog }));
-                                              setShowProgramDropdown(false);
-                                            }}
-                                            style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'space-between',
-                                              gap: '8px',
-                                              padding: '7px 10px',
-                                              borderRadius: '8px',
-                                              cursor: 'pointer',
-                                              fontSize: '0.8rem',
-                                              fontWeight: isSelected ? 700 : 500,
-                                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-                                              background: isSelected ? 'var(--color-primary-light, rgba(189, 29, 45, 0.08))' : 'transparent',
-                                              transition: 'background 0.15s ease'
-                                            }}
-                                            onMouseEnter={e => {
-                                              if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)';
-                                            }}
-                                            onMouseLeave={e => {
-                                              if (!isSelected) e.currentTarget.style.background = 'transparent';
-                                            }}
-                                          >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                              <BookOpen size={13} style={{ color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }} />
-                                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {prog}
-                                              </span>
-                                            </div>
-                                            {isSelected && <Check size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />}
-                                          </div>
-                                        );
-                                      })
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -7287,7 +7285,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     </div>
                                   </div>
 
-                                  {/* Mobile Dropdown UI */}
+                                  {/* Mobile Dropdown UI as Tags */}
                                   {showProgramDropdown && (
                                     <div
                                       style={{
@@ -7312,96 +7310,99 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         borderBottom: '1px solid var(--color-border-light)'
                                       }}>
                                         <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                          <BookOpen size={12} style={{ color: 'var(--color-primary)' }} />
-                                          Gợi ý chương trình
+                                          <TagIcon size={12} style={{ color: 'var(--color-primary)' }} />
+                                          Tag chương trình
                                         </span>
-                                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
-                                          {programSuggestions.length}
-                                        </span>
+                                        {formData.program && (
+                                          <button
+                                            type="button"
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              setFormData((prev: any) => ({ ...prev, program: '' }));
+                                            }}
+                                            style={{
+                                              background: 'transparent',
+                                              border: 'none',
+                                              fontSize: '0.7rem',
+                                              color: 'var(--color-danger)',
+                                              cursor: 'pointer',
+                                              fontWeight: 600,
+                                              padding: '1px 6px'
+                                            }}
+                                          >
+                                            Xóa tag
+                                          </button>
+                                        )}
                                       </div>
 
-                                      {(() => {
-                                        const currentText = (formData.program || '').trim();
-                                        const isExactMatch = programSuggestions.some(p => p.toLowerCase() === currentText.toLowerCase());
-                                        const filtered = programSuggestions.filter(p => !currentText || p.toLowerCase().includes(currentText.toLowerCase()));
+                                      <div style={{ padding: '10px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                        {programSuggestions.map((prog, pIdx) => {
+                                          const currentVal = (formData.program || '').trim().toLowerCase();
+                                          const isSelected = currentVal === prog.toLowerCase();
+                                          return (
+                                            <button
+                                              key={pIdx}
+                                              type="button"
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }));
+                                                setShowProgramDropdown(false);
+                                              }}
+                                              style={{
+                                                padding: '4px 10px',
+                                                borderRadius: '16px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 700,
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                transition: 'all 0.15s ease',
+                                                border: isSelected 
+                                                  ? '1px solid var(--color-primary)' 
+                                                  : '1px solid var(--color-border)',
+                                                background: isSelected 
+                                                  ? 'linear-gradient(135deg, #bd1d2d 0%, #e63946 100%)' 
+                                                  : 'var(--color-surface)',
+                                                color: isSelected 
+                                                  ? '#ffffff' 
+                                                  : 'var(--color-text)',
+                                                boxShadow: isSelected ? '0 2px 6px rgba(189, 29, 45, 0.25)' : 'none'
+                                              }}
+                                            >
+                                              {prog}
+                                              {isSelected && <Check size={11} />}
+                                            </button>
+                                          );
+                                        })}
 
-                                        return (
-                                          <div className="custom-scrollbar" style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px' }}>
-                                            {currentText && !isExactMatch && (
+                                        {(() => {
+                                          const currentVal = (formData.program || '').trim();
+                                          const isKnown = programSuggestions.some(p => p.toLowerCase() === currentVal.toLowerCase());
+                                          if (currentVal && !isKnown) {
+                                            return (
                                               <div
-                                                onMouseDown={(e) => {
-                                                  e.preventDefault();
-                                                  setFormData((prev: any) => ({ ...prev, program: currentText }));
-                                                  setShowProgramDropdown(false);
-                                                }}
                                                 style={{
-                                                  display: 'flex',
-                                                  alignItems: 'center',
-                                                  gap: '8px',
-                                                  padding: '8px 10px',
-                                                  borderRadius: '8px',
-                                                  cursor: 'pointer',
-                                                  background: 'rgba(189, 29, 45, 0.06)',
-                                                  color: 'var(--color-primary)',
-                                                  fontSize: '0.8rem',
+                                                  padding: '4px 10px',
+                                                  borderRadius: '16px',
+                                                  fontSize: '0.75rem',
                                                   fontWeight: 700,
-                                                  marginBottom: '4px',
-                                                  border: '1px dashed rgba(189, 29, 45, 0.25)'
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '4px',
+                                                  border: '1px solid var(--color-primary)',
+                                                  background: 'rgba(189, 29, 45, 0.08)',
+                                                  color: 'var(--color-primary)'
                                                 }}
                                               >
-                                                <Plus size={14} style={{ flexShrink: 0 }} />
-                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                  Sử dụng: "{currentText}"
-                                                </span>
+                                                <span>{currentVal}</span>
+                                                <Check size={11} />
                                               </div>
-                                            )}
-
-                                            {filtered.length === 0 && (!currentText || isExactMatch) ? (
-                                              <div style={{ padding: '12px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                                                Không tìm thấy chương trình phù hợp
-                                              </div>
-                                            ) : (
-                                              filtered.map((prog, pIdx) => {
-                                                const isSelected = (formData.program || '').trim().toLowerCase() === prog.toLowerCase();
-                                                return (
-                                                  <div
-                                                    key={pIdx}
-                                                    onMouseDown={(e) => {
-                                                      e.preventDefault();
-                                                      setFormData((prev: any) => ({ ...prev, program: prog }));
-                                                      setShowProgramDropdown(false);
-                                                    }}
-                                                    style={{
-                                                      display: 'flex',
-                                                      alignItems: 'center',
-                                                      justifyContent: 'space-between',
-                                                      gap: '8px',
-                                                      padding: '7px 10px',
-                                                      borderRadius: '8px',
-                                                      cursor: 'pointer',
-                                                      fontSize: '0.8rem',
-                                                      fontWeight: isSelected ? 700 : 500,
-                                                      color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-                                                      background: isSelected ? 'var(--color-primary-light, rgba(189, 29, 45, 0.08))' : 'transparent',
-                                                      transition: 'background 0.15s ease'
-                                                    }}
-                                                  >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                                      <BookOpen size={13} style={{ color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }} />
-                                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {prog}
-                                                      </span>
-                                                    </div>
-                                                    {isSelected && (
-                                                      <Check size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                                                    )}
-                                                  </div>
-                                                );
-                                              })
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
+                                            );
+                                          }
+                                          return null;
+                                        })()}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -8505,11 +8506,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Chương trình học</label>
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                   <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <BookOpen size={16} />
+                                    <TagIcon size={16} />
                                   </div>
                                   <input 
                                     className="form-input form-input-icon-left" 
-                                    placeholder="Nhập hoặc chọn chương trình..." 
+                                    placeholder="Chọn tag hoặc nhập..." 
                                     list="customer-drawer-program-suggestions"
                                     value={formData.program || ''} 
                                     onChange={e => {
@@ -8522,6 +8523,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       <option key={pIdx} value={prog} />
                                     ))}
                                   </datalist>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
+                                  {programSuggestions.map((prog, pIdx) => {
+                                    const isSelected = (formData.program || '').trim().toLowerCase() === prog.toLowerCase();
+                                    return (
+                                      <button
+                                        key={pIdx}
+                                        type="button"
+                                        onClick={() => setFormData((prev: any) => ({ ...prev, program: isSelected ? '' : prog }))}
+                                        style={{
+                                          padding: '2px 8px',
+                                          borderRadius: '12px',
+                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                          background: isSelected ? 'var(--color-primary)' : 'var(--color-surface)',
+                                          color: isSelected ? '#ffffff' : 'var(--color-text)',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }}
+                                      >
+                                        {prog}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </div>
 

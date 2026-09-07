@@ -1129,7 +1129,9 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
     require_once __DIR__ . '/webhook_logic.php';
 
     $phone = normalizePhone($leadData['phone'] ?? '');
+    if ($phone === '') $phone = null;
     $email = trim($leadData['email'] ?? '');
+    if ($email === '') $email = null;
     $name = trim($leadData['name'] ?? '');
     $source = trim($leadData['source'] ?? '');
     $type = trim($leadData['type'] ?? '');
@@ -1205,7 +1207,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
             // Ensure Person exists and is set to public (databank)
             $stmtPerson = $conn->prepare("
                 INSERT INTO persons (phone, email, full_name, is_public, released_to_kho_at, public_count, deleted_from_databank) 
-                VALUES (?, ?, ?, 1, NOW(), 1, 0) 
+                VALUES (NULLIF(?, ''), NULLIF(?, ''), ?, 1, NOW(), 1, 0) 
                 ON DUPLICATE KEY UPDATE 
                     email = IF(email IS NULL OR email = '', VALUES(email), email),
                     full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name),
