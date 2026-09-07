@@ -510,6 +510,11 @@ class CheckInController {
             }
         }
 
+        // Sales users work_end_time = '22:00' is data receiving window, company shift checkout time is 17:00 / global_work_end_time
+        if (in_array(strtolower($uRow['role'] ?? ''), ['sales', 'sale'], true) || $workEndTime > '18:30') {
+            $workEndTime = $settingsMap['global_work_end_time'] ?? '17:00';
+        }
+
         $dayOfWeek = (int)date('N', strtotime($today));
         $todaySchedule = null;
         if (!empty($workScheduleJson)) {
@@ -883,14 +888,11 @@ class CheckInController {
             respond(403, null, 'Bạn không có quyền thao tác trên dữ liệu này', false);
         }
 
-        // Allow creator to recall pending request, otherwise require role
+        // Allow creator or privileged role to delete/recall request
         $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
-        if ($isCreator) {
-            if ($row['status'] !== 'pending_approval') {
-                respond(400, null, 'Không thể thu hồi giải trình đã duyệt hoặc từ chối', false);
-            }
-        } else {
-            requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director', 'hr']);
+        $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'manager'], true);
+        if (!$isCreator && !$isPrivileged) {
+            respond(403, null, 'Bạn không có quyền xóa bản ghi này', false);
         }
 
         // Delete
@@ -1217,12 +1219,19 @@ class CheckInController {
             }
             $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
+            // Auto approve if approver is the creator
+            $isSelfApproved = ($approverId > 0 && $approverId === (int)$userId);
+            $initialStatus = $isSelfApproved ? 'approved' : 'pending_manager';
+            $approvedBy = $isSelfApproved ? $userId : null;
+            $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
+            $adminNote = $isSelfApproved ? 'Tự động duyệt do người lập kiêm người phê duyệt' : null;
+
             // Create bulk request
             $stmt = $this->db->prepare("
-                INSERT INTO attendance_bulk_requests (user_id, month_period, status, manager_id, related_user_ids)
-                VALUES (?, ?, 'pending_manager', ?, ?)
+                INSERT INTO attendance_bulk_requests (user_id, month_period, status, manager_id, related_user_ids, approved_by, approved_at, admin_note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$userId, $month, $approverId, $relatedUserIds]);
+            $stmt->execute([$userId, $month, $initialStatus, $approverId, $relatedUserIds, $approvedBy, $approvedAt, $adminNote]);
             $requestId = (int)$this->db->lastInsertId();
 
             // Insert details
@@ -1230,6 +1239,22 @@ class CheckInController {
                 INSERT INTO attendance_bulk_request_details (request_id, check_in_date, suggested_check_in, suggested_check_out, reason, approved)
                 VALUES (?, ?, ?, ?, ?, 1)
             ");
+
+            $stmtUpsert = null;
+            if ($isSelfApproved) {
+                $stmtUpsert = $this->db->prepare("
+                    INSERT INTO check_ins (user_id, check_in_date, check_in_time, check_out_time, status, reason, admin_note, late_minutes, early_minutes)
+                    VALUES (?, ?, ?, ?, 'approved', ?, ?, 0, 0)
+                    ON DUPLICATE KEY UPDATE 
+                      check_in_time = VALUES(check_in_time),
+                      check_out_time = VALUES(check_out_time),
+                      status = 'approved',
+                      reason = VALUES(reason),
+                      admin_note = VALUES(admin_note),
+                      late_minutes = 0,
+                      early_minutes = 0
+                ");
+            }
 
             // Fetch leaves to ensure no on-leave days are included
             $stmtLeaves = $this->db->prepare("
@@ -1268,6 +1293,19 @@ class CheckInController {
 
                 $stmtDetail->execute([$requestId, $date, $in, $out, $reason]);
                 $validDetailsCount++;
+
+                if ($isSelfApproved && $stmtUpsert) {
+                    $inTime = $in ? "$date $in:00" : "$date 08:30:00";
+                    $outTime = $out ? "$date $out:00" : "$date 17:00:00";
+                    $stmtUpsert->execute([
+                        $userId,
+                        $date,
+                        $inTime,
+                        $outTime,
+                        $reason,
+                        $adminNote
+                    ]);
+                }
             }
 
             if ($validDetailsCount === 0) {
@@ -1329,7 +1367,10 @@ class CheckInController {
                 error_log("Failed to send bulk request notification: " . $ne->getMessage());
             }
 
-            respond(201, ['request_id' => $requestId], 'Tạo phiếu đề xuất bổ sung công tổng hợp thành công');
+            $msg = $isSelfApproved 
+                ? 'Đề xuất cập nhật công đã được tạo và tự động phê duyệt thành công' 
+                : 'Tạo phiếu đề xuất bổ sung công tổng hợp thành công';
+            respond(201, ['request_id' => $requestId, 'status' => $initialStatus, 'auto_approved' => $isSelfApproved], $msg);
         } catch (\Throwable $ex) {
             $this->db->rollBack();
             respond(500, null, 'Lỗi hệ thống: ' . $ex->getMessage(), false);
@@ -1423,7 +1464,6 @@ class CheckInController {
     }
 
     public function approveBulkRequest(array $auth, int $id): void {
-        requireRole($auth, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr']);
         $b = getBody();
         $status = trim($b['status'] ?? ''); // 'approved' or 'rejected'
         $adminNote = trim($b['admin_note'] ?? '');
@@ -1452,27 +1492,33 @@ class CheckInController {
             return;
         }
 
-        // Manager checks: approve their own team members or if explicitly designated as approver
-        if ($auth['role'] === 'manager') {
-            $isAssignedApprover = (int)($req['manager_id'] ?? 0) === (int)$auth['user_id'];
-            if (!$isAssignedApprover) {
-                $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
-                $stmtUserTeam->execute([$req['user_id']]);
-                $targetUserTeamId = $stmtUserTeam->fetchColumn();
+        // Permission check:
+        // 1. Is designated approver (manager_id or hr_id)
+        // 2. Is creator self-approving (trưởng phòng / người tạo tự duyệt)
+        // 3. Has admin/director/manager/hr role
+        // 4. Is team leader of creator
+        $isAssignedApprover = ((int)($req['manager_id'] ?? 0) === (int)$auth['user_id']) || ((int)($req['hr_id'] ?? 0) === (int)$auth['user_id']);
+        $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
+        $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
 
-                $isTeamMember = false;
-                if ($targetUserTeamId !== null) {
-                    $stmtCheckManager = $this->db->prepare("
-                        SELECT 1 FROM teams WHERE id = ? AND FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                    ");
-                    $stmtCheckManager->execute([$targetUserTeamId, $auth['user_id']]);
-                    $isTeamMember = (bool)$stmtCheckManager->fetch();
-                }
+        $isTeamLeader = false;
+        if (!$isAssignedApprover && !$isCreator && !$isPrivileged) {
+            $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
+            $stmtUserTeam->execute([$req['user_id']]);
+            $targetUserTeamId = $stmtUserTeam->fetchColumn();
 
-                if ((int)$req['user_id'] !== (int)$auth['user_id'] && !$isTeamMember) {
-                    respond(403, null, 'Bạn chỉ có quyền phê duyệt chấm công cho nhân viên thuộc nhóm của mình hoặc khi được chỉ định làm người duyệt', false);
-                }
+            if ($targetUserTeamId !== null) {
+                $stmtCheckManager = $this->db->prepare("
+                    SELECT 1 FROM teams WHERE id = ? AND FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                ");
+                $stmtCheckManager->execute([$targetUserTeamId, $auth['user_id']]);
+                $isTeamLeader = (bool)$stmtCheckManager->fetch();
             }
+        }
+
+        if (!$isAssignedApprover && !$isCreator && !$isPrivileged && !$isTeamLeader) {
+            respond(403, null, 'Bạn không có quyền phê duyệt đề xuất này', false);
+            return;
         }
 
         $this->db->beginTransaction();
@@ -1632,15 +1678,22 @@ class CheckInController {
             respond(404, null, 'Không tìm thấy phiếu đề xuất', false);
         }
 
-        $isAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director'], true);
-        if (!$isAdmin && (int)$req['user_id'] !== (int)$auth['user_id']) {
+        $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
+        $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
+        if (!$isPrivileged && !$isCreator) {
             respond(403, null, 'Bạn không có quyền xóa phiếu này', false);
         }
 
-        $this->db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$id]);
-        $this->db->prepare("DELETE FROM attendance_bulk_requests WHERE id = ?")->execute([$id]);
-
-        respond(200, null, 'Đã xóa phiếu đề xuất thành công');
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$id]);
+            $this->db->prepare("DELETE FROM attendance_bulk_requests WHERE id = ?")->execute([$id]);
+            $this->db->commit();
+            respond(200, null, 'Đã xóa phiếu đề xuất thành công');
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            respond(500, null, 'Lỗi khi xóa phiếu đề xuất: ' . $e->getMessage(), false);
+        }
     }
 
     public function getCheckinComments(array $auth, int $id): void {

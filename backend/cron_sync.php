@@ -3417,6 +3417,103 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                         error_log("Error calculating check-in reminder: " . $remEx->getMessage());
                     }
                 }
+
+                // --- B. CHECK-OUT REMINDER (NHẮC NHỞ RA CA) ---
+                // Đối với Sale, work_end_time = '22:00' là khung giờ nhận data; giờ ra ca chấm công là globalWorkEnd (17:00 / 17:30)
+                $rawWorkEnd = ($user['use_custom_work_hours'] == 1 && !empty($user['work_end_time'])) ? substr($user['work_end_time'], 0, 5) : $globalWorkEnd;
+                $workEnd = (in_array(strtolower($user['role'] ?? ''), ['sales', 'sale'], true) || $rawWorkEnd > '18:30') ? $globalWorkEnd : $rawWorkEnd;
+
+                $workEndParts = explode(':', $workEnd);
+                if (count($workEndParts) >= 2) {
+                    try {
+                        $checkoutReminderTime = new DateTime($todayStr . ' ' . $workEnd);
+                        $checkoutReminderTime->modify("-$attendanceLeadMinutes minutes");
+
+                        $nowTimestamp = $now->getTimestamp();
+                        $coReminderTimestamp = $checkoutReminderTime->getTimestamp();
+                        $workEndTimestamp = (new DateTime($todayStr . ' ' . $workEnd))->getTimestamp();
+                        // Allow checkout reminder within 30 minutes after shift end if not checked out yet
+                        $coWindowEndTimestamp = $workEndTimestamp + (30 * 60);
+
+                        if ($nowTimestamp >= $coReminderTimestamp && $nowTimestamp <= $coWindowEndTimestamp) {
+                            // Check if already sent checkout reminder today
+                            $chkCO = $conn->prepare("SELECT id FROM sent_notifications WHERE user_id = ? AND notify_type = 'checkout_reminder' AND notify_date = ?");
+                            $chkCO->bind_param("is", $userId, $todayStr);
+                            $chkCO->execute();
+                            $hasSentCO = (bool)$chkCO->get_result()->fetch_assoc();
+                            $chkCO->close();
+
+                            if (!$hasSentCO) {
+                                // Check if user checked in today but has NOT checked out yet
+                                $chkInNoOut = $conn->prepare("SELECT id FROM check_ins WHERE user_id = ? AND check_in_date = ? AND check_in_time IS NOT NULL AND (check_out_time IS NULL OR check_out_time = '') LIMIT 1");
+                                $chkInNoOut->bind_param("is", $userId, $todayStr);
+                                $chkInNoOut->execute();
+                                $needCheckout = (bool)$chkInNoOut->get_result()->fetch_assoc();
+                                $chkInNoOut->close();
+
+                                if ($needCheckout) {
+                                    $msgCO = "Đã đến giờ kết thúc ca làm việc (Ca ra lúc $workEnd). Vui lòng thực hiện chấm công ra ca nhé!";
+                                    $userTenantId = (int)($user['tenant_id'] ?? 1);
+
+                                    // 1. Web In-App Notification Bell
+                                    if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'bell')) {
+                                        try {
+                                            $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, '⏰ NHẮC NHỞ CHẤM CÔNG RA CA', ?, 'checkout_reminder', '/attendance')");
+                                            if ($insNotif) {
+                                                $insNotif->bind_param("iis", $userId, $userTenantId, $msgCO);
+                                                $insNotif->execute();
+                                                $insNotif->close();
+                                            }
+                                        } catch (Throwable $eWeb) {}
+                                    }
+
+                                    // 2. Email Notification
+                                    if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'email')) {
+                                        try {
+                                            if (!empty($user['email']) && function_exists('sendEmailNotification')) {
+                                                $emailSubject = "⏰ [IDEAS ERP] Nhắc nhở: Đến giờ chấm công ra ca [Ca $workEnd]";
+                                                $emailTitle = "NHẮC NHỞ CHẤM CÔNG RA CA";
+                                                $emailContent = "Chào <strong>" . htmlspecialchars($user['full_name']) . "</strong>,<br/><br/>Hệ thống ghi nhận đã đến giờ kết thúc ca làm việc hôm nay (lúc <strong>" . htmlspecialchars($workEnd) . "</strong>).<br/><br/>Bạn đã thực hiện chấm công vào sáng nay nhưng <strong>chưa thực hiện chấm công ra ca</strong>.<br/><br/>Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công ra ca đúng quy định.";
+                                                sendEmailNotification($user['email'], $emailSubject, $emailTitle, $emailContent, '', false);
+                                            }
+                                        } catch (Throwable $eMail) {
+                                            error_log("Checkout Reminder Email Error: " . $eMail->getMessage());
+                                        }
+                                    }
+
+                                    // 3. Zalo message if available
+                                    if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'zalo')) {
+                                        try {
+                                            if (!empty($zaloBotToken) && !empty($user['zalo_chat_id']) && function_exists('sendZaloMessage')) {
+                                                $zaloText = "⏰ [ NHẮC NHỞ CHẤM CÔNG RA CA ]\n\nXin chào {$user['full_name']},\nĐã đến giờ kết thúc ca làm việc ({$workEnd}). Bạn chưa chấm công ra ca, vui lòng đăng nhập MYERP để chấm công ra nhé!\n👉 https://myerp.ideas.edu.vn/attendance";
+                                                sendZaloMessage($zaloBotToken, $user['zalo_chat_id'], $zaloText, false);
+                                            }
+                                        } catch (Throwable $eZalo) {}
+                                    }
+
+                                    // 4. Telegram message if available
+                                    if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'telegram')) {
+                                        try {
+                                            if (!empty($telegramBotToken) && !empty($user['telegram_chat_id']) && function_exists('sendTelegramMessage')) {
+                                                $tgText = "⏰ <b>NHẮC NHỞ CHẤM CÔNG RA CA</b> (Ca {$workEnd})\n\nXin chào <b>" . htmlspecialchars($user['full_name']) . "</b>,\nĐã đến giờ kết thúc ca làm việc. Vui lòng truy cập MYERP để chấm công ra ca đúng quy định nhé!";
+                                                sendTelegramMessage($telegramBotToken, $user['telegram_chat_id'], $tgText);
+                                            }
+                                        } catch (Throwable $eTg) {}
+                                    }
+
+                                    $ins = $conn->prepare("INSERT IGNORE INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, 'checkout_reminder', ?)");
+                                    $ins->bind_param("is", $userId, $todayStr);
+                                    $ins->execute();
+                                    $ins->close();
+
+                                    logSync("Sent check-out reminder (Web/Zalo/Telegram/Email) to User: {$user['full_name']} (User ID: {$userId})");
+                                }
+                            }
+                        }
+                    } catch (Exception $coEx) {
+                        error_log("Error calculating check-out reminder: " . $coEx->getMessage());
+                    }
+                }
             }
         }
     }

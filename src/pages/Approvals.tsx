@@ -202,6 +202,7 @@ export interface ApprovalItem {
   id: number;
   type: 'leave' | 'advance' | 'expense' | 'checkin' | 'attendance_bulk';
   user_id?: number;
+  created_by?: number;
   employee_name?: string;
   title: string;
   description: string;
@@ -1370,9 +1371,18 @@ export default function Approvals() {
       u.email !== 'turniodev@gmail.com'
     );
 
-    // 1. First priority: Team Leader / Trưởng phòng of the proposer's team
+    // 0. If proposer is a team leader / manager / head of department, they can self-approve!
     const teamId = p.team_id || (user as any)?.team_id;
     const myTeam = teams.find(t => Number(t.id) === Number(teamId));
+    const isLeaderOrManager = (myTeam && Number(myTeam.leader_id) === Number(p.id)) || 
+                              ['manager', 'truongphong', 'quanly', 'head_of_department', 'leader', 'director', 'academic', 'admin'].includes(String(p.role).toLowerCase()) ||
+                              (p.job_title && (p.job_title.toLowerCase().includes('trưởng phòng') || p.job_title.toLowerCase().includes('quản lý')));
+    if (isLeaderOrManager) {
+      const selfUser = businessUsers.find(u => Number(u.id) === Number(p.id));
+      if (selfUser) return selfUser;
+    }
+
+    // 1. First priority: Team Leader / Trưởng phòng of the proposer's team
     if (myTeam && myTeam.leader_id && Number(myTeam.leader_id) !== Number(p.id)) {
       const leader = businessUsers.find(u => Number(u.id) === Number(myTeam.leader_id));
       if (leader) return leader;
@@ -2872,29 +2882,37 @@ export default function Approvals() {
                                   <CheckCircle2 size={12} />
                                   {t('Duyệt')}
                                 </button>
+                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id)) && (
+                                  <button
+                                    onClick={() => handleDeleteRequest(item)}
+                                    className="btn secondary"
+                                    style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                    title={t('Xóa')}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
                               </>
                             ) : activeTab === 'my_requests' ? (
-                              <>
-                                {(item.status === 'pending' || item.status === 'pending_approval') && (
-                                  <>
-                                    <button
-                                      onClick={() => handleEditRequest(item)}
-                                      className="btn secondary"
-                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
-                                      title={t('Sửa')}
-                                    >
-                                      <Edit size={12} />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteRequest(item)}
-                                      className="btn secondary"
-                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                      title={t('Xóa')}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  </>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                                  <button
+                                    onClick={() => handleEditRequest(item)}
+                                    className="btn secondary"
+                                    style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                    title={t('Sửa')}
+                                  >
+                                    <Edit size={12} />
+                                  </button>
                                 )}
+                                <button
+                                  onClick={() => handleDeleteRequest(item)}
+                                  className="btn secondary"
+                                  style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                  title={t('Xóa')}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
                                 <button
                                   onClick={() => handleDuplicate(item)}
                                   className="btn secondary"
@@ -2903,19 +2921,48 @@ export default function Approvals() {
                                 >
                                   <Copy size={12} />
                                 </button>
-                              </>
+                                <button
+                                  onClick={() => setSelectedTimelineItem(item)}
+                                  className="btn secondary"
+                                  style={{ height: '28px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
+                                  title={t('Chi tiết')}
+                                >
+                                  <Eye size={12} />
+                                </button>
+                              </div>
                             ) : activeTab === 'following' ? (
-                              <span style={{ fontSize: '0.75rem', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
-                                <Eye size={12} /> {t('Theo dõi')}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
+                                  <Eye size={12} /> {t('Theo dõi')}
+                                </span>
+                                <button
+                                  onClick={() => setSelectedTimelineItem(item)}
+                                  className="btn secondary"
+                                  style={{ height: '28px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
+                                >
+                                  {t('Chi tiết')}
+                                </button>
+                              </div>
                             ) : (
-                              <button
-                                onClick={() => setSelectedTimelineItem(item)}
-                                className="btn secondary"
-                                style={{ height: '28px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
-                              >
-                                <Eye size={12} /> {t('Chi tiết')}
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  onClick={() => setSelectedTimelineItem(item)}
+                                  className="btn secondary"
+                                  style={{ height: '28px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
+                                >
+                                  <Eye size={12} /> {t('Chi tiết')}
+                                </button>
+                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
+                                  <button
+                                    onClick={() => handleDeleteRequest(item)}
+                                    className="btn secondary"
+                                    style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                    title={t('Xóa đơn/đề xuất')}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -3263,6 +3310,7 @@ export default function Approvals() {
           isAdmin={isAdmin && activeTab === 'pending'}
           onDuplicate={handleDuplicate}
           onEdit={handleEditRequest}
+          onDelete={handleDeleteRequest}
         />
       )}
 
@@ -6927,7 +6975,7 @@ export default function Approvals() {
 }
 
 // Side-Drawer Component detailing step-by-step progress
-export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onReject, isAdmin, onDuplicate, onEdit }: {
+export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onReject, isAdmin, onDuplicate, onEdit, onDelete }: {
   item: ApprovalItem;
   onClose: () => void;
   users: any[];
@@ -6937,6 +6985,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   isAdmin: boolean;
   onDuplicate?: (item: ApprovalItem) => void;
   onEdit?: (item: ApprovalItem) => void;
+  onDelete?: (item: ApprovalItem) => void;
 }) {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -6981,6 +7030,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       if (currentLevel === 1) {
         if (app1 > 0 && app1 === userId) return true;
         if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
+        if (Number(item.created_by || (item as any)?.user_id) === userId) return true;
         return isSuperAdmin;
       }
       if (currentLevel === 2) {
@@ -7011,6 +7061,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       if (currentLevel === 1) {
         if (app1 > 0 && app1 === userId) return true;
         if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
+        if (Number(item.user_id || detail?.user_id) === userId) return true;
         return isSuperAdmin;
       }
       if (currentLevel === 2) {
@@ -7023,6 +7074,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     if (item.type === 'attendance_bulk' || item.type === 'checkin') {
       const targetApproverId = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
       if (targetApproverId && Number(targetApproverId) === userId) return true;
+      if (Number(item.user_id || detail?.user_id) === userId) return true;
       if (targetApproverId && Number(targetApproverId) !== userId) {
         return isSuperAdmin;
       }
@@ -8873,6 +8925,33 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 title={t('Nhân bản đề xuất')}
               >
                 <Copy size={isMobile ? 14 : 16} />
+              </button>
+            )}
+            {onDelete && (Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
+              <button
+                onClick={async () => {
+                  await onDelete(item);
+                  onClose();
+                }}
+                className="btn secondary hover-lift"
+                style={{
+                  height: isMobile ? '30px' : '36px',
+                  padding: isMobile ? '0 8px' : '0 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  borderRadius: '7px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  color: '#ef4444',
+                  fontWeight: 700,
+                  fontSize: isMobile ? '0.725rem' : '0.8rem',
+                  cursor: 'pointer'
+                }}
+                title={t('Xóa đề xuất')}
+              >
+                <Trash2 size={isMobile ? 12 : 14} />
+                <span>{t('Xóa')}</span>
               </button>
             )}
             <button 

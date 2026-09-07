@@ -3859,7 +3859,7 @@ function sendNewLeadApiNotificationToAdmins($conn, $connData, $leadId, $customer
 
 function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
     // 1. Get lead info
-    $stmt = $conn->prepare("SELECT phone, email, name, source, type, note, assigned_to, is_accepted, target_round_id FROM leads WHERE id = ?");
+    $stmt = $conn->prepare("SELECT phone, email, name, source, type, note, assigned_to, is_accepted, target_round_id, person_id FROM leads WHERE id = ?");
     if (!$stmt) return;
     $stmt->bind_param("i", $leadId);
     $stmt->execute();
@@ -3881,56 +3881,58 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
     $type = $lead['type'] ?? '';
     $note = $lead['note'] ?? '';
 
-    // 2. Ensure Person
-    $person_id = null;
-    if (!empty($phone) || !empty($email)) {
-        $stmtPerson = $conn->prepare("
-            INSERT INTO persons (phone, email, full_name) 
-            VALUES (NULLIF(?, ''), NULLIF(?, ''), ?) 
-            ON DUPLICATE KEY UPDATE 
-                email = IF(email IS NULL OR email = '', VALUES(email), email), 
-                full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name)
-        ");
-        if ($stmtPerson) {
-            $stmtPerson->bind_param("sss", $phone, $email, $name);
-            $stmtPerson->execute();
-            $stmtPerson->close();
-        }
+    // 2. Ensure Person (reuse if lead already has person_id)
+    $person_id = !empty($lead['person_id']) ? (int)$lead['person_id'] : null;
+    if (!$person_id) {
+        if (!empty($phone) || !empty($email)) {
+            $stmtPerson = $conn->prepare("
+                INSERT INTO persons (phone, email, full_name) 
+                VALUES (NULLIF(?, ''), NULLIF(?, ''), ?) 
+                ON DUPLICATE KEY UPDATE 
+                    email = IF(email IS NULL OR email = '', VALUES(email), email), 
+                    full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name)
+            ");
+            if ($stmtPerson) {
+                $stmtPerson->bind_param("sss", $phone, $email, $name);
+                $stmtPerson->execute();
+                $stmtPerson->close();
+            }
 
-        // Get Person ID
-        if (!empty($phone)) {
-            $noZeroPhone = ltrim($phone, '0');
-            $withZeroPhone = '0' . $noZeroPhone;
-            $stmtGet = $conn->prepare("SELECT id FROM persons WHERE (phone = ? OR phone = ?) LIMIT 1");
-            if ($stmtGet) {
-                $stmtGet->bind_param("ss", $withZeroPhone, $noZeroPhone);
-                $stmtGet->execute();
-                $person = $stmtGet->get_result()->fetch_assoc();
-                $stmtGet->close();
-                if ($person) {
-                    $person_id = $person['id'];
+            // Get Person ID
+            if (!empty($phone)) {
+                $noZeroPhone = ltrim($phone, '0');
+                $withZeroPhone = '0' . $noZeroPhone;
+                $stmtGet = $conn->prepare("SELECT id FROM persons WHERE (phone = ? OR phone = ?) LIMIT 1");
+                if ($stmtGet) {
+                    $stmtGet->bind_param("ss", $withZeroPhone, $noZeroPhone);
+                    $stmtGet->execute();
+                    $person = $stmtGet->get_result()->fetch_assoc();
+                    $stmtGet->close();
+                    if ($person) {
+                        $person_id = $person['id'];
+                    }
+                }
+            } else if (!empty($email)) {
+                $stmtGetE = $conn->prepare("SELECT id FROM persons WHERE email = ? LIMIT 1");
+                if ($stmtGetE) {
+                    $stmtGetE->bind_param("s", $email);
+                    $stmtGetE->execute();
+                    $personE = $stmtGetE->get_result()->fetch_assoc();
+                    $stmtGetE->close();
+                    if ($personE) {
+                        $person_id = $personE['id'];
+                    }
                 }
             }
-        } else if (!empty($email)) {
-            $stmtGetE = $conn->prepare("SELECT id FROM persons WHERE email = ? LIMIT 1");
-            if ($stmtGetE) {
-                $stmtGetE->bind_param("s", $email);
-                $stmtGetE->execute();
-                $personE = $stmtGetE->get_result()->fetch_assoc();
-                $stmtGetE->close();
-                if ($personE) {
-                    $person_id = $personE['id'];
-                }
+        } else if (!empty($name)) {
+            // Referral lead with name only (e.g. Zalo QR)
+            $stmtPerson = $conn->prepare("INSERT INTO persons (full_name) VALUES (?)");
+            if ($stmtPerson) {
+                $stmtPerson->bind_param("s", $name);
+                $stmtPerson->execute();
+                $person_id = $stmtPerson->insert_id;
+                $stmtPerson->close();
             }
-        }
-    } else if (!empty($name)) {
-        // Referral lead with name only (e.g. Zalo QR)
-        $stmtPerson = $conn->prepare("INSERT INTO persons (full_name) VALUES (?)");
-        if ($stmtPerson) {
-            $stmtPerson->bind_param("s", $name);
-            $stmtPerson->execute();
-            $person_id = $stmtPerson->insert_id;
-            $stmtPerson->close();
         }
     }
 

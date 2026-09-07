@@ -275,9 +275,16 @@ class HRMController {
             }
         }
 
+        $isSelfApproved = ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
+        $initialStatus = $isSelfApproved ? 'approved' : 'pending';
+        $statusL1 = $isSelfApproved ? 'approved' : 'pending';
+        $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
+        $approvedBy = $isSelfApproved ? $auth['user_id'] : null;
+        $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
+
         $stmt = $this->db->prepare("
-            INSERT INTO hrm_leave_requests (user_id, leave_type, ot_type, ot_rate, start_date, end_date, total_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, related_user_ids)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'pending', ?, ?)
+            INSERT INTO hrm_leave_requests (user_id, leave_type, ot_type, ot_rate, start_date, end_date, total_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, approved_by, approved_at, related_user_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $auth['user_id'],
@@ -288,11 +295,24 @@ class HRMController {
             $endDate,
             (float)($b['total_days'] ?? 1.0),
             $reason,
+            $initialStatus,
             $approverId,
             $approverId2,
-            $approverId2 ? 'pending' : 'none',
+            $statusL1,
+            $statusL2,
+            $approvedBy,
+            $approvedAt,
             $relatedUserIds
         ]);
+
+        if ($isSelfApproved && in_array($leaveType, ['annual', 'compensatory', 'sick', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'remote_work'], true)) {
+            $startDateOnly = date('Y-m-d', strtotime($startDate));
+            $endDateOnly = date('Y-m-d', strtotime($endDate));
+            try {
+                $cLeaveStmt = $this->db->prepare("INSERT IGNORE INTO consultant_leaves (consultant_id, start_date, end_date) VALUES (?, ?, ?)");
+                $cLeaveStmt->execute([$auth['user_id'], $startDateOnly, $endDateOnly]);
+            } catch (\Throwable $e) {}
+        }
 
         // Dispatch Notification
         try {
@@ -365,11 +385,12 @@ class HRMController {
             respond(404, null, 'Yêu cầu nghỉ phép không tồn tại', false);
         }
 
+        $isCreator = ($auth['user_id'] == $leaveRow['user_id']);
         $isApprover1 = ($auth['user_id'] == $leaveRow['approver_id']);
         $isApprover2 = ($auth['user_id'] == $leaveRow['approver_id_2']);
-        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true);
+        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
 
-        if (!$isApprover1 && !$isApprover2 && !$isSuperAdmin) {
+        if (!$isApprover1 && !$isApprover2 && !$isPrivileged && !$isCreator) {
             respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
         }
 
@@ -737,17 +758,28 @@ class HRMController {
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
         $relatedUserIds = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? json_encode($b['related_user_ids']) : $b['related_user_ids']) : null;
 
+        $isSelfApproved = ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
+        $initialStatus = $isSelfApproved ? 'approved' : 'pending';
+        $statusL1 = $isSelfApproved ? 'approved' : 'pending';
+        $statusL2 = $isSelfApproved ? (!empty($approverId2) ? 'approved' : 'none') : ($approverId2 ? 'pending' : 'none');
+        $approvedBy = $isSelfApproved ? $auth['user_id'] : null;
+        $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
+
         $stmt = $this->db->prepare("
-            INSERT INTO hrm_salary_advances (user_id, amount, request_date, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, related_user_ids)
-            VALUES (?, ?, CURDATE(), ?, 'pending', ?, ?, 'pending', ?, ?)
+            INSERT INTO hrm_salary_advances (user_id, amount, request_date, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, approved_by, approved_at, related_user_ids)
+            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $auth['user_id'],
             (float)$b['amount'],
             $b['reason'] ?? '',
+            $initialStatus,
             $approverId,
             $approverId2,
-            $approverId2 ? 'pending' : 'none',
+            $statusL1,
+            $statusL2,
+            $approvedBy,
+            $approvedAt,
             $relatedUserIds
         ]);
 
@@ -2683,12 +2715,10 @@ class HRMController {
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
         }
-        $isAdmin = $this->isAdmin($auth);
-        if ((int)$row['user_id'] !== (int)$auth['user_id'] && !$isAdmin) {
+        $isPrivileged = $this->isAdmin($auth) || in_array($auth['role'], ['manager', 'director', 'hr'], true);
+        $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
+        if (!$isCreator && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
-        }
-        if ($row['status'] !== 'pending' && !$isAdmin) {
-            respond(400, null, 'Chỉ có thể xóa yêu cầu ở trạng thái Chờ duyệt', false);
         }
         
         $this->db->prepare("DELETE FROM hrm_leave_requests WHERE id = ?")->execute([$id]);
@@ -2702,12 +2732,10 @@ class HRMController {
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
         }
-        $isAdmin = $this->isAdmin($auth);
-        if ((int)$row['user_id'] !== (int)$auth['user_id'] && !$isAdmin) {
+        $isPrivileged = $this->isAdmin($auth) || in_array($auth['role'], ['manager', 'director', 'hr'], true);
+        $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
+        if (!$isCreator && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền xóa yêu cầu này', false);
-        }
-        if ($row['status'] !== 'pending' && !$isAdmin) {
-            respond(400, null, 'Chỉ có thể xóa yêu cầu ở trạng thái Chờ duyệt', false);
         }
         
         $this->db->prepare("DELETE FROM hrm_salary_advances WHERE id = ?")->execute([$id]);

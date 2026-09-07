@@ -1296,27 +1296,21 @@ class FinanceController
         
         $sql = "UPDATE expenses SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
-        if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
+        $isPrivileged = in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'manager'], true);
+        if (!$isPrivileged) {
             $sql .= " AND created_by = ?";
-            $p[] = $auth['user_id'];
-        } else if ($auth['role'] === 'manager') {
-            $sql .= " AND (created_by = ? OR created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
-            $p[] = $auth['user_id'];
             $p[] = $auth['user_id'];
         }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($p);
         if (!$stmt->rowCount())
-            respond(404, null, 'Không tìm thấy chi phí hoặc không có quyền', false);
+            respond(404, null, 'Không tìm thấy chi phí hoặc không có quyền xóa', false);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'expense', $id);
         respond(200, null, 'Đã xóa chi phí');
     }
 
     public function approveExpense(array $auth, int $id): void
     {
-        if (!in_array($auth['role'], ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin'], true)) respond(403, null, 'Bạn không có quyền duyệt chi phí', false);
-        requireRole($auth, ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin']);
-
         $data = getBody();
         $statusInput = $data['status'] ?? 'approved'; // 'approved' or 'rejected'
         if (!in_array($statusInput, ['approved', 'rejected'], true)) {
@@ -1335,6 +1329,17 @@ class FinanceController
             if (!$expenseRow) {
                 $this->db->rollBack();
                 respond(404, null, 'Không tìm thấy chi phí', false);
+            }
+
+            $isAssigned = ((int)($expenseRow['approver_id'] ?? 0) === (int)$auth['user_id']) || 
+                          ((int)($expenseRow['approver_id_2'] ?? 0) === (int)$auth['user_id']) || 
+                          ((int)($expenseRow['approver_id_3'] ?? 0) === (int)$auth['user_id']);
+            $isCreator = ((int)($expenseRow['created_by'] ?? 0) === (int)$auth['user_id']);
+            $isPrivileged = in_array($auth['role'], ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin'], true);
+
+            if (!$isAssigned && !$isCreator && !$isPrivileged) {
+                $this->db->rollBack();
+                respond(403, null, 'Bạn không có quyền duyệt chi phí này', false);
             }
 
             if ($auth['role'] === 'manager') {

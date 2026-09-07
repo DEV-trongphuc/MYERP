@@ -205,7 +205,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                     
   const isTodayDayOff = Boolean(currentDayConfig && currentDayConfig.active === false);
   const morningShiftStart = String(currentDayConfig?.start || consultantProfile?.work_start_time || user?.work_start_time || '08:00').substring(0, 5);
-  const afternoonShiftEnd = String(currentDayConfig?.end_afternoon || currentDayConfig?.end || consultantProfile?.work_end_time || user?.work_end_time || '17:00').substring(0, 5);
+  // Giờ ra ca chuẩn của công ty là 17:00 / 17:30 (lấy theo currentDayConfig hoặc 17:00). 22:00 của Sales chỉ là giờ nhận data.
+  const rawWorkEnd = String(currentDayConfig?.end_afternoon || currentDayConfig?.end || user?.work_end_time || '17:00').substring(0, 5);
+  const afternoonShiftEnd = (rawWorkEnd > '18:30' || ['sales', 'sale'].includes(String(user?.role).toLowerCase())) ? '17:00' : rawWorkEnd;
 
   const isCheckOutMode = !!(requireCheckout && todayCheckIn && todayCheckIn.status !== 'rejected' && !todayCheckIn.check_out_time);
   const isBeforeMorningStart = curHM < morningShiftStart;
@@ -868,9 +870,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
               border: '1px solid var(--color-border)'
             }}>
               {t('Quy định:')} <span style={{ color: '#BD1D2D' }}>
-                {isCheckOutMode 
-                  ? (consultantProfile?.work_end_time || '17:00') 
-                  : (consultantProfile?.work_start_time || '08:00')}
+                {isCheckOutMode ? afternoonShiftEnd : morningShiftStart}
               </span>
             </div>
           </div>
@@ -1133,19 +1133,19 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
               width: 22, 
               height: 22, 
               borderRadius: '50%', 
-              background: locationError ? 'rgba(239, 68, 68, 0.15)' : gpsCoords ? 'rgba(16, 185, 129, 0.15)' : 'rgba(189, 29, 45, 0.1)', 
+              background: gpsCoords ? 'rgba(16, 185, 129, 0.15)' : 'rgba(189, 29, 45, 0.1)', 
               flexShrink: 0, 
               marginTop: '2px' 
             }}>
-              <MapPin size={14} color={locationError ? '#ef4444' : gpsCoords ? '#10b981' : '#BD1D2D'} />
+              <MapPin size={14} color={gpsCoords ? '#10b981' : '#BD1D2D'} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: locationError ? '#ef4444' : gpsCoords ? '#10b981' : 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {locationError ? t('LỖI ĐỊNH VỊ (GPS BẮT BUỘC)') : gpsCoords ? t('ĐÃ XÁC THỰC GPS CHÍNH XÁC') : t('VỊ TRÍ CHẤM CÔNG')}
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: gpsCoords ? '#10b981' : 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {gpsCoords ? t('ĐÃ XÁC THỰC GPS CHÍNH XÁC') : locationError ? t('VỊ TRÍ (TÙY CHỌN - CHƯA BẬT ĐỊNH VỊ)') : t('VỊ TRÍ CHẤM CÔNG')}
                 {addressLoading && <RefreshCw size={10} className="spin" style={{ marginLeft: '4px', color: 'var(--color-text-muted)' }} />}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text)', marginTop: '4px', wordBreak: 'break-word', opacity: 0.9, lineHeight: 1.4 }}>
-                {locationError || currentAddress || (gpsCoords ? `${gpsCoords.latitude.toFixed(6)}, ${gpsCoords.longitude.toFixed(6)}` : addressLoading ? t('Đang định vị GPS...') : t('Chưa có vị trí'))}
+                {currentAddress || (gpsCoords ? `${gpsCoords.latitude.toFixed(6)}, ${gpsCoords.longitude.toFixed(6)}` : addressLoading ? t('Đang định vị GPS...') : (locationError ? t('Chưa bật định vị GPS (vẫn chấm công bình thường)') : t('Vị trí tùy chọn')))}
               </div>
             </div>
           </div>

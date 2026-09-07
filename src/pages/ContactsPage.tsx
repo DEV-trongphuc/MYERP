@@ -879,7 +879,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       const r = await api.get('/contacts', { params });
       const data = r.data.data;
       const items = data.items || [];
-      setContacts(items.map((c: any) => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
+      const uniqueItems = Array.from(new Map(items.map((c: any) => [c.id, c])).values());
+      setContacts(uniqueItems.map((c: any) => ({ ...c, score: calcScore(c, scoringRules, decayDays) })));
       setTotal(data.total || items.length);
       if (data.stage_counts) {
         setStageCounts(data.stage_counts);
@@ -1185,7 +1186,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     try {
       const r = await api.post('/contacts', createForm);
       const newContact = r.data.data;
-      setContacts(prev => [newContact, ...prev]);
+      if (newContact && newContact.id) {
+        setContacts(prev => [newContact, ...prev.filter(c => c && c.id !== newContact.id)]);
+      }
       setShowCreateModal(false);
       setCreateForm({ full_name: '', email: '', phone: '', company_name: '', job_title: '', status: 'lead', source: 'other', owner_id: '', city: '', ward: '', address: '' });
       addToast('Đã thêm liên hệ mới thành công', 'success');
