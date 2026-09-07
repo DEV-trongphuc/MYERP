@@ -31,6 +31,7 @@ import { useUIStore } from '../store/uiStore';
 import { Package } from 'lucide-react';
 import { AssignedAssetsSection, type AssignedAsset } from '../components/ui/AssignedAssetsSection';
 
+import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { MentionInput } from '../components/ui/MentionInput';
@@ -641,7 +642,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   });
   const [wsTeamId, setWsTeamId] = useState('all_teams_bypass');
-  const stripHtml = (html: string) => html ? html.replace(/<[^>]*>/g, '').trim() : '';
   const [wsUserId, setWsUserId] = useState('');
   const [wsActivityType, setWsActivityType] = useState('task');
   const [wsRelatedType, setWsRelatedType] = useState('');
@@ -975,7 +975,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (match) {
         checklistItems.push({
           checked: match[1].toLowerCase() === 'x',
-          text: match[2].trim()
+          text: decodeHtmlEntities(match[2].trim())
         });
       } else {
         descLines.push(line);
@@ -983,7 +983,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     });
     
     return {
-      pureDescription: descLines.join('\n').trim(),
+      pureDescription: decodeHtmlEntities(descLines.join('\n').trim()),
       checklist: checklistItems
     };
   };
@@ -1194,6 +1194,26 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     const datePreset = wsDatePreset && wsDatePreset !== 'all' ? getPresetDates(wsDatePreset) : null;
 
     const filtered = wsTasks.filter(task => {
+      // 0. Strict privacy isolation: "của ai thấy người đó hoặc có liên quan thì mới thấy thôi ko được thấy mà ko có liên quan nhé"
+      const currentRole = String(currentUser?.role || '').toLowerCase();
+      const isTopAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(currentRole);
+      if (!isTopAdmin) {
+        const uid = Number(currentUser?.id || 0);
+        const uidStr = String(uid);
+        const isAssignee = Number(task.user_id) === uid;
+        const isCreator = Number(task.created_by) === uid;
+        const isApprover = Number(task.approver_id) === uid;
+        const isParticipant = task.participant_ids ? String(task.participant_ids).split(',').map(s => s.trim()).includes(uidStr) : false;
+        const isContactOrDealInvolved = (task.contact_owner_id && Number(task.contact_owner_id) === uid) ||
+                                       (task.owner_id && Number(task.owner_id) === uid) ||
+                                       (task.collaborator_ids && String(task.collaborator_ids).split(',').map(s => s.trim()).includes(uidStr));
+        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass'));
+
+        if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isContactOrDealInvolved && !isManagerViewingTeam) {
+          return false;
+        }
+      }
+
       // 1. Filter out hidden tasks or filter by hidden status only
       if (wsStatus === 'hidden') {
         if (!task.is_hidden || Number(task.is_hidden) !== 1) return false;
@@ -1306,6 +1326,24 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       // Skip hidden tasks in statistics
       if (task.is_hidden || Number(task.is_hidden) === 1) return;
 
+      const currentRole = String(currentUser?.role || '').toLowerCase();
+      const isTopAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(currentRole);
+      if (!isTopAdmin) {
+        const uid = Number(currentUser?.id || 0);
+        const isAssignee = Number(task.user_id) === uid;
+        const isCreator = Number(task.created_by) === uid;
+        const isApprover = Number(task.approver_id) === uid;
+        const isParticipant = task.participant_ids ? String(task.participant_ids).split(',').map(s => s.trim()).includes(currentUserIdStr) : false;
+        const isContactOrDealInvolved = (task.contact_owner_id && Number(task.contact_owner_id) === uid) ||
+                                       (task.owner_id && Number(task.owner_id) === uid) ||
+                                       (task.collaborator_ids && String(task.collaborator_ids).split(',').map(s => s.trim()).includes(currentUserIdStr));
+        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass'));
+
+        if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isContactOrDealInvolved && !isManagerViewingTeam) {
+          return;
+        }
+      }
+
       // Filter tasks based on current wsSubTab
       if (wsSubTab === 'customer') {
         if (!task.related_type || !['contact', 'deal', 'company'].includes(task.related_type)) return;
@@ -1376,16 +1414,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       try {
         const parsed = JSON.parse(trimmed);
         if (parsed.erp_task?.description) {
-          return parsed.erp_task.description;
+          return decodeHtmlEntities(parsed.erp_task.description);
         }
         if (parsed.description) {
-          return parsed.description;
+          return decodeHtmlEntities(parsed.description);
         }
       } catch {
         // fallback
       }
     }
-    return body;
+    return decodeHtmlEntities(body);
   };
 
   // Task details modal states inside SalePortal

@@ -37,6 +37,7 @@ import styles from './EntityDrawer.module.css';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getModulePermissionScope } from '../store/authStore';
+import { decodeHtmlEntities } from '../utils/textUtils';
 
 const EditHistoryIndicator = ({ history }: { history: any }) => {
   const [showPopup, setShowPopup] = useState(false);
@@ -8197,17 +8198,45 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 gap: '4px',
                                 fontSize: '0.75rem',
                                 fontWeight: 600,
-                                padding: '3px 8px',
+                                padding: '4px 10px',
                                 borderRadius: '6px',
-                                border: '1px solid var(--color-border)',
-                                background: isEditingInitialNotes ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                                color: isEditingInitialNotes ? 'var(--color-primary)' : 'var(--color-text)',
-                                cursor: 'pointer'
+                                border: isEditingInitialNotes ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                background: isEditingInitialNotes ? 'var(--color-primary)' : 'var(--color-surface)',
+                                color: isEditingInitialNotes ? '#fff' : 'var(--color-text)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
                               }}
                             >
-                              <Pencil size={12} />
-                              <span>{isEditingInitialNotes ? 'Xong' : 'Chỉnh sửa'}</span>
+                              {isEditingInitialNotes ? <Save size={12} /> : <Pencil size={12} />}
+                              <span>{isEditingInitialNotes ? 'Lưu' : 'Chỉnh sửa'}</span>
                             </button>
+                            {isEditingInitialNotes && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsEditingInitialNotes(false);
+                                  if (contact) {
+                                    setFormData((prev: any) => ({ ...prev, notes: contact.notes || '' }));
+                                  }
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--color-border)',
+                                  background: 'var(--color-surface)',
+                                  color: 'var(--color-text-muted)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <span>Hủy</span>
+                              </button>
+                            )}
                             <div 
                               onClick={() => setIsInitialNotesExpanded(!isInitialNotesExpanded)}
                               style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
@@ -8248,8 +8277,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 />
                               ) : (
                                 <div 
-                                  onClick={() => setIsEditingInitialNotes(true)}
-                                  title="Nhấp để chỉnh sửa ghi chú ban đầu"
                                   style={{ 
                                     background: '#fefce8', 
                                     border: '1px solid #fef08a',
@@ -8262,11 +8289,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     whiteSpace: 'pre-wrap',
                                     wordBreak: 'break-word',
                                     boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02), 0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                                    minHeight: '120px',
-                                    cursor: 'pointer'
+                                    minHeight: '80px',
+                                    userSelect: 'text'
                                   }}
                                 >
-                                  {formData.notes || 'Không có ghi chú ban đầu (Nhấp để thêm)'}
+                                  {formData.notes ? decodeHtmlEntities(formData.notes) : <span style={{ color: '#a16207', fontStyle: 'italic' }}>Không có ghi chú ban đầu</span>}
                                 </div>
                               )}
                             </motion.div>

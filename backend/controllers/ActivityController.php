@@ -236,7 +236,7 @@ class ActivityController {
             return false;
         }
 
-        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
+        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin'], true)) {
             return true;
         }
 
@@ -262,7 +262,7 @@ class ActivityController {
         }
 
         // 4. Check Team Manager access to team member tasks
-        if ($role === 'manager') {
+        if ($role === 'manager' || in_array($role, ['sale_admin', 'saleadmin'], true)) {
             if (!empty($activity['user_id'])) {
                 $stmt = $this->db->prepare("
                     SELECT 1 FROM users u 
@@ -273,6 +273,19 @@ class ActivityController {
                 if ($stmt->fetch()) {
                     return true;
                 }
+            }
+        }
+
+        // 5. Check Contact/Deal relation
+        if (!empty($activity['related_type']) && !empty($activity['related_id'])) {
+            if ($activity['related_type'] === 'contact') {
+                $chk = $this->db->prepare("SELECT 1 FROM contacts WHERE id = ? AND (owner_id = ? OR FIND_IN_SET(?, collaborator_ids))");
+                $chk->execute([(int)$activity['related_id'], $userId, (string)$userId]);
+                if ($chk->fetch()) return true;
+            } elseif ($activity['related_type'] === 'deal') {
+                $chk = $this->db->prepare("SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = ? AND (d.owner_id = ? OR ct.owner_id = ? OR FIND_IN_SET(?, ct.collaborator_ids))");
+                $chk->execute([(int)$activity['related_id'], $userId, $userId, (string)$userId]);
+                if ($chk->fetch()) return true;
             }
         }
 
@@ -328,61 +341,22 @@ class ActivityController {
             }
         }
 
-        if (in_array($auth['role'], ['sales', 'sale'], true)) {
+        if (in_array($auth['role'], ['super_admin', 'superadmin', 'admin'], true)) {
+            // Super Admin / Admin: full oversight, can filter by team_id or user_id
+        } else if (in_array($auth['role'], ['director'], true)) {
+            // Director: oversight of company-wide tasks except private personal tasks
             $where[] = '(
-                a.user_id = ? 
-                OR a.created_by = ?
-                OR a.approver_id = ?
-                OR FIND_IN_SET(?, a.participant_ids)
-                OR (a.related_type = \'contact\' AND EXISTS (
-                    SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (ct.owner_id = ? OR FIND_IN_SET(?, ct.collaborator_ids) OR ct.id IN (
-                        SELECT contact_id FROM cooperation_slips 
-                        WHERE shares_json IS NOT NULL AND JSON_VALID(shares_json) AND JSON_CONTAINS(JSON_KEYS(shares_json), JSON_QUOTE(CAST(? AS CHAR)))
-                    ))
-                )) 
-                OR (a.related_type = \'deal\' AND EXISTS (
-                    SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
-                        d.owner_id = ? OR ct.owner_id = ? OR FIND_IN_SET(?, ct.collaborator_ids) OR ct.id IN (
-                            SELECT contact_id FROM cooperation_slips 
-                            WHERE shares_json IS NOT NULL AND JSON_VALID(shares_json) AND JSON_CONTAINS(JSON_KEYS(shares_json), JSON_QUOTE(CAST(? AS CHAR)))
-                        )
+                NOT (
+                    (
+                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
+                        OR (COALESCE(a.tags, \'\') LIKE \'%ca_nhan%\' OR COALESCE(a.tags, \'\') LIKE \'%personal%\')
                     )
-                ))
-                OR (a.related_type = \'project\' AND EXISTS (
-                    SELECT 1 FROM project_roster pr WHERE pr.project_id = a.related_id AND pr.user_id = ?
-                ) AND (a.user_id IS NULL OR a.user_id = 0 OR a.user_id = ?))
-                OR (a.related_type = \'campaign\' AND EXISTS (
-                    SELECT 1 FROM marketing_campaigns mc WHERE mc.id = a.related_id AND (FIND_IN_SET(?, mc.user_ids) OR FIND_IN_SET(?, mc.manager_ids) OR mc.created_by = ?)
-                ) AND (a.user_id IS NULL OR a.user_id = 0 OR a.user_id = ?))
-                OR (a.tags LIKE \'internal_%\' AND (
-                    (a.user_id = ?)
-                    OR (
-                        (a.user_id IS NULL OR a.user_id = 0)
-                        AND (a.created_by IN (SELECT id FROM users WHERE team_id = (SELECT team_id FROM users WHERE id = ?)))
-                    )
-                    OR a.body LIKE \'%"scope":"global"%\'
-                ))
+                    AND a.user_id != ? AND a.created_by != ?
+                )
             )';
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id']; // ct.owner_id
-            $params[] = $auth['user_id']; // ct.collaborator_ids (NEW)
-            $params[] = $auth['user_id']; // coop slips
-            $params[] = $auth['user_id']; // d.owner_id
-            $params[] = $auth['user_id']; // ct.owner_id
-            $params[] = $auth['user_id']; // ct.collaborator_ids (NEW)
-            $params[] = $auth['user_id']; // coop slips
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-        } else if ($auth['role'] === 'manager') {
+        } else if ($auth['role'] === 'manager' || (!empty($managedUserIds) && in_array($auth['role'], ['sale_admin', 'saleadmin'], true))) {
             $teamUserClause = !empty($managedUserIds) ? "a.user_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "1=0";
             $teamCtClause = !empty($managedUserIds) ? "OR ct.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "";
             $teamDClause = !empty($managedUserIds) ? "OR d.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ") OR ct.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "";
@@ -421,7 +395,6 @@ class ActivityController {
                             OR (COALESCE(a.tags, '') LIKE '%ca_nhan%' OR COALESCE(a.tags, '') LIKE '%personal%')
                         )
                     )
-                    OR a.body LIKE '%\"scope\":\"global\"%'
                 ))
             )";
             $params[] = $auth['user_id'];
@@ -435,29 +408,59 @@ class ActivityController {
             $params[] = (string)$auth['user_id'];
             $params[] = (string)$auth['user_id'];
             $params[] = $auth['user_id'];
-        } else if (in_array($auth['role'], ['director', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            $where[] = '(
-                NOT (
-                    (
-                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
-                        OR (COALESCE(a.tags, \'\') LIKE \'%ca_nhan%\' OR COALESCE(a.tags, \'\') LIKE \'%personal%\')
-                    )
-                    AND a.user_id != ? AND a.created_by != ?
-                )
-            )';
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-        } else if (!in_array($auth['role'], ['super_admin', 'superadmin', 'admin'], true)) {
+        } else {
+            // STRICT ISOLATION: For sales, academic, teacher, hoc_vu, tro_giang, giang_vien, marketing, accountant, staff, etc.
+            // "Của ai thấy người đó hoặc có liên quan thì mới thấy thôi ko được thấy mà ko có liên quan nhé"
             $where[] = '(
                 a.user_id = ? 
                 OR a.created_by = ?
                 OR a.approver_id = ?
                 OR FIND_IN_SET(?, a.participant_ids)
+                OR (a.related_type = \'contact\' AND EXISTS (
+                    SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (
+                        ct.owner_id = ? 
+                        OR FIND_IN_SET(?, ct.collaborator_ids) 
+                        OR ct.id IN (
+                            SELECT contact_id FROM cooperation_slips 
+                            WHERE shares_json IS NOT NULL AND JSON_VALID(shares_json) AND JSON_CONTAINS(JSON_KEYS(shares_json), JSON_QUOTE(CAST(? AS CHAR)))
+                        )
+                    )
+                )) 
+                OR (a.related_type = \'deal\' AND EXISTS (
+                    SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
+                        d.owner_id = ? 
+                        OR ct.owner_id = ? 
+                        OR FIND_IN_SET(?, ct.collaborator_ids) 
+                        OR ct.id IN (
+                            SELECT contact_id FROM cooperation_slips 
+                            WHERE shares_json IS NOT NULL AND JSON_VALID(shares_json) AND JSON_CONTAINS(JSON_KEYS(shares_json), JSON_QUOTE(CAST(? AS CHAR)))
+                        )
+                    )
+                ))
+                OR (a.related_type = \'project\' AND EXISTS (
+                    SELECT 1 FROM project_roster pr WHERE pr.project_id = a.related_id AND pr.user_id = ?
+                ) AND (a.user_id IS NULL OR a.user_id = 0 OR a.user_id = ?))
+                OR (a.related_type = \'campaign\' AND EXISTS (
+                    SELECT 1 FROM marketing_campaigns mc WHERE mc.id = a.related_id AND (FIND_IN_SET(?, mc.user_ids) OR FIND_IN_SET(?, mc.manager_ids) OR mc.created_by = ?)
+                ) AND (a.user_id IS NULL OR a.user_id = 0 OR a.user_id = ?))
             )';
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
             $params[] = (string)$auth['user_id'];
+            $params[] = $auth['user_id']; // ct.owner_id
+            $params[] = (string)$auth['user_id']; // ct.collaborator_ids
+            $params[] = $auth['user_id']; // coop slips
+            $params[] = $auth['user_id']; // d.owner_id
+            $params[] = $auth['user_id']; // ct.owner_id
+            $params[] = (string)$auth['user_id']; // ct.collaborator_ids
+            $params[] = $auth['user_id']; // coop slips
+            $params[] = $auth['user_id']; // project_roster user_id
+            $params[] = $auth['user_id']; // a.user_id
+            $params[] = (string)$auth['user_id']; // campaign user_ids
+            $params[] = (string)$auth['user_id']; // campaign manager_ids
+            $params[] = $auth['user_id']; // campaign created_by
+            $params[] = $auth['user_id']; // a.user_id
         }
         if ($type)     { 
             if (strpos($type, ',') !== false) {
@@ -555,6 +558,14 @@ class ActivityController {
 
         foreach ($items as &$item) {
             $item['first_image_url'] = $this->getFirstImageUrl($item, $preFetchedComments[$item['id']] ?? []);
+            if (!empty($item['subject'])) {
+                $item['subject'] = html_entity_decode($item['subject'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $item['subject'] = str_replace(["\xc2\xa0", "&nbsp;"], ' ', $item['subject']);
+                $item['subject'] = trim(preg_replace('/\s+/', ' ', $item['subject']));
+            }
+            if (!empty($item['body']) && is_string($item['body'])) {
+                $item['body'] = str_replace('&nbsp;', ' ', $item['body']);
+            }
         }
         respond(200,['items'=>$items,'total'=>$total,'page'=>$page,'limit'=>$limit]);
     }
@@ -563,6 +574,12 @@ class ActivityController {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền thêm mới', false);
         $b=getBody();
         if (empty($b['subject'])||empty($b['type'])) respond(422,null,'Tiêu đề và loại là bắt buộc',false);
+
+        if (!empty($b['subject'])) {
+            $cleanSubject = html_entity_decode(strip_tags((string)$b['subject']), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $cleanSubject = str_replace(["\xc2\xa0", "&nbsp;"], ' ', $cleanSubject);
+            $b['subject'] = trim(preg_replace('/\s+/', ' ', $cleanSubject));
+        }
         
         // Verify related entity if provided
         $allowedRelTypes = ['contact', 'company', 'deal', 'project', 'campaign', 'team'];
@@ -914,6 +931,12 @@ class ActivityController {
             } else {
                 $b['related_type'] = null; $b['related_id'] = null; // Reset if type not allowed
             }
+        }
+
+        if (isset($b['subject'])) {
+            $cleanSubject = html_entity_decode(strip_tags((string)$b['subject']), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $cleanSubject = str_replace(["\xc2\xa0", "&nbsp;"], ' ', $cleanSubject);
+            $b['subject'] = trim(preg_replace('/\s+/', ' ', $cleanSubject));
         }
 
         $fields=['user_id','type','subject','body','status','priority','start_date','due_date','done_at','related_type','related_id','contact_id','tags','participant_ids','progress','require_approval','approver_id','approval_status','link'];
