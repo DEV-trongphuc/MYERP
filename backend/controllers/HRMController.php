@@ -388,6 +388,7 @@ class HRMController {
         $isCreator = ($auth['user_id'] == $leaveRow['user_id']);
         $isApprover1 = ($auth['user_id'] == $leaveRow['approver_id']);
         $isApprover2 = ($auth['user_id'] == $leaveRow['approver_id_2']);
+        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
         $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
 
         if (!$isApprover1 && !$isApprover2 && !$isPrivileged && !$isCreator) {
