@@ -1847,10 +1847,10 @@ export const QuickAddLeadModal = () => {
         <button
           className="btn primary"
           onClick={handleManualSubmit}
-          disabled={isSubmittingManual || (activeTab === 'single' ? (!manualData.phone && !manualData.email) : bulkParsedLeads.length === 0)}
+          disabled={isSubmittingManual || (activeTab === 'bulk' && bulkParsedLeads.length === 0)}
           style={{ background: 'linear-gradient(135deg, #bd1d2d 0%, #e63946 100%)', border: 'none' }}
         >
-          {isSubmittingManual ? t('Đang lưu...') : (activeTab === 'single' ? t('Lưu & Giao Data') : t('Import và Giao ') + bulkParsedLeads.length + t(' Data'))}
+          {isSubmittingManual ? t('Đang lưu...') : (activeTab === 'single' ? t('Lưu & Phân bổ Khách hàng') : t('Import và Giao ') + bulkParsedLeads.length + t(' Data'))}
         </button>
       </div>
     </CustomModal>
