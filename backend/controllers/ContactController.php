@@ -15,8 +15,9 @@ class ContactController {
         $search  = $_GET['search'] ?? '';
         $status  = $_GET['status'] ?? '';
         $segment = $_GET['segment'] ?? 'all';
+        $uncontacted = !empty($_GET['uncontacted']) && in_array(strtolower((string)$_GET['uncontacted']), ['1', 'true', 'yes'], true);
         if ($status === 'not_contacted') {
-            $segment = 'not_contacted';
+            $uncontacted = true;
             $status = '';
         }
         $source  = $_GET['source'] ?? '';
@@ -214,7 +215,6 @@ class ContactController {
                 break;
             case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
             case 'no_contact': $where[] = "c.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
-            case 'not_contacted': $where[] = "NOT EXISTS (SELECT 1 FROM activities WHERE related_type = 'contact' AND related_id = c.id) AND NOT EXISTS (SELECT 1 FROM notes WHERE entity_type = 'contact' AND entity_id = c.id)"; break;
             case 'new_week':   $where[] = "c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
         }
 
@@ -271,6 +271,36 @@ class ContactController {
                     $stageCounts[$lsKey] = (int)$cnt;
                 }
             }
+            // Compute uncontacted count
+            try {
+                $unStmt = $this->db->prepare("
+                    SELECT COUNT(*) 
+                    FROM contacts c 
+                    WHERE $scWhereStr 
+                      AND (c.last_contact IS NULL OR c.last_contact = '')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM activities a 
+                          WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
+                            AND a.deleted_at IS NULL
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM notes n 
+                          WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                            AND n.body NOT LIKE '[Tự động]%' 
+                            AND n.body NOT LIKE '[Phân bổ]%' 
+                            AND n.body NOT LIKE '[Giao data]%'
+                            AND n.body NOT LIKE '[Auto]%'
+                            AND n.body NOT LIKE '[Import]%'
+                            AND n.body NOT LIKE '[Tái phân bổ]%'
+                            AND n.body NOT LIKE 'Tái phân bổ%'
+                            AND n.body NOT LIKE 'Giao lại%'
+                      )
+                ");
+                $unStmt->execute($baseParams);
+                $stageCounts['uncontacted'] = (int)$unStmt->fetchColumn();
+            } catch (\Throwable $e) {
+                $stageCounts['uncontacted'] = 0;
+            }
         } catch (\Exception $e) {
             $stageCounts = [];
         }
@@ -301,6 +331,29 @@ class ContactController {
                 $where[] = 'c.stage_id = ?';
             }
             $params[] = (int)$stage;
+        }
+
+        if ($uncontacted || $segment === 'not_contacted') {
+            $where[] = "(
+                (c.last_contact IS NULL OR c.last_contact = '')
+                AND NOT EXISTS (
+                    SELECT 1 FROM activities a 
+                    WHERE ((a.related_type = 'contact' AND a.related_id = c.id) OR a.contact_id = c.id) 
+                      AND a.deleted_at IS NULL
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM notes n 
+                    WHERE n.entity_type = 'contact' AND n.entity_id = c.id 
+                      AND n.body NOT LIKE '[Tự động]%' 
+                      AND n.body NOT LIKE '[Phân bổ]%' 
+                      AND n.body NOT LIKE '[Giao data]%'
+                      AND n.body NOT LIKE '[Auto]%'
+                      AND n.body NOT LIKE '[Import]%'
+                      AND n.body NOT LIKE '[Tái phân bổ]%'
+                      AND n.body NOT LIKE 'Tái phân bổ%'
+                      AND n.body NOT LIKE 'Giao lại%'
+                )
+            )";
         }
 
         $whereStr = implode(' AND ', $where);

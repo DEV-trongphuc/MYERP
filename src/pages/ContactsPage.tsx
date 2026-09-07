@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -484,9 +484,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [creating, setCreating] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
 
-  // Quick Filter state (Lost & Nurture)
+  // Quick Filter state (Lost & Nurture & Uncontacted)
   const [showLost, setShowLost] = useState<boolean>(false);
   const [quickLeadStatus, setQuickLeadStatus] = useState<string>(''); // '' (all/active), 'nurture', 'lost'
+  const [filterUncontacted, setFilterUncontacted] = useState<boolean>(() => {
+    const uc = searchParams.get('uncontacted');
+    return uc === '1' || uc === 'true' || searchParams.get('status') === 'not_contacted';
+  });
 
   // Advanced Filter state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -617,11 +621,12 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   useEffect(() => {
     const statusParam = searchParams.get('status');
-    if (statusParam === 'not_contacted') {
-      setFilterStatus('not_contacted');
-      setActiveFilters(prev => ({ ...prev, status: 'not_contacted' }));
+    const uncontactedParam = searchParams.get('uncontacted');
+    if (statusParam === 'not_contacted' || uncontactedParam === '1' || uncontactedParam === 'true') {
+      setFilterUncontacted(true);
       const newParams = new URLSearchParams(searchParams);
-      newParams.delete('status');
+      if (statusParam === 'not_contacted') newParams.delete('status');
+      if (uncontactedParam) newParams.delete('uncontacted');
       setSearchParams(newParams, { replace: true });
     }
 
@@ -829,6 +834,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         }
       }
 
+      if (filterUncontacted) {
+        params.uncontacted = 1;
+      }
+
       if (activeFilters.status) {
         if (/^\d+$/.test(activeFilters.status)) {
           params.stage_id = activeFilters.status;
@@ -898,7 +907,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (initialMetadataLoaded) {
       fetchData();
     }
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage]);
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -1017,6 +1026,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
 
   const handleResetFilters = () => {
+    setFilterUncontacted(false);
     setFilterStatus('');
     setFilterStageOp('in');
     setFilterLeadStatus('');
@@ -1550,9 +1560,50 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </span>
                         )}
                       </button>
- 
 
- 
+                      {/* Quick Filter: Chưa tương tác */}
+                      <button
+                        onClick={() => {
+                          setFilterUncontacted(!filterUncontacted);
+                          setPage(1);
+                          setShowMobileActions(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: 'none',
+                          background: filterUncontacted ? 'rgba(239, 68, 68, 0.08)' : 'transparent',
+                          color: filterUncontacted ? '#ef4444' : 'var(--color-text)',
+                          borderRadius: '8px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <PhoneOff size={12} style={{ color: filterUncontacted ? '#ef4444' : 'inherit' }} />
+                        <span>Chưa tương tác</span>
+                        {typeof stageCounts['uncontacted'] === 'number' && (
+                          <span
+                            style={{
+                              background: filterUncontacted ? '#ef4444' : 'var(--color-bg-light)',
+                              color: filterUncontacted ? '#ffffff' : 'var(--color-text-muted)',
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              borderRadius: '10px',
+                              padding: '1px 6px',
+                              marginLeft: 'auto',
+                              lineHeight: 1.4
+                            }}
+                          >
+                            {stageCounts['uncontacted']}
+                          </span>
+                        )}
+                      </button>
+
                       <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
  
                       {/* Sorting Dropdowns inside mobile menu */}
@@ -1819,6 +1870,56 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     {activeFiltersCount}
                   </span>
                 )}
+              </button>
+
+              {/* Quick Filter: Chưa tương tác */}
+              <button 
+                type="button"
+                onClick={() => {
+                  setFilterUncontacted(prev => !prev);
+                  setPage(1);
+                }}
+                style={{
+                  height: '38px',
+                  padding: '0 0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  border: filterUncontacted ? '1.5px solid #ef4444' : '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  background: filterUncontacted ? 'rgba(239, 68, 68, 0.08)' : 'var(--color-surface)',
+                  color: filterUncontacted ? '#ef4444' : 'var(--color-text)',
+                  fontWeight: filterUncontacted ? 700 : 600,
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s',
+                  boxShadow: filterUncontacted ? '0 2px 8px rgba(239, 68, 68, 0.2)' : 'var(--shadow-sm)',
+                  outline: 'none',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+                title={filterUncontacted ? "Bỏ lọc Chưa tương tác" : "Lọc nhanh các khách hàng chưa có tương tác"}
+              >
+                <PhoneOff size={14} style={{ color: filterUncontacted ? '#ef4444' : 'var(--color-text-muted)' }} />
+                <span>Chưa tương tác</span>
+                {typeof stageCounts['uncontacted'] === 'number' && (
+                  <span
+                    style={{
+                      background: filterUncontacted ? '#ef4444' : 'var(--color-bg-light)',
+                      color: filterUncontacted ? '#ffffff' : 'var(--color-text-muted)',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '10px',
+                      padding: '1px 6px',
+                      marginLeft: '2px',
+                      lineHeight: 1.4
+                    }}
+                  >
+                    {stageCounts['uncontacted']}
+                  </span>
+                )}
+                {filterUncontacted && <X size={12} style={{ marginLeft: '2px', opacity: 0.8 }} />}
               </button>
 
             </div>
