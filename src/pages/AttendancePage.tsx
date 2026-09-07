@@ -6193,10 +6193,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               <CheckCircle size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
                 <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
-                  {t("1. Chấm công Selfie & Xác thực GPS")}
+                  {t("1. Chấm công Khuôn mặt (Selfie) & Tọa độ GPS (Tùy chọn)")}
                 </h5>
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                  {t("Mỗi ca làm việc, TVV thực hiện Check-in / Check-out kèm hình ảnh khuôn mặt thực tế và định vị GPS. Điều này giúp ngăn ngừa gian lận chấm công hộ và đảm bảo nhân sự có mặt tại khu vực bán hàng quy định.")}
+                  {t("Mỗi ca làm việc, nhân sự thực hiện Check-in / Check-out kèm hình ảnh khuôn mặt thực tế. Tọa độ GPS là tùy chọn (hệ thống tự động ghi nhận nếu thiết bị có bật GPS, nếu không có GPS vẫn chấm công bình thường).")}
                 </p>
               </div>
             </div>

@@ -137,7 +137,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
     }
 
     if (!navigator.geolocation) {
-      setLocationError(t('Trình duyệt của bạn không hỗ trợ định vị GPS.'));
+      setLocationError(t('Thiết bị không hỗ trợ định vị GPS (không bắt buộc, vẫn chấm công bình thường).'));
       setAddressLoading(false);
       return;
     }
@@ -162,9 +162,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
           onLocationSuccess,
           (err2) => {
             if (!globalCachedGPS) {
-              let msg = t('Không thể lấy vị trí GPS. Vui lòng bật định vị.');
+              let msg = t('Không lấy được định vị GPS (không bắt buộc, vẫn chấm công bình thường).');
               if (err2.code === err2.PERMISSION_DENIED || error.code === error.PERMISSION_DENIED) {
-                msg = t('Vui lòng cấp quyền truy cập vị trí (GPS) trên trình duyệt để chấm công.');
+                msg = t('Chưa bật quyền vị trí GPS (không bắt buộc, vẫn chấm công bình thường).');
               }
               setLocationError(msg);
               setAddressLoading(false);
@@ -1133,19 +1133,29 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
               width: 22, 
               height: 22, 
               borderRadius: '50%', 
-              background: gpsCoords ? 'rgba(16, 185, 129, 0.15)' : 'rgba(189, 29, 45, 0.1)', 
+              background: gpsCoords ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.12)', 
               flexShrink: 0, 
               marginTop: '2px' 
             }}>
-              <MapPin size={14} color={gpsCoords ? '#10b981' : '#BD1D2D'} />
+              <MapPin size={14} color={gpsCoords ? '#10b981' : '#64748b'} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: gpsCoords ? '#10b981' : 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {gpsCoords ? t('ĐÃ XÁC THỰC GPS CHÍNH XÁC') : locationError ? t('VỊ TRÍ (TÙY CHỌN - CHƯA BẬT ĐỊNH VỊ)') : t('VỊ TRÍ CHẤM CÔNG')}
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: gpsCoords ? '#10b981' : 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span>{gpsCoords ? t('ĐÃ XÁC THỰC VỊ TRÍ GPS') : t('VỊ TRÍ')}</span>
+                <span style={{
+                  fontSize: '0.68rem',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  background: gpsCoords ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)',
+                  color: gpsCoords ? '#10b981' : 'var(--color-text-muted)',
+                  fontWeight: 600
+                }}>
+                  {gpsCoords ? t('Tùy chọn: Đã nhận diện') : t('Tùy chọn: Không bắt buộc')}
+                </span>
                 {addressLoading && <RefreshCw size={10} className="spin" style={{ marginLeft: '4px', color: 'var(--color-text-muted)' }} />}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text)', marginTop: '4px', wordBreak: 'break-word', opacity: 0.9, lineHeight: 1.4 }}>
-                {currentAddress || (gpsCoords ? `${gpsCoords.latitude.toFixed(6)}, ${gpsCoords.longitude.toFixed(6)}` : addressLoading ? t('Đang định vị GPS...') : (locationError ? t('Chưa bật định vị GPS (vẫn chấm công bình thường)') : t('Vị trí tùy chọn')))}
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', wordBreak: 'break-word', opacity: 0.9, lineHeight: 1.4 }}>
+                {currentAddress || (gpsCoords ? `${gpsCoords.latitude.toFixed(6)}, ${gpsCoords.longitude.toFixed(6)}` : addressLoading ? t('Đang định vị GPS...') : (locationError || t('Không có GPS vẫn chấm công bình thường')))}
               </div>
             </div>
           </div>

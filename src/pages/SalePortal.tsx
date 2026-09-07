@@ -3680,9 +3680,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
       let coords: { latitude: number; longitude: number } | null = null;
       try {
-        coords = await new Promise<{ latitude: number; longitude: number }>((resolve) => {
+        coords = await new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
           if (!navigator.geolocation) {
-            resolve({ latitude: 0, longitude: 0 });
+            resolve(null);
             return;
           }
           navigator.geolocation.getCurrentPosition(
@@ -3693,7 +3693,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               });
             },
             () => {
-              resolve({ latitude: 0, longitude: 0 });
+              resolve(null);
             },
             {
               enableHighAccuracy: true,
@@ -3707,7 +3707,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
 
       let addressStr = '';
-      if (coords) {
+      if (coords && coords.latitude && coords.longitude) {
         try {
           const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&accept-language=vi`;
           const geoRes = await fetch(geoUrl, {
