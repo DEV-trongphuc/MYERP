@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 243;
+$targetVersion = 244;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2517,8 +2517,24 @@ try {
         $logMsg("Nâng cấp lên phiên bản 243 hoàn tất.", "success");
     }
 
+    // ==========================================
+    // PHIÊN BẢN 244: BỔ SUNG INDEXES TỐI ƯU PIPELINE CONTACTS VÀ BỘ ĐẾM STAGES
+    // ==========================================
+    if ($currentVersion < 244 && $apply) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 244: Bổ sung Indexes cho contacts...", "info");
+        try {
+            $conn->query("ALTER TABLE `contacts` ADD INDEX IF NOT EXISTS `idx_contacts_tenant_lead_stage` (`tenant_id`, `lead_status`, `stage_id`, `deleted_at`)");
+            $conn->query("ALTER TABLE `contacts` ADD INDEX IF NOT EXISTS `idx_contacts_lead_status` (`lead_status`)");
+            $conn->query("ALTER TABLE `contacts` ADD INDEX IF NOT EXISTS `idx_contacts_last_contact` (`tenant_id`, `last_contact`, `deleted_at`)");
+            $logMsg("Đã bổ sung thành công các Indexes tối ưu pipeline cho bảng `contacts`.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 244: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 244 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '243') ON DUPLICATE KEY UPDATE setting_value = '243'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '244') ON DUPLICATE KEY UPDATE setting_value = '244'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

@@ -245,38 +245,61 @@ class ContactController {
         // Calculate counts per pipeline stage and lead status for quick status tabs
         $stageCounts = [];
         try {
-            $scWhere = $baseWhere;
-            $scWhere[] = "(c.lead_status != 'lost' OR c.lead_status IS NULL)";
-            $scWhereStr = implode(' AND ', $scWhere);
+            $baseWhereStr = implode(' AND ', $baseWhere);
 
-            // Compute total active count for "Tất cả" tab
-            $totStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $scWhereStr");
-            $totStmt->execute($baseParams);
-            $stageCounts['all'] = (int)$totStmt->fetchColumn();
+            // Single unified aggregate query for active stage counts, nurture count, and lost count
+            $aggStmt = $this->db->prepare("
+                SELECT 
+                    CASE 
+                        WHEN c.lead_status = 'lost' THEN 'lost'
+                        WHEN c.lead_status = 'nurture' THEN 'nurture'
+                        ELSE 'active'
+                    END as status_group,
+                    c.stage_id,
+                    COUNT(*) as cnt
+                FROM contacts c
+                WHERE $baseWhereStr
+                GROUP BY status_group, c.stage_id
+            ");
+            $aggStmt->execute($baseParams);
+            $aggRows = $aggStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-            $scStmt = $this->db->prepare("SELECT c.stage_id, COUNT(*) as cnt FROM contacts c WHERE $scWhereStr GROUP BY c.stage_id");
-            $scStmt->execute($baseParams);
-            $stageCountsFromDb = $scStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
-            foreach ($stageCountsFromDb as $sId => $cnt) {
-                $stageCounts[$sId] = (int)$cnt;
-            }
+            $activeTotal = 0;
+            $nurtureTotal = 0;
+            $lostTotal = 0;
 
-            // Compute nurture and lost counts
-            $lsWhereStr = implode(' AND ', $baseWhere);
-            $lsStmt = $this->db->prepare("SELECT c.lead_status, COUNT(*) as cnt FROM contacts c WHERE $lsWhereStr GROUP BY c.lead_status");
-            $lsStmt->execute($baseParams);
-            $leadStatusCounts = $lsStmt->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
-            foreach ($leadStatusCounts as $lsKey => $cnt) {
-                if (!empty($lsKey)) {
-                    $stageCounts[$lsKey] = (int)$cnt;
+            foreach ($aggRows as $row) {
+                $grp = $row['status_group'];
+                $sId = $row['stage_id'];
+                $cnt = (int)$row['cnt'];
+
+                if ($grp === 'nurture') {
+                    $nurtureTotal += $cnt;
+                } elseif ($grp === 'lost') {
+                    $lostTotal += $cnt;
+                } else {
+                    // Active pipeline leads
+                    if (!empty($sId)) {
+                        $stageCounts[(string)$sId] = ($stageCounts[(string)$sId] ?? 0) + $cnt;
+                    }
+                    $activeTotal += $cnt;
                 }
             }
-            // Compute uncontacted count
+
+            $stageCounts['all'] = $activeTotal;
+            $stageCounts['nurture'] = $nurtureTotal;
+            $stageCounts['lost'] = $lostTotal;
+
+            // Compute uncontacted count (for active pipeline leads only)
             try {
+                $unWhere = $baseWhere;
+                $unWhere[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
+                $unWhereStr = implode(' AND ', $unWhere);
+
                 $unStmt = $this->db->prepare("
                     SELECT COUNT(*) 
                     FROM contacts c 
-                    WHERE $scWhereStr 
+                    WHERE $unWhereStr 
                       AND (c.last_contact IS NULL OR c.last_contact = '')
                       AND NOT EXISTS (
                           SELECT 1 FROM activities a 
@@ -305,7 +328,7 @@ class ContactController {
             $stageCounts = [];
         }
 
-        // Filter by Lead Status (active, nurture, lost) or default hide lost
+        // Filter by Lead Status (active, nurture, lost) or default hide lost & nurture for active pipeline
         if ($leadStatus !== '') {
             $statuses = array_filter(array_map('trim', explode(',', $leadStatus)));
             if (!empty($statuses)) {
@@ -320,8 +343,8 @@ class ContactController {
                 }
             }
         } elseif (!$showLost) {
-            // Default filter: automatically hide lost contacts unless show_lost=1 is explicitly requested
-            $where[] = "(c.lead_status != 'lost' OR c.lead_status IS NULL)";
+            // Default filter for active pipeline stages: hide both lost AND nurture
+            $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         }
 
         if ($stage) {
@@ -391,7 +414,7 @@ class ContactController {
                    END as company_name,
                    u.full_name as owner_name,
                    u.avatar_url as owner_avatar,
-                   ps.name as stage_name, ps.color as stage_color,
+                   COALESCE(ps.name, ps_fb.name) as stage_name, COALESCE(ps.color, ps_fb.color) as stage_color,
                    dl.received_at as distributed_at,
                    dl.status as dl_status,
                    dl.round_id as dl_round_id,
@@ -412,7 +435,8 @@ class ContactController {
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
-            LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
+            LEFT JOIN pipeline_stages ps ON ps.id = c.stage_id
+            LEFT JOIN pipeline_stages ps_fb ON (c.stage_id IS NULL AND ps_fb.system_slug = c.pipeline_status)
             LEFT JOIN leads l ON l.id = COALESCE(
                 (SELECT MAX(id) FROM leads WHERE c.person_id IS NOT NULL AND person_id = c.person_id),
                 (SELECT MAX(id) FROM leads WHERE c.phone IS NOT NULL AND phone = c.phone),
