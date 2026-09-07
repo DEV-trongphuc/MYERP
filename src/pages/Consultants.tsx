@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { withRouterFreezer } from '../components/RouterFreezer';
@@ -207,6 +207,14 @@ const ConsultantsInner = () => {
   const [branchSearchQuery, setBranchSearchQuery] = useState('');
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<any>(null);
+  const isLeaderOfEditingTeam = useMemo(() => {
+    if (!editingTeam || !user?.id) return false;
+    if (String(editingTeam.leader_id) === String(user.id)) return true;
+    const coLeaderIds = editingTeam.co_leader_ids ? (Array.isArray(editingTeam.co_leader_ids) ? editingTeam.co_leader_ids.map(String) : String(editingTeam.co_leader_ids).split(',').map((id: any) => id.trim())) : [];
+    return coLeaderIds.includes(String(user.id));
+  }, [editingTeam, user]);
+
+  const canEditTeam = isWriteAuthorized || isLeaderOfEditingTeam;
   const [isUploadingTeamAvatar, setIsUploadingTeamAvatar] = useState(false);
   const [teamFormData, setTeamFormData] = useState({
     name: '',
@@ -2023,46 +2031,72 @@ const ConsultantsInner = () => {
                     </div>
 
                     {/* Actions */}
-                    {isWriteAuthorized && (
-                      <div 
-                        style={{ 
-                          display: 'flex', 
-                          justifyContent: 'flex-end', 
-                          gap: '0.5rem', 
-                          marginTop: 'auto',
-                          paddingTop: '8px'
-                        }} 
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <button 
-                          className="btn sm outline" 
-                          onClick={() => openEditTeamModal(team)}
-                          style={{ borderRadius: '20px', padding: '5px 14px', fontSize: '0.75rem', fontWeight: 600, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)' }}
-                        >
-                          {t('Sửa')}
-                        </button>
-                        <button
-                          className="btn sm"
+                    {(() => {
+                      const isLeaderOfThisTeam = Boolean(user?.id && (
+                        String(team.leader_id) === String(user.id) ||
+                        (team.co_leader_ids && (
+                          Array.isArray(team.co_leader_ids)
+                            ? team.co_leader_ids.map(String).includes(String(user.id))
+                            : String(team.co_leader_ids).split(',').map((s: string) => s.trim()).includes(String(user.id))
+                        ))
+                      ));
+                      const canEditThisTeam = isWriteAuthorized || isLeaderOfThisTeam;
+
+                      return (
+                        <div 
                           style={{ 
-                            background: 'rgba(239, 68, 68, 0.05)', 
-                            color: 'var(--color-danger)', 
-                            border: '1px solid rgba(239, 68, 68, 0.15)', 
-                            borderRadius: '20px', 
-                            padding: '6px 12px', 
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          onClick={() => {
-                            setDeleteTeamId(team.id);
-                            setConfirmDeleteTeamOpen(true);
-                          }}
-                          title={t('Xóa')}
+                            display: 'flex', 
+                            justifyContent: 'flex-end', 
+                            gap: '0.5rem', 
+                            marginTop: 'auto',
+                            paddingTop: '8px'
+                          }} 
+                          onClick={e => e.stopPropagation()}
                         >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
+                          {canEditThisTeam ? (
+                            <>
+                              <button 
+                                className="btn sm outline" 
+                                onClick={() => openEditTeamModal(team)}
+                                style={{ borderRadius: '20px', padding: '5px 14px', fontSize: '0.75rem', fontWeight: 600, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)' }}
+                              >
+                                {t('Sửa')}
+                              </button>
+                              {isWriteAuthorized && (
+                                <button
+                                  className="btn sm"
+                                  style={{ 
+                                    background: 'rgba(239, 68, 68, 0.05)', 
+                                    color: 'var(--color-danger)', 
+                                    border: '1px solid rgba(239, 68, 68, 0.15)', 
+                                    borderRadius: '20px', 
+                                    padding: '6px 12px', 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}
+                                  onClick={() => {
+                                    setDeleteTeamId(team.id);
+                                    setConfirmDeleteTeamOpen(true);
+                                  }}
+                                  title={t('Xóa')}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <button 
+                              className="btn sm outline" 
+                              onClick={() => openEditTeamModal(team)}
+                              style={{ borderRadius: '20px', padding: '5px 14px', fontSize: '0.75rem', fontWeight: 600, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)' }}
+                            >
+                              {t('Xem chi tiết')}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
             })}
@@ -2791,7 +2825,7 @@ const ConsultantsInner = () => {
                     </div>
                   </div>
                   <div className={styles.headerActions} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {isWriteAuthorized ? (
+                    {canEditTeam ? (
                       <button 
                         type="submit"
                         form="team-drawer-form"
@@ -2887,7 +2921,7 @@ const ConsultantsInner = () => {
                                     <Avatar name={teamFormData.name || 'Team'} size={54} />
                                   )}
                                 </div>
-                                {isWriteAuthorized && (
+                                {canEditTeam && (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <label
                                       className="btn sm outline"
@@ -3226,7 +3260,7 @@ const ConsultantsInner = () => {
                                       }}
                                     >
                                       {projName}
-                                      {isWriteAuthorized && (
+                                      {canEditTeam && (
                                         <button 
                                           type="button" 
                                           onClick={() => setTeamFormData({ ...teamFormData, focus_projects: teamFormData.focus_projects.filter(p => p !== projName) })}
@@ -3261,7 +3295,7 @@ const ConsultantsInner = () => {
                                       <div
                                         key={p.id}
                                         onClick={() => {
-                                          if (!isWriteAuthorized) return;
+                                          if (!canEditTeam) return;
                                           const current = [...teamFormData.focus_projects];
                                           if (isChecked) {
                                             setTeamFormData({ ...teamFormData, focus_projects: current.filter(name => name !== p.name) });
@@ -3274,20 +3308,20 @@ const ConsultantsInner = () => {
                                           alignItems: 'center',
                                           gap: '0.5rem',
                                           padding: '0.375rem 0.5rem',
-                                          cursor: isWriteAuthorized ? 'pointer' : 'default',
+                                          cursor: canEditTeam ? 'pointer' : 'default',
                                           borderRadius: '4px',
                                           fontSize: '0.8125rem',
                                           background: isChecked ? 'rgba(163, 20, 34, 0.05)' : 'transparent'
                                         }}
-                                        onMouseEnter={e => { if (!isChecked && isWriteAuthorized) e.currentTarget.style.background = 'var(--color-surface)'; }}
-                                        onMouseLeave={e => { if (!isChecked && isWriteAuthorized) e.currentTarget.style.background = 'transparent'; }}
+                                        onMouseEnter={e => { if (!isChecked && canEditTeam) e.currentTarget.style.background = 'var(--color-surface)'; }}
+                                        onMouseLeave={e => { if (!isChecked && canEditTeam) e.currentTarget.style.background = 'transparent'; }}
                                       >
                                         <input
                                           type="checkbox"
                                           checked={isChecked}
                                           onChange={() => {}}
-                                          style={{ cursor: isWriteAuthorized ? 'pointer' : 'default' }}
-                                          disabled={!isWriteAuthorized}
+                                          style={{ cursor: canEditTeam ? 'pointer' : 'default' }}
+                                          disabled={!canEditTeam}
                                         />
                                         <span style={{ color: 'var(--color-text)', fontWeight: isChecked ? 600 : 400 }}>{p.name}</span>
                                       </div>
@@ -3353,7 +3387,7 @@ const ConsultantsInner = () => {
                             </div>
 
                             {/* Add Member Dropdown Trigger */}
-                            {isWriteAuthorized && (
+                            {canEditTeam && (
                               <div ref={addMemberDropdownRef} style={{ position: 'relative' }}>
                                 <button
                                   type="button"
@@ -3406,8 +3440,7 @@ const ConsultantsInner = () => {
                                     </div>
                                     <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }} className="custom-scrollbar">
                                       {(() => {
-                                        const systemSales = allSystemUsers.filter(u => u.role === 'sales' || u.role === 'sale');
-                                        const nonMembers = systemSales.filter(u => !teamFormData.member_ids.includes(String(u.id)));
+                                        const nonMembers = allSystemUsers.filter(u => !teamFormData.member_ids.includes(String(u.id)));
                                         const filtered = nonMembers.filter(u => 
                                           (u.full_name || u.name || '').toLowerCase().includes(memberSearch.toLowerCase()) ||
                                           (u.email || '').toLowerCase().includes(memberSearch.toLowerCase())
@@ -3520,7 +3553,7 @@ const ConsultantsInner = () => {
                                       </p>
                                     </div>
                                     
-                                    {isWriteAuthorized && (
+                                    {canEditTeam && (
                                       <button
                                         type="button"
                                         onClick={() => {

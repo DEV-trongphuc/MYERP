@@ -130,8 +130,8 @@ class TeamController
 
     public function show(array $auth, int $id): void
     {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'sale', 'sales', 'hr', 'sale_admin', 'saleadmin'], true)) {
-            respond(403, null, 'Quyền quản trị là bắt buộc', false);
+        if (empty($auth['user_id'])) {
+            respond(401, null, 'Chưa đăng nhập', false);
         }
 
         $stmt = $this->db->prepare("
@@ -146,8 +146,13 @@ class TeamController
             respond(404, null, 'Không tìm thấy nhóm', false);
         }
 
-        // Fetch members
-        $mStmt = $this->db->prepare("SELECT id, name, email, status, avatar FROM consultants WHERE team_id = ?");
+        // Fetch members from users table
+        $mStmt = $this->db->prepare("
+            SELECT u.id, u.full_name as name, u.email, u.role, u.avatar_url as avatar, u.is_active as status 
+            FROM users u 
+            WHERE u.team_id = ? AND (u.is_active = 1 OR u.is_active IS NULL)
+            ORDER BY u.full_name ASC
+        ");
         $mStmt->execute([$id]);
         $row['members'] = $mStmt->fetchAll();
 
@@ -156,8 +161,21 @@ class TeamController
 
     public function update(array $auth, int $id): void
     {
-        if (!in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true)) {
-            respond(403, null, 'Quyền quản trị là bắt buộc', false);
+        $isGlobalAdmin = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true);
+        
+        // Also check if this user is leader or co-leader of the team
+        $stmtChk = $this->db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ?");
+        $stmtChk->execute([$id]);
+        $teamInfo = $stmtChk->fetch(PDO::FETCH_ASSOC);
+        
+        $isLeader = false;
+        if ($teamInfo) {
+            $isLeader = (int)$teamInfo['leader_id'] === (int)$auth['user_id']
+                || (!empty($teamInfo['co_leader_ids']) && in_array((string)$auth['user_id'], explode(',', str_replace(['[', ']'], '', $teamInfo['co_leader_ids'])), true));
+        }
+
+        if (!$isGlobalAdmin && !$isLeader) {
+            respond(403, null, 'Bạn không có quyền chỉnh sửa phòng ban này', false);
         }
 
         $b = getBody();
@@ -391,6 +409,15 @@ class TeamController
         if (in_array($role, ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'hr'], true)) {
             return;
         }
+        $stmtChk = $this->db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ?");
+        $stmtChk->execute([$teamId]);
+        $teamInfo = $stmtChk->fetch(PDO::FETCH_ASSOC);
+        if ($teamInfo) {
+            if ((int)$teamInfo['leader_id'] === (int)$auth['user_id']
+                || (!empty($teamInfo['co_leader_ids']) && in_array((string)$auth['user_id'], explode(',', str_replace(['[', ']'], '', $teamInfo['co_leader_ids'])), true))) {
+                return;
+            }
+        }
         $stmt = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
         $stmt->execute([$auth['user_id']]);
         $teamIdUser = (int)$stmt->fetchColumn();
@@ -400,7 +427,9 @@ class TeamController
     }
 
     public function getComments(array $auth, int $teamId): void {
-        $this->requireTeamAccess($auth, $teamId);
+        if (empty($auth['user_id'])) {
+            respond(401, null, 'Chưa đăng nhập', false);
+        }
         $stmt = $this->db->prepare("
             SELECT c.*, u.full_name as user_name, u.avatar_url 
             FROM comments c
