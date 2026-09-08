@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ApprovalDetailDrawer } from './Approvals';
 import type { ApprovalItem } from './Approvals';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { useUIStore } from '../store/uiStore';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#0d9488'];
 
@@ -102,6 +103,7 @@ const FormattedMoneyInput = ({ value, onChange, disabled, width = '95px' }: { va
 export default function HRM() {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { showConfirm } = useUIStore();
   
   const getRoleBadgeStyle = (role: string) => {
     switch (String(role).toLowerCase()) {
@@ -733,25 +735,30 @@ export default function HRM() {
     }
   };
 
-  const handleUnlockPayroll = async () => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn mở khóa bảng lương kỳ này? Chữ ký của toàn bộ nhân viên trong kỳ này sẽ bị xóa bỏ.'))) {
-      return;
-    }
-    setLocking(true);
-    try {
-      await fetchAPI('hrm/payroll', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month_year: payrollMonth, action: 'unlock' })
-      });
-      toast.success(t('Đã mở khóa bảng lương thành công!'));
-      loadPayslips();
-      loadAllPayslips();
-    } catch (err: any) {
-      toast.error(err?.message || t('Lỗi mở khóa'));
-    } finally {
-      setLocking(false);
-    }
+  const handleUnlockPayroll = () => {
+    showConfirm({
+      title: t('Xác nhận mở khóa bảng lương'),
+      message: t('Bạn có chắc chắn muốn mở khóa bảng lương kỳ này?\nChữ ký của toàn bộ nhân viên trong kỳ này sẽ bị xóa bỏ.'),
+      confirmText: t('Mở khóa'),
+      isDanger: true,
+      onConfirm: async () => {
+        setLocking(true);
+        try {
+          await fetchAPI('hrm/payroll', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month_year: payrollMonth, action: 'unlock' })
+          });
+          toast.success(t('Đã mở khóa bảng lương thành công!'));
+          loadPayslips();
+          loadAllPayslips();
+        } catch (err: any) {
+          toast.error(err?.message || t('Lỗi mở khóa'));
+        } finally {
+          setLocking(false);
+        }
+      }
+    });
   };
 
   const formatCurrency = (val: number) => {

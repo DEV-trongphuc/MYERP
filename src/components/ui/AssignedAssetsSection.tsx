@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Package, Laptop, Key, Smartphone, Plus, Edit2, Trash2, CheckCircle2, RotateCcw, AlertTriangle, XCircle, Calendar, ShieldCheck, X, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useUIStore } from '../../store/uiStore';
 
 export interface AssignedAsset {
   id: string;
@@ -26,6 +27,7 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
   readOnly = false
 }) => {
   const { t } = useLanguage();
+  const { showConfirm } = useUIStore();
   const [showModal, setShowModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssignedAsset | null>(null);
 
@@ -61,10 +63,16 @@ export const AssignedAssetsSection: React.FC<AssignedAssetsSectionProps> = ({
   };
 
   const handleDeleteAsset = (id: string) => {
-    if (window.confirm(t('Bạn có chắc chắn muốn xóa tài sản này khỏi danh sách cấp phát?'))) {
-      const updated = assets.filter(a => a.id !== id);
-      onChange(updated);
-    }
+    showConfirm({
+      title: t('Xóa tài sản cấp phát'),
+      message: t('Bạn có chắc chắn muốn xóa tài sản này khỏi danh sách cấp phát không?'),
+      confirmText: t('Xóa'),
+      isDanger: true,
+      onConfirm: () => {
+        const updated = assets.filter(a => a.id !== id);
+        onChange(updated);
+      }
+    });
   };
 
   const handleSaveAsset = (e: React.FormEvent) => {

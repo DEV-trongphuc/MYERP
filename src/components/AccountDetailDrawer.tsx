@@ -19,6 +19,7 @@ import { SignaturePadModal } from './ui/SignaturePadModal';
 import { AssignedAssetsSection, type AssignedAsset } from './ui/AssignedAssetsSection';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useUIStore } from '../store/uiStore';
 import styles from '../pages/EntityDrawer.module.css';
 import { numberToVietnameseText } from '../utils/numberToText';
 
@@ -146,6 +147,7 @@ const resolveAttachmentUrl = (path: string) => {
 
 export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account, onSaveSuccess, readOnly = false }) => {
   const { t } = useLanguage();
+  const { showConfirm } = useUIStore();
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   };
@@ -741,22 +743,28 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
     }
   };
 
-  const handleDeleteDoc = async (docId: number) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa tài liệu này không?'))) return;
-
-    try {
-      const res = await fetchAPI(`cloud-files/${docId}`, {
-        method: 'DELETE'
-      });
-      if (res.success) {
-        toast.success(t('Đã xóa tài liệu'));
-        fetchDocuments();
-      } else {
-        toast.error(res.message || t('Lỗi khi xóa tài liệu'));
+  const handleDeleteDoc = (docId: number) => {
+    showConfirm({
+      title: t('Xóa tài liệu'),
+      message: t('Bạn có chắc chắn muốn xóa tài liệu này không?'),
+      confirmText: t('Xóa'),
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetchAPI(`cloud-files/${docId}`, {
+            method: 'DELETE'
+          });
+          if (res.success) {
+            toast.success(t('Đã xóa tài liệu'));
+            fetchDocuments();
+          } else {
+            toast.error(res.message || t('Lỗi khi xóa tài liệu'));
+          }
+        } catch (err: any) {
+          toast.error(err.message || t('Lỗi hệ thống'));
+        }
       }
-    } catch (err: any) {
-      toast.error(err.message || t('Lỗi hệ thống'));
-    }
+    });
   };
 
   // Avatar Upload
@@ -817,50 +825,62 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
     }
   };
 
-  const handleUnlinkZalo = async () => {
+  const handleUnlinkZalo = () => {
     if (!account) return;
-    if (!window.confirm(t('Bạn có chắc chắn muốn hủy liên kết Zalo của tài khoản này không?'))) return;
-    
-    setIsUnlinking(true);
-    try {
-      const json = await fetchAPI('unlink_zalo', {
-        method: 'POST',
-        body: JSON.stringify({ id: account.id, type: 'account' })
-      });
-      if (json.success) {
-        toast.success(t('Đã hủy liên kết Zalo thành công!'));
-        setZaloChatId('');
-      } else {
-        toast.error(json.message || t('Lỗi khi hủy liên kết'));
+    showConfirm({
+      title: t('Hủy liên kết Zalo'),
+      message: t('Bạn có chắc chắn muốn hủy liên kết Zalo của tài khoản này không?'),
+      confirmText: t('Hủy liên kết'),
+      isDanger: true,
+      onConfirm: async () => {
+        setIsUnlinking(true);
+        try {
+          const json = await fetchAPI('unlink_zalo', {
+            method: 'POST',
+            body: JSON.stringify({ id: account.id, type: 'account' })
+          });
+          if (json.success) {
+            toast.success(t('Đã hủy liên kết Zalo thành công!'));
+            setZaloChatId('');
+          } else {
+            toast.error(json.message || t('Lỗi khi hủy liên kết'));
+          }
+        } catch (e: any) {
+          toast.error(t('Lỗi') + ': ' + e.message);
+        } finally {
+          setIsUnlinking(false);
+        }
       }
-    } catch (e: any) {
-      toast.error(t('Lỗi') + ': ' + e.message);
-    } finally {
-      setIsUnlinking(false);
-    }
+    });
   };
 
-  const handleUnlinkTelegram = async () => {
+  const handleUnlinkTelegram = () => {
     if (!account) return;
-    if (!window.confirm(t('Bạn có chắc chắn muốn hủy liên kết Telegram của tài khoản này không?'))) return;
-    
-    setIsUnlinking(true);
-    try {
-      const json = await fetchAPI('unlink_telegram', {
-        method: 'POST',
-        body: JSON.stringify({ id: account.id, type: 'account' })
-      });
-      if (json.success) {
-        toast.success(t('Đã hủy liên kết Telegram thành công!'));
-        setTelegramChatId('');
-      } else {
-        toast.error(json.message || t('Lỗi khi hủy liên kết'));
+    showConfirm({
+      title: t('Hủy liên kết Telegram'),
+      message: t('Bạn có chắc chắn muốn hủy liên kết Telegram của tài khoản này không?'),
+      confirmText: t('Hủy liên kết'),
+      isDanger: true,
+      onConfirm: async () => {
+        setIsUnlinking(true);
+        try {
+          const json = await fetchAPI('unlink_telegram', {
+            method: 'POST',
+            body: JSON.stringify({ id: account.id, type: 'account' })
+          });
+          if (json.success) {
+            toast.success(t('Đã hủy liên kết Telegram thành công!'));
+            setTelegramChatId('');
+          } else {
+            toast.error(json.message || t('Lỗi khi hủy liên kết'));
+          }
+        } catch (e: any) {
+          toast.error(t('Lỗi') + ': ' + e.message);
+        } finally {
+          setIsUnlinking(false);
+        }
       }
-    } catch (e: any) {
-      toast.error(t('Lỗi') + ': ' + e.message);
-    } finally {
-      setIsUnlinking(false);
-    }
+    });
   };
 
   // Save changes
@@ -3413,9 +3433,15 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                             <button
                               type="button"
                               onClick={() => {
-                                if (window.confirm(t('Bạn có chắc chắn muốn xóa chứng chỉ này?'))) {
-                                  setCertificates(certificates.filter((_, i) => i !== index));
-                                }
+                                showConfirm({
+                                  title: t('Xóa chứng chỉ'),
+                                  message: t('Bạn có chắc chắn muốn xóa chứng chỉ này?'),
+                                  confirmText: t('Xóa'),
+                                  isDanger: true,
+                                  onConfirm: () => {
+                                    setCertificates(certificates.filter((_, i) => i !== index));
+                                  }
+                                });
                               }}
                               style={{
                                 position: 'absolute', top: '12px', right: '12px',
@@ -3925,9 +3951,15 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm(t('Bạn có chắc chắn muốn xóa ghi nhận này?'))) {
-                                    setHrRecords(hrRecords.filter((_, i) => i !== originalIndex));
-                                  }
+                                  showConfirm({
+                                    title: t('Xóa ghi nhận'),
+                                    message: t('Bạn có chắc chắn muốn xóa ghi nhận này?'),
+                                    confirmText: t('Xóa'),
+                                    isDanger: true,
+                                    onConfirm: () => {
+                                      setHrRecords(hrRecords.filter((_, i) => i !== originalIndex));
+                                    }
+                                  });
                                 }}
                                 style={{
                                   position: 'absolute', top: '12px', right: '12px',

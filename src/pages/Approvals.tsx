@@ -1825,25 +1825,32 @@ export default function Approvals() {
     }
   };
 
-  const handleDeleteRequest = async (item: any) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa/thu hồi yêu cầu này?'))) return;
-    try {
-      if (item.type === 'expense') {
-        await api.delete(`/expenses/${item.id}`);
-      } else if (item.type === 'checkin') {
-        await api.delete(`/check-ins/${item.id}`);
-      } else if (item.type === 'leave') {
-        await fetchAPI(`hrm/leaves/${item.id}`, { method: 'DELETE' });
-      } else if (item.type === 'advance') {
-        await fetchAPI(`hrm/advances/${item.id}`, { method: 'DELETE' });
-      } else if (item.type === 'attendance_bulk') {
-        await api.delete(`/check-ins/bulk-requests/${item.id}`);
+  const handleDeleteRequest = (item: any) => {
+    showConfirm({
+      title: t('Xác nhận xóa / thu hồi yêu cầu'),
+      message: t('Bạn có chắc chắn muốn xóa hoặc thu hồi yêu cầu này không? Hành động này không thể hoàn tác.'),
+      confirmText: t('Xóa yêu cầu'),
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          if (item.type === 'expense') {
+            await api.delete(`/expenses/${item.id}`);
+          } else if (item.type === 'checkin') {
+            await api.delete(`/check-ins/${item.id}`);
+          } else if (item.type === 'leave') {
+            await fetchAPI(`hrm/leaves/${item.id}`, { method: 'DELETE' });
+          } else if (item.type === 'advance') {
+            await fetchAPI(`hrm/advances/${item.id}`, { method: 'DELETE' });
+          } else if (item.type === 'attendance_bulk') {
+            await api.delete(`/check-ins/bulk-requests/${item.id}`);
+          }
+          toast.success(t('Đã xóa yêu cầu thành công'));
+          loadData();
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || t('Lỗi khi xóa yêu cầu'));
+        }
       }
-      toast.success(t('Đã xóa yêu cầu thành công'));
-      loadData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || t('Lỗi khi xóa yêu cầu'));
-    }
+    });
   };
 
   const getWorkflowDefFromItem = (item: ApprovalItem | any) => {

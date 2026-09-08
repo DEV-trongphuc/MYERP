@@ -5,6 +5,7 @@ import { CustomModal } from './CustomModal';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { fetchAPI } from '../../utils/api';
 import toast from 'react-hot-toast';
+import { CheckOutConfirmModal } from './CheckOutConfirmModal';
 
 // Module-level in-memory cache for ultra-fast location and address retrieval (0ms retrieval if recent)
 let globalCachedGPS: { coords: { latitude: number; longitude: number }; timestamp: number } | null = null;
@@ -65,6 +66,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   // Scanner & AI Auto Detection States
   const [faceScanProgress, setFaceScanProgress] = useState(0);
   const [scanStatusText, setScanStatusText] = useState('');
+  const [showCheckOutConfirmModal, setShowCheckOutConfirmModal] = useState(false);
 
   // Success Screen State
   const [isSuccessScreen, setIsSuccessScreen] = useState(false);
@@ -83,6 +85,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       setLocationError('');
       setGpsCoords(null);
       setAddressLoading(false);
+      setShowCheckOutConfirmModal(false);
     }
   }, [isOpen]);
 
@@ -217,6 +220,16 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   const isBlockedEarlyCheckOut = isCheckOutMode && isBeforeMorningStart;
   // Chặn vào ca sau khi đã quá giờ tan ca hôm nay (yêu cầu tạo phiếu giải trình / bổ sung)
   const isBlockedLateCheckIn = !isCheckOutMode && (!todayCheckIn || todayCheckIn.status === 'rejected') && isAfterShiftEnd;
+
+  // Kiểm tra ra ca sớm so với giờ tan ca
+  const isEarlyCheckOut = isCheckOutMode && !isTodayDayOff && curHM < afternoonShiftEnd;
+  const getEarlyMinutesCheckOut = () => {
+    if (!isEarlyCheckOut) return 0;
+    const [endH, endM] = afternoonShiftEnd.split(':').map(Number);
+    const curH = now.getHours();
+    const curM = now.getMinutes();
+    return Math.max(0, (endH * 60 + endM) - (curH * 60 + curM));
+  };
 
   const checkIsLate = () => {
     if (isTodayDayOff) return false; 
@@ -381,7 +394,11 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       setCapturedBlob(snap.blob);
       stopCamera();
       if (!isLate) {
-        submitCheckIn(snap.dataUrl, snap.blob);
+        if (isCheckOutMode) {
+          setShowCheckOutConfirmModal(true);
+        } else {
+          submitCheckIn(snap.dataUrl, snap.blob);
+        }
       }
     } else {
       toast.error(t('Chưa nhận được khung hình camera. Vui lòng thử lại.'));
@@ -459,7 +476,8 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
                   if (!isCheckOutMode) {
                     submitCheckIn(snap.dataUrl, snap.blob);
                   } else {
-                    setScanStatusText(t('Đã nhận diện khuôn mặt! Vui lòng nhấn nút Xác nhận Ra ca bên dưới để hoàn tất.'));
+                    setScanStatusText(t('Đã nhận diện khuôn mặt! Vui lòng xác nhận để hoàn tất Ra ca.'));
+                    setShowCheckOutConfirmModal(true);
                   }
                 }
               }, 60);
@@ -486,7 +504,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   }, [isCameraActive, capturedImage, isSuccessScreen, isLate, isCheckOutMode]);
 
   // Submit Check-in API (Ultra-optimized single-pass upload, non-blocking GPS)
-  const submitCheckIn = async (overrideImage?: string, overrideBlob?: Blob | null) => {
+  const submitCheckIn = async (overrideImage?: string, overrideBlob?: Blob | null, confirmedCheckOut = false) => {
     if (isBlockedEarlyCheckOut) {
       toast.error(t(`Không thể chấm công Ra ca trước khi ca làm việc bắt đầu (${morningShiftStart}).`));
       return;
@@ -502,12 +520,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
 
     if (!imageToUse || submitting) return;
 
-    if (isCheckOutMode) {
-      const ok = window.confirm(t('Bạn có chắc chắn muốn Chấm công Ra ca kết thúc ca làm việc hôm nay không?'));
-      if (!ok) {
-        setSubmitting(false);
-        return;
-      }
+    if (isCheckOutMode && !confirmedCheckOut) {
+      setShowCheckOutConfirmModal(true);
+      return;
     }
 
     setSubmitting(true);
@@ -604,7 +619,8 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   const strokeDashoffset = circumference - (circumference * faceScanProgress) / 100;
 
   return (
-    <CustomModal
+    <>
+      <CustomModal
       isOpen={isOpen}
       onClose={onClose}
       title={isSuccessScreen ? '' : (
@@ -1246,6 +1262,22 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
           </div>
         </div>
       )}
-    </CustomModal>
+      </CustomModal>
+
+      <CheckOutConfirmModal
+        isOpen={showCheckOutConfirmModal}
+        onClose={() => setShowCheckOutConfirmModal(false)}
+        onConfirm={() => submitCheckIn(capturedImage || undefined, capturedBlob || undefined, true)}
+        capturedImage={capturedImage}
+        userName={user?.name || consultantProfile?.name}
+        userRole={consultantProfile?.department || user?.department || user?.role}
+        checkInTime={todayCheckIn?.check_in_time}
+        shiftEndTime={afternoonShiftEnd}
+        address={currentAddress}
+        isEarly={isEarlyCheckOut}
+        earlyMinutes={getEarlyMinutesCheckOut()}
+        submitting={submitting}
+      />
+    </>
   );
 };

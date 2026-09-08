@@ -12174,9 +12174,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             <button
                               type="button"
                               onClick={() => {
-                                if (window.confirm(t('Bạn có chắc chắn muốn xóa chứng chỉ này?'))) {
-                                  setProfileCertificates(profileCertificates.filter((_, i) => i !== index));
-                                }
+                                showConfirm({
+                                  title: t('Xóa chứng chỉ'),
+                                  message: t('Bạn có chắc chắn muốn xóa chứng chỉ này?'),
+                                  confirmText: t('Xóa'),
+                                  isDanger: true,
+                                  onConfirm: () => {
+                                    setProfileCertificates(profileCertificates.filter((_, i) => i !== index));
+                                  }
+                                });
                               }}
                               style={{
                                 position: 'absolute', top: '12px', right: '12px',
@@ -12715,9 +12721,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             <button
                               type="button"
                               onClick={() => {
-                                if (window.confirm(t('Bạn có chắc chắn muốn xóa ghi nhận này?'))) {
-                                  setProfileHRRecords(profileHRRecords.filter(r => r.id !== record.id));
-                                }
+                                showConfirm({
+                                  title: t('Xóa ghi nhận'),
+                                  message: t('Bạn có chắc chắn muốn xóa ghi nhận này?'),
+                                  confirmText: t('Xóa'),
+                                  isDanger: true,
+                                  onConfirm: () => {
+                                    setProfileHRRecords(profileHRRecords.filter(r => r.id !== record.id));
+                                  }
+                                });
                               }}
                               style={{
                                 position: 'absolute', top: '12px', right: '12px',
@@ -14593,19 +14605,26 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           {(['admin', 'superadmin', 'manager', 'assistant'].includes(user?.role as any)) && (
                             <button
                               type="button"
-                              onClick={async () => {
-                                if (!window.confirm(t('Bạn có chắc chắn muốn xóa tài liệu này?'))) return;
-                                try {
-                                  const res = await api.delete(`/cloud-files/${doc.id}`);
-                                  if (res.data.success || res.data.success) {
-                                    toast.success(t('Đã xóa tài liệu thành công!'));
-                                    fetchConsultantDocs();
-                                  } else {
-                                    toast.error(res.data.message || t('Lỗi khi xóa tài liệu'));
+                              onClick={() => {
+                                showConfirm({
+                                  title: t('Xóa tài liệu'),
+                                  message: t('Bạn có chắc chắn muốn xóa tài liệu này?'),
+                                  confirmText: t('Xóa'),
+                                  isDanger: true,
+                                  onConfirm: async () => {
+                                    try {
+                                      const res = await api.delete(`/cloud-files/${doc.id}`);
+                                      if (res.data.success || res.data.success) {
+                                        toast.success(t('Đã xóa tài liệu thành công!'));
+                                        fetchConsultantDocs();
+                                      } else {
+                                        toast.error(res.data.message || t('Lỗi khi xóa tài liệu'));
+                                      }
+                                    } catch (err: any) {
+                                      toast.error(t('Lỗi kết nối xóa tài liệu: ') + err.message);
+                                    }
                                   }
-                                } catch (err: any) {
-                                    toast.error(t('Lỗi kết nối xóa tài liệu: ') + err.message);
-                                }
+                                });
                               }}
                               style={{
                                 background: 'transparent',
@@ -17348,22 +17367,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                  {!a.contact_id && (
                                    <button
                                      type="button"
-                                     onClick={async () => {
-                                       if (window.confirm(t('Bạn có chắc chắn muốn xóa ghi chú này?'))) {
-                                         try {
-                                           await api.delete(`/activities/${a.id}`);
-                                           toast.success(t('Đã xóa ghi chú!'));
-                                           fetchCalendarStats();
-                                           // If the deleted item is the last one on the current page, go back a page
-                                           const remainingCount = dayNotes.length - 1;
-                                           const maxPage = Math.max(1, Math.ceil(remainingCount / pageSize));
-                                           if (diaryPage > maxPage) {
-                                             setDiaryPage(maxPage);
+                                     onClick={() => {
+                                       showConfirm({
+                                         title: t('Xóa ghi chú'),
+                                         message: t('Bạn có chắc chắn muốn xóa ghi chú này?'),
+                                         confirmText: t('Xóa'),
+                                         isDanger: true,
+                                         onConfirm: async () => {
+                                           try {
+                                             await api.delete(`/activities/${a.id}`);
+                                             toast.success(t('Đã xóa ghi chú!'));
+                                             fetchCalendarStats();
+                                             // If the deleted item is the last one on the current page, go back a page
+                                             const remainingCount = dayNotes.length - 1;
+                                             const maxPage = Math.max(1, Math.ceil(remainingCount / pageSize));
+                                             if (diaryPage > maxPage) {
+                                               setDiaryPage(maxPage);
+                                             }
+                                           } catch {
+                                             toast.error(t('Không thể xóa ghi chú'));
                                            }
-                                         } catch {
-                                           toast.error(t('Không thể xóa ghi chú'));
                                          }
-                                       }
+                                       });
                                      }}
                                      style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', cursor: 'pointer', opacity: 0.7 }}
                                      title={t('Xóa')}

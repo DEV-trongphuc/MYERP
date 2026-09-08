@@ -475,18 +475,25 @@ export const Header = ({
   };
 
   const handleClearAllNotif = async () => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa toàn bộ thông báo?')) return;
-    try {
-      const res = await fetchAPI('notifications', {
-        method: 'DELETE'
-      });
-      if (res.success) {
-        fetchNotifications();
-        toast.success('Đã xóa toàn bộ thông báo');
+    showConfirm({
+      title: 'Xóa toàn bộ thông báo',
+      message: 'Bạn có chắc chắn muốn xóa toàn bộ thông báo không? Hành động này không thể hoàn tác.',
+      confirmText: 'Xóa tất cả',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetchAPI('notifications', {
+            method: 'DELETE'
+          });
+          if (res.success) {
+            fetchNotifications();
+            toast.success('Đã xóa toàn bộ thông báo');
+          }
+        } catch (err) {
+          console.error("Error clearing notifications:", err);
+        }
       }
-    } catch (err) {
-      console.error("Error clearing notifications:", err);
-    }
+    });
   };
 
   const handleNotifClick = async (notif: any) => {

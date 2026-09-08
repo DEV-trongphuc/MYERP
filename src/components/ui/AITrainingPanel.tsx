@@ -10,6 +10,7 @@ import { fetchAPI } from '../../utils/api';
 import toast from 'react-hot-toast';
 import { EmptyCard } from './EmptyCard';
 import { CustomSelect } from './CustomSelect';
+import { useUIStore } from '../../store/uiStore';
 
 interface AIDoc {
   id: string;
@@ -188,6 +189,7 @@ const RAGSlider = ({
 };
 
 export const AITrainingPanel: React.FC = () => {
+  const { showConfirm } = useUIStore();
   const [subtab, setSubtab] = useState<'docs' | 'rag'>('docs');
   const [docs, setDocs] = useState<AIDoc[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
@@ -571,52 +573,62 @@ export const AITrainingPanel: React.FC = () => {
     }
   };
 
-  const handleDeleteDoc = async (docId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tài liệu huấn luyện này? Chunks vector tương ứng cũng sẽ bị loại bỏ.')) {
-      return;
-    }
-    try {
-      const res = await fetchAPI('ai_training', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'delete_doc',
-          property_id: 'Ideas',
-          doc_id: docId
-        })
-      });
-      if (res && res.success) {
-        toast.success('Đã xóa tài liệu');
-        fetchDocs();
-      } else {
-        toast.error(res?.message || 'Xóa thất bại');
+  const handleDeleteDoc = (docId: string) => {
+    showConfirm({
+      title: 'Xóa tài liệu huấn luyện',
+      message: 'Bạn có chắc chắn muốn xóa tài liệu huấn luyện này?\nChunks vector tương ứng cũng sẽ bị loại bỏ.',
+      confirmText: 'Xóa tài liệu',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetchAPI('ai_training', {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'delete_doc',
+              property_id: 'Ideas',
+              doc_id: docId
+            })
+          });
+          if (res && res.success) {
+            toast.success('Đã xóa tài liệu');
+            fetchDocs();
+          } else {
+            toast.error(res?.message || 'Xóa thất bại');
+          }
+        } catch (e: any) {
+          toast.error('Lỗi: ' + e.message);
+        }
       }
-    } catch (e: any) {
-      toast.error('Lỗi: ' + e.message);
-    }
+    });
   };
 
-  const handleDeleteFolder = async (folderId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa toàn bộ thư mục này? Tất cả tài liệu con cũng sẽ bị xóa.')) {
-      return;
-    }
-    try {
-      const res = await fetchAPI('ai_training', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'delete_batch',
-          property_id: 'Ideas',
-          batch_id: folderId
-        })
-      });
-      if (res && res.success) {
-        toast.success('Đã xóa thư mục');
-        fetchDocs();
-      } else {
-        toast.error(res?.message || 'Xóa thất bại');
+  const handleDeleteFolder = (folderId: string) => {
+    showConfirm({
+      title: 'Xóa thư mục huấn luyện',
+      message: 'Bạn có chắc chắn muốn xóa toàn bộ thư mục này?\nTất cả tài liệu con cũng sẽ bị xóa.',
+      confirmText: 'Xóa thư mục',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetchAPI('ai_training', {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'delete_batch',
+              property_id: 'Ideas',
+              batch_id: folderId
+            })
+          });
+          if (res && res.success) {
+            toast.success('Đã xóa thư mục');
+            fetchDocs();
+          } else {
+            toast.error(res?.message || 'Xóa thất bại');
+          }
+        } catch (e: any) {
+          toast.error('Lỗi: ' + e.message);
+        }
       }
-    } catch (e: any) {
-      toast.error('Lỗi: ' + e.message);
-    }
+    });
   };
 
   const handleToggleDoc = async (docId: string, currentStatus: number) => {

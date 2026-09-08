@@ -283,33 +283,33 @@ export const GlobalConfirmModal: React.FC = () => {
             justifyContent: isMobile ? 'center' : 'flex-end', 
             gap: '0.75rem'
           }}>
-            {!isMobile && (
-              <button 
-                className="btn sm"
-                onClick={handleCancel}
-                style={{ 
-                  fontWeight: 700, 
-                  padding: '8px 16px', 
-                  borderRadius: '10px', 
-                  fontSize: '0.8125rem',
-                  background: 'var(--color-bg)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-light)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--color-bg-hover)';
-                  e.currentTarget.style.color = 'var(--color-text)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--color-bg)';
-                  e.currentTarget.style.color = 'var(--color-text-light)';
-                }}
-              >
-                {cancelText}
-              </button>
-            )}
+            <button 
+              className="btn sm"
+              onClick={handleCancel}
+              style={{ 
+                fontWeight: 700, 
+                padding: '9px 18px', 
+                borderRadius: '10px', 
+                fontSize: '0.84rem',
+                background: 'var(--color-bg, #f1f5f9)',
+                border: '1px solid var(--color-border, #cbd5e1)',
+                color: 'var(--color-text-light, #475569)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                flex: isMobile ? 1 : 'none',
+                textAlign: 'center'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--color-bg-hover, #e2e8f0)';
+                e.currentTarget.style.color = 'var(--color-text, #0f172a)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--color-bg, #f1f5f9)';
+                e.currentTarget.style.color = 'var(--color-text-light, #475569)';
+              }}
+            >
+              {cancelText}
+            </button>
             {extraText && (
               <button 
                 className="btn outline sm"

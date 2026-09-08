@@ -16,6 +16,7 @@ import { compressToWebP } from '../utils/imageCompress';
 import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { MentionInput } from '../components/ui/MentionInput';
+import { useUIStore } from '../store/uiStore';
 
 // Reaction Types Constants
 const REACTION_TYPES = [
@@ -67,6 +68,7 @@ interface Comment {
 export const EnterpriseFeed: React.FC = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { showConfirm } = useUIStore();
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
@@ -241,20 +243,27 @@ export const EnterpriseFeed: React.FC = () => {
     }
   };
 
-  const handleDeleteHonor = async (id: number) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa vinh danh này?'))) return;
-    try {
-      const res = await api.post('/posts/honors', {
-        id,
-        action: 'delete'
-      });
-      if (res.data && res.data.success) {
-        toast.success(t('Xóa vinh danh thành công!'));
-        fetchHonors();
+  const handleDeleteHonor = (id: number) => {
+    showConfirm({
+      title: t('Xóa vinh danh'),
+      message: t('Bạn có chắc chắn muốn xóa vinh danh này không? Hành động này không thể hoàn tác.'),
+      confirmText: t('Xóa'),
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await api.post('/posts/honors', {
+            id,
+            action: 'delete'
+          });
+          if (res.data && res.data.success) {
+            toast.success(t('Xóa vinh danh thành công!'));
+            fetchHonors();
+          }
+        } catch (e) {
+          toast.error(t('Lỗi khi xóa vinh danh'));
+        }
       }
-    } catch (e) {
-      toast.error(t('Lỗi khi xóa vinh danh'));
-    }
+    });
   };
 
   const handleHeartHonor = async (id: number) => {
@@ -401,18 +410,24 @@ export const EnterpriseFeed: React.FC = () => {
   };
 
   // Handle post delete
-  const handleDeletePost = async (postId: number) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa bài viết này không?'))) return;
-
-    try {
-      const res = await api.delete(`/posts/${postId}`);
-      if (res.data && res.data.success) {
-        toast.success(t('Bài viết đã được xóa'));
-        setPosts(prev => prev.filter(p => p.id !== postId));
+  const handleDeletePost = (postId: number) => {
+    showConfirm({
+      title: t('Xóa bài viết'),
+      message: t('Bạn có chắc chắn muốn xóa bài viết này không? Toàn bộ bình luận và tương tác liên quan sẽ bị xóa bỏ.'),
+      confirmText: t('Xóa'),
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await api.delete(`/posts/${postId}`);
+          if (res.data && res.data.success) {
+            toast.success(t('Bài viết đã được xóa'));
+            setPosts(prev => prev.filter(p => p.id !== postId));
+          }
+        } catch (e) {
+          toast.error(t('Lỗi khi xóa bài viết'));
+        }
       }
-    } catch (e) {
-      toast.error(t('Lỗi khi xóa bài viết'));
-    }
+    });
   };
 
   // Handle Reaction Selection
@@ -498,8 +513,6 @@ export const EnterpriseFeed: React.FC = () => {
 
   // Handle delete comment
   const handleDeleteComment = async (postId: number, commentId: number) => {
-    if (!window.confirm(t('Xóa bình luận này?'))) return;
-
     try {
       const res = await api.delete(`/posts/comments/${commentId}`);
       if (res.data && res.data.success) {
