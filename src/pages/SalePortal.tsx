@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import {
@@ -1441,9 +1441,20 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     if (activeTabProp) {
-      setActiveTab(activeTabProp);
+      if (activeTabProp === 'data') {
+        navigate('/contacts', { replace: true });
+      } else {
+        setActiveTab(activeTabProp);
+      }
     }
-  }, [activeTabProp]);
+  }, [activeTabProp, navigate]);
+
+  useEffect(() => {
+    if (activeTab === 'data') {
+      navigate('/contacts', { replace: true });
+    }
+  }, [activeTab, navigate]);
+
 
   const prevFilteredIdsRef = useRef<string>('');
 
@@ -8540,7 +8551,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>{t('Data nhận gần đây')}</h3>
               <span
                 style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, cursor: 'pointer' }}
-                onClick={() => setActiveTab('data')}
+                onClick={() => navigate('/contacts')}
               >{t('Xem tất cả')}</span>
             </div>
             <div style={{ flex: 1, padding: '0.5rem 0.5rem 1.25rem 0.5rem', overflowY: 'auto', maxHeight: 280 }} className="custom-scrollbar">
@@ -8880,454 +8891,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 };
 
   const renderDataView = () => {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Consolidated Filters Row */}
-        <div className="portal-filters-row" style={{
-          display: 'flex',
-          gap: '0.75rem',
-          marginBottom: '0.5rem',
-          flexShrink: 0,
-          flexWrap: 'wrap',
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-light)',
-          borderRadius: '12px',
-          padding: '0.75rem 1rem',
-          alignItems: 'center',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
-        }}>
-          {/* Search Input */}
-          <DebouncedSearchInput
-            initialValue={searchInput}
-            placeholder={t("Tìm theo tên, SĐT, email...")}
-            onSearchChange={(val) => {
-              setSearchInput(val);
-              setSearch(val.trim());
-            }}
-          />
-
-          {/* Date Select Filter */}
-          <div className="responsive-filter-item">
-            <CustomSelect
-              options={[
-                { value: 'all', label: t('Tất cả thời gian'), icon: <Clock size={16} /> },
-                { value: 'today', label: t('Hôm nay') },
-                { value: 'yesterday', label: t('Hôm qua') },
-                { value: 'this_week', label: t('Tuần này') },
-                { value: 'last_week', label: t('Tuần trước') },
-                { value: 'two_weeks_ago', label: t('Tuần trước nữa') },
-                { value: '7_days', label: t('7 ngày qua') },
-                { value: '30_days', label: t('30 ngày qua') },
-                { value: 'this_month', label: t('Tháng này') },
-                { value: 'last_month', label: t('Tháng trước') },
-                { value: 'this_year', label: t('Năm nay') },
-                { value: 'custom', label: t('Tùy chọn ngày...') }
-              ]}
-              value={dateMode}
-              onChange={(val) => handleDateModeChange(String(val))}
-              width={160}
-            />
-          </div>
-
-          {/* Custom Date Inputs */}
-          {showCustomDate && (
-            <div className="portal-filter-custom-date" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{
-                  padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--color-border)',
-                  fontSize: '0.85rem', outline: 'none', background: 'var(--color-surface)', color: 'var(--color-text)',
-                  height: 38
-                }}
-              />
-              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{t('đến')}</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={{
-                  padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--color-border)',
-                  fontSize: '0.85rem', outline: 'none', background: 'var(--color-surface)', color: 'var(--color-text)',
-                  height: 38
-                }}
-              />
-            </div>
-          )}
-
-          {/* Status Select Filter */}
-          <div className="responsive-filter-item">
-            <CustomSelect
-              options={[
-                { value: 'all', label: t('Tất cả trạng thái'), icon: <Filter size={16} /> },
-                { value: 'assigned', label: t('Đã chia') },
-                { value: 'compensation', label: t('Data Bù') },
-                { value: 'databank_claim', label: 'Databank Claim' },
-                { value: 'reminder', label: t('Nhắc lại') },
-                { value: 'pending_ticket', label: t('Ticket chờ duyệt') },
-                { value: 'approved_ticket', label: t('Ticket đã bù') },
-                { value: 'approved_no_comp_ticket', label: t('Lỗi không bù') },
-                { value: 'not_contacted', label: t('Chưa liên hệ'), icon: <AlertCircle size={16} /> },
-                { value: 'rejected_ticket', label: t('Ticket bị từ chối') }
-              ]}
-              value={statusFilter}
-              onChange={(val) => setStatusFilter(String(val))}
-              width={170}
-            />
-          </div>
-
-          {/* Round Select Filter */}
-          <div className="responsive-filter-item">
-            <CustomSelect
-              options={[
-                { value: '', label: t('Tất cả vòng'), icon: <Tag size={16} /> },
-                ...data.rounds.map((r: any) => ({ value: r.id, label: r.round_name }))
-              ]}
-              value={roundId}
-              onChange={(val) => setRoundId(String(val))}
-              width={160}
-            />
-          </div>
-
-          <button
-            onClick={handleApplyFilters}
-            className="btn sm primary"
-            style={{ height: 38 }}
-          >
-            <Filter size={14} /> {t('Áp dụng')}
-          </button>
-
-          <div style={{ marginLeft: 'auto', fontSize: '0.875rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-            {t('Tổng cộng:')} <strong style={{ color: 'var(--color-text)' }}>{filteredLeads.length}</strong> {t('data')}
-          </div>
-        </div>
-
-        {/* Bảng Dữ Liệu */}
-        <div className="card mobile-flat-container" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
-              {t('DANH SÁCH DỮ LIỆU ĐƯỢC PHÂN BỔ')}
-            </h3>
-            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', background: 'var(--color-border-light)', padding: '4px 10px', borderRadius: '20px', fontWeight: 600 }}>
-              {t('Đang hiển thị')} {paginatedLeads.length} / {totalCount} {t('dòng')}
-            </span>
-          </div>
-
-          <div className="table-wrap responsive-table-wrap mobile-card-table" style={{
-            overflowX: isMobile ? 'visible' : 'auto',
-            maxHeight: isMobile ? 'none' : '520px',
-            overflowY: isMobile ? 'visible' : 'auto'
-          }}>
-            {loading ? (
-              <TableSkeleton cols={7} rows={6} />
-            ) : filteredLeads.length > 0 ? (
-              isMobile ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0 5rem 0' }}>
-                  {paginatedLeads.map((lead: any) => (
-                    <div
-                      key={lead.log_id}
-                      onClick={() => {
-                        if (lead.contact_id) {
-                          handleOpenContactProfile(Number(lead.contact_id));
-                        } else {
-                          setActiveDetailLead(lead);
-                          setDetailModalOpen(true);
-                        }
-                      }}
-                      style={{
-                        padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
-                        borderRadius: '12px', background: 'var(--color-surface)',
-                        border: '1px solid var(--color-border-light)', cursor: 'pointer', transition: 'all 0.2s'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-                          <Avatar name={lead.lead_name || t('Khách hàng')} size={32} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                {lead.lead_name || t('Chưa cập nhật')}
-                              </span>
-                              {effectiveRole === 'sale' && Number(lead.is_accepted) === 1 && Number(lead.lead_recall_minutes) > 0 && (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 2, padding: '1px 6px', borderRadius: '8px',
-                                  background: '#e6f4ea', color: '#137333', fontSize: '0.65rem', fontWeight: 700
-                                }}>
-                                  <CheckCircle2 size={10} /> {t('Đã tiếp nhận')}
-                                </span>
-                              )}
-                              {getStatusBadge(lead.status, lead.report_status)}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', marginTop: '1px' }}>
-                              <span style={{ color: 'var(--color-text)', fontWeight: 700, fontSize: '0.75rem' }}>{lead.phone}</span>
-                              {lead.lead_email && (
-                                <>
-                                  <span style={{ color: '#cbd5e1', fontSize: '0.7rem' }}>•</span>
-                                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px' }}>
-                                    {lead.lead_email}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <span style={{ display: 'inline-flex', padding: '3px 8px', borderRadius: '8px', background: '#ffe3e8', color: '#8a0f1b', fontSize: '0.675rem', fontWeight: 700 }}>
-                            {lead.round_name || t('Mặc định')}
-                          </span>
-                          {lead.status === 'compensation' && (
-                            <span style={{ padding: '2px 6px', borderRadius: '4px', background: '#d1fae5', color: '#065f46', fontSize: '0.625rem', fontWeight: 700 }}>
-                              {t('Data bù')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div style={{ borderTop: '1px dotted var(--color-border-light)', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div>
-                            <span style={{ fontWeight: 600, color: 'var(--color-text-light)' }}>{t('Nguồn')}: </span>
-                            <span>{lead.source || 'N/A'}</span>
-                            {lead.type && <span style={{ color: '#94a3b8' }}> ({lead.type})</span>}
-                          </div>
-                          {lead.sale_name && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--color-text-light)' }}>{t('Phân bổ')}: </span>
-                              <Avatar src={lead.sale_avatar} name={lead.sale_name} size={18} />
-                              <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{lead.sale_name}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ textAlign: 'right', color: '#64748b' }}>
-                          {lead.received_at ? parseServerDate(lead.received_at).toLocaleString('vi-VN') : '—'}
-                        </div>
-                      </div>
-
-                      {(lead.report_status || (isAllowedToReport &&
-                        (!data.below_standard_fallback_round_ids || !data.below_standard_fallback_round_ids.includes(Number(lead.round_id))) &&
-                        (!data.below_standard_fallback_round_id || Number(lead.round_id) !== Number(data.below_standard_fallback_round_id)))) && (
-                          <div onClick={e => e.stopPropagation()} style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '0.5rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {lead.report_status === 'pending' && (
-                                <span className="badge warning" title={t("Ticket chờ duyệt (Bấm để xem chi tiết)")} onClick={() => { setActiveDetailLead(lead); setDetailModalOpen(true); }}>
-                                  {t('Chờ duyệt')}
-                                </span>
-                              )}
-                              {lead.report_status === 'approved' && (
-                                <span className="badge success" title={t("Ticket đã duyệt bù (Bấm để xem chi tiết)")} onClick={() => { setActiveDetailLead(lead); setDetailModalOpen(true); }}>
-                                  {t('Đã bù')}
-                                </span>
-                              )}
-                              {lead.report_status === 'approved_no_comp' && (
-                                <span className="badge" style={{ background: '#dbeafe', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)', cursor: 'pointer' }} title={t("Ticket duyệt lỗi không bù (Bấm để xem chi tiết)")} onClick={() => { setActiveDetailLead(lead); setDetailModalOpen(true); }}>
-                                  {t('Lỗi không bù')}
-                                </span>
-                              )}
-                              {lead.report_status === 'rejected' && (
-                                <span className="badge danger" title={t("Từ chối")} onClick={() => { setActiveDetailLead(lead); setDetailModalOpen(true); }}>
-                                  {t('Từ chối')}
-                                </span>
-                              )}
-                              {(!lead.report_status || lead.report_status === 'rejected') && isAllowedToReport && lead.status !== 'reminder' && lead.status !== 'databank_claim' &&
-                                (!data.below_standard_fallback_round_ids || !data.below_standard_fallback_round_ids.includes(Number(lead.round_id))) &&
-                                (!data.below_standard_fallback_round_id || Number(lead.round_id) !== Number(data.below_standard_fallback_round_id)) && (
-                                  <button onClick={() => handleOpenReportModal(lead)} className="btn sm danger" style={{ height: 30, padding: '0 10px' }}>
-                                    <AlertCircle size={12} /> {t('Báo lỗi')}
-                                  </button>
-                                )}
-                            </div>
-                          </div>
-                        )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <table style={{ width: '100%', minWidth: 850, borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('KHÁCH HÀNG')}</th>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('LIÊN HỆ')}</th>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('TRẠNG THÁI')}</th>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('PHÂN BỔ CHO')}</th>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('NGUỒN / PHÂN LOẠI')}</th>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('THỜI GIAN NHẬN')}</th>
-                      <th style={{ padding: '1rem', color: 'var(--color-text-light)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' }}>{t('TICKET')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedLeads.map((lead: any) => (
-                      <tr
-                        key={lead.log_id}
-                        onClick={() => {
-                          if (lead.contact_id) {
-                            handleOpenContactProfile(Number(lead.contact_id));
-                          } else {
-                            setActiveDetailLead(lead);
-                            setDetailModalOpen(true);
-                          }
-                        }}
-                        className="table-row-hover"
-                        style={{
-                          borderBottom: '1px solid var(--color-border)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', width: '100%' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <Avatar name={lead.lead_name || t('Khách hàng')} size={32} />
-                              <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>
-                                {lead.lead_name || t('Chưa cập nhật')}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{lead.phone}</span>
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{lead.lead_email || '—'}</span>
-                          </div>
-                        </td>
-
-                        <td style={{ padding: '1rem' }}>
-                          {getStatusBadge(lead.status, lead.report_status)}
-                        </td>
-
-                        <td style={{ padding: '1rem' }}>
-                          {lead.sale_name ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <Avatar src={lead.sale_avatar} name={lead.sale_name} size={32} />
-                              <div>
-                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>{lead.sale_name}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                                  {(lead.status === 'reminder' && (!lead.round_name || lead.round_name === '-')) ? 'Reminder' : (lead.round_name || 'Form')}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--color-text-muted)' }}>-</span>
-                          )}
-                        </td>
-
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ color: 'var(--color-text-light)', fontSize: '0.8rem', fontWeight: 500 }}>{lead.source || 'N/A'}</span>
-                            {lead.type && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{lead.type}</span>}
-                          </div>
-                        </td>
-
-                        <td style={{ padding: '1rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                            <span>{lead.received_at ? parseServerDate(lead.received_at).toLocaleString('vi-VN') : '—'}</span>
-                            {lead.status === 'compensation' && (
-                              <span style={{ alignSelf: 'flex-start', padding: '2px 6px', borderRadius: '4px', background: '#d1fae5', color: '#065f46', fontSize: '0.7rem', fontWeight: 700 }}>
-                                {t('Data bù')}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td style={{ padding: '1rem', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                            {lead.report_status === 'pending' && (
-                              <div style={{ display: 'inline-flex', padding: '6px', borderRadius: '50%', background: '#fef3c7', color: '#d97706' }} title={t("Ticket chờ duyệt")}>
-                                <Clock size={16} />
-                              </div>
-                            )}
-                            {lead.report_status === 'approved' && (
-                              <div style={{ display: 'inline-flex', padding: '6px', borderRadius: '50%', background: 'var(--color-success-light)', color: 'var(--color-success)' }} title={t("Ticket đã duyệt bù")}>
-                                <CheckCircle2 size={16} />
-                              </div>
-                            )}
-                            {lead.report_status === 'approved_no_comp' && (
-                              <div style={{ display: 'inline-flex', padding: '6px', borderRadius: '50%', background: '#dbeafe', color: '#2563eb' }} title={t("Ticket duyệt lỗi không bù")}>
-                                <Info size={16} />
-                              </div>
-                            )}
-                            {lead.report_status === 'rejected' && (
-                              <div style={{ display: 'inline-flex', padding: '6px', borderRadius: '50%', background: 'var(--color-danger-light)', color: 'var(--color-danger)' }} title={t("Từ chối")}>
-                                <XCircle size={16} />
-                              </div>
-                            )}
-                            {(!lead.report_status || lead.report_status === 'rejected') && isAllowedToReport && lead.status !== 'reminder' && lead.status !== 'databank_claim' &&
-                              (!data.below_standard_fallback_round_ids || !data.below_standard_fallback_round_ids.includes(Number(lead.round_id))) &&
-                              (!data.below_standard_fallback_round_id || Number(lead.round_id) !== Number(data.below_standard_fallback_round_id)) && (
-                                <button
-                                  onClick={() => handleOpenReportModal(lead)}
-                                  className="btn sm danger"
-                                  style={{ borderRadius: '50%', width: 32, height: 32, padding: 0 }}
-                                >
-                                  <AlertCircle size={16} />
-                                </button>
-                              )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            ) : (
-              <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>
-                <AlertCircle size={32} style={{ margin: '0 auto 10px', display: 'block' }} />
-                <span>{t('Không tìm thấy dữ liệu nào.')}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--color-surface)' }}>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-                {t('Hiển thị')} <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> - <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{Math.min(currentPage * ITEMS_PER_PAGE, totalCount)}</span> {t('trên')} <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{totalCount}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="btn sm secondary" style={{ height: 32, width: 32, padding: 0 }}>
-                  <ChevronLeft size={16} />
-                </button>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let startPage = 1;
-                    if (totalPages > 5) {
-                      if (currentPage > 3) {
-                        startPage = currentPage - 2;
-                        if (startPage + 4 > totalPages) {
-                          startPage = totalPages - 4;
-                        }
-                      }
-                    }
-                    const pageNum = startPage + i;
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        style={{
-                          width: 32, height: 32, borderRadius: 6, fontSize: '0.8125rem', fontWeight: 600,
-                          border: currentPage === pageNum ? 'none' : '1px solid var(--color-border)',
-                          background: currentPage === pageNum ? 'var(--color-primary)' : 'var(--color-surface)',
-                          color: currentPage === pageNum ? 'white' : 'var(--color-text)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="btn sm secondary" style={{ height: 32, width: 32, padding: 0 }}>
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <Navigate to="/contacts" replace />;
   };
+
 
   const renderDatabankView = () => {
     const DATABANK_ITEMS_PER_PAGE = 10;
@@ -15130,8 +14696,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 {
                   title: 'KHÁCH HÀNG',
                   items: [
-                    { name: 'Nhật ký Data', key: 'data', icon: Database },
-                    { name: 'Khách hàng CRM', key: 'crm-contacts', icon: Users, route: '/contacts' },
+                    { name: 'Tiềm năng & Khách hàng', key: 'crm-contacts', icon: Users, route: '/contacts' },
                     { name: 'Lịch trình', key: 'calendar', icon: Calendar },
                     { name: 'Chấm công', key: 'attendance-portal', icon: Clock },
                     { name: 'Ticket Lỗi Data', key: 'tickets', icon: Ticket, badgeCount: data.stats.tickets_pending },
@@ -15397,8 +14962,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 {
                   title: 'KHÁCH HÀNG',
                   items: [
-                    { name: 'Nhật ký Data', key: 'data', icon: Database },
-                    { name: 'Khách hàng CRM', key: 'crm-contacts', icon: Users, route: '/contacts' },
+                    { name: 'Tiềm năng & Khách hàng', key: 'crm-contacts', icon: Users, route: '/contacts' },
                     { name: 'Lịch trình', key: 'calendar', icon: Calendar },
                     { name: 'Chấm công', key: 'attendance-portal', icon: Clock },
                     { name: 'Ticket Lỗi Data', key: 'tickets', icon: Ticket, badgeCount: data.stats.tickets_pending },
@@ -15978,7 +15542,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             <div key={activeTab} className="subtab-enter-active">
               {activeTab === 'dashboard' && renderDashboardView()}
               {activeTab === 'workspace' && renderWorkspaceView()}
-              {activeTab === 'data' && renderDataView()}
+              {activeTab === 'data' && <Navigate to="/contacts" replace />}
               {activeTab === 'calendar' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {/* Title */}
@@ -16196,11 +15760,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             <span className="mobile-bottom-nav-item-label">{t('Bàn làm việc')}</span>
           </button>
           <button
-            onClick={() => setActiveTab('data')}
-            className={`mobile-bottom-nav-item ${activeTab === 'data' ? 'active' : ''}`}
+            onClick={() => navigate('/contacts')}
+            className="mobile-bottom-nav-item"
           >
-            <Database />
-            <span className="mobile-bottom-nav-item-label">{t('Nhật ký Data')}</span>
+            <Users />
+            <span className="mobile-bottom-nav-item-label">{t('Tiềm năng')}</span>
           </button>
           <button
             onClick={() => setActiveTab('tickets')}

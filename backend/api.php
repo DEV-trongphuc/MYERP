@@ -1128,10 +1128,8 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
 {
     require_once __DIR__ . '/webhook_logic.php';
 
-    $phone = normalizePhone($leadData['phone'] ?? '');
-    if ($phone === '') $phone = null;
-    $email = trim($leadData['email'] ?? '');
-    if ($email === '') $email = null;
+    $phone = sanitizePhoneNumber($leadData['phone'] ?? '');
+    $email = sanitizeEmailAddress($leadData['email'] ?? '');
     $name = trim($leadData['name'] ?? '');
     $source = trim($leadData['source'] ?? '');
     $type = trim($leadData['type'] ?? '');
@@ -1179,14 +1177,15 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
     }
 
     if (empty($phone) && empty($email)) {
-        if ($source === 'gioi_thieu' || $source === 'ca_nhan') {
-            if (empty($name)) {
-                return ['success' => false, 'message' => 'Vui lòng nhập họ và tên khách hàng giới thiệu.'];
-            }
-        } else {
-            return ['success' => false, 'message' => 'Vui lòng nhập SĐT hoặc Email'];
+        // Mặc định là data giới thiệu khác nếu không có SĐT / Email
+        if (empty($source) || !in_array($source, ['gioi_thieu', 'ca_nhan'], true)) {
+            $source = 'gioi_thieu';
+        }
+        if (empty($name)) {
+            return ['success' => false, 'message' => 'Vui lòng nhập họ và tên khách hàng giới thiệu.'];
         }
     }
+
 
     if ((!empty($phone) || !empty($email)) && isLeadBlocked($conn, $phone, $email)) {
         return ['success' => false, 'message' => 'Liên hệ này đã bị chặn vĩnh viễn trong hệ thống (Blocked).'];
@@ -1341,7 +1340,7 @@ function processManualLead($conn, $leadData, $override_round_id, $override_consu
     } else if (!empty($email)) {
         $lockKey = 'webhook_lead_email_' . md5($email);
     } else {
-        $lockKey = 'webhook_lead_empty_' . md5(json_encode($leadData));
+        $lockKey = 'webhook_lead_empty_' . uniqid('lead_', true);
     }
 
     // Get lock using prepared statement with 5s timeout

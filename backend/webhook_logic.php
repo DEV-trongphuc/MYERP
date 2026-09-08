@@ -69,6 +69,63 @@ function normalizePhone($phoneRaw)
 }
 
 /**
+ * Sanitize placeholder email and validate format.
+ * Returns valid email string or null if empty/placeholder/invalid.
+ */
+function sanitizeEmailAddress($emailRaw)
+{
+    if (empty($emailRaw)) return null;
+    $email = trim((string)$emailRaw);
+    if ($email === '') return null;
+
+    $lower = mb_strtolower($email, 'UTF-8');
+    $placeholders = [
+        'không', 'khong', 'k', 'ko', 'none', 'null', 'chưa có', 'chua co',
+        'chưa rõ', 'chua ro', 'na', 'n/a', '-', '.', 'no', '0', 'undefined',
+        'trống', 'trong', 'chua_co', 'chua_ro', 'ko co', 'không có', 'khong co',
+        'không có sđt', 'khong co sdt', 'ko co sdt', 'k co sdt'
+    ];
+    if (in_array($lower, $placeholders, true)) {
+        return null;
+    }
+
+    if (strpos($email, '@') === false || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return null;
+    }
+
+    return $email;
+}
+
+/**
+ * Sanitize placeholder phone number.
+ * Returns normalized phone string or null if empty/placeholder/invalid.
+ */
+function sanitizePhoneNumber($phoneRaw)
+{
+    if (empty($phoneRaw)) return null;
+    $phone = trim((string)$phoneRaw);
+    if ($phone === '') return null;
+
+    $lower = mb_strtolower($phone, 'UTF-8');
+    $placeholders = [
+        'không', 'khong', 'k', 'ko', 'none', 'null', 'chưa có', 'chua co',
+        'chưa rõ', 'chua ro', 'na', 'n/a', '-', '.', 'no', '0', 'undefined',
+        'trống', 'trong', 'chua_co', 'chua_ro', 'ko co', 'không có', 'khong co',
+        'không có sđt', 'khong co sdt', 'ko co sdt', 'k co sdt'
+    ];
+    if (in_array($lower, $placeholders, true)) {
+        return null;
+    }
+
+    $norm = normalizePhone($phone);
+    $digits = preg_replace('/[^\d]/', '', $norm);
+    if (strlen($digits) < 8 || strlen($digits) > 15) {
+        return null;
+    }
+    return $norm;
+}
+
+/**
  * Normalize date to standard MySQL Y-m-d H:i:s format.
  * Supports various common Excel/text formats (e.g. 20-05-2026 16:35:50, 2026-05-20, etc.)
  */
@@ -336,13 +393,19 @@ function findConsultantByEmailOrName($conn, $value)
 
 function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInactive = false, $excludeLeadId = null)
 {
+    $phone = sanitizePhoneNumber($phone);
+    $email = sanitizeEmailAddress($email);
+
     if (empty($phone) && empty($email)) {
         return [
             'isDuplicate' => false,
+            'leadExists' => false,
+            'leadStatus' => null,
             'monthsSinceLastInteraction' => 0,
             'assignedTo' => null,
             'originalAssignedTo' => null,
-            'consultantStatus' => null
+            'consultantStatus' => null,
+            'isBeforeHoSo' => false
         ];
     }
 
@@ -662,8 +725,11 @@ function checkCRMInteraction($conn, $phone, $email, $ignoreReassignIfOwnerInacti
  */
 function getContactIdByPhoneOrEmail($conn, $phone, $email = null)
 {
+    $phone = sanitizePhoneNumber($phone);
+    $email = sanitizeEmailAddress($email);
+
     if (!empty($phone)) {
-        $cleanPhone = normalizePhone($phone);
+        $cleanPhone = $phone;
         $noLeadingZero = ltrim($cleanPhone, '0');
         $withLeadingZero = '0' . $noLeadingZero;
         $stmt = $conn->prepare("SELECT id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
@@ -676,10 +742,9 @@ function getContactIdByPhoneOrEmail($conn, $phone, $email = null)
         }
     }
     if (!empty($email)) {
-        $cleanEmail = trim(strtolower($email));
         $stmt = $conn->prepare("SELECT id FROM contacts WHERE email = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
         if ($stmt) {
-            $stmt->bind_param("s", $cleanEmail);
+            $stmt->bind_param("s", $email);
             $stmt->execute();
             $r = $stmt->get_result()->fetch_assoc();
             $stmt->close();
@@ -1430,10 +1495,8 @@ function isLeadBlocked($conn, $phone, $email) {
 
 function insertLead($conn, $data, $assignedConsultantId, $phone, $email, $name, $source, $type, $note, $connectionId = null, $customDate = null, $preserveInteractionDate = false)
 {
-    $phone = normalizePhone($phone);
-    if ($phone === '')
-        $phone = null;
-    $email = trim($email ?? '') === '' ? null : trim($email);
+    $phone = sanitizePhoneNumber($phone);
+    $email = sanitizeEmailAddress($email);
 
     if (isLeadBlocked($conn, $phone, $email)) {
         error_log("Lead insertion rejected: Blocked lead (phone: " . ($phone ?? '') . ", email: " . ($email ?? '') . ")");
@@ -1641,7 +1704,8 @@ if (!function_exists('saveMappedExtendedFields')) {
 
 function updateLead($conn, $phone, $email, $assignedConsultantId, $source, $type, $note, $connectionId = null, $customDate = null, $name = null, $onlyUpdateDate = false, $preserveInteractionDate = false)
 {
-    $phone = normalizePhone($phone);
+    $phone = sanitizePhoneNumber($phone);
+    $email = sanitizeEmailAddress($email);
     if (empty($phone) && empty($email))
         return null;
 
@@ -3881,9 +3945,9 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
 
     if (!$lead) return;
 
-    $phone = normalizePhone($lead['phone'] ?? '');
-    $email = $lead['email'] ?? '';
-    $name = $lead['name'] ?? '';
+    $phone = sanitizePhoneNumber($lead['phone'] ?? '');
+    $email = sanitizeEmailAddress($lead['email'] ?? '');
+    $name = trim($lead['name'] ?? '');
     if ((!empty($phone) || !empty($email)) && isLeadBlocked($conn, $phone, $email)) {
         return;
     }
@@ -3896,6 +3960,17 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
 
     // 2. Ensure Person (reuse if lead already has person_id)
     $person_id = !empty($lead['person_id']) ? (int)$lead['person_id'] : null;
+
+    // Referral/personal lead with no phone & email must NOT hijack an existing person with phone/email or another name
+    if ($person_id && empty($phone) && empty($email)) {
+        $chkP = $conn->query("SELECT phone, email, full_name FROM persons WHERE id = $person_id LIMIT 1");
+        if ($chkP && $rowP = $chkP->fetch_assoc()) {
+            if (!empty($rowP['phone']) || !empty($rowP['email']) || ($name !== '' && mb_strtolower(trim($rowP['full_name'])) !== mb_strtolower($name))) {
+                $person_id = null;
+            }
+        }
+    }
+
     if (!$person_id) {
         if (!empty($phone) || !empty($email)) {
             $stmtPerson = $conn->prepare("
@@ -3938,7 +4013,8 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                 }
             }
         } else if (!empty($name)) {
-            // Referral lead with name only (e.g. Zalo QR)
+            // Referral lead with name only (e.g. Zalo QR, Giới thiệu, Cá nhân)
+            // Always creates a brand new person record
             $stmtPerson = $conn->prepare("INSERT INTO persons (full_name) VALUES (?)");
             if ($stmtPerson) {
                 $stmtPerson->bind_param("s", $name);
@@ -4038,28 +4114,32 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
 
         // Get all active contacts for this person
         $existingContacts = [];
-        $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
-        $stmtExist->bind_param("i", $person_id);
-        $stmtExist->execute();
-        $resExist = $stmtExist->get_result();
-        while ($rowExist = $resExist->fetch_assoc()) {
-            $existingContacts[] = $rowExist;
-        }
-        $stmtExist->close();
+        // Only lookup existing contacts if phone or email is provided.
+        // For referral/personal leads without phone & email, NEVER merge with existing contacts!
+        if (!empty($phone) || !empty($email)) {
+            $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
+            $stmtExist->bind_param("i", $person_id);
+            $stmtExist->execute();
+            $resExist = $stmtExist->get_result();
+            while ($rowExist = $resExist->fetch_assoc()) {
+                $existingContacts[] = $rowExist;
+            }
+            $stmtExist->close();
 
-        // Tìm tiếp qua phone nếu person_id chưa có contact để tránh tạo trùng
-        if (empty($existingContacts) && !empty($phone)) {
-            $noZeroP = ltrim($phone, '0');
-            $withZeroP = '0' . $noZeroP;
-            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
-            if ($stmtExistPhone) {
-                $stmtExistPhone->bind_param("ss", $withZeroP, $noZeroP);
-                $stmtExistPhone->execute();
-                $resExistPhone = $stmtExistPhone->get_result();
-                while ($rowExistP = $resExistPhone->fetch_assoc()) {
-                    $existingContacts[] = $rowExistP;
+            // Tìm tiếp qua phone nếu person_id chưa có contact để tránh tạo trùng
+            if (empty($existingContacts) && !empty($phone)) {
+                $noZeroP = ltrim($phone, '0');
+                $withZeroP = '0' . $noZeroP;
+                $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
+                if ($stmtExistPhone) {
+                    $stmtExistPhone->bind_param("ss", $withZeroP, $noZeroP);
+                    $stmtExistPhone->execute();
+                    $resExistPhone = $stmtExistPhone->get_result();
+                    while ($rowExistP = $resExistPhone->fetch_assoc()) {
+                        $existingContacts[] = $rowExistP;
+                    }
+                    $stmtExistPhone->close();
                 }
-                $stmtExistPhone->close();
             }
         }
 
