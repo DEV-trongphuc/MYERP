@@ -374,7 +374,7 @@ export const Login = () => {
           )}
 
           <div className="login-card">
-            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.125rem' }}>
+            <form onSubmit={handleLogin} className="login-form">
               {/* Email */}
               <div>
                 <label className="form-label-custom">{t('Email doanh nghiệp')}</label>
@@ -389,7 +389,7 @@ export const Login = () => {
                     autoFocus
                     autoComplete="username"
                   />
-                  <Mail className="input-icon" size={18} />
+                  <Mail className="input-icon" size={19} />
                 </div>
               </div>
 
@@ -416,13 +416,13 @@ export const Login = () => {
                     tabIndex={-1}
                     aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
                   </button>
                 </div>
               </div>
 
               {/* Options row: Remember Me & Forgot Password */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem', marginTop: '2px' }}>
+              <div className="options-row">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', cursor: 'pointer', userSelect: 'none' }}>
                   <input
                     type="checkbox"
@@ -451,12 +451,12 @@ export const Login = () => {
                 type="submit"
                 className="submit-btn-custom"
                 disabled={loading}
-                style={{ marginTop: '0.5rem' }}
+                style={{ marginTop: '0.25rem' }}
               >
                 {loading ? (
-                  <><Loader2 className="animate-spin" size={18} /> {t('Đang xác thực...')}</>
+                  <><Loader2 className="animate-spin" size={19} /> {t('Đang xác thực...')}</>
                 ) : (
-                  <><LogIn size={18} /> {t('Đăng Nhập')}</>
+                  <><LogIn size={19} /> {t('Đăng Nhập')}</>
                 )}
               </button>
             </form>
@@ -741,33 +741,38 @@ export const Login = () => {
         }
         .login-card {
           width: 100%;
-          max-width: 380px;
-          padding: 2rem;
+          max-width: 400px;
+          padding: 2.25rem 2rem;
           background: rgba(15, 23, 42, 0.55);
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 32px;
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
           backdrop-filter: blur(20px);
         }
+        .login-form {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+        }
         .form-label-custom {
-          font-size: 11px;
+          font-size: 11.5px;
           font-weight: 700;
           color: #94a3b8;
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 0.8px;
           display: block;
-          margin-bottom: 6px;
+          margin-bottom: 7px;
         }
         .input-wrapper {
           position: relative;
-          margin-bottom: 1.25rem;
+          margin-bottom: 0;
           display: flex;
           align-items: center;
           width: 100%;
         }
         .input-icon {
           position: absolute;
-          right: 14px;
+          right: 15px;
           top: 50%;
           transform: translateY(-50%);
           color: #94a3b8;
@@ -782,8 +787,8 @@ export const Login = () => {
           right: 8px;
           top: 50%;
           transform: translateY(-50%) !important;
-          width: 36px;
-          height: 36px;
+          width: 38px;
+          height: 38px;
           background: none;
           border: none;
           color: #94a3b8;
@@ -807,6 +812,13 @@ export const Login = () => {
         .input-icon-btn:focus {
           transform: translateY(-50%) !important;
           outline: none;
+        }
+        .options-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 0.8125rem;
+          margin-top: 2px;
         }
         .forgot-btn {
           background: none;
@@ -844,14 +856,14 @@ export const Login = () => {
         }
         .input-field {
           width: 100%;
-          height: 44px;
+          height: 48px;
           padding-left: 16px;
-          padding-right: 42px;
+          padding-right: 46px;
           border-radius: 12px;
           border: 1px solid rgba(255, 255, 255, 0.08);
           background: rgba(15, 23, 42, 0.8);
           color: white;
-          font-size: 14px;
+          font-size: 15px;
           transition: all 0.2s ease;
           box-sizing: border-box;
         }
@@ -862,12 +874,12 @@ export const Login = () => {
         }
         .submit-btn-custom {
           width: 100%;
-          height: 46px;
+          height: 48px;
           background: linear-gradient(135deg, #a31422 0%, #d01d33 100%);
           color: white;
           border-radius: 12px;
           font-weight: 700;
-          font-size: 14px;
+          font-size: 15px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1018,8 +1030,48 @@ export const Login = () => {
             align-items: center;
           }
           .login-card {
-            padding: 1.5rem 1.25rem;
-            border-radius: 24px;
+            max-width: 440px;
+            padding: 2rem 1.35rem;
+            border-radius: 26px;
+          }
+          .login-form {
+            gap: 1.35rem;
+          }
+          .form-label-custom {
+            font-size: 12px;
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+          }
+          .input-field {
+            height: 52px;
+            font-size: 16px;
+            padding-left: 18px;
+            padding-right: 50px;
+            border-radius: 14px;
+          }
+          .input-icon {
+            right: 16px;
+          }
+          .input-icon svg {
+            width: 20px;
+            height: 20px;
+          }
+          .input-icon-btn {
+            right: 8px;
+            width: 42px;
+            height: 42px;
+          }
+          .input-icon-btn svg {
+            width: 20px;
+            height: 20px;
+          }
+          .options-row {
+            font-size: 0.875rem;
+          }
+          .submit-btn-custom {
+            height: 52px;
+            font-size: 16px;
+            border-radius: 14px;
           }
           .right-side > div {
             gap: 1.25rem !important;
@@ -1031,6 +1083,20 @@ export const Login = () => {
           }
           .logo-box + div h2 {
             font-size: 1.5rem !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .right-side {
+            padding: 1.5rem 1rem;
+          }
+          .login-card {
+            padding: 1.75rem 1.15rem;
+          }
+          .input-field {
+            height: 52px;
+            font-size: 16px;
+            padding-left: 16px;
+            padding-right: 48px;
           }
         }
       `}</style>
