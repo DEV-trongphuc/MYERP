@@ -1372,7 +1372,9 @@ export default function Approvals() {
     );
 
     // 0. If proposer is a team leader / manager / head of department, they can self-approve!
-    const teamId = p.team_id || (user as any)?.team_id;
+    const currentUserId = p?.id || (user as any)?.id;
+    const proposerInUsers = users.find(u => Number(u.id) === Number(currentUserId) || (p?.email && u.email === p.email) || (p?.username && u.username === p.username));
+    const teamId = p.team_id || proposerInUsers?.team_id || (user as any)?.team_id;
     const myTeam = teams.find(t => Number(t.id) === Number(teamId));
     const isLeaderOrManager = (myTeam && Number(myTeam.leader_id) === Number(p.id)) || 
                               ['manager', 'truongphong', 'quanly', 'head_of_department', 'leader', 'director', 'academic', 'admin'].includes(String(p.role).toLowerCase()) ||
@@ -1398,15 +1400,7 @@ export default function Approvals() {
       if (teamLead) return teamLead;
     }
 
-    // 2. Second priority (if no team leader or proposer is leader): Default to HR Leader (Nguyễn Thị Duy Phương)
-    const hrLead = getDefaultHrLeader();
-    if (hrLead && Number(hrLead.id) !== Number(p.id)) return hrLead;
-
-    // 3. Fallback: Any manager in company
-    const manager = businessUsers.find(u => ['manager', 'truongphong', 'quanly', 'head_of_department', 'leader'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
-    if (manager) return manager;
-
-    // Director (Mai Thị Nữ)
+    // 2. Second priority (if no team leader or proposer is leader): Director (Mai Thị Nữ)
     const director = businessUsers.find(u => ['director'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (director) return director;
 
@@ -1414,12 +1408,25 @@ export default function Approvals() {
     const admin = businessUsers.find(u => ['admin'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (admin) return admin;
 
+    // 3. Fallback: HR Leader (Nguyễn Thị Duy Phương)
+    const hrLead = getDefaultHrLeader();
+    if (hrLead && Number(hrLead.id) !== Number(p.id)) return hrLead;
+
+    // 4. Any manager in company
+    const manager = businessUsers.find(u => ['manager', 'truongphong', 'quanly', 'head_of_department', 'leader'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
+    if (manager) return manager;
+
     return hrLead || businessUsers[0] || null;
   };
 
   const defaultApp1 = useMemo(() => getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef), [teams, users, proposerUser, user, selectedWorkflowDef]);
   
   const defaultAccountant = useMemo(() => {
+    const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'remote_work'].includes(formType) || (formType === 'overtime' && otType === 'compensatory');
+    if (isHrWf) {
+      const hrLead = getDefaultHrLeader();
+      if (hrLead && Number(hrLead.id) !== Number(defaultApp1?.id)) return hrLead;
+    }
     const businessUsers = users.filter(u => 
       !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
       u.email !== 'turniodev@gmail.com'
@@ -1435,7 +1442,7 @@ export default function Approvals() {
       })
       || businessUsers[0]
       || null;
-  }, [users]);
+  }, [users, selectedWorkflowDef, formType, otType, defaultApp1]);
 
   const defaultDirector = useMemo(() => {
     const businessUsers = users.filter(u => 
@@ -1514,8 +1521,23 @@ export default function Approvals() {
       } else {
         if (defaultAccountant) setCustomApprover2(defaultAccountant);
       }
-    } else if (formType === 'leave' || formType === 'late_early' || formType === 'remote_work' || formType === 'attendance_bulk') {
-      // Đề xuất công / nghỉ / chấm công: Mặc định Trưởng phòng (hoặc Duy Phương nếu ko có Trưởng phòng)
+    } else if (formType === 'leave' || formType === 'late_early' || formType === 'remote_work') {
+      // Đề xuất nghỉ phép / đi muộn về sớm / WFH: 2 cấp duyệt
+      // Cấp 1: Trưởng nhóm / Quản lý trực tiếp
+      // Cấp 2: Nhân sự (HR Duy Phương)
+      setShowStepManager(true);
+      setShowStepAccountant(true);
+      setShowStepDirector(false);
+      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
+      if (defaultApprover) setCustomApprover1(defaultApprover);
+      const hrLead = getDefaultHrLeader();
+      if (hrLead && Number(hrLead.id) !== Number(defaultApprover?.id)) {
+        setCustomApprover2(hrLead);
+      } else {
+        const director = users.find(u => String(u.role).toLowerCase() === 'director' && Number(u.id) !== Number(proposerUser?.id || user?.id));
+        if (director) setCustomApprover2(director);
+      }
+    } else if (formType === 'attendance_bulk') {
       setShowStepManager(true);
       setShowStepAccountant(false);
       setShowStepDirector(false);
@@ -6482,7 +6504,7 @@ export default function Approvals() {
                                   </div>
                                   <div style={{ width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                      <strong style={{ fontSize: '0.8rem', color: app1User ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt')}</strong>
+                                      <strong style={{ fontSize: '0.8rem', color: app1User ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt (Trưởng nhóm / Quản lý)')}</strong>
                                       <button
                                         type="button"
                                         onClick={() => setShowStepManager(false)}
@@ -6534,7 +6556,12 @@ export default function Approvals() {
                                   </div>
                                   <div style={{ width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                      <strong style={{ fontSize: '0.8rem', color: accountantUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt')}</strong>
+                                      <strong style={{ fontSize: '0.8rem', color: accountantUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                        {(() => {
+                                          const isHrStep = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'remote_work'].includes(formType) || (formType === 'overtime' && otType === 'compensatory');
+                                          return isHrStep ? t('Phê duyệt (HR Duy Phương / Nhân sự)') : t('Phê duyệt (Kế toán)');
+                                        })()}
+                                      </strong>
                                       <button
                                         type="button"
                                         onClick={() => setShowStepAccountant(false)}
@@ -6552,7 +6579,10 @@ export default function Approvals() {
                                           const u = users.find(x => String(x.id) === String(val));
                                           if (u) setCustomApprover2(u);
                                         }}
-                                        placeholder={t('Chọn kế toán...')}
+                                        placeholder={(() => {
+                                          const isHrStep = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'remote_work'].includes(formType) || (formType === 'overtime' && otType === 'compensatory');
+                                          return isHrStep ? t('Chọn nhân sự (Duy Phương)...') : t('Chọn kế toán...');
+                                        })()}
                                         searchable
                                         showAvatars
                                         width="100%"

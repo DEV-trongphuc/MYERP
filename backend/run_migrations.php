@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 246;
+$targetVersion = 247;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2594,8 +2594,33 @@ try {
         $logMsg("Nâng cấp lên phiên bản 246 hoàn tất.", "success");
     }
 
+    // Migration 247: Thêm cột approved_at vào hrm_leave_requests và approved_by, approved_at vào hrm_salary_advances
+    if ($currentVersion < 247 && $apply) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 247 (Bổ sung approved_at và approved_by cho HRM)...", "info");
+        try {
+            $chkCol1 = $conn->query("SHOW COLUMNS FROM hrm_leave_requests LIKE 'approved_at'");
+            if ($chkCol1 && $chkCol1->num_rows === 0) {
+                $conn->query("ALTER TABLE hrm_leave_requests ADD COLUMN approved_at DATETIME NULL DEFAULT NULL AFTER approved_by");
+                $logMsg("Đã thêm cột approved_at vào bảng hrm_leave_requests.", "success");
+            }
+            $chkCol2 = $conn->query("SHOW COLUMNS FROM hrm_salary_advances LIKE 'approved_by'");
+            if ($chkCol2 && $chkCol2->num_rows === 0) {
+                $conn->query("ALTER TABLE hrm_salary_advances ADD COLUMN approved_by INT NULL DEFAULT NULL AFTER status_level_2");
+                $logMsg("Đã thêm cột approved_by vào bảng hrm_salary_advances.", "success");
+            }
+            $chkCol3 = $conn->query("SHOW COLUMNS FROM hrm_salary_advances LIKE 'approved_at'");
+            if ($chkCol3 && $chkCol3->num_rows === 0) {
+                $conn->query("ALTER TABLE hrm_salary_advances ADD COLUMN approved_at DATETIME NULL DEFAULT NULL AFTER approved_by");
+                $logMsg("Đã thêm cột approved_at vào bảng hrm_salary_advances.", "success");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 247: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 247 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '246') ON DUPLICATE KEY UPDATE setting_value = '246'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '247') ON DUPLICATE KEY UPDATE setting_value = '247'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

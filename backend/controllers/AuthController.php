@@ -320,6 +320,7 @@ class AuthController {
                 'email'       => $user['email'],
                 'full_name'   => $user['full_name'],
                 'role'        => $user['role'],
+                'team_id'     => $user['team_id'] ?? null,
                 'job_title'   => $user['job_title'] ?? null,
                 'avatar_url'  => $user['avatar_url'],
                 'signature_url' => $user['signature_url'] ?? null,

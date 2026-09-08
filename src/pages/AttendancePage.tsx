@@ -192,15 +192,44 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
   };
 
-  const applyDefaultApprover = (list: any[], teamsData?: any[]) => {
+  const applyDefaultApprover = (list: any[], teamsData?: any[], currentType = createLeaveType, currentOtType = otTypeField) => {
     const approvers = list.filter((u: any) => 
       ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'assistant'].includes(String(u.role).toLowerCase())
     );
-    const userTeamId = (user as any)?.team_id;
     const currentUserId = (user as any)?.id || (user as any)?.user_id;
+    const currentUserInList = list.find((u: any) => 
+      Number(u.id) === Number(currentUserId) || 
+      (user?.email && u.email === user.email) || 
+      (user?.username && u.username === user.username)
+    );
+    const userTeamId = (user as any)?.team_id || currentUserInList?.team_id;
     const activeTeams = (teamsData && teamsData.length > 0) ? teamsData : teamsList;
 
-    // 1. First priority: Team Leader from teams table
+    // 1. Duy Phương (HR)
+    const hrDuyPhuong = list.find((u: any) =>
+      u.username === 'phuongntd' ||
+      String(u.full_name || u.name || '').toLowerCase().includes('duy phương') ||
+      Number(u.id) === 100065
+    ) || list.find((u: any) => ['hr'].includes(String(u.role).toLowerCase()));
+
+    // 2. Director or Admin (excluding technical superadmin)
+    const directorOrAdmin = list.find((u: any) =>
+      ['director'].includes(String(u.role).toLowerCase()) &&
+      Number(u.id) !== Number(currentUserId)
+    ) || list.find((u: any) =>
+      ['admin'].includes(String(u.role).toLowerCase()) &&
+      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) &&
+      u.email !== 'turniodev@gmail.com' &&
+      Number(u.id) !== Number(currentUserId)
+    ) || approvers.find((u: any) => Number(u.id) !== Number(currentUserId));
+
+    // 3. Accountant (Thu Thảo)
+    const accountantUser = list.find((u: any) =>
+      String(u.full_name || u.name || '').toLowerCase().includes('thu thảo') ||
+      String(u.role).toLowerCase() === 'accountant'
+    );
+
+    // 4. First priority: Team Leader from teams table
     let teamLeader = null;
     if (userTeamId && activeTeams.length > 0) {
       const myTeam = activeTeams.find((t: any) => Number(t.id) === Number(userTeamId));
@@ -209,7 +238,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       }
     }
 
-    // 2. Fallback: Manager in same team from users list
+    // 5. Fallback: Manager in same team from users list
     const teamManager = teamLeader || list.find((u: any) => 
       userTeamId && (Number(u.team_id) === Number(userTeamId) || String(u.team_id) === String(userTeamId)) &&
       ['manager', 'leader', 'teamlead'].includes(String(u.role).toLowerCase()) &&
@@ -220,28 +249,34 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       Number(u.id) !== Number(currentUserId)
     );
 
-    // 3. Fallback: Duy Phương (HR) or Director or Admin (excluding technical superadmin)
-    const directorOrAdmin = list.find((u: any) =>
-      (String(u.full_name || u.name || '').toLowerCase().includes('duy phương') || u.username === 'phuongntd') &&
-      Number(u.id) !== Number(currentUserId)
-    ) || list.find((u: any) =>
-      ['hr'].includes(String(u.role).toLowerCase()) &&
-      Number(u.id) !== Number(currentUserId)
-    ) || list.find((u: any) =>
-      ['director'].includes(String(u.role).toLowerCase()) &&
-      Number(u.id) !== Number(currentUserId)
-    ) || list.find((u: any) =>
-      ['admin'].includes(String(u.role).toLowerCase()) &&
-      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) &&
-      u.email !== 'turniodev@gmail.com' &&
-      Number(u.id) !== Number(currentUserId)
-    );
+    // Level 1: Team Leader / Manager; if user is leader or no manager, fallback to Director / Admin
+    const defaultApprover1 = teamManager || directorOrAdmin || hrDuyPhuong || approvers[0];
 
-    const defaultApprover = teamManager || directorOrAdmin || approvers[0];
-    if (defaultApprover) {
-      setApproverIdField(String(defaultApprover.id));
+    // Level 2: HR Duy Phương (or Director if approver 1 is Duy Phương)
+    let defaultApprover2: any = null;
+    if (currentType === 'overtime') {
+      if (currentOtType === 'compensatory') {
+        defaultApprover2 = (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(defaultApprover1?.id)) ? hrDuyPhuong : directorOrAdmin;
+      } else {
+        defaultApprover2 = (accountantUser && Number(accountantUser.id) !== Number(defaultApprover1?.id)) ? accountantUser : directorOrAdmin;
+      }
+    } else {
+      // For leave, late_early, remote_work
+      if (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(defaultApprover1?.id) && Number(hrDuyPhuong.id) !== Number(currentUserId)) {
+        defaultApprover2 = hrDuyPhuong;
+      } else if (directorOrAdmin && Number(directorOrAdmin.id) !== Number(defaultApprover1?.id) && Number(directorOrAdmin.id) !== Number(currentUserId)) {
+        defaultApprover2 = directorOrAdmin;
+      }
     }
-    setApproverId2Field('');
+
+    if (defaultApprover1) {
+      setApproverIdField(String(defaultApprover1.id));
+    }
+    if (defaultApprover2 && Number(defaultApprover2.id) !== Number(defaultApprover1?.id)) {
+      setApproverId2Field(String(defaultApprover2.id));
+    } else {
+      setApproverId2Field('');
+    }
   };
 
   useEffect(() => {
@@ -255,12 +290,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         const tList = teamsRes?.data || teamsList;
         if (usersList.length === 0 && Array.isArray(uList)) setUsersList(uList);
         if (teamsList.length === 0 && Array.isArray(tList)) setTeamsList(tList);
-        applyDefaultApprover(uList, tList);
+        applyDefaultApprover(uList, tList, createLeaveType, otTypeField);
       }).catch(() => {
-        if (usersList.length > 0) applyDefaultApprover(usersList, teamsList);
+        if (usersList.length > 0) applyDefaultApprover(usersList, teamsList, createLeaveType, otTypeField);
       });
     }
-  }, [showCreateLeaveModal, user]);
+  }, [showCreateLeaveModal, createLeaveType, otTypeField, user]);
 
   const handleCreateLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3709,7 +3744,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                {t('Người duyệt 1')}
+                {t('Người duyệt 1 (Trưởng nhóm / Quản lý)')}
               </label>
               <CustomSelect
                 value={approverIdField}
@@ -3724,7 +3759,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                 {createLeaveType === 'overtime'
                   ? (otTypeField === 'compensatory' ? t('Người duyệt 2 (Nhân sự ghi nhận phép)') : t('Người duyệt 2 (Kế toán duyệt lương OT)'))
-                  : t('Người duyệt 2 (Không bắt buộc)')
+                  : t('Người duyệt 2 (HR Duy Phương / Nhân sự)')
                 }
               </label>
               <CustomSelect
