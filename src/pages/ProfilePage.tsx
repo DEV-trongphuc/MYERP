@@ -1257,7 +1257,7 @@ export const ProfilePage: React.FC = () => {
                         placeholder={t("Nhập mật khẩu hiện tại...")}
                         style={{ paddingRight: '40px', height: '36px', fontSize: '0.85rem' }}
                       />
-                      <button type="button" onClick={() => setShowOldPass(!showOldPass)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                      <button type="button" className="no-active-scale" onMouseDown={(e) => e.preventDefault()} onClick={() => setShowOldPass(!showOldPass)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
                         {showOldPass ? <EyeOff size={15} /> : <Eye size={15} />}
                       </button>
                     </div>
@@ -1279,7 +1279,7 @@ export const ProfilePage: React.FC = () => {
                           borderColor: newPass.length > 0 ? (isStrong ? '#10b981' : '#f59e0b') : undefined
                         }}
                       />
-                      <button type="button" onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                      <button type="button" className="no-active-scale" onMouseDown={(e) => e.preventDefault()} onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
                         {showNewPass ? <EyeOff size={15} /> : <Eye size={15} />}
                       </button>
                     </div>

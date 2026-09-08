@@ -411,7 +411,8 @@ export const Login = () => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="input-icon-btn"
+                    onMouseDown={(e) => e.preventDefault()}
+                    className="input-icon-btn no-active-scale"
                     tabIndex={-1}
                     aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                   >
@@ -780,7 +781,7 @@ export const Login = () => {
           position: absolute;
           right: 8px;
           top: 50%;
-          transform: translateY(-50%);
+          transform: translateY(-50%) !important;
           width: 36px;
           height: 36px;
           background: none;
@@ -792,12 +793,20 @@ export const Login = () => {
           align-items: center;
           justify-content: center;
           border-radius: 8px;
-          transition: all 0.2s ease;
+          transition: color 0.15s ease, background-color 0.15s ease;
           z-index: 2;
+          outline: none;
+          user-select: none;
         }
         .input-icon-btn:hover {
           color: #ef4444;
           background: rgba(255, 255, 255, 0.05);
+          transform: translateY(-50%) !important;
+        }
+        .input-icon-btn:active,
+        .input-icon-btn:focus {
+          transform: translateY(-50%) !important;
+          outline: none;
         }
         .forgot-btn {
           background: none;

@@ -402,7 +402,7 @@ export const ProfileModal = () => {
                     placeholder={t("Nhập mật khẩu hiện tại...")}
                     style={{ paddingRight: 40 }}
                   />
-                  <button type="button" onClick={() => setShowOldPass(!showOldPass)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                  <button type="button" className="no-active-scale" onMouseDown={(e) => e.preventDefault()} onClick={() => setShowOldPass(!showOldPass)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
                     {showOldPass ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
@@ -422,7 +422,7 @@ export const ProfileModal = () => {
                       borderColor: newPass.length > 0 ? (isStrong ? '#10b981' : '#f59e0b') : undefined
                     }}
                   />
-                  <button type="button" onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                  <button type="button" className="no-active-scale" onMouseDown={(e) => e.preventDefault()} onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
                     {showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>

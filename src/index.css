@@ -3814,13 +3814,26 @@ select:focus {
 }
 
 /* Premium Tactile Mobile Feedback */
-button:not(.no-active-scale):active, 
+button:not(.no-active-scale):not(.input-icon-btn):not([class*="eye"]):not([class*="Eye"]):not([style*="translateY"]):active, 
 .btn:not(.no-active-scale):active, 
 .timeline-card:active, 
 .detail-action-btn:active,
 .interactive-tab-btn:active {
   transform: scale(0.97) !important;
   transition: transform 0.08s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Ensure all input icon / eye toggle buttons never jump or shift vertically */
+.input-icon-btn,
+.input-icon-btn:hover,
+.input-icon-btn:active,
+.input-icon-btn:focus,
+button.input-icon-btn,
+button.input-icon-btn:active,
+button.input-icon-btn:focus,
+button[class*="eye"]:active,
+button[class*="Eye"]:active {
+  transform: translateY(-50%) !important;
 }
 
 /* Glassmorphism Panel styles */

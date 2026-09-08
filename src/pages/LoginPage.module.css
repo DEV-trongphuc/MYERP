@@ -154,16 +154,21 @@
   position: absolute;
   right: 14px;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) !important;
   color: #64748b;
   padding: 4px;
   cursor: pointer;
   background: transparent;
   border: none;
+  outline: none;
 }
 
-.eyeBtn:hover {
+.eyeBtn:hover,
+.eyeBtn:active,
+.eyeBtn:focus {
+  transform: translateY(-50%) !important;
   color: #fff;
+  outline: none;
 }
 
 .forgotRow {

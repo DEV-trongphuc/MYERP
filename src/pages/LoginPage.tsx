@@ -76,7 +76,13 @@ export const LoginPage: React.FC = () => {
                 placeholder="••••••••"
                 required
               />
-              <button type="button" className={styles.eyeBtn} onClick={() => setShowPw(!showPw)}>
+              <button 
+                type="button" 
+                className={`${styles.eyeBtn} no-active-scale`} 
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setShowPw(!showPw)}
+                aria-label={showPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              >
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
