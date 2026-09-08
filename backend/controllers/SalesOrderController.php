@@ -292,6 +292,52 @@ class SalesOrderController {
                 error_log("SO Notification Error: " . $soNotifEx->getMessage());
             }
 
+            // Notify customer's assigned salesperson & log interaction history
+            if ($contactId) {
+                try {
+                    $stmtC = $this->db->prepare("SELECT id, owner_id, full_name FROM contacts WHERE id = ?");
+                    $stmtC->execute([$contactId]);
+                    $contRow = $stmtC->fetch(PDO::FETCH_ASSOC);
+                    if ($contRow) {
+                        $cOwnerId = !empty($contRow['owner_id']) ? (int)$contRow['owner_id'] : 0;
+                        $creatorName = $auth['full_name'] ?? 'Nhân viên';
+                        $customerName = $contRow['full_name'] ?? 'Khách hàng';
+                        $formattedTotal = number_format($total, 0, ',', '.') . ' đ';
+
+                        // Log interaction
+                        if (function_exists('logInteraction')) {
+                            logInteraction($this->db, $tenantId, $userId, 'order', 'Tạo Đơn Bán Hàng (SO)', "Đã tạo đơn bán hàng $soNumber cho khách hàng $customerName với tổng tiền $formattedTotal.", 'contact', $contactId);
+                        }
+
+                        if ($cOwnerId > 0 && $cOwnerId !== $userId) {
+                            $stmtSaleNotif = $this->db->prepare("
+                                INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                                VALUES (?, ?, 'Đơn bán hàng mới cho khách hàng của bạn', ?, 'order', ?)
+                            ");
+                            $stmtSaleNotif->execute([
+                                $cOwnerId,
+                                $tenantId,
+                                "$creatorName vừa tạo đơn bán hàng mới ($soNumber) cho khách hàng $customerName ($formattedTotal).",
+                                "/contacts/$contactId"
+                            ]);
+
+                            require_once __DIR__ . '/../NotificationService.php';
+                            NotificationService::send($this->db, $tenantId, 'SO_CREATED_FOR_SALE', [
+                                'user_id' => $cOwnerId,
+                                'customer_name' => $customerName,
+                                'creator_name' => $creatorName,
+                                'so_number' => $soNumber,
+                                'amount' => $total,
+                                'currency' => 'VND',
+                                'contact_id' => $contactId
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $saleNotifEx) {
+                    error_log("Sale SO Notification Error: " . $saleNotifEx->getMessage());
+                }
+            }
+
             respond(201, ['id' => $soId, 'so_number' => $soNumber, 'total' => $total], 'Tạo đơn bán hàng thành công');
         } catch (\Throwable $e) {
             if ($e instanceof \Exception && (get_class($e) === 'ResponseException' || get_class($e) === 'RespondException')) {

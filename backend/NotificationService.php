@@ -149,14 +149,14 @@ class NotificationService {
 
                         $zaloChatIds = [];
                         // 1. Group Admin Zalo: TUYỆT ĐỐI CHỈ gửi tới group Zalo các sự kiện liên quan đến Lead / Data
-                        $isLeadEvent = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN', 'LEAD_RECALL', 'TICKET_LEAD', 'TICKET_NEW', 'TICKET_APPROVED', 'TICKET_REJECTED'], true);
+                        $isLeadEvent = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN', 'LEAD_HANDOVER_NEW_SALE', 'LEAD_RECALL', 'TICKET_LEAD', 'TICKET_NEW', 'TICKET_APPROVED', 'TICKET_REJECTED'], true);
                         if (!empty($zaloGroupChatId) && $isAdminBroadcastEvent && $isLeadEvent) {
                             $zaloChatIds[] = $zaloGroupChatId;
                         }
 
-                        // 2. Personal Zalo: Hiện tại CHỈ gửi cho Sale khi có Lead tới / Giao Lead (không gửi Zalo cá nhân cho các sự kiện ngoài Lead)
-                        $isLeadEvent = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN'], true);
-                        if ($isLeadEvent && (!$zaloOnlyGroup || !$isAdminBroadcastEvent)) {
+                        // 2. Personal Zalo: Gửi cho Sale khi có Lead tới / Giao Lead / Bàn giao / SO mới
+                        $isPersonalAllowed = in_array($eventType, ['LEAD_ASSIGNMENT', 'LEAD_NEW', 'NEW_LEAD', 'LEAD_REASSIGN', 'LEAD_HANDOVER_NEW_SALE', 'SO_CREATED_FOR_SALE'], true);
+                        if ($isPersonalAllowed && (!$zaloOnlyGroup || !$isAdminBroadcastEvent)) {
                             foreach ($recipients as $rec) {
                                 $rId = (int)($rec['id'] ?? 0);
                                 $role = strtolower((string)($rec['role'] ?? ''));
@@ -954,6 +954,77 @@ class NotificationService {
                                     "Sale Order #$depId của khách hàng <strong>" . htmlspecialchars($customerName) . "</strong> đã <strong>$statusText</strong>.<br/>" .
                                     (!empty($reason) ? "Ghi chú: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "") .
                                     "Vui lòng kiểm tra trên CRM."
+                ];
+
+            case 'SO_CREATED_FOR_SALE':
+                $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
+                $custName = $payload['customer_name'] ?? 'Khách hàng';
+                $creatorName = $payload['creator_name'] ?? 'Nhân viên';
+                $soCode = !empty($payload['so_number']) ? $payload['so_number'] : ('Phiếu #' . ($payload['deposit_id'] ?? ''));
+                $currency = $payload['currency'] ?? 'VND';
+                $amtStr = number_format((float)($payload['amount'] ?? 0), 0, ',', '.') . ' ' . $currency;
+                $contactId = $payload['contact_id'] ?? '';
+                $link = $contactId ? "/contacts?id=$contactId" : "/deposits";
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Đơn thanh toán / SO mới cho khách hàng",
+                    'body' => "$creatorName vừa tạo đơn thanh toán ($soCode) cho khách hàng $custName ($amtStr)",
+                    'type' => "deposit",
+                    'link' => $link,
+                    'zalo_msg' => "🧾 [ ĐƠN THANH TOÁN / SO MỚI ]\n\n"
+                        . "Khách hàng $custName của bạn vừa có đơn thanh toán mới:\n"
+                        . "  • Mã đơn/phiếu: $soCode\n"
+                        . "  • Khách hàng: $custName\n"
+                        . "  • Số tiền: $amtStr\n"
+                        . "  • Người tạo: $creatorName\n\n"
+                        . "Vui lòng truy cập CRM để xem chi tiết.",
+                    'tg_msg' => "🧾 <b>[ ĐƠN THANH TOÁN / SO MỚI ]</b>\n\n"
+                        . "Khách hàng <b>" . htmlspecialchars($custName) . "</b> của bạn vừa có đơn thanh toán mới:\n"
+                        . "  • Mã đơn/phiếu: <b>$soCode</b>\n"
+                        . "  • Khách hàng: <b>" . htmlspecialchars($custName) . "</b>\n"
+                        . "  • Số tiền: <b>$amtStr</b>\n"
+                        . "  • Người tạo: <b>" . htmlspecialchars($creatorName) . "</b>\n\n"
+                        . "Vui lòng truy cập CRM để xem chi tiết.",
+                    'email_subject' => "[IDEAS] Đơn thanh toán mới cho khách hàng $custName",
+                    'email_title' => "ĐƠN THANH TOÁN / SO MỚI",
+                    'email_content' => "Chào bạn,<br/><br/>" .
+                                    "Nhân viên <strong>" . htmlspecialchars($creatorName) . "</strong> vừa tạo đơn thanh toán mới (<strong>$soCode</strong>) cho khách hàng <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
+                                    "Số tiền: <strong>$amtStr</strong>.<br/>" .
+                                    "Vui lòng truy cập CRM để theo dõi tiến độ đơn hàng."
+                ];
+
+            case 'LEAD_HANDOVER_NEW_SALE':
+                $recipients = self::getRecipientById($db, $payload['user_id'] ?? 0);
+                $custName = $payload['customer_name'] ?? 'Khách hàng';
+                $oldSaleName = $payload['old_sale_name'] ?? 'Sale trước';
+                $actorName = $payload['actor_name'] ?? 'Quản trị viên';
+                $contactId = $payload['contact_id'] ?? '';
+                $link = $contactId ? "/contacts?id=$contactId" : "/sale-portal";
+                return [
+                    'recipients' => $recipients,
+                    'title' => "Bàn giao khách hàng mới",
+                    'body' => "Bạn vừa được $actorName bàn giao khách hàng $custName (từ $oldSaleName)",
+                    'type' => "lead",
+                    'link' => $link,
+                    'zalo_msg' => "🔄 [ BÀN GIAO KHÁCH HÀNG MỚI ]\n\n"
+                        . "Bạn vừa được chuyển giao khách hàng phụ trách mới:\n"
+                        . "  • Khách hàng: $custName\n"
+                        . "  • Chuyển từ: $oldSaleName\n"
+                        . "  • Người thực hiện: $actorName\n\n"
+                        . "Vui lòng vào CRM để xem lịch sử tương tác và liên hệ chăm sóc ngay.",
+                    'tg_msg' => "🔄 <b>[ BÀN GIAO KHÁCH HÀNG MỚI ]</b>\n\n"
+                        . "Bạn vừa được chuyển giao khách hàng phụ trách mới:\n"
+                        . "  • Khách hàng: <b>" . htmlspecialchars($custName) . "</b>\n"
+                        . "  • Chuyển từ: <b>" . htmlspecialchars($oldSaleName) . "</b>\n"
+                        . "  • Người thực hiện: <b>" . htmlspecialchars($actorName) . "</b>\n\n"
+                        . "Vui lòng vào CRM để xem lịch sử tương tác và liên hệ chăm sóc ngay.",
+                    'email_subject' => "[IDEAS] Bàn giao khách hàng mới: $custName",
+                    'email_title' => "BÀN GIAO KHÁCH HÀNG MỚI",
+                    'email_content' => "Chào bạn,<br/><br/>" .
+                                    "Bạn vừa được bàn giao khách hàng: <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
+                                    "Người phụ trách trước: <strong>" . htmlspecialchars($oldSaleName) . "</strong>.<br/>" .
+                                    "Người thực hiện chuyển giao: <strong>" . htmlspecialchars($actorName) . "</strong>.<br/>" .
+                                    "Vui lòng truy cập CRM để kiểm tra thông tin và lịch sử tương tác của khách hàng."
                 ];
 
             case 'NIGHT_SHIFT_BOOKING':

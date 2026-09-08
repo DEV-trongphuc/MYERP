@@ -16807,6 +16807,47 @@ switch ($action) {
                 ensurePersonAndContact($conn, $lead_id);
             }
 
+            // Find contact_id associated with this lead to log interaction
+            $contactIdForLead = null;
+            $stmtCLead = $conn->prepare("SELECT c.id FROM contacts c JOIN leads l ON (c.person_id = l.person_id OR c.phone = l.phone) WHERE l.id = ? ORDER BY c.id DESC LIMIT 1");
+            if ($stmtCLead) {
+                $stmtCLead->bind_param("i", $lead_id);
+                $stmtCLead->execute();
+                $cRes = $stmtCLead->get_result();
+                if ($cRow = $cRes->fetch_assoc()) {
+                    $contactIdForLead = (int)$cRow['id'];
+                }
+                $stmtCLead->close();
+            }
+
+            $actorName = $decodedUser['full_name'] ?? $decodedUser['name'] ?? 'Quản trị viên';
+            $actorId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 1);
+            $reassignHistoryMsg = "Chuyển người phụ trách từ " . ($old_consultant_name ?: 'Chưa phân bổ') . " sang $new_cons_name bởi $actorName.";
+
+            // 1. Record into interaction history (activities & notes)
+            if ($contactIdForLead) {
+                $stmtAct = $conn->prepare("
+                    INSERT INTO activities (tenant_id, user_id, created_by, type, subject, body, status, priority, due_date, done_at, related_type, related_id, contact_id)
+                    VALUES (1, ?, ?, 'system', 'Bàn giao Lead', ?, 'done', 'medium', NOW(), NOW(), 'contact', ?, ?)
+                ");
+                if ($stmtAct) {
+                    $stmtAct->bind_param("iisii", $actorId, $actorId, $reassignHistoryMsg, $contactIdForLead, $contactIdForLead);
+                    $stmtAct->execute();
+                    $stmtAct->close();
+                }
+
+                $stmtNote = $conn->prepare("
+                    INSERT INTO notes (tenant_id, user_id, entity_type, entity_id, body, note_type, created_at, updated_at)
+                    VALUES (1, ?, 'contact', ?, ?, 'pipeline_stage_change', NOW(), NOW())
+                ");
+                if ($stmtNote) {
+                    $noteBody = "[Bàn giao Lead] $reassignHistoryMsg";
+                    $stmtNote->bind_param("iis", $actorId, $contactIdForLead, $noteBody);
+                    $stmtNote->execute();
+                    $stmtNote->close();
+                }
+            }
+
             if ($compensate_old_sale && $old_consultant_id) {
                 // Check if the consultant is enrolled in the round
                 $chkEnroll = $conn->prepare("SELECT 1 FROM round_consultants WHERE round_id = ? AND consultant_id = ? LIMIT 1");
@@ -16852,6 +16893,35 @@ switch ($action) {
             $conn->commit();
             // Trigger Live Two-Way Sync to Google Sheets
             triggerTwoWaySync($conn, $lead_id);
+
+            // In-app bell notification for new consultant
+            $stmtNotifNew = $conn->prepare("
+                INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                VALUES (?, 1, 'Bàn giao lead mới', ?, 'lead', '/sale-portal')
+            ");
+            if ($stmtNotifNew) {
+                $leadDisplayName = $log_data['lead_name'] ?: 'Khách hàng';
+                $notifBody = "Bạn vừa được $actorName bàn giao lead \"$leadDisplayName\" (từ " . ($old_consultant_name ?: 'Chưa phân bổ') . ").";
+                $stmtNotifNew->bind_param("is", $new_consultant_id, $notifBody);
+                $stmtNotifNew->execute();
+                $stmtNotifNew->close();
+            }
+
+            // Multi-channel notification via NotificationService
+            try {
+                require_once __DIR__ . '/config/Database.php';
+                require_once __DIR__ . '/NotificationService.php';
+                $pdoInstance = Database::getInstance();
+                NotificationService::send($pdoInstance, 1, 'LEAD_HANDOVER_NEW_SALE', [
+                    'user_id' => $new_consultant_id,
+                    'customer_name' => $log_data['lead_name'] ?: 'Khách hàng',
+                    'old_sale_name' => $old_consultant_name ?: 'Chưa phân bổ',
+                    'actor_name' => $actorName,
+                    'contact_id' => $contactIdForLead ?? ''
+                ]);
+            } catch (\Throwable $notifSvcErr) {
+                error_log("Error in NotificationService LEAD_HANDOVER_NEW_SALE: " . $notifSvcErr->getMessage());
+            }
         } catch (Exception $e) {
             $conn->rollback();
             echo json_encode(['success' => false, 'message' => getSafeErrorMsg($e)]);

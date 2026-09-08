@@ -1168,6 +1168,71 @@ class ContactController {
                 }
             }
 
+            // HANDLE SALE REASSIGNMENT / HANDOVER LOGGING & NOTIFICATION
+            $oldOwnerId = !empty($currentContact['owner_id']) ? (int)$currentContact['owner_id'] : 0;
+            $hasNewOwnerKey = array_key_exists('owner_id', $b);
+            $newOwnerId = $hasNewOwnerKey && !empty($b['owner_id']) ? (int)$b['owner_id'] : 0;
+
+            if ($hasNewOwnerKey && $newOwnerId > 0 && $newOwnerId !== $oldOwnerId) {
+                // Fetch old owner name
+                $oldOwnerName = 'Chưa phân bổ';
+                if ($oldOwnerId > 0) {
+                    $stmtOldO = $this->db->prepare("SELECT full_name, username FROM users WHERE id = ?");
+                    $stmtOldO->execute([$oldOwnerId]);
+                    $oldRow = $stmtOldO->fetch(PDO::FETCH_ASSOC);
+                    if ($oldRow) {
+                        $oldOwnerName = $oldRow['full_name'] ?: $oldRow['username'];
+                    }
+                }
+
+                // Fetch new owner name
+                $newOwnerName = 'Nhân viên mới';
+                $stmtNewO = $this->db->prepare("SELECT full_name, username FROM users WHERE id = ?");
+                $stmtNewO->execute([$newOwnerId]);
+                $newRow = $stmtNewO->fetch(PDO::FETCH_ASSOC);
+                if ($newRow) {
+                    $newOwnerName = $newRow['full_name'] ?: $newRow['username'];
+                }
+
+                $actorName = $auth['full_name'] ?? 'Quản trị viên';
+                $customerName = trim($currentContact['full_name'] ?? '') ?: 'Khách hàng';
+
+                // 1. Record in interaction history (activities and notes)
+                $handoverMsg = "Chuyển người phụ trách từ $oldOwnerName sang $newOwnerName bởi $actorName.";
+                logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'system', 'Bàn giao khách hàng', $handoverMsg, 'contact', $id);
+
+                // 2. Notify the new salesperson
+                if ($newOwnerId !== (int)$auth['user_id']) {
+                    try {
+                        $stmtNotif = $this->db->prepare("
+                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                            VALUES (?, ?, 'Bàn giao khách hàng mới', ?, 'contact', ?)
+                        ");
+                        $stmtNotif->execute([
+                            $newOwnerId,
+                            $auth['tenant_id'],
+                            "Bạn vừa được $actorName bàn giao khách hàng \"$customerName\" (từ $oldOwnerName).",
+                            "/contacts?id=$id"
+                        ]);
+                    } catch (\Throwable $notifEx) {
+                        error_log("Notification insert error for new owner: " . $notifEx->getMessage());
+                    }
+
+                    try {
+                        require_once __DIR__ . '/../NotificationService.php';
+                        NotificationService::send($this->db, $auth['tenant_id'], 'LEAD_HANDOVER_NEW_SALE', [
+                            'user_id' => $newOwnerId,
+                            'customer_name' => $customerName,
+                            'old_sale_name' => $oldOwnerName,
+                            'actor_name' => $actorName,
+                            'contact_id' => $id
+                        ]);
+                    } catch (\Throwable $svcEx) {
+                        error_log("NotificationService send error for new owner: " . $svcEx->getMessage());
+                    }
+                }
+            }
+
             // AUTO TRIGGER META CAPI EVENTS ON STATE TRANSITION AND UPDATE SECURITY TIMERS / DATABANK STATUS
             if ($newStatus && $newStatus !== $currStatus) {
                 require_once __DIR__ . '/../config/CapiHelper.php';

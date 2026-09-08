@@ -40,6 +40,17 @@ interface CustomSelectProps {
   onSearchChange?: (search: string) => void;
 }
 
+export const removeVietnameseTones = (str: string): string => {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+};
+
 export const CustomSelect: React.FC<CustomSelectProps> = ({
   options,
   value,
@@ -102,22 +113,35 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
   const filtered = React.useMemo(() => {
     if (!searchable || !search.trim()) return options;
-    const removeAccents = (str: string) =>
-      (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
-    const searchClean = removeAccents(search.trim());
+    const searchClean = removeVietnameseTones(search);
+    const searchWords = searchClean.split(/\s+/).filter(Boolean);
+    const rawSearchLower = search.trim().toLowerCase();
+
     return options.filter(o => {
       const labelStr = o.label ? String(o.label) : '';
       const sublabelStr = o.sublabel ? String(o.sublabel) : '';
       const translatedLabel = t(labelStr) || '';
       const translatedSublabel = t(sublabelStr) || '';
-      return (
-        removeAccents(labelStr).includes(searchClean) ||
-        removeAccents(translatedLabel).includes(searchClean) ||
-        (o.sublabel && (
-          removeAccents(sublabelStr).includes(searchClean) ||
-          removeAccents(translatedSublabel).includes(searchClean)
-        ))
-      );
+
+      // Direct exact substring match with accents
+      const rawText = `${labelStr} ${translatedLabel} ${sublabelStr} ${translatedSublabel}`.toLowerCase();
+      if (rawText.includes(rawSearchLower)) return true;
+
+      // Unaccented continuous match
+      const labelClean = removeVietnameseTones(labelStr);
+      const transLabelClean = removeVietnameseTones(translatedLabel);
+      const sublabelClean = removeVietnameseTones(sublabelStr);
+      const transSublabelClean = removeVietnameseTones(translatedSublabel);
+      const combinedClean = `${labelClean} ${transLabelClean} ${sublabelClean} ${transSublabelClean}`;
+
+      if (combinedClean.includes(searchClean)) return true;
+
+      // Word-by-word match (e.g. typing "nguyen thien" matches "nguyen huu thien")
+      if (searchWords.length > 1) {
+        return searchWords.every(word => combinedClean.includes(word));
+      }
+
+      return false;
     });
   }, [options, search, searchable, t]);
 

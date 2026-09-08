@@ -358,6 +358,51 @@ class DepositController {
                 }
             }
 
+            // Notify customer's assigned salesperson (Sale in charge) & log interaction history
+            if ($contactId && !empty($contact['owner_id'])) {
+                $contactOwnerId = (int)$contact['owner_id'];
+                $creatorName = $auth['full_name'] ?? 'Nhân viên';
+                $customerName = $contact['full_name'] ?? 'Khách hàng';
+                $priceFormatted = number_format($price, 0, ',', '.') . ' ' . $currency;
+
+                // Always log interaction into customer timeline
+                $interactionMsg = "Đã tạo phiếu thanh toán / SO #$depositId cho khách hàng $customerName với số tiền $priceFormatted.";
+                logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'order', 'Tạo Phiếu Thanh Toán', $interactionMsg, 'contact', $contactId);
+
+                // Notify assigned salesperson if created by another user/admin
+                if ($contactOwnerId !== (int)$auth['user_id']) {
+                    try {
+                        $stmtSaleNotif = $this->db->prepare("
+                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                            VALUES (?, ?, 'Đơn thanh toán mới cho khách hàng của bạn', ?, 'deposit', ?)
+                        ");
+                        $stmtSaleNotif->execute([
+                            $contactOwnerId,
+                            $auth['tenant_id'],
+                            "$creatorName vừa tạo phiếu thanh toán mới (#$depositId) cho khách hàng $customerName ($priceFormatted).",
+                            "/contacts/$contactId"
+                        ]);
+                    } catch (\Throwable $sNotifErr) {
+                        error_log("Failed to send sale in-app notification: " . $sNotifErr->getMessage());
+                    }
+
+                    try {
+                        require_once __DIR__ . '/../NotificationService.php';
+                        NotificationService::send($this->db, $auth['tenant_id'], 'SO_CREATED_FOR_SALE', [
+                            'user_id' => $contactOwnerId,
+                            'customer_name' => $customerName,
+                            'creator_name' => $creatorName,
+                            'deposit_id' => $depositId,
+                            'amount' => $price,
+                            'currency' => $currency,
+                            'contact_id' => $contactId
+                        ]);
+                    } catch (\Throwable $sSvcErr) {
+                        error_log("Failed to dispatch SO_CREATED_FOR_SALE notification: " . $sSvcErr->getMessage());
+                    }
+                }
+            }
+
             // Insert milestones (default to Đợt 1 if empty)
             if (empty($milestones)) {
                 $milestones = [['name' => 'Thanh toán đợt 1', 'amount' => $price]];

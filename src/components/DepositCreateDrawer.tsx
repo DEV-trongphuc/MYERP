@@ -105,8 +105,13 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
         .then(([resCont, resProj, resUsr, resComp, resSup, resCoop, resDep]) => {
           if (resCont.success) {
             const allContacts = resCont.data?.items || resCont.data || [];
-            const filteredContacts = (user?.role === 'sale')
-              ? allContacts.filter((c: any) => String(c.owner_id) === String(user.id))
+            const roleStr = String(user?.role || '');
+            const isSalesRole = roleStr === 'sale' || roleStr === 'sales';
+            const filteredContacts = isSalesRole
+              ? allContacts.filter((c: any) => 
+                  String(c.owner_id) === String(user?.id) || 
+                  (c.collaborator_ids && String(c.collaborator_ids).split(',').map((s: string) => s.trim()).includes(String(user?.id)))
+                )
               : allContacts;
             setContacts(filteredContacts);
           }
@@ -282,6 +287,48 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
       setExistingCoopShares([]);
     }
   }, [selectedContactId, contacts, coopSlips, usersList]);
+
+  const handleCustomerSearch = React.useCallback(async (query: string) => {
+    const q = query.trim();
+    if (!q || q.length < 2) return;
+    if (entitySubtab === 'contact') {
+      try {
+        const res = await fetchAPI(`contacts?search=${encodeURIComponent(q)}&limit=50`);
+        if (res.success && res.data) {
+          const items = res.data.items || res.data || [];
+          if (Array.isArray(items) && items.length > 0) {
+            setContacts(prev => {
+              const existingMap = new Map(prev.map(c => [String(c.id), c]));
+              items.forEach((c: any) => {
+                if (!existingMap.has(String(c.id))) {
+                  existingMap.set(String(c.id), c);
+                }
+              });
+              return Array.from(existingMap.values());
+            });
+          }
+        }
+      } catch (err) {}
+    } else {
+      try {
+        const res = await fetchAPI(`companies?search=${encodeURIComponent(q)}&limit=50`);
+        if (res.success && res.data) {
+          const items = res.data.items || res.data || [];
+          if (Array.isArray(items) && items.length > 0) {
+            setCompanies(prev => {
+              const existingMap = new Map(prev.map(c => [String(c.id), c]));
+              items.forEach((c: any) => {
+                if (!existingMap.has(String(c.id))) {
+                  existingMap.set(String(c.id), c);
+                }
+              });
+              return Array.from(existingMap.values());
+            });
+          }
+        }
+      } catch (err) {}
+    }
+  }, [entitySubtab]);
 
   const handleAddMilestoneInput = () => {
     setMilestonesInput(prev => [...prev, { name: `Đợt ${prev.length + 1}`, amount: '', expected_pay_date: '' }]);
@@ -614,6 +661,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                             placeholder={entitySubtab === 'contact' ? "-- Chọn khách hàng --" : "-- Chọn đối tác --"}
                             showAvatars={true}
                             searchable
+                            onSearchChange={handleCustomerSearch}
                           />
                         </div>
 
