@@ -252,7 +252,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     // Level 1: Team Leader / Manager; if user is leader or no manager, fallback to Director / Admin
     const defaultApprover1 = teamManager || directorOrAdmin || hrDuyPhuong || approvers[0];
 
-    // Level 2: HR Duy Phương (or Director if approver 1 is Duy Phương)
+    // Level 2: Chỉ áp dụng cho tăng ca (overtime). Với nghỉ phép / đi muộn / WFH: Người duyệt 2 không cần, Duy Phương bên dưới liên quan theo dõi
     let defaultApprover2: any = null;
     if (currentType === 'overtime') {
       if (currentOtType === 'compensatory') {
@@ -261,12 +261,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         defaultApprover2 = (accountantUser && Number(accountantUser.id) !== Number(defaultApprover1?.id)) ? accountantUser : directorOrAdmin;
       }
     } else {
-      // For leave, late_early, remote_work
-      if (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(defaultApprover1?.id) && Number(hrDuyPhuong.id) !== Number(currentUserId)) {
-        defaultApprover2 = hrDuyPhuong;
-      } else if (directorOrAdmin && Number(directorOrAdmin.id) !== Number(defaultApprover1?.id) && Number(directorOrAdmin.id) !== Number(currentUserId)) {
-        defaultApprover2 = directorOrAdmin;
-      }
+      defaultApprover2 = null;
     }
 
     if (defaultApprover1) {
@@ -276,6 +271,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       setApproverId2Field(String(defaultApprover2.id));
     } else {
       setApproverId2Field('');
+    }
+
+    // Tự động thêm HR Duy Phương vào danh sách Người liên quan (Theo dõi) bên dưới
+    if (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(currentUserId) && Number(hrDuyPhuong.id) !== Number(defaultApprover1?.id)) {
+      const hrId = Number(hrDuyPhuong.id);
+      setRelatedUserIds(prev => prev.includes(hrId) ? prev : [...prev, hrId]);
     }
   };
 
@@ -294,6 +295,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       }).catch(() => {
         if (usersList.length > 0) applyDefaultApprover(usersList, teamsList, createLeaveType, otTypeField);
       });
+    } else {
+      setRelatedUserIds([]);
     }
   }, [showCreateLeaveModal, createLeaveType, otTypeField, user]);
 
@@ -3759,7 +3762,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                 {createLeaveType === 'overtime'
                   ? (otTypeField === 'compensatory' ? t('Người duyệt 2 (Nhân sự ghi nhận phép)') : t('Người duyệt 2 (Kế toán duyệt lương OT)'))
-                  : t('Người duyệt 2 (HR Duy Phương / Nhân sự)')
+                  : t('Người duyệt 2 (Không bắt buộc)')
                 }
               </label>
               <CustomSelect

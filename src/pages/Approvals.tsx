@@ -1521,28 +1521,14 @@ export default function Approvals() {
       } else {
         if (defaultAccountant) setCustomApprover2(defaultAccountant);
       }
-    } else if (formType === 'leave' || formType === 'late_early' || formType === 'remote_work') {
-      // Đề xuất nghỉ phép / đi muộn về sớm / WFH: 2 cấp duyệt
-      // Cấp 1: Trưởng nhóm / Quản lý trực tiếp
-      // Cấp 2: Nhân sự (HR Duy Phương)
-      setShowStepManager(true);
-      setShowStepAccountant(true);
-      setShowStepDirector(false);
-      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
-      if (defaultApprover) setCustomApprover1(defaultApprover);
-      const hrLead = getDefaultHrLeader();
-      if (hrLead && Number(hrLead.id) !== Number(defaultApprover?.id)) {
-        setCustomApprover2(hrLead);
-      } else {
-        const director = users.find(u => String(u.role).toLowerCase() === 'director' && Number(u.id) !== Number(proposerUser?.id || user?.id));
-        if (director) setCustomApprover2(director);
-      }
-    } else if (formType === 'attendance_bulk') {
+    } else if (formType === 'leave' || formType === 'late_early' || formType === 'remote_work' || formType === 'attendance_bulk') {
+      // Đề xuất nghỉ phép / đi muộn về sớm / WFH / giải trình chấm công: 1 cấp duyệt (Trưởng nhóm / Quản lý trực tiếp), HR Duy Phương tự động theo dõi bên dưới
       setShowStepManager(true);
       setShowStepAccountant(false);
       setShowStepDirector(false);
       const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       if (defaultApprover) setCustomApprover1(defaultApprover);
+      setCustomApprover2(null);
     } else if (formType === 'advance' || formType === 'general') {
       setShowStepManager(true);
       setShowStepAccountant(true);
