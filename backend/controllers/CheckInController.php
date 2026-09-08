@@ -72,31 +72,6 @@ class CheckInController {
                             'work_end_time' => '17:00',
                             'user_name' => $auth['full_name'] ?? ''
                         ];
-                    } else {
-                        // Check single attendance requests
-                        $reqStmt = $this->db->prepare("
-                            SELECT id, status, requested_time
-                            FROM attendance_requests
-                            WHERE user_id = ? AND date = ? AND status = 'pending'
-                            ORDER BY id DESC LIMIT 1
-                        ");
-                        $reqStmt->execute([$auth['user_id'], $today]);
-                        $singleReq = $reqStmt->fetch(PDO::FETCH_ASSOC);
-                        if ($singleReq) {
-                            $row = [
-                                'id' => 0,
-                                'user_id' => $auth['user_id'],
-                                'check_in_date' => $today,
-                                'check_in_time' => $singleReq['requested_time'] ?? null,
-                                'check_out_time' => null,
-                                'status' => 'pending_approval',
-                                'pending_explanation_today' => true,
-                                'request_id' => $singleReq['id'],
-                                'work_start_time' => '08:00',
-                                'work_end_time' => '17:00',
-                                'user_name' => $auth['full_name'] ?? ''
-                            ];
-                        }
                     }
                 } catch (\Throwable $e3) {}
             }
@@ -954,32 +929,19 @@ class CheckInController {
                 $hrmLeaves = [];
             }
 
-            $leaves2 = [];
-            try {
-                $stmtL2 = $this->db->prepare("
-                    SELECT DATE(start_date) as s_date, DATE(end_date) as e_date, status, reason, leave_type 
-                    FROM leaves 
-                    WHERE user_id = ? AND status IN ('approved', 'pending') AND DATE(start_date) <= ? AND DATE(end_date) >= ?
-                ");
-                $stmtL2->execute([$userId, $endDate, $startDate]);
-                $leaves2 = $stmtL2->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            } catch (\Throwable $e) {
-                $leaves2 = [];
-            }
-
             $cLeaves = [];
             try {
                 $stmtCLeaves = $this->db->prepare("
-                    SELECT start_date as s_date, end_date as e_date, status, reason, '' as leave_type 
+                    SELECT start_date as s_date, end_date as e_date, 'approved' as status, '' as reason, '' as leave_type 
                     FROM consultant_leaves 
-                    WHERE consultant_id = ? AND status IN ('approved', 'pending') AND start_date <= ? AND end_date >= ?
+                    WHERE consultant_id = ? AND start_date <= ? AND end_date >= ?
                 ");
                 $stmtCLeaves->execute([$userId, $endDate, $startDate]);
                 $cLeaves = $stmtCLeaves->fetchAll(PDO::FETCH_ASSOC) ?: [];
             } catch (\Throwable $e) {
                 $cLeaves = [];
             }
-            $allLeaves = array_merge($hrmLeaves, $leaves2, $cLeaves);
+            $allLeaves = array_merge($hrmLeaves, $cLeaves);
 
             $getLeaveInfo = function($dateStr) use ($allLeaves) {
                 foreach ($allLeaves as $l) {

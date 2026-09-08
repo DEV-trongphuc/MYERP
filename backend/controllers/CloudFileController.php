@@ -478,12 +478,12 @@ class CloudFileController {
         // 2b. Deposits UNC proofs
         try {
             $stmtMilestones = $this->db->prepare("
-                SELECT m.id, m.name, m.unc_file_path 
+                SELECT m.id, m.milestone_name as name, m.unc_file_path 
                 FROM deposit_milestones m 
                 JOIN deposits d ON m.deposit_id = d.id 
-                WHERE d.contact_id = ? AND d.tenant_id = ? AND (m.unc_file_path IS NOT NULL AND m.unc_file_path != '')
+                WHERE d.contact_id = ? AND (m.unc_file_path IS NOT NULL AND m.unc_file_path != '')
             ");
-            $stmtMilestones->execute([$contactId, $tid]);
+            $stmtMilestones->execute([$contactId]);
             $milestones = $stmtMilestones->fetchAll(PDO::FETCH_ASSOC);
             foreach ($milestones as $ms) {
                 $filesToZip[] = [
@@ -496,8 +496,8 @@ class CloudFileController {
 
         // 2c. Cooperation slips attachments
         try {
-            $stmtCoop = $this->db->prepare("SELECT attachment_url FROM cooperation_slips WHERE contact_id = ? AND tenant_id = ? AND deleted_at IS NULL");
-            $stmtCoop->execute([$contactId, $tid]);
+            $stmtCoop = $this->db->prepare("SELECT attachment_url FROM cooperation_slips WHERE contact_id = ? AND (attachment_url IS NOT NULL AND attachment_url != '')");
+            $stmtCoop->execute([$contactId]);
             $coopSlips = $stmtCoop->fetchAll(PDO::FETCH_ASSOC);
             foreach ($coopSlips as $cs) {
                 if (!empty($cs['attachment_url'])) {

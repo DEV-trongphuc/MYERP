@@ -109,7 +109,7 @@ class CampaignController {
             if (!empty($uIds)) {
                 $in = implode(',', $uIds);
                 try {
-                    $uStmt = $this->db->query("SELECT id, name as full_name, email, role, avatar_url FROM users WHERE id IN ($in)");
+                    $uStmt = $this->db->query("SELECT id, full_name, email, role, avatar_url FROM users WHERE id IN ($in)");
                     $roster = $uStmt->fetchAll(PDO::FETCH_ASSOC);
                 } catch (Exception $e) {}
             }
