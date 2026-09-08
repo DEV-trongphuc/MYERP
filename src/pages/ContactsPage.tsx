@@ -139,8 +139,8 @@ const renderInteractionInfo = (c: any) => {
           fontWeight: 700, 
           padding: '1px 5px', 
           borderRadius: '4px', 
-          background: 'rgba(59, 130, 246, 0.12)', 
-          color: '#2563eb',
+          background: 'rgba(236, 72, 153, 0.14)', 
+          color: '#db2777',
           lineHeight: '1.2'
         }}>
           Nhắc lại
