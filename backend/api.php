@@ -2690,6 +2690,8 @@ switch ($action) {
         $lastLeadCount = -1;
         $lastNotifCount = -1;
         $lastCoopCount = -1;
+        $lastMaxContactId = -1;
+        $lastMaxLeadId = -1;
 
         $maxIterations = 16; // Runs for ~48 seconds to free up PHP workers periodically
         for ($iteration = 0; $iteration < $maxIterations; $iteration++) {
@@ -2737,6 +2739,42 @@ switch ($action) {
                 $stmt->close();
             }
 
+            // 1.1 Max contact ID visible to user
+            $maxContactId = 0;
+            if ($isSale && $saleId > 0) {
+                $sqlMaxC = "SELECT MAX(id) as max_id FROM contacts WHERE owner_id = ? OR JSON_CONTAINS(COALESCE(collaborator_ids, '[]'), CAST(? AS CHAR))";
+                $stmtC = $conn->prepare($sqlMaxC);
+                if ($stmtC) {
+                    $uidStr = (string)$saleId;
+                    $stmtC->bind_param("is", $saleId, $uidStr);
+                    $stmtC->execute();
+                    $maxContactId = (int)($stmtC->get_result()->fetch_assoc()['max_id'] ?? 0);
+                    $stmtC->close();
+                }
+            } else {
+                $resMaxC = $conn->query("SELECT MAX(id) as max_id FROM contacts");
+                if ($resMaxC) {
+                    $maxContactId = (int)($resMaxC->fetch_assoc()['max_id'] ?? 0);
+                }
+            }
+
+            // 1.2 Max lead ID
+            $maxLeadId = 0;
+            if ($isSale && $saleId > 0) {
+                $stmtL = $conn->prepare("SELECT MAX(id) as max_id FROM leads WHERE assigned_to = ?");
+                if ($stmtL) {
+                    $stmtL->bind_param("i", $saleId);
+                    $stmtL->execute();
+                    $maxLeadId = (int)($stmtL->get_result()->fetch_assoc()['max_id'] ?? 0);
+                    $stmtL->close();
+                }
+            } else {
+                $resMaxL = $conn->query("SELECT MAX(id) as max_id FROM leads");
+                if ($resMaxL) {
+                    $maxLeadId = (int)($resMaxL->fetch_assoc()['max_id'] ?? 0);
+                }
+            }
+
             // 2. Count unread notifications
             $notifCount = 0;
             $sqlNotif = "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0";
@@ -2767,16 +2805,31 @@ switch ($action) {
             }
 
             // Detect changes
-            if ($leadCount !== $lastLeadCount || $notifCount !== $lastNotifCount || $coopCount !== $lastCoopCount) {
+            if (
+                $leadCount !== $lastLeadCount || 
+                $notifCount !== $lastNotifCount || 
+                $coopCount !== $lastCoopCount ||
+                $maxContactId !== $lastMaxContactId ||
+                $maxLeadId !== $lastMaxLeadId
+            ) {
+                $contactChanged = ($lastMaxContactId !== -1 && $maxContactId !== $lastMaxContactId);
+                $leadChanged = ($lastMaxLeadId !== -1 && $maxLeadId !== $lastMaxLeadId);
+
                 $lastLeadCount = $leadCount;
                 $lastNotifCount = $notifCount;
                 $lastCoopCount = $coopCount;
+                $lastMaxContactId = $maxContactId;
+                $lastMaxLeadId = $maxLeadId;
 
                 echo "event: update\n";
                 echo "data: " . json_encode([
                     'new_leads' => $leadCount,
                     'unread_notifications' => $notifCount,
-                    'pending_coops' => $coopCount
+                    'pending_coops' => $coopCount,
+                    'latest_contact_id' => $maxContactId,
+                    'latest_lead_id' => $maxLeadId,
+                    'contact_changed' => $contactChanged,
+                    'lead_changed' => $leadChanged
                 ]) . "\n\n";
 
                 // Flush buffers

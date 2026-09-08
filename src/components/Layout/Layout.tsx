@@ -218,6 +218,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
     let lastNewLeads: number | null = null;
+    let lastMaxContactId: number | null = null;
+    let lastMaxLeadId: number | null = null;
 
     if (token) {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -239,13 +241,19 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           // Dispatch custom window events to trigger instant updates across components
           window.dispatchEvent(new CustomEvent('realtime-update-received', { detail }));
           
-          // Only dispatch contact-updated if the number of new leads actually changed,
-          // and it's not the initial connect update.
-          if (detail && typeof detail.new_leads === 'number') {
-            if (lastNewLeads !== null && lastNewLeads !== detail.new_leads) {
+          // Dispatch contact-updated if new leads count changed, or new contact/lead ID appeared
+          if (detail) {
+            const hasNewLeadCount = typeof detail.new_leads === 'number' && lastNewLeads !== null && lastNewLeads !== detail.new_leads;
+            const hasNewContact = typeof detail.latest_contact_id === 'number' && lastMaxContactId !== null && lastMaxContactId !== detail.latest_contact_id;
+            const hasNewLead = typeof detail.latest_lead_id === 'number' && lastMaxLeadId !== null && lastMaxLeadId !== detail.latest_lead_id;
+
+            if (hasNewLeadCount || hasNewContact || hasNewLead || detail.contact_changed || detail.lead_changed) {
               window.dispatchEvent(new Event('contact-updated'));
             }
-            lastNewLeads = detail.new_leads;
+
+            if (typeof detail.new_leads === 'number') lastNewLeads = detail.new_leads;
+            if (typeof detail.latest_contact_id === 'number') lastMaxContactId = detail.latest_contact_id;
+            if (typeof detail.latest_lead_id === 'number') lastMaxLeadId = detail.latest_lead_id;
           }
 
           window.dispatchEvent(new CustomEvent('new-notification-received', { detail }));

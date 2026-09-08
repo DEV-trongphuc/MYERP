@@ -17,20 +17,37 @@ function sendZaloMessage($botToken, $chatId, $text, $sync = true, $leadId = 0)
         return false;
     }
 
-    // BẢO VỆ CHỐNG GỬI LẶP TIN NHẮN (DEDUPLICATION 30S):
+    // BẢO VỆ CHỐNG GỬI LẶP TIN NHẮN (DEDUPLICATION):
     static $sentZaloCache = [];
     $dedupKey = md5($chatId . '_' . trim($text));
     $now = time();
-    if (isset($sentZaloCache[$dedupKey]) && ($now - $sentZaloCache[$dedupKey]) < 30) {
-        return true;
-    }
-    $sentZaloCache[$dedupKey] = $now;
 
-    $tempDedupFile = sys_get_temp_dir() . '/zalo_dedup_' . $dedupKey;
-    if (file_exists($tempDedupFile) && ($now - @filemtime($tempDedupFile)) < 30) {
-        return true;
+    if (!$sync) {
+        // 1. Khi Enqueue vào hàng đợi: chặn enqueue trùng lặp cùng 1 nội dung tới 1 người trong vòng 30s
+        if (isset($sentZaloCache['enq_' . $dedupKey]) && ($now - $sentZaloCache['enq_' . $dedupKey]) < 30) {
+            return true;
+        }
+        $sentZaloCache['enq_' . $dedupKey] = $now;
+
+        $tempDedupFile = sys_get_temp_dir() . '/zalo_dedup_enq_' . $dedupKey;
+        if (file_exists($tempDedupFile) && ($now - @filemtime($tempDedupFile)) < 30) {
+            return true;
+        }
+        @file_put_contents($tempDedupFile, (string)$now, LOCK_EX);
+    } else {
+        // 2. Khi Gửi cURL thực tế ($sync = true): chặn gửi HTTP cURL lặp lại cùng 1 nội dung tới 1 người trong vòng 5s (tránh 2 worker chạy trùng giây)
+        // Tuyệt đối không kiểm tra zalo_dedup_enq_ ở đây để worker cron_mailer không bị chặn nhầm.
+        if (isset($sentZaloCache['send_' . $dedupKey]) && ($now - $sentZaloCache['send_' . $dedupKey]) < 5) {
+            return true;
+        }
+        $sentZaloCache['send_' . $dedupKey] = $now;
+
+        $tempDedupFile = sys_get_temp_dir() . '/zalo_dedup_send_' . $dedupKey;
+        if (file_exists($tempDedupFile) && ($now - @filemtime($tempDedupFile)) < 5) {
+            return true;
+        }
+        @file_put_contents($tempDedupFile, (string)$now, LOCK_EX);
     }
-    @file_put_contents($tempDedupFile, (string)$now, LOCK_EX);
 
     global $conn;
 
@@ -164,13 +181,20 @@ function sendZaloMessage($botToken, $chatId, $text, $sync = true, $leadId = 0)
     // Ghi nhận nhật ký giao tiếp Zalo
     log_communication($conn ?? null, $leadId, 'zalo', $chatId, $newStatus, $errorMessage);
 
-    if ($leadId > 0) {
+    if ($leadId > 0 && isset($conn)) {
         $sentAtExpr = $isSent ? ", zalo_notify_sent_at = NOW(), last_interaction_date = NOW()" : "";
-        $stmtLead = $conn->prepare("UPDATE leads SET zalo_notify_status = ? $sentAtExpr WHERE id = ?");
-        if ($stmtLead) {
-            $stmtLead->bind_param("si", $newStatus, $leadId);
-            $stmtLead->execute();
-            $stmtLead->close();
+        if ($conn instanceof PDO) {
+            $stmtLead = $conn->prepare("UPDATE leads SET zalo_notify_status = ? $sentAtExpr WHERE id = ?");
+            if ($stmtLead) {
+                $stmtLead->execute([$newStatus, $leadId]);
+            }
+        } else {
+            $stmtLead = $conn->prepare("UPDATE leads SET zalo_notify_status = ? $sentAtExpr WHERE id = ?");
+            if ($stmtLead) {
+                $stmtLead->bind_param("si", $newStatus, $leadId);
+                $stmtLead->execute();
+                $stmtLead->close();
+            }
         }
     }
 

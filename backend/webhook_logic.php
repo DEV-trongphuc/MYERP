@@ -1859,6 +1859,19 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
             }
         }
 
+        // 7. Insert in-app notification into notifications table for assigned sale
+        $stmtDbNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'lead_assignment', ?)");
+        if ($stmtDbNotif) {
+            $notifTitle = "Bạn được phân bổ khách hàng mới";
+            $custName = !empty($lead['name']) ? $lead['name'] : 'Khách hàng mới';
+            $custPhone = !empty($lead['phone']) ? $lead['phone'] : 'Không có SĐT';
+            $notifBody = "Khách hàng \"$custName\" ($custPhone) đã được phân bổ cho bạn" . ($roundName ? " từ vòng \"$roundName\"" : "") . ".";
+            $notifLink = "/contacts";
+            $stmtDbNotif->bind_param("isss", $assignedToId, $notifTitle, $notifBody, $notifLink);
+            $stmtDbNotif->execute();
+            $stmtDbNotif->close();
+        }
+
     } catch (Exception $e) {
         error_log("Error in sendDirectSaleLeadNotification: " . $e->getMessage());
     }
