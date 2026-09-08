@@ -10126,6 +10126,50 @@ switch ($action) {
                             } catch (Exception $mailEx) {
                                 error_log("Error sending reassigned duplicate reminder email: " . $mailEx->getMessage());
                             }
+
+                            // In-app bell notification for new consultant
+                            try {
+                                $targetUserId = $new_consultant_id;
+                                $stmtUId = $conn->prepare("SELECT id FROM users WHERE id = ? OR email = ? LIMIT 1");
+                                if ($stmtUId) {
+                                    $stmtUId->bind_param("is", $new_consultant_id, $newC['email']);
+                                    $stmtUId->execute();
+                                    $uRow = $stmtUId->get_result()->fetch_assoc();
+                                    if ($uRow) $targetUserId = (int)$uRow['id'];
+                                    $stmtUId->close();
+                                }
+                                
+                                $reportContactId = null;
+                                if (!empty($lDetails['phone'])) {
+                                    $pClean = sanitizePhoneNumber($lDetails['phone']);
+                                    $noZ = ltrim($pClean, '0');
+                                    $wZ = '0' . $noZ;
+                                    $cStmt = $conn->prepare("SELECT id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+                                    if ($cStmt) {
+                                        $cStmt->bind_param("ss", $wZ, $noZ);
+                                        $cStmt->execute();
+                                        $cRes = $cStmt->get_result()->fetch_assoc();
+                                        if ($cRes) $reportContactId = (int)$cRes['id'];
+                                        $cStmt->close();
+                                    }
+                                }
+
+                                $rLink = $reportContactId ? "/contacts?open_contact_id=$reportContactId" : "/contacts";
+                                $stmtNotifRep = $conn->prepare("
+                                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                                    VALUES (?, 1, '🔄 Bạn được chuyển giao Lead mới!', ?, 'contact', ?)
+                                ");
+                                if ($stmtNotifRep) {
+                                    $rCustName = $lDetails['name'] ?: 'Khách hàng';
+                                    $rPhoneStr = !empty($lDetails['phone']) ? " ({$lDetails['phone']})" : "";
+                                    $rBody = "Bạn vừa được phân bổ khách hàng \"$rCustName\"$rPhoneStr từ xử lý trùng lặp. Nhấn để mở chi tiết.";
+                                    $stmtNotifRep->bind_param("iss", $targetUserId, $rBody, $rLink);
+                                    $stmtNotifRep->execute();
+                                    $stmtNotifRep->close();
+                                }
+                            } catch (\Throwable $nrEx) {
+                                error_log("Error creating reassigned in-app notification in approve_report: " . $nrEx->getMessage());
+                            }
                         }
                     }
                 } catch (Exception $newCEx) {
@@ -16894,30 +16938,29 @@ switch ($action) {
             // Trigger Live Two-Way Sync to Google Sheets
             triggerTwoWaySync($conn, $lead_id);
 
-            // In-app bell notification for new consultant
-            $stmtNotifNew = $conn->prepare("
-                INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                VALUES (?, 1, 'Bàn giao lead mới', ?, 'lead', '/sale-portal')
-            ");
-            if ($stmtNotifNew) {
-                $leadDisplayName = $log_data['lead_name'] ?: 'Khách hàng';
-                $notifBody = "Bạn vừa được $actorName bàn giao lead \"$leadDisplayName\" (từ " . ($old_consultant_name ?: 'Chưa phân bổ') . ").";
-                $stmtNotifNew->bind_param("is", $new_consultant_id, $notifBody);
-                $stmtNotifNew->execute();
-                $stmtNotifNew->close();
+            // Resolve target user ID in users table (in case new_consultant_id is a consultants table ID)
+            $targetUserId = (int)$new_consultant_id;
+            $stmtUId = $conn->prepare("SELECT id FROM users WHERE id = ? OR email = ? LIMIT 1");
+            if ($stmtUId) {
+                $stmtUId->bind_param("is", $new_consultant_id, $new_cons_email);
+                $stmtUId->execute();
+                $uRow = $stmtUId->get_result()->fetch_assoc();
+                if ($uRow) $targetUserId = (int)$uRow['id'];
+                $stmtUId->close();
             }
 
-            // Multi-channel notification via NotificationService
+            // Multi-channel & In-App bell notification via NotificationService
             try {
                 require_once __DIR__ . '/config/Database.php';
                 require_once __DIR__ . '/NotificationService.php';
                 $pdoInstance = Database::getInstance();
                 NotificationService::send($pdoInstance, 1, 'LEAD_HANDOVER_NEW_SALE', [
-                    'user_id' => $new_consultant_id,
+                    'user_id' => $targetUserId,
                     'customer_name' => $log_data['lead_name'] ?: 'Khách hàng',
                     'old_sale_name' => $old_consultant_name ?: 'Chưa phân bổ',
                     'actor_name' => $actorName,
-                    'contact_id' => $contactIdForLead ?? ''
+                    'contact_id' => $contactIdForLead ?? '',
+                    'phone' => $log_data['phone'] ?? ''
                 ]);
             } catch (\Throwable $notifSvcErr) {
                 error_log("Error in NotificationService LEAD_HANDOVER_NEW_SALE: " . $notifSvcErr->getMessage());
@@ -18968,6 +19011,24 @@ switch ($action) {
             }
 
             logDistribution($conn, $leadId, $saleConsultantId, null, 'databank_claim', 'Sale tự nhận từ Kho chung (Databank)', false);
+
+            // In-app bell notification for the sale who claimed lead from databank
+            try {
+                $claimedPhoneStr = !empty($person['phone']) ? " ({$person['phone']})" : "";
+                $claimLink = "/contacts?open_contact_id=" . $newContactId;
+                $stmtNotifClaim = $conn->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                    VALUES (?, 1, '🎉 Bạn đã nhận Lead từ Kho chung!', ?, 'contact', ?)
+                ");
+                if ($stmtNotifClaim) {
+                    $claimBody = "Bạn vừa nhận thành công khách hàng \"$fullName\"$claimedPhoneStr từ Kho chung. Nhấn để mở chi tiết.";
+                    $stmtNotifClaim->bind_param("iss", $saleUserId, $claimBody, $claimLink);
+                    $stmtNotifClaim->execute();
+                    $stmtNotifClaim->close();
+                }
+            } catch (\Throwable $clEx) {
+                error_log("Error creating databank claim notification: " . $clEx->getMessage());
+            }
 
             $conn->commit();
 

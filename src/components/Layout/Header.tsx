@@ -566,8 +566,30 @@ export const Header = ({
       // Contact matching
       const contactMatch = targetLink.match(/^\/contacts\/(\d+)$/) || targetLink.match(/\/contacts\?(?:open_contact_id|id)=(\d+)/);
       if (contactMatch) {
-        urlObj.searchParams.set('open_contact_id', contactMatch[1]);
+        const contactId = Number(contactMatch[1]);
+        urlObj.searchParams.set('open_contact_id', String(contactId));
         targetLink = `/contacts?${urlObj.searchParams.toString()}`;
+        window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+          detail: { id: contactId }
+        }));
+      }
+
+      // Fallback for lead/contact notifications that didn't have ID in the URL
+      const isLeadNotif = notif.type === 'contact' || notif.type === 'lead' || notif.type === 'lead_assignment' ||
+        (notif.title && (notif.title.toLowerCase().includes('lead') || notif.title.toLowerCase().includes('khách hàng'))) ||
+        (notif.body && (notif.body.toLowerCase().includes('lead') || notif.body.toLowerCase().includes('khách hàng')));
+
+      if (!contactMatch && isLeadNotif && notif.body) {
+        const bodyIdMatch = notif.body.match(/Contact ID:\s*(\d+)/i) || 
+                            notif.body.match(/Lead ID:\s*(\d+)/i) || 
+                            notif.body.match(/ID:\s*(\d+)/i);
+        if (bodyIdMatch) {
+          const cid = Number(bodyIdMatch[1]);
+          targetLink = `/contacts?open_contact_id=${cid}`;
+          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+            detail: { id: cid }
+          }));
+        }
       }
 
       // Workspace Task matching
@@ -628,14 +650,18 @@ export const Header = ({
     // 3. Contact ID from Reference fallback
     let contactIdFromRef: string | null = null;
     if (notif.body) {
-      const refMatch = notif.body.match(/Contact ID:\s*(\d+)/i) || notif.body.match(/ID:\s*(\d+)/i);
+      const refMatch = notif.body.match(/Contact ID:\s*(\d+)/i) || notif.body.match(/Lead ID:\s*(\d+)/i) || notif.body.match(/ID:\s*(\d+)/i);
       if (refMatch) {
         contactIdFromRef = refMatch[1];
       }
     }
 
     if (contactIdFromRef) {
-      navigate(`/contacts?open_contact_id=${contactIdFromRef}`);
+      const cid = Number(contactIdFromRef);
+      window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+        detail: { id: cid }
+      }));
+      navigate(`/contacts?open_contact_id=${contactIdFromRef}`, { state: { timestamp: Date.now() } });
       return;
     }
 

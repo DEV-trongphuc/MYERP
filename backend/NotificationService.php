@@ -999,22 +999,26 @@ class NotificationService {
                 $oldSaleName = $payload['old_sale_name'] ?? 'Sale trước';
                 $actorName = $payload['actor_name'] ?? 'Quản trị viên';
                 $contactId = $payload['contact_id'] ?? '';
-                $link = $contactId ? "/contacts?id=$contactId" : "/sale-portal";
+                $phone = $payload['phone'] ?? '';
+                $link = $contactId ? "/contacts?open_contact_id=$contactId" : "/contacts";
+                $bodyText = "Bạn vừa được $actorName bàn giao khách hàng \"$custName\"" . (!empty($phone) ? " ($phone)" : "") . " (từ $oldSaleName). Nhấn để mở chi tiết.";
                 return [
                     'recipients' => $recipients,
-                    'title' => "Bàn giao khách hàng mới",
-                    'body' => "Bạn vừa được $actorName bàn giao khách hàng $custName (từ $oldSaleName)",
-                    'type' => "lead",
+                    'title' => "🔄 Bạn được chuyển giao Lead mới!",
+                    'body' => $bodyText,
+                    'type' => "contact",
                     'link' => $link,
                     'zalo_msg' => "🔄 [ BÀN GIAO KHÁCH HÀNG MỚI ]\n\n"
                         . "Bạn vừa được chuyển giao khách hàng phụ trách mới:\n"
                         . "  • Khách hàng: $custName\n"
+                        . ($phone ? "  • SĐT: $phone\n" : "")
                         . "  • Chuyển từ: $oldSaleName\n"
                         . "  • Người thực hiện: $actorName\n\n"
                         . "Vui lòng vào CRM để xem lịch sử tương tác và liên hệ chăm sóc ngay.",
                     'tg_msg' => "🔄 <b>[ BÀN GIAO KHÁCH HÀNG MỚI ]</b>\n\n"
                         . "Bạn vừa được chuyển giao khách hàng phụ trách mới:\n"
                         . "  • Khách hàng: <b>" . htmlspecialchars($custName) . "</b>\n"
+                        . ($phone ? "  • SĐT: <code>" . htmlspecialchars($phone) . "</code>\n" : "")
                         . "  • Chuyển từ: <b>" . htmlspecialchars($oldSaleName) . "</b>\n"
                         . "  • Người thực hiện: <b>" . htmlspecialchars($actorName) . "</b>\n\n"
                         . "Vui lòng vào CRM để xem lịch sử tương tác và liên hệ chăm sóc ngay.",
@@ -1022,6 +1026,7 @@ class NotificationService {
                     'email_title' => "BÀN GIAO KHÁCH HÀNG MỚI",
                     'email_content' => "Chào bạn,<br/><br/>" .
                                     "Bạn vừa được bàn giao khách hàng: <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
+                                    ($phone ? "Số điện thoại: <strong>" . htmlspecialchars($phone) . "</strong>.<br/>" : "") .
                                     "Người phụ trách trước: <strong>" . htmlspecialchars($oldSaleName) . "</strong>.<br/>" .
                                     "Người thực hiện chuyển giao: <strong>" . htmlspecialchars($actorName) . "</strong>.<br/>" .
                                     "Vui lòng truy cập CRM để kiểm tra thông tin và lịch sử tương tác của khách hàng."
@@ -1095,28 +1100,35 @@ class NotificationService {
                 $maskedPhone = !empty($phone) && strlen($phone) >= 7 
                     ? (substr($phone, 0, 4) . '***' . substr($phone, -3)) 
                     : '******';
+                $contactId = $payload['contact_id'] ?? '';
+                $roundName = $payload['round_name'] ?? '';
+                $link = !empty($contactId) ? "/contacts?open_contact_id=$contactId" : "/contacts";
+                $bodyText = "Khách hàng \"$custName\"" . (!empty($phone) ? " ($phone)" : "") . (!empty($roundName) ? " từ vòng \"$roundName\"" : "") . ". Nhấn để mở chi tiết.";
                 return [
                     'recipients' => $recipients,
-                    'title' => "Khách hàng mới được phân bổ",
-                    'body' => "Bạn vừa được phân bổ khách hàng mới. Vui lòng vào CRM (Sale Portal) để nhận và xem chi tiết.",
-                    'type' => "lead",
-                    'link' => "/sale-portal",
+                    'title' => "🎉 Bạn nhận được Lead mới!",
+                    'body' => $bodyText,
+                    'type' => "contact",
+                    'link' => $link,
                     'zalo_msg' => "🎯 [ KHÁCH HÀNG MỚI ĐƯỢC CHIA ]\n\n"
                         . "Bạn vừa được hệ thống phân bổ 1 khách hàng mới:\n"
-                        . "  • Trạng thái: Chờ nhận & xem chi tiết\n"
-                        . "  • SĐT liên hệ: $maskedPhone\n\n"
-                        . "Vui lòng truy cập Sale Portal trên CRM ngay để nhận và lấy thông tin chi tiết!",
+                        . "  • Tên khách hàng: $custName\n"
+                        . "  • SĐT liên hệ: $maskedPhone\n"
+                        . (!empty($roundName) ? "  • Vòng phân bổ: $roundName\n" : "")
+                        . "\nVui lòng truy cập CRM ngay để xem chi tiết và chăm sóc!",
                     'tg_msg' => "🎯 <b>[ KHÁCH HÀNG MỚI ĐƯỢC CHIA ]</b>\n\n"
                         . "Bạn vừa được hệ thống phân bổ 1 khách hàng mới:\n"
-                        . "  • Trạng thái: <b>Chờ nhận & xem chi tiết</b>\n"
-                        . "  • SĐT liên hệ: <code>$maskedPhone</code>\n\n"
-                        . "Vui lòng truy cập Sale Portal trên CRM ngay để nhận và lấy thông tin chi tiết!",
-                    'email_subject' => "[IDEAS] Thông báo phân bổ khách hàng mới",
+                        . "  • Tên khách hàng: <b>" . htmlspecialchars($custName) . "</b>\n"
+                        . "  • SĐT liên hệ: <code>$maskedPhone</code>\n"
+                        . (!empty($roundName) ? "  • Vòng phân bổ: <b>" . htmlspecialchars($roundName) . "</b>\n" : "")
+                        . "\nVui lòng truy cập CRM ngay để xem chi tiết và chăm sóc!",
+                    'email_subject' => "[IDEAS] Thông báo phân bổ khách hàng mới: $custName",
                     'email_title' => "KHÁCH HÀNG MỚI ĐƯỢC PHÂN BỔ",
                     'email_content' => "Chào bạn,<br/><br/>" .
-                                    "Hệ thống vừa phân bổ 1 khách hàng mới cho bạn.<br/>" .
-                                    "Vì lý do bảo mật dữ liệu, thông tin chi tiết và SĐT đầy đủ chỉ hiển thị khi bạn đăng nhập vào CRM.<br/>" .
-                                    "Vui lòng truy cập <strong>Sale Portal</strong> trên CRM để nhận khách hàng."
+                                    "Hệ thống vừa phân bổ 1 khách hàng mới cho bạn: <strong>" . htmlspecialchars($custName) . "</strong>.<br/>" .
+                                    (!empty($phone) ? "SĐT: <strong>" . htmlspecialchars($phone) . "</strong>.<br/>" : "") .
+                                    (!empty($roundName) ? "Vòng phân bổ: <strong>" . htmlspecialchars($roundName) . "</strong>.<br/>" : "") .
+                                    "Vui lòng truy cập CRM để kiểm tra thông tin và chăm sóc khách hàng."
                 ];
 
             case 'COOP_INVITATION':
@@ -1853,10 +1865,11 @@ class NotificationService {
                    c.id AS is_consultant
             FROM users u
             LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id)
-            WHERE u.id = ?
+            WHERE u.id = ? OR c.id = ?
+            ORDER BY (u.id = ?) DESC
             LIMIT 1
         ");
-        $stmt->execute([$userId]);
+        $stmt->execute([$userId, $userId, $userId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ? [$row] : [];
     }

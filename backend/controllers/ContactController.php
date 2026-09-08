@@ -648,6 +648,7 @@ class ContactController {
         $birthday = empty($b['birthday']) ? null : $b['birthday'];
         $last_contact = empty($b['last_contact']) ? null : $b['last_contact'];
 
+        $assignedOwnerId = (in_array($auth['role'], ['sale', 'sales'], true)) ? (int)$auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : (int)$auth['user_id']);
         $stmt = $this->db->prepare("
             INSERT INTO contacts (tenant_id,company_id,owner_id,created_by,full_name,
                 email,phone,mobile,job_title,department,source,status,tags,notes,stage_id,
@@ -656,7 +657,7 @@ class ContactController {
         ");
         $stmt->execute([
             $auth['tenant_id'],
-            $company_id, (in_array($auth['role'], ['sale', 'sales'], true)) ? $auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : $auth['user_id']),
+            $company_id, $assignedOwnerId,
             $auth['user_id'], trim($b['full_name'] ?? ''),
             $email, $phone, $phone,
             $b['job_title'] ?? null, $b['department'] ?? null,
@@ -670,6 +671,27 @@ class ContactController {
             $pipelineStatus
         ]);
         $id = (int)$this->db->lastInsertId();
+
+        // Send in-app notification to the assigned salesperson if created by someone else
+        if ($assignedOwnerId > 0 && $assignedOwnerId !== (int)$auth['user_id']) {
+            try {
+                $creatorName = $auth['full_name'] ?? 'Quản trị viên';
+                $custFullName = trim($b['full_name'] ?? '') ?: 'Khách hàng mới';
+                $custPhoneStr = !empty($phone) ? " ($phone)" : "";
+                $stmtNotifOwner = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                    VALUES (?, ?, '🎉 Bạn được phân bổ khách hàng mới!', ?, 'contact', ?)
+                ");
+                $stmtNotifOwner->execute([
+                    $assignedOwnerId,
+                    $auth['tenant_id'],
+                    "Bạn vừa được $creatorName phân bổ khách hàng \"$custFullName\"$custPhoneStr. Nhấn để mở chi tiết.",
+                    "/contacts?open_contact_id=$id"
+                ]);
+            } catch (\Throwable $notifEx) {
+                error_log("Notification insert error for assigned owner in store: " . $notifEx->getMessage());
+            }
+        }
         if ($duplicateFlag) {
             $upd = $this->db->prepare("UPDATE contacts SET duplicate_flag = 1, duplicate_with_id = ? WHERE id = ?");
             $upd->execute([$duplicateWithId, $id]);
@@ -1202,28 +1224,14 @@ class ContactController {
                 // 2. Notify the new salesperson
                 if ($newOwnerId !== (int)$auth['user_id']) {
                     try {
-                        $stmtNotif = $this->db->prepare("
-                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
-                            VALUES (?, ?, 'Bàn giao khách hàng mới', ?, 'contact', ?)
-                        ");
-                        $stmtNotif->execute([
-                            $newOwnerId,
-                            $auth['tenant_id'],
-                            "Bạn vừa được $actorName bàn giao khách hàng \"$customerName\" (từ $oldOwnerName).",
-                            "/contacts?id=$id"
-                        ]);
-                    } catch (\Throwable $notifEx) {
-                        error_log("Notification insert error for new owner: " . $notifEx->getMessage());
-                    }
-
-                    try {
                         require_once __DIR__ . '/../NotificationService.php';
                         NotificationService::send($this->db, $auth['tenant_id'], 'LEAD_HANDOVER_NEW_SALE', [
                             'user_id' => $newOwnerId,
                             'customer_name' => $customerName,
                             'old_sale_name' => $oldOwnerName,
                             'actor_name' => $actorName,
-                            'contact_id' => $id
+                            'contact_id' => $id,
+                            'phone' => $currentContact['phone'] ?? ''
                         ]);
                     } catch (\Throwable $svcEx) {
                         error_log("NotificationService send error for new owner: " . $svcEx->getMessage());

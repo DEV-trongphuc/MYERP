@@ -1831,18 +1831,28 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
     if (!$leadId || !$assignedToId) return;
 
     try {
-        // 1. Get Sale info (zalo_chat_id, email, telegram_chat_id, name)
-        $saleStmt = $conn->prepare("SELECT id, full_name AS name, email, zalo_chat_id, telegram_chat_id FROM users WHERE id = ?");
+        // 1. Get Sale user info (resolve robustly whether assignedToId is a users.id or consultants.id)
+        $saleStmt = $conn->prepare("
+            SELECT u.id, u.full_name AS name, u.email, 
+                   COALESCE(u.zalo_chat_id, c.zalo_chat_id) as zalo_chat_id, 
+                   COALESCE(u.telegram_chat_id, c.telegram_chat_id) as telegram_chat_id 
+            FROM users u 
+            LEFT JOIN consultants c ON (u.email = c.email OR u.id = c.id) 
+            WHERE u.id = ? OR c.id = ? 
+            ORDER BY (u.id = ?) DESC 
+            LIMIT 1
+        ");
         if (!$saleStmt) return;
-        $saleStmt->bind_param("i", $assignedToId);
+        $saleStmt->bind_param("iii", $assignedToId, $assignedToId, $assignedToId);
         $saleStmt->execute();
         $sale = $saleStmt->get_result()->fetch_assoc();
         $saleStmt->close();
 
         if (!$sale) return;
+        $actualUserId = (int)$sale['id'];
 
-        // 2. Get Lead info (name, phone, email, source, type, note)
-        $leadStmt = $conn->prepare("SELECT name, phone, email, source, type, note FROM leads WHERE id = ?");
+        // 2. Get Lead info (name, phone, email, source, type, note, person_id)
+        $leadStmt = $conn->prepare("SELECT name, phone, email, source, type, note, person_id FROM leads WHERE id = ?");
         if (!$leadStmt) return;
         $leadStmt->bind_param("i", $leadId);
         $leadStmt->execute();
@@ -1868,7 +1878,33 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
             }
         }
 
-        // 4. Send Zalo
+        // 4. Resolve associated Contact ID to jump straight to CustomerProfileDrawer
+        $contactId = null;
+        if (!empty($lead['person_id'])) {
+            $cStmt = $conn->prepare("SELECT id FROM contacts WHERE person_id = ? ORDER BY id DESC LIMIT 1");
+            if ($cStmt) {
+                $cStmt->bind_param("i", $lead['person_id']);
+                $cStmt->execute();
+                $cRes = $cStmt->get_result()->fetch_assoc();
+                if ($cRes) $contactId = (int)$cRes['id'];
+                $cStmt->close();
+            }
+        }
+        if (!$contactId && !empty($lead['phone'])) {
+            $pClean = sanitizePhoneNumber($lead['phone']);
+            $noZ = ltrim($pClean, '0');
+            $wZ = '0' . $noZ;
+            $cStmt = $conn->prepare("SELECT id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1");
+            if ($cStmt) {
+                $cStmt->bind_param("ss", $wZ, $noZ);
+                $cStmt->execute();
+                $cRes = $cStmt->get_result()->fetch_assoc();
+                if ($cRes) $contactId = (int)$cRes['id'];
+                $cStmt->close();
+            }
+        }
+
+        // 5. Send Zalo
         require_once __DIR__ . '/zalo_bot.php';
         sendLeadAssignedZaloMessageToSale(
             $assignedToId,
@@ -1884,7 +1920,7 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
             $lead['type'] ?: ''
         );
 
-        // 5. Send Email
+        // 6. Send Email
         require_once __DIR__ . '/mailer.php';
         sendLeadAssignedEmailToSale(
             $sale['email'],
@@ -1900,7 +1936,7 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
             $roundId
         );
 
-        // 6. Send Telegram if configured
+        // 7. Send Telegram if configured
         $teleBotToken = get_system_setting($conn, 'telegram_bot_token');
         if (!empty($teleBotToken) && !empty($sale['telegram_chat_id'])) {
             require_once __DIR__ . '/telegram_bot.php';
@@ -1923,17 +1959,33 @@ function sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId 
             }
         }
 
-        // 7. Insert in-app notification into notifications table for assigned sale
-        $stmtDbNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'lead_assignment', ?)");
-        if ($stmtDbNotif) {
-            $notifTitle = "Bạn được phân bổ khách hàng mới";
-            $custName = !empty($lead['name']) ? $lead['name'] : 'Khách hàng mới';
-            $custPhone = !empty($lead['phone']) ? $lead['phone'] : 'Không có SĐT';
-            $notifBody = "Khách hàng \"$custName\" ($custPhone) đã được phân bổ cho bạn" . ($roundName ? " từ vòng \"$roundName\"" : "") . ".";
-            $notifLink = "/contacts";
-            $stmtDbNotif->bind_param("isss", $assignedToId, $notifTitle, $notifBody, $notifLink);
-            $stmtDbNotif->execute();
-            $stmtDbNotif->close();
+        // 8. Insert in-app notification into notifications table for assigned sale
+        $notifLink = $contactId ? "/contacts?open_contact_id=$contactId" : "/contacts";
+        
+        // Check if recent notification already exists to avoid duplicate
+        $chkRecent = $conn->prepare("SELECT id FROM notifications WHERE user_id = ? AND link = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE) LIMIT 1");
+        $hasRecent = false;
+        if ($chkRecent) {
+            $chkRecent->bind_param("is", $actualUserId, $notifLink);
+            $chkRecent->execute();
+            $chkRes = $chkRecent->get_result();
+            if ($chkRes && $chkRes->num_rows > 0) {
+                $hasRecent = true;
+            }
+            $chkRecent->close();
+        }
+
+        if (!$hasRecent) {
+            $stmtDbNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'contact', ?)");
+            if ($stmtDbNotif) {
+                $notifTitle = "🎉 Bạn nhận được Lead mới!";
+                $custName = !empty($lead['name']) ? $lead['name'] : 'Khách hàng mới';
+                $custPhone = !empty($lead['phone']) ? $lead['phone'] : '';
+                $notifBody = "Khách hàng \"$custName\"" . ($custPhone ? " ($custPhone)" : "") . ($roundName ? " từ vòng \"$roundName\"" : "") . ". Nhấn để mở chi tiết.";
+                $stmtDbNotif->bind_param("isss", $actualUserId, $notifTitle, $notifBody, $notifLink);
+                $stmtDbNotif->execute();
+                $stmtDbNotif->close();
+            }
         }
 
     } catch (Exception $e) {
@@ -4211,6 +4263,32 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                         );
                         $stmtTransfer->execute();
                         $stmtTransfer->close();
+
+                        // In-app bell notification for new owner
+                        if ($ownerUserId > 0) {
+                            try {
+                                $tLink = "/contacts?open_contact_id=" . $primaryContactId;
+                                $chkRec = $conn->prepare("SELECT id FROM notifications WHERE user_id = ? AND link = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE) LIMIT 1");
+                                $hasRec = false;
+                                if ($chkRec) {
+                                    $chkRec->bind_param("is", $ownerUserId, $tLink);
+                                    $chkRec->execute();
+                                    $chkRecRes = $chkRec->get_result();
+                                    if ($chkRecRes && $chkRecRes->num_rows > 0) $hasRec = true;
+                                    $chkRec->close();
+                                }
+                                if (!$hasRec) {
+                                    $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, 1, ?, ?, 'contact', ?)");
+                                    if ($insNotif) {
+                                        $tTitle = "🔄 Bạn được phân bổ lại khách hàng cũ!";
+                                        $tBody = "Khách hàng \"$fullName\"" . ($phone ? " ($phone)" : "") . " đã được tái phân bổ cho bạn. Nhấn để mở chi tiết.";
+                                        $insNotif->bind_param("isss", $ownerUserId, $tTitle, $tBody, $tLink);
+                                        $insNotif->execute();
+                                        $insNotif->close();
+                                    }
+                                }
+                            } catch (\Throwable $ex) {}
+                        }
                     }
                 } else {
                     // Đã ở bước Hồ sơ trở đi -> Bắt buộc giữ nguyên Sale cũ, không đổi Sale
@@ -4255,7 +4333,34 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                 }
                 $stmtContact->bind_param("iiiiisssssisssss", $tenantId, $person_id, $projectId, $ownerUserId, $createdBy, $fullName, $email, $phone, $source, $firstStageSlug, $firstStageId, $secExpiresTime, $note, $type, $initTemp, $initTemp);
                 $stmtContact->execute();
+                $newCid = $conn->insert_id;
                 $stmtContact->close();
+
+                // In-app bell notification for assigned sale upon contact creation
+                if ($newCid > 0 && $ownerUserId > 0) {
+                    try {
+                        $cLink = "/contacts?open_contact_id=" . $newCid;
+                        $chkRec = $conn->prepare("SELECT id FROM notifications WHERE user_id = ? AND link = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE) LIMIT 1");
+                        $hasRec = false;
+                        if ($chkRec) {
+                            $chkRec->bind_param("is", $ownerUserId, $cLink);
+                            $chkRec->execute();
+                            $chkRecRes = $chkRec->get_result();
+                            if ($chkRecRes && $chkRecRes->num_rows > 0) $hasRec = true;
+                            $chkRec->close();
+                        }
+                        if (!$hasRec) {
+                            $insNotif = $conn->prepare("INSERT INTO notifications (user_id, tenant_id, title, body, type, link) VALUES (?, ?, ?, ?, 'contact', ?)");
+                            if ($insNotif) {
+                                $cTitle = "🎉 Bạn nhận được Lead mới!";
+                                $cBody = "Khách hàng \"$fullName\"" . ($phone ? " ($phone)" : "") . ". Nhấn để mở chi tiết.";
+                                $insNotif->bind_param("iisss", $ownerUserId, $tenantId, $cTitle, $cBody, $cLink);
+                                $insNotif->execute();
+                                $insNotif->close();
+                            }
+                        }
+                    } catch (\Throwable $ex) {}
+                }
             }
         }
     }

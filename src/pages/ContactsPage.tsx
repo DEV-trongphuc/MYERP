@@ -479,6 +479,24 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       }
     }
   }, [openContactId]);
+
+  // Global event listener for instant drawer opening when notification is clicked
+  useEffect(() => {
+    const handleOpenContactDrawer = (e: any) => {
+      const cid = Number(e.detail?.id);
+      if (cid) {
+        api.get(`/contacts/${cid}`).then(res => {
+          if (res.data.success && res.data.data) {
+            setProfileContact(res.data.data);
+          }
+        }).catch(err => {
+          console.error("Error opening contact drawer from event:", err);
+        });
+      }
+    };
+    window.addEventListener('open-contact-drawer', handleOpenContactDrawer);
+    return () => window.removeEventListener('open-contact-drawer', handleOpenContactDrawer);
+  }, []);
   const [segment, setSegment] = useState(defaultSegment);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);

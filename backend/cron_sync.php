@@ -880,6 +880,14 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                         } catch (Exception $zaloEx) {
                             logSync("Error sending Zalo to new consultant: " . $zaloEx->getMessage());
                         }
+
+                        // In-app bell notification for new consultant
+                        try {
+                            require_once __DIR__ . '/webhook_logic.php';
+                            sendDirectSaleLeadNotification($conn, $row['lead_id'], $assignedConsultantId, $row['round_id'] ?? 0);
+                        } catch (Exception $notifEx) {
+                            logSync("Error sending in-app notification in realloc: " . $notifEx->getMessage());
+                        }
                     } else if ($isFallbackAdmin && $fallbackAdminData) {
                         try {
                             sendLeadAssignedEmailToSale(
@@ -1447,6 +1455,14 @@ if (!function_exists('recallInactiveLeads')) {
                         );
                     } catch (Exception $zaloEx) {
                         logSync("Error sending Zalo to new consultant: " . $zaloEx->getMessage());
+                    }
+
+                    // In-app bell notification for new consultant
+                    try {
+                        require_once __DIR__ . '/webhook_logic.php';
+                        sendDirectSaleLeadNotification($conn, $leadId, $newConsultantId, $roundId);
+                    } catch (Exception $notifEx) {
+                        logSync("Error sending in-app notification in lead recall: " . $notifEx->getMessage());
                     }
                 } else if ($isFallbackAdmin && $fallbackAdminData) {
                     try {
@@ -2278,6 +2294,10 @@ foreach ($connections as $connItem) {
                     }
                     $syncedCount++;
                 } else if (($cronStatus === 'assigned' || $cronStatus === 'compensation') && !empty($leadId) && $assignedConsultantId) {
+                    try {
+                        require_once __DIR__ . '/webhook_logic.php';
+                        sendDirectSaleLeadNotification($conn, $leadId, $assignedConsultantId, $targetRoundId);
+                    } catch (Exception $e) {}
                     $syncedCount++;
                 }
             } finally {
