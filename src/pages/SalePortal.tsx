@@ -3571,6 +3571,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         setClaimLeadConfirmOpen(false);
         fetchPublicLeads();
         loadPortalData();
+        window.dispatchEvent(new CustomEvent('notification-trigger'));
         if (json.contact_id) {
           navigate('/contacts?open_contact_id=' + json.contact_id);
         }

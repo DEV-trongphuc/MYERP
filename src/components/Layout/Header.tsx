@@ -34,6 +34,127 @@ const maskPhone = (phone: string) => {
   return `${start}***${end}`;
 };
 
+const getNotifMeta = (notif: any) => {
+  const type = (notif.type || '').toLowerCase();
+  const title = (notif.title || '').toLowerCase();
+  const body = (notif.body || '').toLowerCase();
+
+  // 1. Databank Claim
+  if (type === 'databank_claim' || title.includes('kho dữ liệu') || title.includes('nhận data') || body.includes('kho dữ liệu')) {
+    return {
+      icon: '🏢',
+      badge: 'KHO DỮ LIỆU',
+      badgeBg: 'rgba(245, 158, 11, 0.18)',
+      badgeColor: '#fbbf24',
+      borderColor: 'rgba(245, 158, 11, 0.45)',
+      glowColor: 'rgba(245, 158, 11, 0.22)',
+      ctaText: 'Mở chi tiết Lead →'
+    };
+  }
+
+  // 2. Lead Reassignment / Transfer
+  if (type === 'lead_reassignment' || title.includes('chuyển giao lead') || title.includes('chuyển quyền')) {
+    return {
+      icon: '🔄',
+      badge: 'CHUYỂN GIAO LEAD',
+      badgeBg: 'rgba(168, 85, 247, 0.18)',
+      badgeColor: '#c084fc',
+      borderColor: 'rgba(168, 85, 247, 0.45)',
+      glowColor: 'rgba(168, 85, 247, 0.22)',
+      ctaText: 'Mở chi tiết Lead →'
+    };
+  }
+
+  // 3. New Lead Assignment / Contact
+  if (type === 'lead_assignment' || type === 'contact' || type === 'lead' || title.includes('lead') || title.includes('khách hàng') || body.includes('lead:')) {
+    return {
+      icon: '🎯',
+      badge: 'LEAD MỚI',
+      badgeBg: 'rgba(16, 185, 129, 0.18)',
+      badgeColor: '#34d399',
+      borderColor: 'rgba(16, 185, 129, 0.45)',
+      glowColor: 'rgba(16, 185, 129, 0.22)',
+      ctaText: 'Mở chi tiết Lead →'
+    };
+  }
+
+  // 4. Approval & Gatekeeper
+  if (type === 'approval_request' || type === 'approval' || title.includes('phê duyệt') || title.includes('kiểm duyệt') || title.includes('duyệt')) {
+    return {
+      icon: '🛡️',
+      badge: 'PHÊ DUYỆT',
+      badgeBg: 'rgba(244, 63, 94, 0.18)',
+      badgeColor: '#fb7185',
+      borderColor: 'rgba(244, 63, 94, 0.45)',
+      glowColor: 'rgba(244, 63, 94, 0.22)',
+      ctaText: 'Xem yêu cầu →'
+    };
+  }
+
+  // 5. Attendance
+  if (type === 'attendance_update' || type === 'attendance' || title.includes('chấm công') || title.includes('công')) {
+    return {
+      icon: '⏰',
+      badge: 'CHẤM CÔNG',
+      badgeBg: 'rgba(234, 179, 8, 0.18)',
+      badgeColor: '#facc15',
+      borderColor: 'rgba(234, 179, 8, 0.45)',
+      glowColor: 'rgba(234, 179, 8, 0.22)',
+      ctaText: 'Xem bảng công →'
+    };
+  }
+
+  // 6. Warning
+  if (type === 'warning' || title.includes('cảnh báo') || title.includes('trùng số') || title.includes('rửa nguồn')) {
+    return {
+      icon: '⚠️',
+      badge: 'CẢNH BÁO',
+      badgeBg: 'rgba(239, 68, 68, 0.18)',
+      badgeColor: '#f87171',
+      borderColor: 'rgba(239, 68, 68, 0.45)',
+      glowColor: 'rgba(239, 68, 68, 0.22)',
+      ctaText: 'Kiểm tra ngay →'
+    };
+  }
+
+  // 7. Tasks & Activities
+  if (type === 'task_assignment' || type === 'task_participant' || type === 'mention' || title.includes('công việc') || title.includes('task')) {
+    return {
+      icon: '📋',
+      badge: 'CÔNG VIỆC',
+      badgeBg: 'rgba(59, 130, 246, 0.18)',
+      badgeColor: '#60a5fa',
+      borderColor: 'rgba(59, 130, 246, 0.45)',
+      glowColor: 'rgba(59, 130, 246, 0.22)',
+      ctaText: 'Mở công việc →'
+    };
+  }
+
+  // 8. Documents & Comments
+  if (type.includes('document') || type.includes('comment') || title.includes('tài liệu') || title.includes('bình luận')) {
+    return {
+      icon: '💬',
+      badge: 'THẢO LUẬN',
+      badgeBg: 'rgba(56, 189, 248, 0.18)',
+      badgeColor: '#38bdf8',
+      borderColor: 'rgba(56, 189, 248, 0.45)',
+      glowColor: 'rgba(56, 189, 248, 0.22)',
+      ctaText: 'Xem thảo luận →'
+    };
+  }
+
+  // 9. Default
+  return {
+    icon: '🔔',
+    badge: 'THÔNG BÁO',
+    badgeBg: 'rgba(99, 102, 241, 0.18)',
+    badgeColor: '#a5b4fc',
+    borderColor: 'rgba(99, 102, 241, 0.45)',
+    glowColor: 'rgba(99, 102, 241, 0.22)',
+    ctaText: 'Xem chi tiết →'
+  };
+};
+
 export const Header = ({ 
   onActivityFeedClick, 
   onMenuClick, 
@@ -140,6 +261,8 @@ export const Header = ({
   const prevNotifIds = useRef<Set<number>>(new Set());
   const flashIntervalRef = useRef<any>(null);
   const isWindowFocused = useRef(true);
+  const handleNotifClickRef = useRef<(notif: any) => Promise<void>>((() => {}) as any);
+  const showNotificationToastRef = useRef<(notif: any) => void>((() => {}) as any);
 
   // Stop title flashing
   const stopFlashingTitle = () => {
@@ -318,33 +441,30 @@ export const Header = ({
           stopFlashingTitle();
         }
 
-        // Browser notification trigger logic
+        // Real-time interactive toast and browser push notification trigger logic
         if (items.length > 0) {
           const isFirstLoad = prevNotifIds.current.size === 0;
-          let hasNewUnread = false;
-          let latestNotif = null;
+          const newUnreadItems: any[] = [];
           
           items.forEach((item) => {
             if (!prevNotifIds.current.has(item.id)) {
               prevNotifIds.current.add(item.id);
               if (!isFirstLoad && !item.is_read) {
-                hasNewUnread = true;
-                if (!latestNotif) {
-                  latestNotif = item;
-                }
+                newUnreadItems.push(item);
               }
             }
           });
           
-          if (newUnreadCount > 0 && hasNewUnread && latestNotif) {
+          if (newUnreadItems.length > 0) {
             // Play pleasing audio chime
             playNotificationChime();
 
-            // Trigger desktop notification
+            // Trigger desktop notification for the latest notification
             if ('Notification' in window && Notification.permission === 'granted') {
               try {
-                new Notification(latestNotif.title || 'Thông báo IDEAS', {
-                  body: latestNotif.body || 'Bạn có thông báo mới.',
+                const latest = newUnreadItems[0];
+                new Notification(latest.title || 'Thông báo IDEAS', {
+                  body: latest.body || 'Bạn có thông báo mới.',
                   icon: '/LOGO.webp'
                 });
               } catch (err) {
@@ -352,19 +472,28 @@ export const Header = ({
               }
             }
             
-            // Show toast notification if modal is not currently open
-            if (!isNotifModalOpen) {
-              toast((latestNotif.title || 'Thông báo mới') + (latestNotif.body ? `: ${latestNotif.body.substring(0, 80)}...` : ''), {
-                icon: '🔔',
-                duration: 6000
-              });
+            // Pop rich interactive toast notifications for all incoming unread notifications
+            const itemsToShow = newUnreadItems.slice(0, 4);
+            itemsToShow.forEach((item, idx) => {
+              setTimeout(() => {
+                showNotificationToastRef.current?.(item);
+              }, idx * 280);
+            });
+
+            if (newUnreadItems.length > 4) {
+              setTimeout(() => {
+                toast(`🔔 Và còn ${newUnreadItems.length - 4} thông báo mới khác`, {
+                  duration: 6000,
+                  position: 'top-right'
+                });
+              }, 4 * 280);
             }
 
             // Dispatch event for auto-refreshing other active components
-            window.dispatchEvent(new CustomEvent('new-notification-received'));
+            window.dispatchEvent(new CustomEvent('new-notification-received', { detail: { items: newUnreadItems } }));
             
-            // Trigger tab title flash if not focused or modal is not open
-            if (!isWindowFocused.current || !isNotifModalOpen) {
+            // Trigger tab title flash if not focused
+            if (!isWindowFocused.current) {
               startFlashingTitle(newUnreadCount);
             }
           }
@@ -413,21 +542,29 @@ export const Header = ({
   useEffect(() => {
     fetchNotifications();
     fetchNotifPrefs();
-    const interval = setInterval(fetchNotifications, 10000); // Polling every 10s for responsive notifications
+    const interval = setInterval(fetchNotifications, 8000); // Polling every 8s for responsive notifications
     
     const handleRealtimeUpdate = () => {
       fetchNotifications();
     };
 
+    const handleManualToastTest = (e: any) => {
+      if (e.detail) {
+        showNotificationToastRef.current?.(e.detail);
+      }
+    };
+
     window.addEventListener('notification-trigger', fetchNotifications);
     window.addEventListener('realtime-update-received', handleRealtimeUpdate);
     window.addEventListener('new-notification-received', handleRealtimeUpdate);
+    window.addEventListener('test-notification-toast', handleManualToastTest);
     
     return () => {
       clearInterval(interval);
       window.removeEventListener('notification-trigger', fetchNotifications);
       window.removeEventListener('realtime-update-received', handleRealtimeUpdate);
       window.removeEventListener('new-notification-received', handleRealtimeUpdate);
+      window.removeEventListener('test-notification-toast', handleManualToastTest);
     };
   }, [showNotifSettings]);
 
@@ -668,6 +805,176 @@ export const Header = ({
     // Default fallback
     navigate('/');
   };
+
+  handleNotifClickRef.current = handleNotifClick;
+
+  // Real-time interactive toast notification renderer
+  const showNotificationToast = (item: any) => {
+    const meta = getNotifMeta(item);
+
+    toast.custom((t) => (
+      <div
+        onClick={() => {
+          toast.dismiss(t.id);
+          handleNotifClickRef.current(item);
+        }}
+        className="realtime-notif-toast"
+        style={{
+          animation: t.visible
+            ? 'notifToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+            : 'notifToastSlideOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          border: `1px solid ${meta.borderColor}`,
+          boxShadow: `0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 24px ${meta.glowColor}`
+        }}
+      >
+        {/* Glowing left accent line */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: '12px',
+            bottom: '12px',
+            width: '4px',
+            borderRadius: '0 4px 4px 0',
+            background: meta.badgeColor,
+            boxShadow: `0 0 10px ${meta.badgeColor}`
+          }}
+        />
+
+        {/* Top Header Row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px', lineHeight: 1 }}>{meta.icon}</span>
+            <span
+              style={{
+                padding: '2px 8px',
+                borderRadius: '6px',
+                fontSize: '10.5px',
+                fontWeight: 700,
+                letterSpacing: '0.5px',
+                background: meta.badgeBg,
+                color: meta.badgeColor,
+                border: `1px solid ${meta.borderColor}`
+              }}
+            >
+              {meta.badge}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: '2px' }}>
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: '#ef4444',
+                  boxShadow: '0 0 8px #ef4444',
+                  animation: 'notifPulseGlow 1.4s infinite ease-in-out'
+                }}
+              />
+              <span style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 500 }}>Vừa xong</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toast.dismiss(t.id);
+            }}
+            title="Đóng thông báo"
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '3px 6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '6px',
+              fontSize: '13px',
+              lineHeight: 1,
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#94a3b8';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Middle Content: Title & Body */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
+          <div
+            style={{
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '13.5px',
+              lineHeight: 1.35,
+              wordBreak: 'break-word'
+            }}
+          >
+            {item.title || 'Thông báo mới'}
+          </div>
+          {item.body && (
+            <div
+              style={{
+                color: '#cbd5e1',
+                fontSize: '12px',
+                lineHeight: 1.45,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                wordBreak: 'break-word'
+              }}
+            >
+              {item.body}
+            </div>
+          )}
+        </div>
+
+        {/* Footer Action Bar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: '8px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            fontSize: '11.5px'
+          }}
+        >
+          <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {item.actor_name ? `Từ: ${item.actor_name}` : 'Nhấn vào để mở'}
+          </span>
+          <span
+            style={{
+              color: meta.badgeColor,
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              textDecoration: 'none'
+            }}
+          >
+            {meta.ctaText}
+          </span>
+        </div>
+      </div>
+    ), {
+      duration: 8000,
+      position: 'top-right'
+    });
+  };
+
+  showNotificationToastRef.current = showNotificationToast;
 
   const handleLogout = () => {
     logout();

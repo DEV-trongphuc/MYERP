@@ -1889,6 +1889,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       setBaseTags(updated.tags || []);
       onUpdate?.(updated);
       window.dispatchEvent(new CustomEvent('contact-updated'));
+      window.dispatchEvent(new CustomEvent('notification-trigger'));
       if (formData.program && String(formData.program).trim()) {
         const trimmed = String(formData.program).trim();
         setProgramSuggestions(prev => {

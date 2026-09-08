@@ -5949,6 +5949,60 @@ div[data-react-hot-toast] div,
   height: 42px !important;
 }
 
+/* ================================================
+   REAL-TIME NOTIFICATION TOAST ANIMATIONS & STYLES
+   ================================================ */
+@keyframes notifToastSlideIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(115%, 0, 0) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
 
+@keyframes notifToastSlideOut {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(115%, 0, 0) scale(0.94);
+  }
+}
 
+@keyframes notifPulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.35);
+  }
+}
 
+.realtime-notif-toast {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 14px 16px 12px 18px;
+  width: 390px;
+  max-width: calc(100vw - 32px);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto !important;
+  user-select: none;
+}
+
+.realtime-notif-toast:hover {
+  transform: translateY(-2px) scale(1.01);
+}

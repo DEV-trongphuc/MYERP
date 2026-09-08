@@ -1234,6 +1234,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       setShowCreateModal(false);
       setCreateForm({ full_name: '', email: '', phone: '', company_name: '', job_title: '', status: 'lead', source: 'other', owner_id: '', city: '', ward: '', address: '' });
       addToast('Đã thêm liên hệ mới thành công', 'success');
+      window.dispatchEvent(new CustomEvent('notification-trigger'));
     } catch (e: any) {
       addToast(e.response?.data?.message || 'Không thể tạo liên hệ', 'error');
     } finally {
