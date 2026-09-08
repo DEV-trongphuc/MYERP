@@ -815,56 +815,64 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const fetchData = async () => {
     setLoading(true);
     try {
+      const isSearching = Boolean(debouncedSearch);
+
       const params: any = { 
         page, 
         limit: pageSize, 
         search: debouncedSearch, 
         sort: sortBy === 'score_desc' ? 'lead_score' : (sortBy === 'deal_desc' ? 'open_deal_value' : (sortBy === 'interaction_desc' ? 'last_contact' : 'created_at')),
-        order: 'DESC',
-        segment
+        order: 'DESC'
       };
 
-      if (segment === 'customer') {
-        params.student_sub_tab = studentSubTab;
-      }
-      
-      // Quick Pipeline Stage Tab filter
-      if (quickPipelineStage && quickPipelineStage !== 'all') {
-        if (quickPipelineStage === 'nurture') {
-          params.lead_status = 'nurture';
-        } else if (quickPipelineStage === 'lost') {
-          params.lead_status = 'lost';
-          params.show_lost = 1;
-        } else {
-          params.stage_id = quickPipelineStage;
-        }
-      }
-
-      if (filterUncontacted) {
-        params.uncontacted = 1;
-      }
-
-      if (activeFilters.status) {
-        if (/^\d+$/.test(activeFilters.status)) {
-          params.stage_id = activeFilters.status;
-          if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
-        } else {
-          params.status = activeFilters.status;
-          if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
-        }
-      }
-
-      // Lead Status filter (active, nurture, lost)
-      const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
-      const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
-
-      if (effectiveLeadStatus) {
-        params.lead_status = effectiveLeadStatus;
-        params.lead_status_op = effectiveLeadStatusOp;
-      }
-
-      if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost') {
+      if (isSearching) {
+        // When searching, scan across ALL pipelines, stages, and segments (leads, students, applications, nurture, lost)
+        params.all_pipeline = 1;
         params.show_lost = 1;
+      } else {
+        params.segment = segment;
+        if (segment === 'customer') {
+          params.student_sub_tab = studentSubTab;
+        }
+        
+        // Quick Pipeline Stage Tab filter
+        if (quickPipelineStage && quickPipelineStage !== 'all') {
+          if (quickPipelineStage === 'nurture') {
+            params.lead_status = 'nurture';
+          } else if (quickPipelineStage === 'lost') {
+            params.lead_status = 'lost';
+            params.show_lost = 1;
+          } else {
+            params.stage_id = quickPipelineStage;
+          }
+        }
+
+        if (filterUncontacted) {
+          params.uncontacted = 1;
+        }
+
+        if (activeFilters.status) {
+          if (/^\d+$/.test(activeFilters.status)) {
+            params.stage_id = activeFilters.status;
+            if (activeFilters.stageOp) params.stage_op = activeFilters.stageOp;
+          } else {
+            params.status = activeFilters.status;
+            if (activeFilters.stageOp) params.status_op = activeFilters.stageOp;
+          }
+        }
+
+        // Lead Status filter (active, nurture, lost)
+        const effectiveLeadStatus = quickLeadStatus || activeFilters.leadStatus;
+        const effectiveLeadStatusOp = quickLeadStatus ? 'in' : (activeFilters.leadStatusOp || 'in');
+
+        if (effectiveLeadStatus) {
+          params.lead_status = effectiveLeadStatus;
+          params.lead_status_op = effectiveLeadStatusOp;
+        }
+
+        if (showLost || activeFilters.showLost || effectiveLeadStatus === 'lost') {
+          params.show_lost = 1;
+        }
       }
 
       if (activeFilters.source) params.source = activeFilters.source;
@@ -1439,7 +1447,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             <div className="filter-search" style={{ flex: 1, position: 'relative', height: '36px', borderRadius: '8px', border: '1px solid var(--color-border)', boxSizing: 'border-box', padding: 0, display: 'flex', alignItems: 'center', marginBottom: 0 }}>
               <Search size={12} style={{ color:'var(--color-text-muted)', marginLeft: '8px', marginRight: '4px', flexShrink: 0 }}/>
               <input 
-                placeholder="Tìm tên, email, điện thoại..." 
+                placeholder="Tìm tên (có/không dấu), SĐT, email toàn hệ thống..." 
                 value={search} 
                 onChange={e=>{setSearch(e.target.value);setPage(1);}} 
                 style={{ border: 'none', background: 'transparent', outline: 'none', padding: '0 8px', height: '100%', fontSize: '0.75rem', flex: 1, minWidth: 0 }}
@@ -1805,7 +1813,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               <div className="filter-search" style={{ flex: 1, position: 'relative', width: 'auto', height: '38px', borderRadius: '8px', border: '1px solid var(--color-border)', boxSizing: 'border-box', paddingRight: '2.5rem' }}>
                 <Search size={14} style={{ color:'var(--color-text-muted)', marginLeft: '4px' }}/>
                 <input 
-                  placeholder="Tìm tên, email, điện thoại..." 
+                  placeholder="Tìm tên (có/không dấu), SĐT, email toàn hệ thống..." 
                   value={search} 
                   onChange={e=>{setSearch(e.target.value);setPage(1);}} 
                   style={{ paddingRight: '0.5rem', height: '100%' }}
@@ -2035,6 +2043,59 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           </>
         )}
       </div>
+
+      {/* Global Search Active Banner */}
+      {debouncedSearch && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.625rem 1rem',
+          marginBottom: '0.75rem',
+          borderRadius: '10px',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
+          border: '1px solid rgba(59, 130, 246, 0.25)',
+          fontSize: '0.8125rem',
+          color: 'var(--color-primary, #2563eb)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <Search size={14} style={{ flexShrink: 0 }} />
+            <span>
+              Đang rà soát <strong>toàn bộ pipeline, học viên & trạng thái</strong>: &ldquo;<strong>{debouncedSearch}</strong>&rdquo;
+            </span>
+            <span style={{
+              background: 'rgba(59, 130, 246, 0.15)',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              fontWeight: 700,
+              fontSize: '0.75rem'
+            }}>
+              {total} kết quả
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setPage(1); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              background: 'var(--color-surface, #ffffff)',
+              color: 'var(--color-primary, #2563eb)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >
+            <X size={12} /> Bỏ tìm kiếm
+          </button>
+        </div>
+      )}
 
       {/* Collapsible Advanced Filters Panel */}
       <AnimatePresence>

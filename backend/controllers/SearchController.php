@@ -18,8 +18,13 @@ class SearchController {
         $results = [];
 
         // Contacts
-        $sqlC = "SELECT id, full_name as label, email as sublabel, 'contact' as type, status FROM contacts WHERE tenant_id=? AND deleted_at IS NULL AND (full_name LIKE ? OR email LIKE ? OR phone LIKE ?)";
-        $pC = [$tid, $like, $like, $like];
+        require_once __DIR__ . '/../utils/search_helpers.php';
+        $searchRes = buildContactSearchClause($q, '');
+        $cWhere = !empty($searchRes['clause']) ? $searchRes['clause'] : '(full_name LIKE ? OR email LIKE ? OR phone LIKE ?)';
+        $cParams = !empty($searchRes['clause']) ? $searchRes['params'] : [$like, $like, $like];
+
+        $sqlC = "SELECT id, full_name as label, email as sublabel, 'contact' as type, status FROM contacts WHERE tenant_id=? AND deleted_at IS NULL AND $cWhere";
+        $pC = array_merge([$tid], $cParams);
         if ($isSale) { 
             $sqlC .= ' AND (owner_id=? OR id IN (
                 SELECT contact_id FROM cooperation_slips 

@@ -17,6 +17,7 @@ import { useAuthStore } from '../store/authStore';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { useDebounce } from '../hooks/useDebounce';
+import { flexibleMatch } from '../utils/vietnamese';
 
 const FMT = (n: number) => {
   if (!n) return '0 đ';
@@ -187,14 +188,13 @@ export const DealsPage: React.FC = () => {
       result[stageIdStr] = stageItems.filter(item => {
         // Text Search
         if (debouncedSearch) {
-          const lowerSearch = debouncedSearch.toLowerCase();
-          const nameMatch = pipelineView === 'contacts' 
-            ? `${item.full_name || ''} ${item.email || ''}`.toLowerCase().includes(lowerSearch)
+          const targetStr = pipelineView === 'contacts' 
+            ? `${item.full_name || ''} ${item.email || ''} ${item.phone || ''} ${item.mobile || ''}`
             : (pipelineView === 'companies'
-                ? `${item.name || ''} ${item.email || ''}`.toLowerCase().includes(lowerSearch)
-                : `${item.title || ''} ${item.company_name || ''}`.toLowerCase().includes(lowerSearch));
+                ? `${item.name || ''} ${item.email || ''} ${item.phone || ''}`
+                : `${item.title || ''} ${item.company_name || ''} ${item.contact_name || ''} ${item.contact_phone || ''} ${item.contact_email || ''}`);
           
-          if (!nameMatch) return false;
+          if (!flexibleMatch(targetStr, debouncedSearch)) return false;
         }
         // Date Filter
         const dateToCheck = item.updated_at || item.created_at;
@@ -242,7 +242,7 @@ export const DealsPage: React.FC = () => {
   const getVisibleItems = () => {
     return Object.values(filteredItems)
       .flat()
-      .filter(item => activeStageFilter === 'all' || String(item.stage_id) === String(activeStageFilter));
+      .filter(item => activeStageFilter === 'all' || Boolean(debouncedSearch) || String(item.stage_id) === String(activeStageFilter));
   };
 
   const totalVisibleCount = total;
@@ -385,11 +385,16 @@ export const DealsPage: React.FC = () => {
       const params: any = {
         search: debouncedSearch,
         owner_id: filterAssignee,
-        stage_id: filterStage,
+        stage_id: debouncedSearch ? undefined : filterStage,
         project_id: filterProject,
         campaign_id: filterCampaign,
         source: filterSource,
       };
+
+      if (debouncedSearch && pipelineView === 'contacts') {
+        params.all_pipeline = 1;
+        params.show_lost = 1;
+      }
 
       const teamId = getEffectiveTeamId();
       if (teamId) {
@@ -1017,7 +1022,7 @@ export const DealsPage: React.FC = () => {
                 <div className="filter-search" style={{ width: isMobile ? 'auto' : '400px', flex: isMobile ? 1 : undefined, position: 'relative', height: '38px', borderRadius: '8px', border: '1px solid var(--color-border)', boxSizing: 'border-box', paddingRight: '2.5rem' }}>
                   <Search size={14} style={{ color:'var(--color-text-muted)', marginLeft: '4px' }}/>
                   <input 
-                    placeholder="Tìm tên, email, điện thoại..." 
+                    placeholder="Tìm tên (có/không dấu), SĐT, email toàn hệ thống..." 
                     value={searchTerm} 
                     onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
                     style={{ paddingRight: '0.5rem', height: '100%' }} 

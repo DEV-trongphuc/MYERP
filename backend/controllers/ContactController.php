@@ -12,7 +12,9 @@ class ContactController {
         $page   = max(1, (int)($_GET['page']   ?? 1));
         $limit  = min(2000, max(10, (int)($_GET['limit']  ?? 20)));
         $offset = ($page - 1) * $limit;
-        $search  = $_GET['search'] ?? '';
+        $search  = trim((string)($_GET['search'] ?? ''));
+        $allPipeline = isset($_GET['all_pipeline']) && in_array(strtolower((string)$_GET['all_pipeline']), ['1', 'true', 'yes'], true);
+        $isGlobalPipelineSearch = ($search !== '') || $allPipeline;
         $status  = $_GET['status'] ?? '';
         $segment = $_GET['segment'] ?? 'all';
         $uncontacted = !empty($_GET['uncontacted']) && in_array(strtolower((string)$_GET['uncontacted']), ['1', 'true', 'yes'], true);
@@ -118,24 +120,17 @@ class ContactController {
             $where[] = '1=0';
         }
 
-        if ($search) {
-            if (is_numeric($search)) {
-                $where[]  = '(c.full_name LIKE ? OR c.phone LIKE ? OR c.mobile LIKE ? OR c.email LIKE ? OR c.id = ? OR c.person_id = ?)';
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = (int)$search;
-                $params[] = (int)$search;
-            } else {
-                $where[]  = '(c.full_name LIKE ? OR c.phone LIKE ? OR c.mobile LIKE ? OR c.email LIKE ?)';
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = "%$search%";
-                $params[] = "%$search%";
+        if ($search !== '') {
+            require_once __DIR__ . '/../utils/search_helpers.php';
+            $searchRes = buildContactSearchClause($search, 'c.');
+            if (!empty($searchRes['clause'])) {
+                $where[] = $searchRes['clause'];
+                foreach ($searchRes['params'] as $sp) {
+                    $params[] = $sp;
+                }
             }
         }
-        if ($status) {
+        if ($status && !$isGlobalPipelineSearch) {
             if ($statusOp === 'not_in') {
                 $where[] = 'c.status != ?';
             } else {
@@ -203,38 +198,40 @@ class ContactController {
             $params[] = $to . ' 23:59:59';
         }
 
-        switch ($segment) {
-            case 'tiem_nang':  $where[] = "c.status != 'customer'"; break;
-            case 'hot':        $where[] = 'c.lead_score >= 80'; break;
-            case 'customer':
-                if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
-                    // Bypass c.status = 'customer' for candidate stages
-                } else {
-                    $where[] = "(c.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
-                }
-                break;
-            case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
-            case 'no_contact': $where[] = "c.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
-            case 'new_week':   $where[] = "c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
-        }
+        if (!$isGlobalPipelineSearch) {
+            switch ($segment) {
+                case 'tiem_nang':  $where[] = "c.status != 'customer'"; break;
+                case 'hot':        $where[] = 'c.lead_score >= 80'; break;
+                case 'customer':
+                    if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
+                        // Bypass c.status = 'customer' for candidate stages
+                    } else {
+                        $where[] = "(c.status = 'customer' OR EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1)) OR c.pipeline_status IN ('enrolled', 'hoc_vien'))";
+                    }
+                    break;
+                case 'has_deal':   $where[] = "EXISTS (SELECT 1 FROM deals d WHERE d.contact_id = c.id AND d.deleted_at IS NULL)"; break;
+                case 'no_contact': $where[] = "c.last_contact < DATE_SUB(NOW(), INTERVAL 30 DAY)"; break;
+                case 'new_week':   $where[] = "c.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"; break;
+            }
 
-        if ($segment === 'customer' && $studentSubTab !== '') {
-            if ($studentSubTab === 'le_phi') {
-                $where[] = "(
-                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
-                    OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
-                )";
-            } elseif ($studentSubTab === 'nop_ho_so') {
-                $where[] = "(
-                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
-                    OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
-                )";
-            } elseif ($studentSubTab === 'chinh_thuc') {
-                $where[] = "(
-                    EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1))
-                    OR c.pipeline_status IN ('enrolled', 'hoc_vien')
-                    OR c.status = 'customer'
-                )";
+            if ($segment === 'customer' && $studentSubTab !== '') {
+                if ($studentSubTab === 'le_phi') {
+                    $where[] = "(
+                        EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
+                        OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
+                    )";
+                } elseif ($studentSubTab === 'nop_ho_so') {
+                    $where[] = "(
+                        EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
+                        OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
+                    )";
+                } elseif ($studentSubTab === 'chinh_thuc') {
+                    $where[] = "(
+                        EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1))
+                        OR c.pipeline_status IN ('enrolled', 'hoc_vien')
+                        OR c.status = 'customer'
+                    )";
+                }
             }
         }
 
@@ -347,12 +344,13 @@ class ContactController {
                     $params[] = $st;
                 }
             }
-        } elseif (!$showLost) {
+        } elseif (!$showLost && !$isGlobalPipelineSearch) {
             // Default filter for active pipeline stages: hide both lost AND nurture
+            // (When searching, scan across all lead statuses including lost & nurture)
             $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         }
 
-        if ($stage) {
+        if ($stage && !$isGlobalPipelineSearch) {
             if ($stageOp === 'not_in') {
                 $where[] = 'c.stage_id != ?';
             } else {
@@ -361,7 +359,7 @@ class ContactController {
             $params[] = (int)$stage;
         }
 
-        if ($uncontacted || $segment === 'not_contacted') {
+        if (($uncontacted || $segment === 'not_contacted') && !$isGlobalPipelineSearch) {
             $where[] = "(
                 (c.last_contact IS NULL OR c.last_contact = '')
                 AND NOT EXISTS (

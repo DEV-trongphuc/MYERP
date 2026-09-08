@@ -122,7 +122,25 @@ class DealController {
             $params[] = $auth['user_id'];
             $params[] = $auth['user_id'];
         }
-        if ($stage) { $where[]='d.stage_id=?'; $params[]=(int)$stage; }
+        $search = trim($_GET['search'] ?? '');
+        if ($search !== '') {
+            require_once __DIR__ . '/../utils/search_helpers.php';
+            $searchRes = buildContactSearchClause($search, 'c.');
+            $dConds = ["d.title LIKE ?"];
+            $dParams = ["%$search%"];
+            if (!empty($searchRes['clause'])) {
+                $dConds[] = "d.contact_id IN (SELECT id FROM contacts c WHERE c.tenant_id=? AND c.deleted_at IS NULL AND " . $searchRes['clause'] . ")";
+                $dParams[] = $tid;
+                foreach ($searchRes['params'] as $sp) {
+                    $dParams[] = $sp;
+                }
+            }
+            $where[] = '(' . implode(' OR ', $dConds) . ')';
+            foreach ($dParams as $dp) {
+                $params[] = $dp;
+            }
+        }
+        if ($stage && $search === '') { $where[]='d.stage_id=?'; $params[]=(int)$stage; }
         if ($owner) { $where[]='d.owner_id=?'; $params[]=(int)$owner; }
         if ($contactId) { $where[]='d.contact_id=?'; $params[]=(int)$contactId; }
         if ($companyId) { $where[]='d.company_id=?'; $params[]=(int)$companyId; }
