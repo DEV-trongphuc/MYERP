@@ -564,7 +564,11 @@ const ActivityComments: React.FC<{
   const fetchComments = async () => {
     try {
       const res = await api.get(`/activities/${activityId}/comments`);
-      setComments(res.data.data || []);
+      const list = res.data.data || [];
+      setComments(list);
+      if (list.length > 0) {
+        setExpanded(true);
+      }
       setHasFetched(true);
     } catch (e: any) {
       console.error(e);
@@ -589,7 +593,7 @@ const ActivityComments: React.FC<{
       }
     });
   };
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => initialCount > 0);
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -601,15 +605,13 @@ const ActivityComments: React.FC<{
     const params = new URLSearchParams(window.location.search);
     const highlightActivityId = params.get('highlight_activity_id');
 
-    if (String(activityId) === String(highlightActivityId)) {
+    if (String(activityId) === String(highlightActivityId) || initialCount > 0) {
       setExpanded(true);
       if (!hasFetched) {
         fetchComments();
       }
     } else {
-      if (initialCount > 0 && !hasFetched) {
-        fetchComments();
-      } else if (initialCount === 0 && !hasFetched) {
+      if (initialCount === 0 && !hasFetched) {
         setHasFetched(true);
       }
     }
@@ -659,7 +661,7 @@ const ActivityComments: React.FC<{
   const displayCount = hasFetched ? comments.length : initialCount;
 
   const toggleExpand = async () => {
-    if (!expanded && !hasFetched && initialCount > 0) {
+    if (!expanded && !hasFetched) {
       await fetchComments();
     }
     setExpanded(!expanded);
@@ -754,6 +756,12 @@ const ActivityComments: React.FC<{
 
       {expanded && (
         <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {!hasFetched && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              <Loader2 size={13} className="spin" />
+              <span>Đang tải bình luận...</span>
+            </div>
+          )}
           {(() => {
             const rootComments = comments.filter((c: any) => !c.parent_id);
             const getDescendants = (rootId: number) => {
