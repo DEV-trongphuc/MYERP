@@ -2108,9 +2108,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         created_by: currentUser?.id ? Number(currentUser.id) : null,
         require_approval: 0,
         approval_status: 'none',
-        related_id: Number(formData.id || contact?.id),
+        related_id: Number(effectiveContactId),
         related_type: 'contact',
-        contact_id: Number(formData.id || contact?.id),
+        contact_id: Number(effectiveContactId),
         type: 'task',
         priority: 'medium',
         progress: 0
@@ -2398,7 +2398,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         clearTimeout(timer2);
       };
     }
-  }, [pipelineStages, isOpen, formData.pipeline_status, contact?.id]);
+  }, [pipelineStages, isOpen, formData.pipeline_status, effectiveContactId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -2548,7 +2548,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [downloadingZip, setDownloadingZip] = useState<boolean>(false);
 
   const handleDownloadAllZip = async () => {
-    if (!contact?.id) return;
+    if (!effectiveContactId) return;
     if (!docs || docs.length === 0) {
       addToast('Khách hàng chưa có hồ sơ tài liệu nào để tải về.', 'warning');
       return;
@@ -2689,7 +2689,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }));
 
     contactsList.forEach(ct => {
-      if (Number(ct.id) === Number(contact?.id)) return;
+      if (Number(ct.id) === Number(effectiveContactId)) return;
       
       const exists = companiesList.some(comp => 
         (comp.phone && ct.phone && comp.phone === ct.phone) || 
@@ -2706,7 +2706,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     });
 
     return list;
-  }, [companiesList, contactsList, contact?.id]);
+  }, [companiesList, contactsList, effectiveContactId]);
 
   const handleSearchContacts = useCallback(async (searchQuery: string) => {
     try {
@@ -3161,10 +3161,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   useEffect(() => {
-    if (contact?.id) {
+    if (effectiveContactId) {
       fetchCoopSlip();
     }
-  }, [contact?.id]);
+  }, [effectiveContactId]);
 
   const handleCreateCoopSlip = async () => {
     // Validate customer status
@@ -4256,7 +4256,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     } finally {
       setLoadingRelated(false);
     }
-  }, [contact?.id, activeContactId, activeTab, stages.length, projectsList.length, companiesList.length]);
+  }, [effectiveContactId, activeContactId, activeTab, stages.length, projectsList.length, companiesList.length]);
 
   // Sync data whenever active tab, contact, or open status changes
   useEffect(() => {
@@ -4273,12 +4273,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
   useEffect(() => {
     const handleQuoteUpdate = () => {
-      if (isOpen && contact?.id) {
+      if (isOpen && effectiveContactId) {
         fetchData('quotes');
       }
     };
     const handleDepositCreated = async () => {
-      if (isOpen && contact?.id) {
+      if (isOpen && effectiveContactId) {
         fetchData('deals');
         const transition = pendingPipelineTransitionRef.current;
         if (transition) {
@@ -4329,7 +4329,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       window.removeEventListener('quote-updated', handleQuoteUpdate);
       window.removeEventListener('deposit-created', handleDepositCreated);
     };
-  }, [isOpen, contact?.id, fetchData, formData, currentUser, onUpdate]);
+  }, [isOpen, effectiveContactId, fetchData, formData, currentUser, onUpdate]);
 
   // ── Profile Switching & Cloning Handlers ──
   const executeSwitchProfile = useCallback(async (targetContactId: number) => {
@@ -4971,7 +4971,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   ]);
 
   const timeline = useMemo(() => {
-    if (!contact?.id) return [];
+    if (!effectiveContactId) return [];
     let source = drawerActivities;
     
     // Map activities first to normalize migrated call notes to type 'call'
@@ -5032,7 +5032,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }
 
     return filtered.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-  }, [drawerActivities, contact?.id, timelineFilter]);
+  }, [drawerActivities, effectiveContactId, timelineFilter]);
   const fullName = (formData.full_name || '').trim() || 'Chưa cập nhật tên';
   const ownerUser = users.find(u => u.full_name === formData.owner_name || u.name === formData.owner_name || u.username === formData.owner_name);
   const ownerAvatarUrl = ownerUser?.avatar_url || ownerUser?.avatar || undefined;
@@ -9661,7 +9661,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <button 
                                   type="button"
                                   onClick={() => {
-                                    window.open(`/public-schedule/${contact?.id}`, '_blank');
+                                    window.open(`/public-schedule/${effectiveContactId}`, '_blank');
                                   }}
                                   style={{ 
                                     display: 'flex', 
@@ -10488,7 +10488,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                         {(() => {
                           // Retrieve stored note IDs sorting order
-                          const storedOrder = localStorage.getItem(`notes_order_${contact?.id}`);
+                          const storedOrder = localStorage.getItem(`notes_order_${effectiveContactId}`);
                           let sortedNotes = [...notes];
                           if (storedOrder) {
                             try {
@@ -10529,7 +10529,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                             // Persist the order in LocalStorage
                             const newOrderIds = newNotes.map(x => x.id);
-                            localStorage.setItem(`notes_order_${contact?.id}`, JSON.stringify(newOrderIds));
+                            localStorage.setItem(`notes_order_${effectiveContactId}`, JSON.stringify(newOrderIds));
                             
                             setDraggedIndex(null);
                             setDraggedOverIndex(null);
@@ -14347,7 +14347,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       <CallLoggerModal
         isOpen={showCallLogger}
         onClose={() => setShowCallLogger(false)}
-        contact={{ id: contact?.id, full_name: fullName, phone: contact?.phone }}
+        contact={{ id: effectiveContactId, full_name: fullName, phone: formData?.phone || contact?.phone }}
         onSave={async (log) => {
           try {
             // Map CallLog to activities table schema exactly
@@ -14361,14 +14361,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                body: log.note || null,
                status: 'done',
                related_type: 'contact',
-               related_id: contact?.id,
+               related_id: effectiveContactId,
+               contact_id: effectiveContactId,
                user_id: currentUser?.id,
                due_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
                done_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
                tags: log.outcome === 'no_answer' || log.outcome === 'busy' ? 'no_connect' : null
             });
-
-
 
             addToast('Đã ghi nhận cuộc gọi và thêm vào Timeline', 'success');
             fetchData();
@@ -14382,12 +14381,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         isOpen={showActivityModal}
         onClose={() => { setShowActivityModal(false); setEditingActivity(null); }}
         entityType="contact"
-        entityId={contact?.id}
+        entityId={effectiveContactId}
         onSuccess={() => {
           fetchData();
           window.dispatchEvent(new CustomEvent('contact-updated'));
         }}
-        userId={currentUser?.id || contact?.owner_id}
+        userId={currentUser?.id || formData?.owner_id || contact?.owner_id}
         activity={editingActivity}
       />
 
@@ -15565,8 +15564,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             user={currentUser}
             editItem={{
               entity_type: 'contact',
-              entity_id: contact?.id || formData?.id,
-              contact_id: contact?.id || formData?.id,
+              entity_id: effectiveContactId,
+              contact_id: effectiveContactId,
               contact_name: (formData?.full_name || contact?.full_name || '').trim(),
               created_by: currentUser?.id
             }}
@@ -15581,7 +15580,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         isOpen={showQuoteEditor}
         onClose={() => setShowQuoteEditor(false)}
         quote={selectedQuote}
-        initialContact={contact}
+        initialContact={formData?.id ? formData : contact}
         onSuccess={() => {
           setShowQuoteEditor(false);
           fetchData();

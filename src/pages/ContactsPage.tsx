@@ -3612,7 +3612,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         <Suspense fallback={null}>
           <CustomerProfileDrawer
             isOpen={!!profileContact}
-            onClose={() => setProfileContact(null)}
+            onClose={() => {
+              setProfileContact(null);
+              fetchData();
+            }}
             contact={profileContact}
             onUpdate={updated => {
               if (updated === null) {
