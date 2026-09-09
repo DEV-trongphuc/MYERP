@@ -11,14 +11,24 @@ echo "==========================================================================
 echo "🚀 BẮT ĐẦU AUDIT TOÀN DIỆN HỆ THỐNG THÔNG BÁO & EMAIL (MASTER NOTIFICATION SUITE)\n";
 echo "================================================================================\n\n";
 
-// 1. Fetch test user
-$userQuery = $conn->query("SELECT id, email, full_name, role FROM users WHERE is_active = 1 LIMIT 1");
-$userRow = $userQuery->fetch_assoc();
-$userId = $userRow ? (int)$userRow['id'] : 1;
-$userEmail = $userRow ? $userRow['email'] : 'test@ideas.com.vn';
-$userName = $userRow ? $userRow['full_name'] : 'Nhân Viên Kiểm Thử';
+putenv('MYERP_TEST_MODE=1');
+$_ENV['MYERP_TEST_MODE'] = '1';
+if (!defined('MYERP_TEST_MODE')) {
+    define('MYERP_TEST_MODE', true);
+}
 
-echo "👤 Người dùng thực thi kiểm thử: [ID: $userId] {$userName} ({$userEmail}) - Role: {$userRow['role']}\n\n";
+// 1. Dùng tài khoản kiểm thử độc lập (Mock), không gắn vào nhân viên thật
+$userId = 999999;
+$userEmail = 'test_runner_mock@internal.mock';
+$userName = 'Hệ Thống Kiểm Thử Tự Động';
+$userRow = [
+    'id' => $userId,
+    'email' => $userEmail,
+    'full_name' => $userName,
+    'role' => 'tester'
+];
+
+echo "👤 Người dùng thực thi kiểm thử (Mock): [ID: $userId] {$userName} ({$userEmail}) - Role: {$userRow['role']}\n\n";
 
 // Clear test user's notifications before run
 $conn->query("DELETE FROM notifications WHERE user_id = $userId");
@@ -29,6 +39,8 @@ function auditEvent($pdo, $conn, $userId, $userRow, $eventType, $payload, $expec
     echo "\n--------------------------------------------------------------------------------\n";
     echo "📌 SỰ KIỆN: {$eventType}\n";
     echo "--------------------------------------------------------------------------------\n";
+
+    $payload['is_test'] = true;
 
     if (!isset($payload['user_id'])) {
         $payload['user_id'] = $userId;
@@ -43,6 +55,7 @@ function auditEvent($pdo, $conn, $userId, $userRow, $eventType, $payload, $expec
             'id' => $userId,
             'email' => $userRow['email'],
             'full_name' => $userRow['full_name'],
+            'is_test_recipient' => true,
             'zalo_chat_id' => 'test_zalo_123',
             'telegram_chat_id' => 'test_tg_123'
         ]

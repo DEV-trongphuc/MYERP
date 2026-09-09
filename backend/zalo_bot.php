@@ -17,6 +17,18 @@ function sendZaloMessage($botToken, $chatId, $text, $sync = true, $leadId = 0)
         return false;
     }
 
+    // BẢO VỆ CHỐNG BẮN ZALO KHI CHẠY TEST HOẶC AUDIT
+    if (defined('MYERP_TEST_MODE') && MYERP_TEST_MODE) {
+        return true;
+    }
+    if (getenv('MYERP_TEST_MODE') === '1' || ($_ENV['MYERP_TEST_MODE'] ?? '') === '1') {
+        return true;
+    }
+    $script = basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['PHP_SELF'] ?? '');
+    if (strpos($script, 'test_') === 0 || strpos($script, 'audit_') === 0) {
+        return true;
+    }
+
     // BẢO VỆ CHỐNG GỬI LẶP TIN NHẮN (DEDUPLICATION):
     static $sentZaloCache = [];
     $dedupKey = md5($chatId . '_' . trim($text));

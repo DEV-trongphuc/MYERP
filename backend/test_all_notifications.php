@@ -7,17 +7,22 @@ require_once __DIR__ . '/NotificationService.php';
 echo "🚀 BẮT ĐẦU KIỂM THỬ KHÉP KÍN HỆ THỐNG THÔNG BÁO (COMPREHENSIVE NOTIFICATION SUITE)\n";
 echo "==================================================================================\n\n";
 
-// 1. Lấy user chạy test
-$userQuery = $conn->query("SELECT id, email, full_name, role FROM users LIMIT 1");
-$userRow = $userQuery->fetch_assoc();
-$userId = $userRow ? (int)$userRow['id'] : null;
-
-if ($userId === null) {
-    echo "❌ KHÔNG TÌM THẤY USER TRONG HỆ THỐNG ĐỂ CHẠY TEST.\n";
-    exit(1);
+putenv('MYERP_TEST_MODE=1');
+$_ENV['MYERP_TEST_MODE'] = '1';
+if (!defined('MYERP_TEST_MODE')) {
+    define('MYERP_TEST_MODE', true);
 }
 
-echo "💡 Chạy test với user: [ID: $userId] - {$userRow['full_name']} (Role: {$userRow['role']})\n\n";
+// 1. Dùng tài khoản kiểm thử độc lập (Mock), không gắn vào nhân viên thật
+$userId = 999999;
+$userRow = [
+    'id' => $userId,
+    'email' => 'test_runner_mock@internal.mock',
+    'full_name' => 'Hệ Thống Kiểm Thử Tự Động',
+    'role' => 'tester'
+];
+
+echo "💡 Chạy test với user mock: [ID: $userId] - {$userRow['full_name']} (Role: {$userRow['role']})\n\n";
 
 // Dọn dẹp các thông báo cũ trước khi test
 $conn->query("DELETE FROM notifications WHERE user_id = $userId");
@@ -31,6 +36,8 @@ function testNotificationEvent($pdo, $conn, $userId, $userRow, $eventType, $payl
         $payload['user_id'] = $userId;
     }
     
+    $payload['is_test'] = true;
+
     // Ghi đè người nhận để hướng về test user
     $payload['recipients'] = [
         [
@@ -38,7 +45,8 @@ function testNotificationEvent($pdo, $conn, $userId, $userRow, $eventType, $payl
             'email' => $userRow['email'],
             'full_name' => $userRow['full_name'],
             'zalo_chat_id' => 'test_zalo_id',
-            'telegram_chat_id' => 'test_tg_id'
+            'telegram_chat_id' => 'test_tg_id',
+            'is_test_recipient' => true
         ]
     ];
     $payload['user_name'] = $userRow['full_name'];

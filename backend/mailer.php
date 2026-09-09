@@ -46,6 +46,18 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         $db = $conn ?? $GLOBALS['conn'] ?? null;
     }
 
+    // BẢO VỆ CHỐNG BẮN EMAIL KHI CHẠY TEST HOẶC AUDIT
+    if (defined('MYERP_TEST_MODE') && MYERP_TEST_MODE) {
+        return true;
+    }
+    if (getenv('MYERP_TEST_MODE') === '1' || ($_ENV['MYERP_TEST_MODE'] ?? '') === '1') {
+        return true;
+    }
+    $script = basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['PHP_SELF'] ?? '');
+    if (strpos($script, 'test_') === 0 || strpos($script, 'audit_') === 0) {
+        return true;
+    }
+
     // Tự động thêm thời gian [H:i d/m/Y] vào tiêu đề email để tránh bị gộp luồng
     $timeStr = date('H:i d/m/Y');
     $subject = trim($subject);

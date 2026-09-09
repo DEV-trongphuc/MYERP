@@ -4,6 +4,30 @@
 class NotificationService {
 
     /**
+     * Check if current execution is in a testing/audit harness
+     */
+    public static function isTestExecution(array $payload = []): bool {
+        if (!empty($payload['is_test'])) return true;
+        if (defined('MYERP_TEST_MODE') && MYERP_TEST_MODE) return true;
+        if (getenv('MYERP_TEST_MODE') === '1' || ($_ENV['MYERP_TEST_MODE'] ?? '') === '1') return true;
+        
+        $script = basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['PHP_SELF'] ?? '');
+        if (strpos($script, 'test_') === 0 || strpos($script, 'audit_') === 0 || strpos($script, 'simulate_') === 0) {
+            return true;
+        }
+
+        $traces = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 8);
+        foreach ($traces as $t) {
+            $f = basename($t['file'] ?? '');
+            if (strpos($f, 'test_') === 0 || strpos($f, 'audit_') === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Dispatch notification across all 4 independent channels (In-App Bell, Zalo Bot, Telegram Bot, Email)
      * 
      * @param PDO $db
@@ -14,12 +38,27 @@ class NotificationService {
     public static function send(PDO $db, int $tenantId, string $eventType, array $payload): void {
         try {
             $GLOBALS['pdo'] = $db;
+            $isTest = self::isTestExecution($payload);
+
             $resolved = self::resolveEventData($db, $tenantId, $eventType, $payload);
             if (!$resolved) {
                 return;
             }
 
             $recipients = $resolved['recipients'] ?? [];
+
+            // Trong môi trường test: CHỈ cho phép nhận bởi test user chỉ định, tuyệt đối không gửi tới user thật
+            if ($isTest) {
+                if (!empty($payload['recipients'])) {
+                    $recipients = $payload['recipients'];
+                } else {
+                    $recipients = array_values(array_filter($recipients, function($r) use ($payload) {
+                        $uid = (int)($r['id'] ?? 0);
+                        return $uid >= 999000 || !empty($r['is_test_recipient']) || $uid === (int)($payload['user_id'] ?? 0);
+                    }));
+                }
+            }
+
             $excludeUserId = (int)($payload['exclude_user_id'] ?? $payload['actor_id'] ?? $payload['current_user_id'] ?? 0);
             if ($excludeUserId > 0 && !empty($recipients)) {
                 $recipients = array_values(array_filter($recipients, function($r) use ($excludeUserId) {
@@ -79,21 +118,36 @@ class NotificationService {
             // ==================== CHANNEL 1: IN-APP NOTIFICATION BELL ====================
             try {
                 if (!empty($recipients)) {
-                    $insertNotif = $db->prepare("
-                        INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
-                    ");
-                    $insertedUserIds = [];
-                    foreach ($recipients as $rec) {
-                        $rId = (int)($rec['id'] ?? 0);
-                        if ($rId > 0 && !in_array($rId, $insertedUserIds, true) && $isChannelEnabled($rId, 'bell')) {
-                            $insertedUserIds[] = $rId;
-                            $insertNotif->execute([$rId, $tenantId, $title, $body, $type, $link]);
+                    // Nếu đang chạy test: tuyệt đối không tạo chuông thông báo cho user thật
+                    $bellRecipients = $recipients;
+                    if ($isTest) {
+                        $bellRecipients = array_values(array_filter($bellRecipients, function($r) use ($payload) {
+                            $uid = (int)($r['id'] ?? 0);
+                            return $uid >= 999000 || !empty($r['is_test_recipient']) || $uid === (int)($payload['user_id'] ?? 0);
+                        }));
+                    }
+                    if (!empty($bellRecipients)) {
+                        $insertNotif = $db->prepare("
+                            INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
+                        ");
+                        $insertedUserIds = [];
+                        foreach ($bellRecipients as $rec) {
+                            $rId = (int)($rec['id'] ?? 0);
+                            if ($rId > 0 && !in_array($rId, $insertedUserIds, true) && $isChannelEnabled($rId, 'bell')) {
+                                $insertedUserIds[] = $rId;
+                                $insertNotif->execute([$rId, $tenantId, $title, $body, $type, $link]);
+                            }
                         }
                     }
                 }
             } catch (\Throwable $bellEx) {
                 error_log("NotificationService Bell Error: " . $bellEx->getMessage());
+            }
+
+            // If in test mode, do not blast real external network messages (Zalo, Telegram, Email)
+            if ($isTest || getenv('MYERP_TEST_MODE') === '1' || defined('MYERP_TEST_MODE') || !empty($payload['is_test'])) {
+                return;
             }
 
             // Fetch system settings for Zalo and Telegram group configuration
@@ -108,11 +162,6 @@ class NotificationService {
             $tgBotToken = trim((string)($gSettings['telegram_bot_token'] ?? ''));
             $tgGroupChatId = trim((string)($gSettings['telegram_admin_group_chat_id'] ?? ''));
             $tgOnlyGroup = ($gSettings['telegram_notify_only_group'] ?? '0') === '1';
-
-            // If in test mode, do not blast real external network messages (Zalo, Telegram, Email)
-            if (getenv('MYERP_TEST_MODE') === '1' || defined('MYERP_TEST_MODE') || !empty($payload['is_test'])) {
-                return;
-            }
 
             $isAdminBroadcastEvent = in_array($eventType, [
                 'HOLIDAY_REGISTRATION_OPENED', 'HOLIDAY_UPDATE', 'HOLIDAY_RETURN_REMINDER', 'SYSTEM_ANNOUNCEMENT'
@@ -1899,6 +1948,9 @@ class NotificationService {
      * Get list of admin and manager user accounts
      */
     private static function getAdminsAndManagers(PDO $db, int $tenantId, $teamId = null): array {
+        if (self::isTestExecution()) {
+            return [];
+        }
         // If teamId is given, target the direct team leader / co-leaders
         if (!empty($teamId)) {
             $stmtTeam = $db->prepare("SELECT leader_id, co_leader_ids FROM teams WHERE id = ? LIMIT 1");
@@ -1957,6 +2009,9 @@ class NotificationService {
      * Level 3: Fallback System Admins
      */
     public static function getApproversForEvent(PDO $db, int $tenantId, string $moduleKey, ?int $submitterUserId = null, float $amount = 0.0): array {
+        if (self::isTestExecution()) {
+            return [];
+        }
         try {
             $stmt = $db->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'approval_matrix_config' LIMIT 1");
             $stmt->execute();

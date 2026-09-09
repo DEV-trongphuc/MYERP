@@ -7,6 +7,13 @@
 $isCli = (php_sapi_name() === 'cli');
 $hasValidToken = (($_GET['token'] ?? '') === 'Ideas_Diag_Secure_Token_2026_9e88d6c701fbc6b7') || defined('DIAG_TOKEN');
 
+// BẮT BUỘC: Đặt chế độ TEST MODE để chặn 100% việc gửi Email, Zalo, Telegram, Thông báo ra ngoài người dùng thật
+putenv('MYERP_TEST_MODE=1');
+$_ENV['MYERP_TEST_MODE'] = '1';
+if (!defined('MYERP_TEST_MODE')) {
+    define('MYERP_TEST_MODE', true);
+}
+
 if (!$isCli && !$hasValidToken) {
     http_response_code(403);
     header("Content-Type: application/json; charset=UTF-8");
