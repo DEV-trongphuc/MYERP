@@ -65,6 +65,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [threshold, setThreshold] = useState<number>(5000000);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const fileInputMultiRef = useRef<HTMLInputElement>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -224,6 +227,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         setUsers(Array.isArray(d) ? d : (d?.items || []));
       }).catch(() => {});
 
+      api.get('/teams').then(r => {
+        const d = r.data?.data;
+        setTeams(Array.isArray(d) ? d : (r.data || []));
+      }).catch(() => {});
+
       api.get('/suppliers').then(r => {
         const d = r.data.data;
         setSuppliers(Array.isArray(d) ? d : (d?.items || []));
@@ -246,6 +254,22 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     if (isOpen) {
       if (editItem) {
         setVendorSearch(editItem.vendor_name || '');
+        // Extract all existing images
+        const existingImages: string[] = [];
+        if (editItem.image_url) {
+          existingImages.push(editItem.image_url);
+        }
+        if (editItem.notes) {
+          const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+          for (const m of matches) {
+            const url = m[2].trim();
+            if (url && !existingImages.includes(url)) {
+              existingImages.push(url);
+            }
+          }
+        }
+        setImages(existingImages);
+
         const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n]+)/;
         const match = editItem.notes?.match(bankRegex);
         let request_bank_transfer = false;
@@ -308,11 +332,30 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           bank_account_name
         });
       } else {
-        const accountant = users.find((u: any) => u.role === 'accountant' || String(u.role).toLowerCase().includes('acc') || String(u.role).toLowerCase().includes('kế toán'));
+        // Find default manager approver based on team leader ("như chấm công v đó")
+        const currentUserId = user?.id;
+        const myUser = users.find((u: any) => Number(u.id) === Number(currentUserId));
+        const teamId = user?.team_id || myUser?.team_id;
+        const myTeam = teams.find((t: any) => Number(t.id) === Number(teamId));
+
+        let defaultApproverId = null;
+        if (myTeam && myTeam.leader_id && Number(myTeam.leader_id) !== Number(currentUserId)) {
+          defaultApproverId = Number(myTeam.leader_id);
+        } else {
+          // If proposer is the team leader or no team, fallback to Director / Admin / HR
+          const director = users.find((u: any) => ['director'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(currentUserId));
+          const admin = users.find((u: any) => ['admin'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(currentUserId));
+          const hrLeader = users.find((u: any) => (u.full_name?.toLowerCase().includes('duy phương') || u.role === 'hr') && Number(u.id) !== Number(currentUserId));
+          const fallbackUser = users.find((u: any) => Number(u.id) !== Number(currentUserId) && !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()));
+
+          defaultApproverId = director?.id || hrLeader?.id || admin?.id || fallbackUser?.id || (users[0]?.id || null);
+        }
+
+        setImages([]);
         setForm({
           ...EMPTY_FORM,
           date: initialDate || new Date().toISOString().split('T')[0],
-          approver_id: accountant ? accountant.id : (users[0]?.id || null)
+          approver_id: defaultApproverId
         });
         setVendorSearch('');
       }
@@ -320,7 +363,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         isInitializedRef.current = true;
       }, 50);
     }
-  }, [isOpen, editItem, initialDate, users, contacts, companies]);
+  }, [isOpen, editItem, initialDate, users, teams, contacts, companies]);
 
   // Close vendor dropdown on click outside
   useEffect(() => {
@@ -362,12 +405,18 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       if (form.request_bank_transfer && form.bank_name && form.bank_account_number && form.bank_account_name) {
         finalNotes = `${form.notes || ''}\n[Thông tin chuyển khoản]: ${form.bank_name} - STK: ${form.bank_account_number} - Chủ TK: ${form.bank_account_name}`.trim();
       }
+      if (images.length > 0) {
+        const baseUrl = import.meta.env.VITE_API_URL || '/backend';
+        const attsStr = images.map(url => `• ${url.split('/').pop()} (${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')})`).join('\n');
+        finalNotes = `${finalNotes}\n[Tài liệu đính kèm (${images.length} tệp)]:\n${attsStr}`.trim();
+      }
 
       const statusVal = isAutoApprove ? 'approved' : 'pending';
 
       if (editItem && editItem.id && !editItem.isClone) {
         await api.put(`/expenses/${editItem.id}`, {
           ...form,
+          image_url: images[0] || null,
           notes: finalNotes,
           amount: Number(form.amount),
           entities: payloadEntities
@@ -376,6 +425,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       } else {
         await api.post('/expenses', {
           ...form,
+          image_url: images[0] || null,
           notes: finalNotes,
           amount: Number(form.amount),
           status: statusVal,
@@ -832,27 +882,94 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
                 {/* Đính kèm hóa đơn / chứng từ */}
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Đính kèm hóa đơn / chứng từ</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
+                      Đính kèm hóa đơn / chứng từ {images.length > 0 && `(${images.length})`}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => fileInputMultiRef.current?.click()}
+                      style={{
+                        background: 'rgba(189, 29, 45, 0.08)',
+                        color: 'var(--color-primary)',
+                        border: '1px solid rgba(189, 29, 45, 0.2)',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Upload size={13} />
+                      <span>Chọn nhiều ảnh</span>
+                    </button>
+                    <input
+                      type="file"
+                      ref={fileInputMultiRef}
+                      multiple
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+                        setUploadingImg(true);
+                        let successCount = 0;
+                        try {
+                          for (let i = 0; i < files.length; i++) {
+                            const file = files[i];
+                            try {
+                              const webpBlob = await compressToWebP(file);
+                              const compFile = new File([webpBlob], `expense_proof_${Date.now()}_${i}.webp`, { type: 'image/webp' });
+                              const fd = new FormData();
+                              fd.append('file', compFile);
+                              const res = await api.post('/upload', fd, {
+                                headers: { 'Content-Type': 'multipart/form-data' }
+                              });
+                              if (res.data && res.data.success && res.data.data?.url) {
+                                const newUrl = res.data.data.url;
+                                setImages(prev => [...prev, newUrl]);
+                                setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
+                                successCount++;
+                              }
+                            } catch (err) {
+                              console.error('Error compressing file', file.name, err);
+                            }
+                          }
+                          if (successCount > 0) {
+                            addToast(`Đã tải lên & nén thành công ${successCount} ảnh!`, 'success');
+                          }
+                        } catch (err: any) {
+                          addToast('Lỗi khi tải ảnh: ' + (err.message || err), 'error');
+                        } finally {
+                          setUploadingImg(false);
+                          if (fileInputMultiRef.current) fileInputMultiRef.current.value = '';
+                        }
+                      }}
+                    />
+                  </div>
+
                   <PasteDropzoneArea
                     compact={true}
-                    placeholder="Chọn/kéo thả hoặc Ctrl+V để dán ảnh hóa đơn"
-                    subtext="Nén WEBP tự động (Max 5MB)"
+                    placeholder="Chọn/kéo thả hoặc Ctrl+V để dán nhiều ảnh hóa đơn"
+                    subtext="Hỗ trợ tải lên hoặc dán nhiều ảnh cùng lúc, nén WEBP tự động"
                     onConfirmUpload={async (item) => {
                       if (item.file) {
                         setUploadingImg(true);
                         try {
                           const webpBlob = await compressToWebP(item.file);
-                          const compFile = new File([webpBlob], 'expense_proof.webp', { type: 'image/webp' });
+                          const compFile = new File([webpBlob], `expense_proof_${Date.now()}.webp`, { type: 'image/webp' });
                           const fd = new FormData();
                           fd.append('file', compFile);
-                          if (form.image_url) {
-                            fd.append('previous_url', form.image_url);
-                          }
                           const res = await api.post('/upload', fd, {
                             headers: { 'Content-Type': 'multipart/form-data' }
                           });
                           if (res.data && res.data.success && res.data.data?.url) {
-                            setForm({ ...form, image_url: res.data.data.url });
+                            const newUrl = res.data.data.url;
+                            setImages(prev => [...prev, newUrl]);
+                            setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
                             addToast('Tải lên và nén ảnh hóa đơn thành công!', 'success');
                           } else {
                             addToast('Tải ảnh thất bại', 'error');
@@ -865,26 +982,65 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       }
                     }}
                   />
+
                   {uploadingImg && (
                     <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div className="spinner sm"></div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Đang nén & tải lên...</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Đang nén & tải lên ảnh...</span>
                     </div>
                   )}
-                  {form.image_url && !uploadingImg && (
-                    <div style={{ marginTop: '8px', position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)', display: 'flex' }}>
-                      <img
-                        src={form.image_url.startsWith('http') ? form.image_url : `${import.meta.env.VITE_API_URL || '/backend'}${form.image_url}`}
-                        alt="Hóa đơn"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setForm({ ...form, image_url: '' })}
-                        style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                      >
-                        <X size={12} />
-                      </button>
+
+                  {/* Multi-image thumbnail gallery */}
+                  {images.length > 0 && (
+                    <div style={{ marginTop: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                        {images.map((imgUrl, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              position: 'relative',
+                              height: '80px',
+                              borderRadius: '10px',
+                              overflow: 'hidden',
+                              border: '1.5px solid var(--color-border)',
+                              background: '#0a0e17',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                            }}
+                          >
+                            <img
+                              src={imgUrl.startsWith('http') ? imgUrl : `${import.meta.env.VITE_API_URL || '/backend'}${imgUrl}`}
+                              alt={`Hóa đơn ${idx + 1}`}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = images.filter((_, i) => i !== idx);
+                                setImages(next);
+                                setForm((prev: any) => ({ ...prev, image_url: next[0] || '' }));
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: 4,
+                                right: 4,
+                                background: 'rgba(0,0,0,0.7)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: 20,
+                                height: 20,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer'
+                              }}
+                              title="Xóa ảnh này"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

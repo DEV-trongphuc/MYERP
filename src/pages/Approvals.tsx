@@ -9,7 +9,7 @@ import {
   Search, Trash2, Paperclip, Send, AlertTriangle, Users, CreditCard, ShoppingCart, Award,
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
-  UserPlus, Check, MoreHorizontal, Filter, Zap
+  UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -1116,6 +1116,14 @@ export default function Approvals() {
         if (isRecurring) {
           advReasonStr += ` [Lặp lại định kỳ: ${recurringFrequency} - Hạn: ${recurringEndDate || 'Vô thời hạn'}]`;
         }
+        if (paymentDestination) {
+          advReasonStr += `\n[Thông tin chuyển khoản]: ${paymentDestination}`;
+        }
+        if (attachments.length > 0) {
+          const baseUrl = import.meta.env.VITE_API_URL || '/backend';
+          const attsStr = attachments.map(a => `• ${a.name} (${baseUrl}/${a.url})`).join('\n');
+          advReasonStr += `\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n${attsStr}`;
+        }
         await fetchAPI('hrm/advances', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1371,20 +1379,12 @@ export default function Approvals() {
       u.email !== 'turniodev@gmail.com'
     );
 
-    // 0. If proposer is a team leader / manager / head of department, they can self-approve!
     const currentUserId = p?.id || (user as any)?.id;
     const proposerInUsers = users.find(u => Number(u.id) === Number(currentUserId) || (p?.email && u.email === p.email) || (p?.username && u.username === p.username));
     const teamId = p.team_id || proposerInUsers?.team_id || (user as any)?.team_id;
     const myTeam = teams.find(t => Number(t.id) === Number(teamId));
-    const isLeaderOrManager = (myTeam && Number(myTeam.leader_id) === Number(p.id)) || 
-                              ['manager', 'truongphong', 'quanly', 'head_of_department', 'leader', 'director', 'academic', 'admin'].includes(String(p.role).toLowerCase()) ||
-                              (p.job_title && (p.job_title.toLowerCase().includes('trưởng phòng') || p.job_title.toLowerCase().includes('quản lý')));
-    if (isLeaderOrManager) {
-      const selfUser = businessUsers.find(u => Number(u.id) === Number(p.id));
-      if (selfUser) return selfUser;
-    }
 
-    // 1. First priority: Team Leader / Trưởng phòng of the proposer's team
+    // 1. First priority: Team Leader / Trưởng phòng of the proposer's team (cannot be proposer)
     if (myTeam && myTeam.leader_id && Number(myTeam.leader_id) !== Number(p.id)) {
       const leader = businessUsers.find(u => Number(u.id) === Number(myTeam.leader_id));
       if (leader) return leader;
@@ -1404,7 +1404,7 @@ export default function Approvals() {
     const director = businessUsers.find(u => ['director'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (director) return director;
 
-    // Admin (excluding superadmin)
+    // Admin (excluding superadmin and excluding proposer)
     const admin = businessUsers.find(u => ['admin'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (admin) return admin;
 
@@ -1416,7 +1416,7 @@ export default function Approvals() {
     const manager = businessUsers.find(u => ['manager', 'truongphong', 'quanly', 'head_of_department', 'leader'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(p.id));
     if (manager) return manager;
 
-    return hrLead || businessUsers[0] || null;
+    return businessUsers.find(u => Number(u.id) !== Number(p.id)) || null;
   };
 
   const defaultApp1 = useMemo(() => getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef), [teams, users, proposerUser, user, selectedWorkflowDef]);
@@ -1533,11 +1533,18 @@ export default function Approvals() {
       setShowStepManager(true);
       setShowStepAccountant(true);
       setShowStepDirector(false);
+      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
+      if (defaultApprover) setCustomApprover1(defaultApprover);
+      if (defaultAccountant) setCustomApprover2(defaultAccountant);
     } else {
       // expense
       setShowStepManager(true);
       setShowStepAccountant(true);
       setShowStepDirector(true);
+      const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
+      if (defaultApprover) setCustomApprover1(defaultApprover);
+      if (defaultAccountant) setCustomApprover2(defaultAccountant);
+      if (defaultDirector) setCustomApprover3(defaultDirector);
     }
   }, [formType, selectedWorkflowDef, users, teams]);
 
@@ -6116,11 +6123,16 @@ export default function Approvals() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                               {attachments.map((att, index) => {
                                 const baseUrl = import.meta.env.VITE_API_URL || '/backend';
-                                const fileUrl = att.url ? (att.url.startsWith('http') ? att.url : `${baseUrl}/${att.url}`) : null;
+                                const isImg = att.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(att.name || att.url || '');
+                                const fileUrl = att.url ? (att.url.startsWith('http') || att.url.startsWith('blob:') ? att.url : `${baseUrl}/${att.url.replace(/^\/?(backend\/)?/, '')}`) : '';
                                 return (
                                   <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--color-bg-secondary)', borderRadius: '8px', border: '1px solid var(--color-border-light)' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                      <Paperclip size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                      {isImg && fileUrl ? (
+                                        <img src={fileUrl} alt={att.name} style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--color-border)' }} />
+                                      ) : (
+                                        <Paperclip size={14} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                      )}
                                       {fileUrl ? (
                                         <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.78rem', color: 'var(--color-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline' }}>
                                           {att.name}
@@ -7019,6 +7031,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 }) {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
 
   useEffect(() => {
@@ -8558,44 +8571,157 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
           if (extractedFiles.length === 0) return null;
 
+          const isImageFile = (f: { name: string; url: string }) => {
+            return /\.(jpg|jpeg|png|webp|gif|svg|bmp|avif)(\?.*)?$/i.test(f.url) || /\.(jpg|jpeg|png|webp|gif|svg|bmp|avif)$/i.test(f.name);
+          };
+
+          const imageFiles = extractedFiles.filter(isImageFile);
+          const docFiles = extractedFiles.filter(f => !isImageFile(f));
+
           return (
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
               <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>{t('Tài liệu chứng từ đính kèm')} ({extractedFiles.length})</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Paperclip size={14} style={{ color: 'var(--color-primary)' }} />
+                  {t('Tài liệu chứng từ đính kèm')} ({extractedFiles.length})
+                </span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 700 }}>
+                  {imageFiles.length > 0 ? `${imageFiles.length} ${t('hình ảnh')}` : ''}
+                  {docFiles.length > 0 ? `${imageFiles.length > 0 ? ' • ' : ''}${docFiles.length} ${t('tài liệu')}` : ''}
+                </span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {extractedFiles.map((file, fIdx) => (
-                  <a
-                    key={fIdx}
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      background: 'var(--color-bg-secondary)',
-                      borderRadius: '10px',
-                      border: '1px solid var(--color-border-light)',
-                      textDecoration: 'none',
-                      color: 'var(--color-text)',
-                      transition: 'all 0.2s ease'
-                    }}
-                    className="hover-lift"
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                      <Paperclip size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {file.name}
+
+              {/* RENDER IMAGES DIRECTLY ("ảnh thì hiện ra luôn") */}
+              {imageFiles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: imageFiles.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))',
+                    gap: '12px'
+                  }}>
+                    {imageFiles.map((file, fIdx) => (
+                      <div
+                        key={`img-${fIdx}`}
+                        className="hover-lift group"
+                        onClick={() => setLightboxImage({ url: file.url, name: file.name })}
+                        style={{
+                          position: 'relative',
+                          borderRadius: '12px',
+                          overflow: 'hidden',
+                          border: '1.5px solid var(--color-border-light)',
+                          background: 'var(--color-bg)',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                          display: 'flex',
+                          flexDirection: 'column'
+                        }}
+                      >
+                        <div style={{
+                          position: 'relative',
+                          height: imageFiles.length === 1 ? '240px' : '150px',
+                          background: '#090d16',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden'
+                        }}>
+                          <img
+                            src={file.url}
+                            alt={file.name}
+                            loading="lazy"
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: imageFiles.length === 1 ? 'contain' : 'cover',
+                              transition: 'transform 0.3s ease'
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '8px',
+                              right: '8px',
+                              background: 'rgba(0,0,0,0.68)',
+                              backdropFilter: 'blur(6px)',
+                              color: '#ffffff',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.675rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Eye size={12} />
+                            <span>{t('Phóng to')}</span>
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: '8px 12px',
+                          background: 'var(--color-surface)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderTop: '1px solid var(--color-border-light)'
+                        }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '82%' }} title={file.name}>
+                            {file.name}
+                          </span>
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
+                            title={t('Mở trong tab mới')}
+                          >
+                            <ArrowRight size={13} style={{ transform: 'rotate(-45deg)' }} />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* NON-IMAGE DOCUMENTS */}
+              {docFiles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {docFiles.map((file, fIdx) => (
+                    <a
+                      key={`doc-${fIdx}`}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: 'var(--color-bg-secondary)',
+                        borderRadius: '10px',
+                        border: '1px solid var(--color-border-light)',
+                        textDecoration: 'none',
+                        color: 'var(--color-text)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      className="hover-lift"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        <FileText size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {file.name}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0, marginLeft: '12px' }}>
+                        {t('Mở xem')} ↗
                       </span>
-                    </div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0, marginLeft: '12px' }}>
-                      {t('Mở xem')} ↗
-                    </span>
-                  </a>
-                ))}
-              </div>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -9127,6 +9253,106 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         </div>
 
 
+      {/* Lightbox Modal for full size image viewing */}
+      {lightboxImage && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2147483647,
+            background: 'rgba(0, 0, 0, 0.88)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem'
+          }}
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '92vw',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'absolute',
+              top: '-48px',
+              left: 0,
+              right: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: '#ffffff',
+              padding: '0 4px'
+            }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                {lightboxImage.name}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <a
+                  href={lightboxImage.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  style={{
+                    color: '#ffffff',
+                    background: 'rgba(255,255,255,0.15)',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Download size={14} /> Tải về
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightboxImage(null)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    color: '#ffffff',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <img
+              src={lightboxImage.url}
+              alt={lightboxImage.name}
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '82vh',
+                objectFit: 'contain',
+                borderRadius: '12px',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
       </motion.div>
     </>,
     document.body
