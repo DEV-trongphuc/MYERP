@@ -7193,10 +7193,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       mapped.sort((a, b) => b.timestamp - a.timestamp);
 
       // Build birth system log (ALWAYS at the bottom)
+      const ideasLogoUrl = 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp';
       const createdAtVal = detail?.created_at || item.created_at;
       const sys1 = { 
         id: 'sys-1', 
         author: t('Hệ thống quy trình IDEAS'), 
+        avatar: ideasLogoUrl,
+        avatar_url: ideasLogoUrl,
         time: new Date(createdAtVal).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }), 
         text: `${t('Đã tiếp nhận yêu cầu phê duyệt và bắt đầu quy trình lúc')} ${new Date(createdAtVal).toLocaleString('vi-VN')}.`, 
         attachments: []
@@ -7209,6 +7212,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         combined.push({
           id: 'sys-2',
           author: t('Hệ thống quy trình IDEAS'),
+          avatar: ideasLogoUrl,
+          avatar_url: ideasLogoUrl,
           time: new Date(approvedAtVal).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
           text: `✅ ${t('Yêu cầu đã được phê duyệt thành công lúc')} ${new Date(approvedAtVal).toLocaleString('vi-VN')}.`,
           attachments: []
@@ -7219,6 +7224,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         combined.push({
           id: 'sys-2',
           author: t('Hệ thống quy trình IDEAS'),
+          avatar: ideasLogoUrl,
+          avatar_url: ideasLogoUrl,
           time: new Date(rejectedAtVal).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
           text: `❌ ${t('Yêu cầu bị từ chối lúc')} ${new Date(rejectedAtVal).toLocaleString('vi-VN')}.${reasonStr ? ` Lý do: ${reasonStr}` : ''}`,
           attachments: []

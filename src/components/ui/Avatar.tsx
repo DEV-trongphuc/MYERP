@@ -57,6 +57,8 @@ const getColorFromName = (name: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+export const IDEAS_SYSTEM_LOGO = 'https://ideas.edu.vn/wp-content/uploads/2023/04/cropped-logofavicon-1.webp';
+
 export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', className = '', style, title, color, aiScreened }) => {
   const [hasError, setHasError] = React.useState(false);
   const sizeMap = {
@@ -71,6 +73,14 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
   let resolvedSrc = src;
   if (src) {
     if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+      resolvedSrc = src;
+    } else if (
+      src.startsWith('/cropped-logofavicon') ||
+      src.startsWith('/LOGO.') ||
+      src.startsWith('/favicon.') ||
+      src.startsWith('/icons.') ||
+      src.startsWith('/imgs/')
+    ) {
       resolvedSrc = src;
     } else {
       let cleanPath = src.replace(/^\/+/, '');
@@ -95,8 +105,17 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
   // Nếu name là "Hệ thống" / "System" / "HT" / "Hệ thống quy trình IDEAS" và không có ảnh avatar cụ thể, gán ảnh LOGO mặc định
   if (!resolvedSrc && name) {
     const trimmedName = name.trim().toLowerCase();
-    if (trimmedName === 'hệ thống' || trimmedName === 'system' || trimmedName === 'ht' || trimmedName === 'hệ thống quy trình ideas') {
-      resolvedSrc = '/LOGO.jpg';
+    if (
+      trimmedName === 'hệ thống' ||
+      trimmedName === 'system' ||
+      trimmedName === 'ht' ||
+      trimmedName === 'hệ thống quy trình ideas' ||
+      trimmedName.includes('hệ thống quy trình') ||
+      trimmedName.includes('quy trình ideas') ||
+      trimmedName.includes('hệ thống ideas') ||
+      trimmedName.includes('ideas system')
+    ) {
+      resolvedSrc = IDEAS_SYSTEM_LOGO;
     }
   }
 
@@ -104,6 +123,7 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
   React.useEffect(() => {
     setHasError(false);
   }, [resolvedSrc]);
+
 
   const avatarEl = (
     <div 
