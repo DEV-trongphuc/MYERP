@@ -23,6 +23,7 @@ import { ProcessFeed } from '../components/ui/ProcessFeed';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pagination } from '../components/ui/Pagination';
 import { useUIStore } from '../store/uiStore';
+import { NoteDetailModal, NoteCell, renderLinkifiedText } from '../components/ui/NoteDetailModal';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { numberToVietnameseText } from '../utils/numberToText';
@@ -2776,10 +2777,195 @@ export default function Approvals() {
           return <EmptyCard icon={emptyIcon} title={emptyTitle} description={emptyDesc} />;
         }
 
+        if (isMobile) {
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
+                const role = (user?.role || '').toLowerCase();
+                const userId = Number(user?.id || 0);
+                const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
+                
+                const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
+                const isCreator = creatorId > 0 && creatorId === userId;
+
+                let canApproveThisItem = false;
+                if (!isCreator) {
+                  if (isSuperAdmin) {
+                    canApproveThisItem = true;
+                  } else {
+                    const targetApproverId = (item as any)?.approver_id || (item as any)?.manager_id;
+                    if (targetApproverId && Number(targetApproverId) === userId) {
+                      canApproveThisItem = true;
+                    } else if (!targetApproverId && role === 'hr') {
+                      canApproveThisItem = true;
+                    }
+                  }
+                }
+
+                const isPendingAction = activeTab === 'pending' && canApproveThisItem;
+                const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
+                const creatorUser = (item.user_id ? usersMap.get(Number(item.user_id)) : null) || usersByNameMap.get(creatorKey);
+                const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
+
+                return (
+                  <div
+                    key={`${item.type}-${item.id}`}
+                    onClick={() => setSelectedTimelineItem(item)}
+                    style={{
+                      background: 'var(--color-surface)',
+                      borderRadius: '14px',
+                      border: '1px solid var(--color-border-light)',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                      WebkitTextSizeAdjust: '100%'
+                    }}
+                  >
+                    {/* Header: Icon + Creator name + Status Badge */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <div style={{
+                          width: '30px', height: '30px', borderRadius: '8px',
+                          background: 'var(--color-bg-secondary)', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                          {getTypeIcon(item.type)}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                          <Avatar src={avatarUrl} name={item.employee_name || user?.name} size={22} />
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 650, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.employee_name || user?.name}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0 }}>
+                        {formatBadge(item.status || 'pending')}
+                      </div>
+                    </div>
+
+                    {/* Title & Description with explicit font sizes */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <div style={{
+                        fontSize: '0.875rem',
+                        fontWeight: 700,
+                        color: 'var(--color-text)',
+                        lineHeight: 1.35,
+                        WebkitTextSizeAdjust: '100%'
+                      }}>
+                        {item.title}
+                      </div>
+                      {item.description && (
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--color-text-muted)',
+                          lineHeight: 1.4,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          WebkitTextSizeAdjust: '100%'
+                        }}>
+                          {item.description}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer: Date, Approver, and Actions */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingTop: '8px',
+                      borderTop: '1px solid var(--color-border-light)',
+                      fontSize: '0.72rem',
+                      color: 'var(--color-text-muted)',
+                      gap: '8px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span>{new Date(item.created_at).toLocaleDateString('vi-VN')} {new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>•</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          {renderCurrentApprover(item)}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                        {isPendingAction ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedItem(item);
+                                setRejectModalOpen(true);
+                              }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '3px',
+                                background: '#ef4444', color: 'white', border: 'none',
+                                borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
+                                fontWeight: 700, cursor: 'pointer'
+                              }}
+                            >
+                              <XCircle size={12} />
+                              {t('Từ chối')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setItemToApprove(item);
+                                setApproveConfirmOpen(true);
+                              }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '3px',
+                                background: '#10b981', color: 'white', border: 'none',
+                                borderRadius: '6px', padding: '4px 8px', fontSize: '0.72rem',
+                                fontWeight: 700, cursor: 'pointer'
+                              }}
+                            >
+                              <CheckCircle2 size={12} />
+                              {t('Duyệt')}
+                            </button>
+                          </>
+                        ) : activeTab === 'my_requests' ? (
+                          <>
+                            {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                              <button
+                                onClick={() => handleEditRequest(item)}
+                                className="btn secondary"
+                                style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                title={t('Sửa')}
+                              >
+                                <Edit size={12} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteRequest(item)}
+                              className="btn secondary"
+                              style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                              title={t('Xóa')}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
+
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="responsive-table-wrap" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+            <div className="responsive-table-wrap" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', overflowX: 'auto', WebkitTextSizeAdjust: '100%' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left', WebkitTextSizeAdjust: '100%' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '450px' }}>{t('Yêu cầu & Nội dung')}</th>
@@ -2831,8 +3017,8 @@ export default function Approvals() {
                               {getTypeIcon(item.type)}
                             </div>
                             <div>
-                              <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{item.title}</div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>{item.description}</div>
+                              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', WebkitTextSizeAdjust: '100%' }}>{item.title}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px', WebkitTextSizeAdjust: '100%' }}>{item.description}</div>
                             </div>
                           </div>
                         </td>
@@ -7033,6 +7219,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+  const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
 
   useEffect(() => {
@@ -8483,8 +8670,12 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                             {st.quantity} {st.unit}
                           </span>
                         </td>
-                        <td style={{ padding: '10px 12px', color: st.notes ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: st.notes ? 'normal' : 'italic' }}>
-                          {st.notes || '—'}
+                        <td style={{ padding: '10px 12px' }}>
+                          <NoteCell
+                            notes={st.notes}
+                            itemName={st.name}
+                            onOpenModal={(data) => setActiveNoteModal({ ...data, title: t('Ghi chú / Mục đích sử dụng') })}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -8493,7 +8684,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               </div>
             ) : (
               <div style={{ padding: '12px', background: 'var(--color-bg-secondary)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--color-text)' }}>
-                {cleanNoteText}
+                {renderLinkifiedText(cleanNoteText)}
               </div>
             )}
 
@@ -8505,7 +8696,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       {t('Nội dung đề xuất / Giải trình')}
                     </span>
                     <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                      {contentVal}
+                      {renderLinkifiedText(contentVal)}
                     </div>
                   </div>
                 )}
@@ -8515,7 +8706,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       {t('Lý do & Ý kiến đề xuất')}
                     </span>
                     <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                      {reasonVal}
+                      {renderLinkifiedText(reasonVal)}
                     </div>
                   </div>
                 )}
@@ -9405,6 +9596,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         </div>,
         document.body
       )}
+
+      <NoteDetailModal
+        isOpen={!!activeNoteModal}
+        onClose={() => setActiveNoteModal(null)}
+        title={activeNoteModal?.title || t('Ghi chú / Mục đích sử dụng')}
+        itemName={activeNoteModal?.itemName}
+        notes={activeNoteModal?.notes || ''}
+      />
       </motion.div>
     </>,
     document.body

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar } from 'lucide-react';
 
-interface VietnameseDateInputProps {
+export interface VietnameseDateInputProps {
   value?: string | null; // ISO string 'yyyy-mm-dd' or 'yyyy-mm-dd hh:mm:ss'
   onChange: (isoDate: string) => void;
   className?: string;
@@ -11,7 +11,106 @@ interface VietnameseDateInputProps {
   disabled?: boolean;
   min?: string;
   max?: string;
+  hasLeftIcon?: boolean;
+  leftIcon?: React.ReactNode;
+  id?: string;
+  name?: string;
+  autoFocus?: boolean;
+  required?: boolean;
 }
+
+// Check if year, month, day form a valid calendar date
+function isValidDate(y: number, m: number, d: number): boolean {
+  if (y < 1900 || y > 2100) return false;
+  if (m < 1 || m > 12) return false;
+  const maxDays = new Date(y, m, 0).getDate();
+  return d >= 1 && d <= maxDays;
+}
+
+// Convert ISO 'YYYY-MM-DD' to Vietnamese display 'DD/MM/YYYY'
+export const isoToVn = (isoStr?: string | null): string => {
+  if (!isoStr) return '';
+  const clean = String(isoStr).trim().substring(0, 10);
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+  }
+  return isoStr;
+};
+
+// Convert multiple user inputs / clipboard texts to ISO 'YYYY-MM-DD'
+export const parseDateToIso = (rawStr: string): string | null => {
+  if (!rawStr) return null;
+  const trimmed = String(rawStr).trim();
+  if (!trimmed) return null;
+
+  // 1. ISO format: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+  const isoMatch = trimmed.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const d = parseInt(isoMatch[3], 10);
+    if (isValidDate(y, m, d)) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // 2. VN format: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const vnMatch = trimmed.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})/);
+  if (vnMatch) {
+    const d = parseInt(vnMatch[1], 10);
+    const m = parseInt(vnMatch[2], 10);
+    const y = parseInt(vnMatch[3], 10);
+    if (isValidDate(y, m, d)) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // 3. Compact 8 digits: DDMMYYYY or YYYYMMDD
+  const digitsMatch = trimmed.match(/^(\d{8})$/);
+  if (digitsMatch) {
+    // Check DDMMYYYY first (Vietnamese standard)
+    const d1 = parseInt(trimmed.substring(0, 2), 10);
+    const m1 = parseInt(trimmed.substring(2, 4), 10);
+    const y1 = parseInt(trimmed.substring(4, 8), 10);
+    if (isValidDate(y1, m1, d1)) {
+      return `${String(y1).padStart(4, '0')}-${String(m1).padStart(2, '0')}-${String(d1).padStart(2, '0')}`;
+    }
+    // Check YYYYMMDD
+    const y2 = parseInt(trimmed.substring(0, 4), 10);
+    const m2 = parseInt(trimmed.substring(4, 6), 10);
+    const d2 = parseInt(trimmed.substring(6, 8), 10);
+    if (isValidDate(y2, m2, d2)) {
+      return `${String(y2).padStart(4, '0')}-${String(m2).padStart(2, '0')}-${String(d2).padStart(2, '0')}`;
+    }
+  }
+
+  // 4. Short year: DD/MM/YY or DD-MM-YY
+  const shortMatch = trimmed.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{2})$/);
+  if (shortMatch) {
+    const d = parseInt(shortMatch[1], 10);
+    const m = parseInt(shortMatch[2], 10);
+    const yy = parseInt(shortMatch[3], 10);
+    const curYY = new Date().getFullYear() % 100;
+    const y = (yy <= curYY) ? (2000 + yy) : (1900 + yy);
+    if (isValidDate(y, m, d)) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  // 5. Embedded date in text: e.g. "sinh ngày 12/11/1986", "12/11/1986 (cmt)"
+  const embeddedVn = trimmed.match(/(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})/);
+  if (embeddedVn) {
+    const d = parseInt(embeddedVn[1], 10);
+    const m = parseInt(embeddedVn[2], 10);
+    const y = parseInt(embeddedVn[3], 10);
+    if (isValidDate(y, m, d)) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  return null;
+};
 
 export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
   value,
@@ -22,56 +121,52 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
   placeholder = 'dd/mm/yyyy',
   disabled = false,
   min,
-  max
+  max,
+  hasLeftIcon = false,
+  leftIcon,
+  id,
+  name,
+  autoFocus = false,
+  required = false
 }) => {
-  // Convert ISO 'YYYY-MM-DD' to Vietnamese display 'DD/MM/YYYY'
-  const isoToVn = (isoStr?: string | null): string => {
-    if (!isoStr) return '';
-    const clean = isoStr.substring(0, 10);
-    const parts = clean.split('-');
-    if (parts.length === 3 && parts[0].length === 4) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return isoStr;
-  };
-
-  // Convert Vietnamese display 'DD/MM/YYYY' or 'D/M/YYYY' to ISO 'YYYY-MM-DD'
-  const vnToIso = (vnStr: string): string | null => {
-    const trimmed = vnStr.trim();
-    if (!trimmed) return '';
-    const parts = trimmed.split(/[\/\-\.]/);
-    if (parts.length === 3) {
-      const d = parts[0].padStart(2, '0');
-      const m = parts[1].padStart(2, '0');
-      const y = parts[2];
-      if (y.length === 4 && Number(d) >= 1 && Number(d) <= 31 && Number(m) >= 1 && Number(m) <= 12) {
-        return `${y}-${m}-${d}`;
-      }
-    }
-    return null;
-  };
-
-  const isoValue = value ? value.substring(0, 10) : '';
+  const isoValue = value ? String(value).substring(0, 10) : '';
   const [displayText, setDisplayText] = useState(() => isoToVn(isoValue));
   const hiddenDateRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDisplayText(isoToVn(isoValue));
   }, [isoValue]);
 
+  // Handle user typing
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
     setDisplayText(text);
-    const parsed = vnToIso(text);
+    const parsed = parseDateToIso(text);
     if (parsed !== null) {
       onChange(parsed);
-    } else if (text === '') {
+    } else if (text.trim() === '') {
       onChange('');
     }
   };
 
+  // Handle user paste (Ctrl+V, right click paste)
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData?.getData('text');
+    if (!pasted) return;
+
+    const parsed = parseDateToIso(pasted);
+    if (parsed) {
+      e.preventDefault();
+      const vnDate = isoToVn(parsed);
+      setDisplayText(vnDate);
+      onChange(parsed);
+    }
+  };
+
+  // Handle blur: auto-format to DD/MM/YYYY or revert if completely invalid
   const handleBlur = () => {
-    const parsed = vnToIso(displayText);
+    const parsed = parseDateToIso(displayText);
     if (parsed !== null && parsed !== '') {
       setDisplayText(isoToVn(parsed));
       onChange(parsed);
@@ -79,11 +174,12 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
       setDisplayText('');
       onChange('');
     } else {
-      // Revert if invalid
+      // Revert to current valid value if entered junk
       setDisplayText(isoToVn(isoValue));
     }
   };
 
+  // Handle HTML5 native date picker selection
   const handleNativeDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newIso = e.target.value;
     onChange(newIso);
@@ -106,6 +202,9 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
     }
   };
 
+  // Calendar icon is always on the right. Only show left element if custom leftIcon is explicitly provided.
+  const showLeft = Boolean(leftIcon);
+
   return (
     <div 
       style={{ 
@@ -116,19 +215,45 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         ...style 
       }}
     >
+      {/* Optional Left Icon (only when explicitly provided) */}
+      {showLeft && (
+        <div 
+          style={{ 
+            position: 'absolute', 
+            left: '12px', 
+            color: 'var(--color-text-muted)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            pointerEvents: 'none',
+            zIndex: 1
+          }}
+        >
+          {leftIcon}
+        </div>
+      )}
+
+      {/* Main text input (allows full selection, drag, copy Ctrl+C, paste Ctrl+V) */}
       <input
+        ref={textInputRef}
         type="text"
+        id={id}
+        name={name}
         className={className}
         value={displayText}
         onChange={handleTextChange}
+        onPaste={handlePaste}
         onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
+        autoFocus={autoFocus}
+        required={required}
         style={{
           width: '100%',
+          paddingLeft: showLeft ? '2.4rem' : '12px',
           paddingRight: '34px',
-          height: '36px',
+          height: inputStyle?.height || undefined,
           fontSize: '0.85rem',
+          fontWeight: 600,
           borderRadius: '8px',
           border: '1px solid var(--color-border)',
           backgroundColor: disabled ? 'var(--color-bg-light)' : 'var(--color-surface)',
@@ -137,7 +262,7 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         }}
       />
       
-      {/* Invisible HTML5 date input positioned over the calendar icon */}
+      {/* Invisible HTML5 date input positioned over the calendar icon for native picker */}
       <input
         ref={hiddenDateRef}
         type="date"
@@ -161,24 +286,33 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         }}
       />
 
-      {/* Visual calendar icon */}
-      <div
+      {/* Visual calendar icon trigger button */}
+      <button
+        type="button"
+        tabIndex={-1}
         onClick={triggerPicker}
+        disabled={disabled}
+        title="Chọn ngày từ lịch"
         style={{
           position: 'absolute',
-          right: '10px',
+          right: '8px',
           top: '50%',
           transform: 'translateY(-50%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          background: 'none',
+          border: 'none',
+          padding: '4px',
           color: 'var(--color-text-muted, #64748b)',
-          pointerEvents: 'none',
-          zIndex: 1
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          zIndex: 1,
+          borderRadius: '4px',
+          transition: 'color 0.15s ease'
         }}
       >
         <Calendar size={15} />
-      </div>
+      </button>
     </div>
   );
 };

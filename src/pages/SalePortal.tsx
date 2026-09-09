@@ -38,6 +38,7 @@ import { MentionInput } from '../components/ui/MentionInput';
 import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Avatar } from '../components/ui/Avatar';
 import { prewarmSmartCheckInGPS } from '../components/ui/SmartCheckInModal';
@@ -2656,8 +2657,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const handleCommentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(t('Dung lượng tệp tối đa cho phép là 10MB'));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(t('Dung lượng tệp tối đa cho phép là 50MB'));
       return;
     }
     setUploadingCommentFile(true);
@@ -2802,8 +2803,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const handleDetailTaskFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedTaskForDetails) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(t('Dung lượng tệp tối đa cho phép là 10MB'));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(t('Dung lượng tệp tối đa cho phép là 50MB'));
       return;
     }
     setUploadingFile(true);
@@ -11360,11 +11361,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       <div className="form-group">
                         <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày sinh')}</label>
-                        <input
-                          type="date"
-                          className="form-input"
+                        <VietnameseDateInput
                           value={editDob}
-                          onChange={(e) => setEditDob(e.target.value)}
+                          onChange={(val) => setEditDob(val)}
+                          hasLeftIcon={true}
+                          placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
                         />
                       </div>
                       <div className="form-group">
@@ -17826,8 +17827,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (file.size > 5 * 1024 * 1024) {
-                          toast.error(t('Dung lượng tệp đính kèm không được vượt quá 5MB'));
+                        if (file.size > 50 * 1024 * 1024) {
+                          toast.error(t('Dung lượng tệp đính kèm không được vượt quá 50MB'));
                           return;
                         }
                         const previewUrl = URL.createObjectURL(file);

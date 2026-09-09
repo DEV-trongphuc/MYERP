@@ -19,6 +19,7 @@ export const GlobalConfirmModal: React.FC = () => {
     requirePromptInput, 
     optionalPromptInput, 
     promptPlaceholder, 
+    promptDefaultValue,
     onConfirm, 
     onCancel, 
     onExtra 
@@ -38,10 +39,15 @@ export const GlobalConfirmModal: React.FC = () => {
   React.useEffect(() => {
     if (isOpen) {
       setMatchInput('');
-      setPromptInput('');
+      const defaultVal = confirmModal.promptDefaultValue !== undefined
+        ? confirmModal.promptDefaultValue
+        : (confirmModal.promptPlaceholder && !confirmModal.promptPlaceholder.toLowerCase().startsWith('nhập') && !confirmModal.promptPlaceholder.toLowerCase().startsWith('ví dụ') && !confirmModal.promptPlaceholder.includes('...'))
+          ? confirmModal.promptPlaceholder
+          : '';
+      setPromptInput(defaultVal);
       setIsSubmitting(false);
     }
-  }, [isOpen]);
+  }, [isOpen, confirmModal.promptDefaultValue, confirmModal.promptPlaceholder]);
 
   const isLocked = !!(requireWordMatch && matchInput !== requireWordMatch) || !!(requirePromptInput && !promptInput.trim());
 
@@ -247,6 +253,7 @@ export const GlobalConfirmModal: React.FC = () => {
                       placeholder={promptPlaceholder || 'Nhập giá trị...'}
                       value={promptInput}
                       onChange={(e) => setPromptInput(e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       autoFocus
                       rows={3}
                       style={{ 

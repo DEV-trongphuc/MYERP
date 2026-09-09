@@ -38,6 +38,7 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getModulePermissionScope } from '../store/authStore';
 import { decodeHtmlEntities } from '../utils/textUtils';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const EditHistoryIndicator = ({ history }: { history: any }) => {
   const [showPopup, setShowPopup] = useState(false);
@@ -668,8 +669,8 @@ const ActivityComments: React.FC<{
   };
 
   const handleImagePaste = (file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
       return;
     }
     const previewUrl = URL.createObjectURL(file);
@@ -682,8 +683,8 @@ const ActivityComments: React.FC<{
     const file = e.target.files?.[0];
     if (!file) return;
     
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
       return;
     }
     
@@ -843,13 +844,26 @@ const ActivityComments: React.FC<{
                         </div>
                       );
                     })}
-                    <button
-                      onClick={() => setReplyTo({ id: c.id, userName: c.user_name || 'Đồng nghiệp' })}
-                      style={{ alignSelf: 'flex-end', background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '0.72rem', padding: '4px 0 0 0', cursor: 'pointer', fontWeight: 700, display: 'block', width: 'fit-content' }}
-                      className="hover-lift"
-                    >
-                      Phản hồi
-                    </button>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                      <button
+                        onClick={() => setReplyTo({ id: c.id, userName: c.user_name || 'Đồng nghiệp' })}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-primary)',
+                          fontSize: '0.75rem',
+                          padding: '2px 4px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          opacity: 0.85,
+                          transition: 'opacity 0.15s ease'
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = '0.85')}
+                      >
+                        Phản hồi
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -2014,26 +2028,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     return isOwnerOrCreator && isSelfEntered;
   }, [contact, currentUser, formData.owner_id, formData.created_by, formData.source, formData.dl_status]);
 
-  const handleDeleteContact = useCallback(() => {
-    if (!effectiveContactId) return;
-    showConfirm({
-      title: `Xóa khách hàng "${formData.full_name || contact?.full_name || 'này'}"?`,
-      message: 'Bạn có chắc chắn muốn xóa khách hàng này? Thao tác này sẽ chuyển khách hàng vào thùng rác.',
-      isDanger: true,
-      confirmText: 'Xác nhận xóa',
-      cancelText: 'Hủy',
-      onConfirm: async () => {
-        try {
-          await api.delete(`/contacts/${effectiveContactId}`);
-          addToast('Đã xóa khách hàng thành công', 'success');
-          onUpdate?.(null);
-          onClose();
-        } catch (e: any) {
-          addToast(e?.response?.data?.message || 'Không thể xóa khách hàng. Vui lòng thử lại sau.', 'error');
-        }
-      }
-    });
-  }, [effectiveContactId, formData.full_name, contact?.full_name, showConfirm, addToast, onUpdate, onClose]);
   const [showCallLogger, setShowCallLogger] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [meetingToComplete, setMeetingToComplete] = useState<any | null>(null);
@@ -3243,52 +3237,48 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setCoopLoading(false);
   };
 
-  const handleCoopAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoopAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !coopSlip) return;
-    const file = e.target.files[0];
+    const fileList = Array.from(e.target.files);
     const inputTarget = e.target;
     
-    const originalName = file.name;
-    const defaultName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-    const ext = originalName.substring(originalName.lastIndexOf('.'));
-
-    showConfirm({
-      title: 'Tải lên tài liệu đính kèm',
-      message: 'Nhập tên cho tài liệu hợp tác này trước khi tải lên:',
-      requirePromptInput: true,
-      promptPlaceholder: defaultName,
-      confirmText: 'Tải lên',
-      cancelText: 'Hủy',
-      onConfirm: async (customName) => {
-        const finalName = ((customName && customName.trim()) || defaultName) + ext;
-        setCoopLoading(true);
-        try {
-          let fileToUpload = file;
-          if (file.type.startsWith('image/')) {
+    setCoopLoading(true);
+    let successCount = 0;
+    try {
+      for (const file of fileList) {
+        const originalName = file.name;
+        const defaultName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+        const ext = originalName.substring(originalName.lastIndexOf('.'));
+        const finalName = defaultName + ext;
+        
+        let fileToUpload = file;
+        if (file.type && file.type.startsWith('image/')) {
+          try {
             fileToUpload = await compressToWebP(file);
+          } catch (compressErr) {
+            console.error("Compression failed, using original file", compressErr);
           }
-          const renamedFile = new File([fileToUpload], finalName, { type: fileToUpload.type });
-          const fd = new FormData();
-          fd.append('file', renamedFile);
-          const res = await api.post(`/cooperation-slips/${coopSlip.id}/upload-attachment`, fd, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-          if (res.data.success) {
-            addToast('Tải lên tài liệu thành công!', 'success');
-            await fetchCoopSlip();
-          } else {
-            addToast(res.data.message || 'Lỗi khi tải lên tài liệu', 'error');
-          }
-        } catch (e: any) {
-          addToast(e.message, 'error');
-        } finally {
-          setCoopLoading(false);
         }
-      },
-      onCancel: () => {
-        inputTarget.value = '';
+        const renamedFile = new File([fileToUpload], finalName, { type: fileToUpload.type });
+        const fd = new FormData();
+        fd.append('file', renamedFile);
+        const res = await api.post(`/cooperation-slips/${coopSlip.id}/upload-attachment`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (res.data?.success) {
+          successCount++;
+        }
       }
-    });
+      if (successCount > 0) {
+        addToast(`Tải lên thành công ${successCount} tài liệu đính kèm!`, 'success');
+        await fetchCoopSlip();
+      }
+    } catch (e: any) {
+      addToast(e.message || 'Lỗi khi tải lên tài liệu', 'error');
+    } finally {
+      setCoopLoading(false);
+      inputTarget.value = '';
+    }
   };
   const handleUploadRequiredDoc = async (docName: string, file: File) => {
     let finalName = file.name;
@@ -4402,6 +4392,55 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     executeSwitchProfile(targetContactId);
   }, [effectiveContactId, hasChanges, showConfirm, executeSwitchProfile]);
 
+  const handleDeleteContact = useCallback(() => {
+    if (!effectiveContactId) return;
+    const isClonedOrMulti = linkedProfiles && linkedProfiles.length > 1;
+    const currentProg = formData.program || contact?.program;
+    const progText = currentProg ? ` (Chương trình: "${currentProg}")` : '';
+
+    const confirmMessage = isClonedOrMulti
+      ? `Bạn có chắc chắn muốn xóa hồ sơ${progText} này của khách hàng? Thao tác này chỉ xóa bản nhân bản này, các hồ sơ và chương trình khác của khách hàng sẽ được giữ nguyên hoàn toàn.`
+      : 'Bạn có chắc chắn muốn xóa khách hàng này? Thao tác này sẽ chuyển khách hàng vào thùng rác.';
+
+    showConfirm({
+      title: isClonedOrMulti 
+        ? `Xóa bản nhân bản "${formData.full_name || contact?.full_name || 'này'}"?` 
+        : `Xóa khách hàng "${formData.full_name || contact?.full_name || 'này'}"?`,
+      message: confirmMessage,
+      isDanger: true,
+      confirmText: isClonedOrMulti ? 'Xác nhận xóa hồ sơ này' : 'Xác nhận xóa',
+      cancelText: 'Hủy',
+      onConfirm: async () => {
+        try {
+          const res = await api.delete(`/contacts/${effectiveContactId}`);
+          const resData = res.data?.data || res.data || {};
+          const msg = res.data?.message || (isClonedOrMulti ? 'Đã xóa bản nhân bản thành công. Các hồ sơ khác vẫn được giữ nguyên.' : 'Đã xóa khách hàng thành công');
+          addToast(msg, 'success');
+
+          window.dispatchEvent(new CustomEvent('contact-updated'));
+
+          if (isClonedOrMulti && resData.remaining_id) {
+            await executeSwitchProfile(Number(resData.remaining_id));
+            return;
+          }
+
+          if (isClonedOrMulti) {
+            const otherProfile = linkedProfiles.find((p: any) => Number(p.id) !== Number(effectiveContactId));
+            if (otherProfile) {
+              await executeSwitchProfile(Number(otherProfile.id));
+              return;
+            }
+          }
+
+          onUpdate?.(null);
+          onClose();
+        } catch (e: any) {
+          addToast(e?.response?.data?.message || 'Không thể xóa khách hàng. Vui lòng thử lại sau.', 'error');
+        }
+      }
+    });
+  }, [effectiveContactId, formData.full_name, contact?.full_name, formData.program, contact?.program, linkedProfiles, showConfirm, addToast, onUpdate, onClose, executeSwitchProfile]);
+
   const handleOpenCloneModal = () => {
     setCloneProgram('');
     setCloneOwnerId(String(formData.owner_id || contact?.owner_id || currentUser?.id || ''));
@@ -4423,9 +4462,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
     setCloningProfile(true);
     try {
+      const selectedStage = pipelineStages?.find(
+        (st: any) => String(st.id) === String(cloneStageId) || st.system_slug === cloneStageId
+      );
+      const stageIdPayload = selectedStage && !isNaN(Number(selectedStage.id)) ? Number(selectedStage.id) : undefined;
+      const stageSlugPayload = selectedStage?.system_slug || (typeof cloneStageId === 'string' ? cloneStageId : undefined);
+
       const res = await api.post(`/contacts/${effectiveContactId}/clone`, {
         program: trimmedProgram,
-        stage_id: cloneStageId ? Number(cloneStageId) : undefined,
+        stage_id: stageIdPayload,
+        stage_slug: stageSlugPayload,
         owner_id: cloneOwnerId ? Number(cloneOwnerId) : undefined,
         notes: cloneNotes.trim() || undefined
       });
@@ -4452,7 +4498,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   const renderConnectedProfilesBar = () => {
-    // Chỉ hiển thị thanh chuyển chương trình khi có từ 2 chương trình trở lên
+    // Hiển thị thanh chuyển chương trình khi khách hàng có từ 2 hồ sơ liên kết trở lên
     if (!linkedProfiles || linkedProfiles.length < 2) return null;
 
     return (
@@ -4504,7 +4550,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           {linkedProfiles.map((p: any) => {
             const isCurrent = Number(p.id) === Number(effectiveContactId);
             const stageColor = p.stage_color || '#3b82f6';
-            const programTitle = p.program || 'Chưa đặt tên CT';
+            const programTitle = p.program?.trim() || (p.pipeline_status === 'enrolled' || p.status === 'customer' ? 'Học viên chính thức' : 'Chưa đặt tên CT');
             
             return (
               <button
@@ -5205,8 +5251,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
       return;
     }
 
@@ -5220,8 +5266,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleTaskFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      addToast('Dung lượng tệp tối đa cho phép là 10MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp tối đa cho phép là 50MB', 'error');
       return;
     }
     setUploadingFile(true);
@@ -5386,8 +5432,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleDetailTaskFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedTaskForDetails) return;
-    if (file.size > 10 * 1024 * 1024) {
-      addToast('Dung lượng tệp tối đa cho phép là 10MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp tối đa cho phép là 50MB', 'error');
       return;
     }
     setUploadingFile(true);
@@ -7187,7 +7233,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         }}
                       >
                         {/* Chương trình Dropdown */}
-                        <div ref={programDropdownRef} style={{ position: 'relative', minWidth: '220px', maxWidth: '320px', flex: 1 }}>
+                        <div ref={programDropdownRef} style={{ position: 'relative', minWidth: '240px', maxWidth: '360px', flex: '0 1 300px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <BookOpen size={13} style={{ color: 'var(--color-primary)' }} />
@@ -7403,7 +7449,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <div style={{ width: '1px', height: '18px', background: 'var(--color-border)', flexShrink: 0 }} />
 
                         {/* ID Student Input */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '130px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '180px' }}>
                           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <GraduationCap size={13} style={{ color: 'var(--color-primary)' }} />
                             ID Student:
@@ -7417,7 +7463,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               setFormData((prev: any) => ({ ...prev, student_id: val }));
                             }}
                             style={{
-                              width: '100px',
+                              width: '150px',
                               height: '28px',
                               fontSize: '0.78rem',
                               fontWeight: 650,
@@ -8806,7 +8852,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <div className="grid grid-2">
                           {/* Row 1: Họ tên & SĐT chính */}
                           <div className="form-group">
-                            <label className="form-label">Họ tên <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '22px' }}>
+                              <label className="form-label" style={{ margin: 0 }}>Họ tên <span style={{ color: 'var(--color-danger)' }}>*</span></label>
+                            </div>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <User size={16} />
@@ -8819,7 +8867,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           <div className="form-group">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '22px' }}>
                               <label className="form-label" style={{ margin: 0 }}>Số điện thoại chính</label>
                               <span 
                                 onClick={() => {
@@ -8901,7 +8949,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                           {/* Row 2: Email & SĐT phụ */}
                           <div className="form-group">
-                            <label className="form-label">Email</label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '22px' }}>
+                              <label className="form-label" style={{ margin: 0 }}>Email</label>
+                            </div>
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <Mail size={16} />
@@ -8914,7 +8964,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           </div>
 
                           <div className="form-group">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '22px' }}>
                               <label className="form-label" style={{ margin: 0 }}>Số điện thoại phụ</label>
                               <span 
                                 onClick={() => {
@@ -9061,7 +9111,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       left: 0,
                                       width: '100%',
                                       minWidth: '280px',
-                                      maxWidth: '380px',
                                       background: 'var(--color-surface)',
                                       border: '1px solid var(--color-border)',
                                       borderRadius: '12px',
@@ -9152,20 +9201,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                               <div>
                                 <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '4px' }}>Ngày nhập học</label>
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                    <Calendar size={16} />
-                                  </div>
-                                  <input 
-                                    className="form-input form-input-icon-left" 
-                                    type="date" 
-                                    value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, admission_date: val }));
-                                    }} 
-                                  />
-                                </div>
+                                <VietnameseDateInput 
+                                  value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''} 
+                                  onChange={val => setFormData((prev: any) => ({ ...prev, admission_date: val }))}
+                                  placeholder="DD/MM/YYYY"
+                                />
                               </div>
 
                               <div>
@@ -9191,15 +9231,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           {/* Row 4: Ngày sinh & Giới tính */}
                           <div className="form-group">
                             <label className="form-label">Ngày sinh</label>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <Calendar size={16} />
-                              </div>
-                              <input className="form-input form-input-icon-left" type="date" value={formData.birthday || ''} onChange={e => {
-                                const val = e.target.value;
-                                setFormData((prev: any) => ({ ...prev, birthday: val }));
-                              }} />
-                            </div>
+                            <VietnameseDateInput 
+                              value={formData.birthday || ''} 
+                              onChange={val => setFormData((prev: any) => ({ ...prev, birthday: val }))}
+                              placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                            />
                           </div>
 
                           <div className="form-group">
@@ -9354,11 +9390,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     }} />
                                   )}
                                   {field.field_type === 'date' && (
-                                    <input type="date" className="form-input" value={field.value || ''} onChange={e => {
-                                      const newFields = [...formData.custom_fields];
-                                      newFields[index].value = e.target.value;
-                                      setFormData({ ...formData, custom_fields: newFields });
-                                    }} />
+                                    <VietnameseDateInput
+                                      value={field.value || ''}
+                                      onChange={val => {
+                                        const newFields = [...formData.custom_fields];
+                                        newFields[index].value = val;
+                                        setFormData({ ...formData, custom_fields: newFields });
+                                      }}
+                                      hasLeftIcon={true}
+                                      placeholder="DD/MM/YYYY"
+                                    />
                                   )}
                                   {field.field_type === 'dropdown' && (
                                     <CustomSelect 
@@ -13150,60 +13191,69 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }}
                               className="hover-lift"
                             >
-                              <input type="file" style={{ display: 'none' }} onChange={async (e) => {
-                                if (e.target.files?.[0]) {
-                                  const file = e.target.files[0];
-                                  const originalName = file.name;
-                                  const defaultName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-                                  let ext = originalName.substring(originalName.lastIndexOf('.'));
-                                  
-                                  let fileToUpload = file;
-                                  if (file.type && file.type.startsWith('image/')) {
+                              <input type="file" multiple style={{ display: 'none' }} onChange={async (e) => {
+                                if (e.target.files && e.target.files.length > 0) {
+                                  const selectedFiles = Array.from(e.target.files);
+                                  const totalFiles = selectedFiles.length;
+                                  let successCount = 0;
+
+                                  for (let i = 0; i < totalFiles; i++) {
+                                    const file = selectedFiles[i];
+                                    const originalName = file.name;
+                                    const defaultName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+                                    let ext = originalName.substring(originalName.lastIndexOf('.'));
+                                    
+                                    let fileToUpload = file;
+                                    if (file.type && file.type.startsWith('image/')) {
+                                      try {
+                                        fileToUpload = await compressToWebP(file);
+                                        ext = '.webp';
+                                      } catch (compressErr) {
+                                        console.error("Compression failed, using original file", compressErr);
+                                      }
+                                    }
+                                    const finalName = defaultName + ext;
+                                    const renamedFile = new File([fileToUpload], finalName, { type: fileToUpload.type });
+                                    const fData = new FormData();
+                                    fData.append('file', renamedFile);
+                                    fData.append('name', finalName);
+                                    fData.append('contact_id', String(effectiveContactId));
+                                    fData.append('category', currentFolder || 'general');
+                                    fData.append('visibility', 'shared');
+
+                                    const isImg = renamedFile.type && renamedFile.type.startsWith('image/');
+                                    const previewUrl = isImg ? URL.createObjectURL(renamedFile) : '';
+                                    setUploadingFileObj({
+                                      name: totalFiles > 1 ? `(${i + 1}/${totalFiles}) ${finalName}` : finalName,
+                                      size: (renamedFile.size / 1024 / 1024).toFixed(1) + ' MB',
+                                      previewUrl,
+                                      isImage: isImg
+                                    });
+                                    setUploadProgress(0);
+
                                     try {
-                                      fileToUpload = await compressToWebP(file);
-                                      ext = '.webp';
-                                    } catch (compressErr) {
-                                      console.error("Compression failed, using original file", compressErr);
+                                      await api.post('/cloud-files', fData, {
+                                        headers: { 'Content-Type': 'multipart/form-data' },
+                                        onUploadProgress: (progressEvent) => {
+                                          const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+                                          setUploadProgress(percent);
+                                        }
+                                      });
+                                      successCount++;
+                                    } catch (err: any) {
+                                      console.error("Upload error for " + finalName, err);
                                     }
                                   }
-                                  const finalName = defaultName + ext;
-                                  const renamedFile = new File([fileToUpload], finalName, { type: fileToUpload.type });
-                                  const fData = new FormData();
-                                  fData.append('file', renamedFile);
-                                  fData.append('name', finalName);
-                                  fData.append('contact_id', String(effectiveContactId));
-                                  fData.append('category', currentFolder || 'general');
-                                  fData.append('visibility', 'shared');
 
-                                  const isImg = renamedFile.type && renamedFile.type.startsWith('image/');
-                                  const previewUrl = isImg ? URL.createObjectURL(renamedFile) : '';
-                                  setUploadingFileObj({
-                                    name: finalName,
-                                    size: (renamedFile.size / 1024 / 1024).toFixed(1) + ' MB',
-                                    previewUrl,
-                                    isImage: isImg
-                                  });
-                                  setUploadProgress(0);
-
-                                  try {
-                                    await api.post('/cloud-files', fData, {
-                                      headers: { 'Content-Type': 'multipart/form-data' },
-                                      onUploadProgress: (progressEvent) => {
-                                        const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-                                        setUploadProgress(percent);
-                                      }
-                                    });
-                                    setUploadProgress(null);
-                                    setUploadingFileObj(null);
-                                    fetchData();
-                                    addToast('Đã tải lên tài liệu mới thành công.', 'success');
-                                  } catch (err: any) {
-                                    setUploadProgress(null);
-                                    setUploadingFileObj(null);
+                                  setUploadProgress(null);
+                                  setUploadingFileObj(null);
+                                  fetchData();
+                                  if (successCount > 0) {
+                                    addToast(`Đã tải lên thành công ${successCount}/${totalFiles} tài liệu.`, 'success');
+                                  } else {
                                     addToast('Lỗi khi tải tài liệu lên server', 'error');
-                                  } finally {
-                                    e.target.value = '';
                                   }
+                                  e.target.value = '';
                                 }
                               }} />
                               <Plus size={16} /> Upload file
@@ -13456,55 +13506,67 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         <div style={{ width: '100%' }}>
                           <input
                             type="file"
+                            multiple
                             id="empty-folder-upload-input"
                             style={{ display: 'none' }}
                             onChange={async (e) => {
-                              if (e.target.files?.[0]) {
-                                const file = e.target.files[0];
-                                const originalName = file.name;
-                                const defaultName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-                                let ext = originalName.substring(originalName.lastIndexOf('.'));
+                              if (e.target.files && e.target.files.length > 0) {
+                                const selectedFiles = Array.from(e.target.files);
+                                const totalFiles = selectedFiles.length;
+                                let successCount = 0;
 
-                                let fileToUpload = file;
-                                if (file.type && file.type.startsWith('image/')) {
-                                  try {
-                                    fileToUpload = await compressToWebP(file);
-                                    ext = '.webp';
-                                  } catch (e) {}
-                                }
-                                const finalName = defaultName + ext;
-                                const renamedFile = new File([fileToUpload], finalName, { type: fileToUpload.type });
-                                const fData = new FormData();
-                                fData.append('file', renamedFile);
-                                fData.append('name', finalName);
-                                fData.append('contact_id', String(effectiveContactId));
-                                fData.append('category', currentFolder || 'general');
-                                fData.append('visibility', 'shared');
+                                for (let i = 0; i < totalFiles; i++) {
+                                  const file = selectedFiles[i];
+                                  const originalName = file.name;
+                                  const defaultName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+                                  let ext = originalName.substring(originalName.lastIndexOf('.'));
 
-                                setUploadingFileObj({
-                                  name: finalName,
-                                  size: (renamedFile.size / 1024 / 1024).toFixed(1) + ' MB',
-                                  previewUrl: renamedFile.type.startsWith('image/') ? URL.createObjectURL(renamedFile) : '',
-                                  isImage: renamedFile.type.startsWith('image/')
-                                });
-                                setUploadProgress(0);
+                                  let fileToUpload = file;
+                                  if (file.type && file.type.startsWith('image/')) {
+                                    try {
+                                      fileToUpload = await compressToWebP(file);
+                                      ext = '.webp';
+                                    } catch (e) {}
+                                  }
+                                  const finalName = defaultName + ext;
+                                  const renamedFile = new File([fileToUpload], finalName, { type: fileToUpload.type });
+                                  const fData = new FormData();
+                                  fData.append('file', renamedFile);
+                                  fData.append('name', finalName);
+                                  fData.append('contact_id', String(effectiveContactId));
+                                  fData.append('category', currentFolder || 'general');
+                                  fData.append('visibility', 'shared');
 
-                                try {
-                                  await api.post('/cloud-files', fData, {
-                                    headers: { 'Content-Type': 'multipart/form-data' },
-                                    onUploadProgress: (progressEvent) => {
-                                      setUploadProgress(Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1)));
-                                    }
+                                  setUploadingFileObj({
+                                    name: totalFiles > 1 ? `(${i + 1}/${totalFiles}) ${finalName}` : finalName,
+                                    size: (renamedFile.size / 1024 / 1024).toFixed(1) + ' MB',
+                                    previewUrl: renamedFile.type.startsWith('image/') ? URL.createObjectURL(renamedFile) : '',
+                                    isImage: renamedFile.type.startsWith('image/')
                                   });
-                                  setUploadProgress(null);
-                                  setUploadingFileObj(null);
-                                  fetchData();
-                                  addToast('Đã tải lên tài liệu mới thành công.', 'success');
-                                } catch (err: any) {
-                                  setUploadProgress(null);
-                                  setUploadingFileObj(null);
+                                  setUploadProgress(0);
+
+                                  try {
+                                    await api.post('/cloud-files', fData, {
+                                      headers: { 'Content-Type': 'multipart/form-data' },
+                                      onUploadProgress: (progressEvent) => {
+                                        setUploadProgress(Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1)));
+                                      }
+                                    });
+                                    successCount++;
+                                  } catch (err: any) {
+                                    console.error("Upload error for " + finalName, err);
+                                  }
+                                }
+
+                                setUploadProgress(null);
+                                setUploadingFileObj(null);
+                                fetchData();
+                                if (successCount > 0) {
+                                  addToast(`Đã tải lên thành công ${successCount}/${totalFiles} tài liệu.`, 'success');
+                                } else {
                                   addToast('Lỗi khi tải tài liệu lên server', 'error');
                                 }
+                                e.target.value = '';
                               }
                             }}
                           />
@@ -13742,6 +13804,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           message: `Nhập tên mới cho tài liệu "${doc.name}":`,
                                           requirePromptInput: true,
                                           promptPlaceholder: baseName,
+                                          promptDefaultValue: baseName,
                                           confirmText: 'Lưu',
                                           cancelText: 'Hủy',
                                           onConfirm: async (newName) => {
@@ -14477,8 +14540,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          if (file.size > 5 * 1024 * 1024) {
-                            addToast('Dung lượng tệp đính kèm không được vượt quá 5MB', 'error');
+                          if (file.size > 50 * 1024 * 1024) {
+                            addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
                             return;
                           }
                           const previewUrl = URL.createObjectURL(file);
@@ -14597,8 +14660,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     value={newNote || ''}
                     onChange={e => setNewNote(e.target.value)}
                     onImagePaste={(file: File) => {
-                      if (file.size > 10 * 1024 * 1024) {
-                        addToast('Dung lượng tệp đính kèm không được vượt quá 10MB', 'error');
+                      if (file.size > 50 * 1024 * 1024) {
+                        addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
                         return;
                       }
                       const previewUrl = URL.createObjectURL(file);
@@ -14607,8 +14670,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       addToast('Đã dán tệp đính kèm từ clipboard!', 'success');
                     }}
                     onFilePaste={(file: File) => {
-                      if (file.size > 10 * 1024 * 1024) {
-                        addToast('Dung lượng tệp đính kèm không được vượt quá 10MB', 'error');
+                      if (file.size > 50 * 1024 * 1024) {
+                        addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
                         return;
                       }
                       const previewUrl = URL.createObjectURL(file);

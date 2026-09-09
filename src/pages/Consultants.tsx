@@ -456,8 +456,8 @@ const ConsultantsInner = () => {
 
   const addLocalTeamCommentAttachment = (file: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(t('Dung lượng tệp đính kèm không được vượt quá 10MB'));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(t('Dung lượng tệp đính kèm không được vượt quá 50MB'));
       return;
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;

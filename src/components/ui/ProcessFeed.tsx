@@ -1,9 +1,28 @@
 import React, { useState } from 'react';
 import { MessageSquare, Activity, Info, Clock, Coffee, Trash2, Send, Paperclip, Loader2 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import api from '../../api/axios';
 import { Avatar } from './Avatar';
 import { MentionInput } from './MentionInput';
 import { ConfirmModal } from './ConfirmModal';
+
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
+
+const getFileIcon = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (['pdf'].includes(ext)) return '📕';
+  if (['doc', 'docx'].includes(ext)) return '📘';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+  if (['ppt', 'pptx'].includes(ext)) return '📙';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '📦';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return '🖼️';
+  return '📄';
+};
 
 export interface ProcessFeedComment {
   id: string | number;
@@ -53,7 +72,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
   currentUser,
   onAddComment,
   onDeleteComment,
-  showAttachments = false,
+  showAttachments = true,
   maxHeight = 'auto'
 }) => {
   const { t } = useLanguage();
@@ -67,7 +86,34 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
     if (!commentText.trim() && attachments.length === 0) return;
     setSubmittingComment(true);
     try {
-      await onAddComment(commentText, attachments);
+      const uploadedAttachments: any[] = [];
+      for (const att of attachments) {
+        if (att.file instanceof File) {
+          const fd = new FormData();
+          fd.append('file', att.file);
+          const res = await api.post('/upload', fd, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          const fileUrl = res.data?.data?.url || res.data?.url;
+          const apiBase = import.meta.env.VITE_API_URL || '/backend';
+          let resolvedUrl = fileUrl;
+          if (fileUrl && fileUrl.startsWith('uploads/')) {
+            resolvedUrl = `${apiBase}/${fileUrl}`;
+          } else if (fileUrl && fileUrl.startsWith('storage/uploads/')) {
+            resolvedUrl = `${apiBase}/${fileUrl.replace('storage/uploads/', 'uploads/')}`;
+          }
+          uploadedAttachments.push({
+            name: att.name,
+            url: resolvedUrl,
+            size: att.size,
+            type: att.type
+          });
+        } else {
+          uploadedAttachments.push(att);
+        }
+      }
+
+      await onAddComment(commentText, uploadedAttachments);
       setCommentText('');
       setAttachments([]);
     } catch (err) {
@@ -78,9 +124,13 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAttachments([...attachments, { name: file.name, file }]);
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setAttachments(prev => [
+      ...prev,
+      ...files.map(f => ({ name: f.name, file: f, size: f.size, type: f.type }))
+    ]);
+    e.target.value = '';
   };
 
   const getLogDetails = (item: ProcessFeedHistory) => {
@@ -253,24 +303,31 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                     {/* Attached files chips list */}
                     {item.attachments && item.attachments.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                        {item.attachments.map((file: any, index: number) => (
-                          <div key={index} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: 'var(--color-surface)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: '6px',
-                            padding: '4px 8px',
-                            fontSize: '0.72rem',
-                            color: 'var(--color-text-light)'
-                          }}>
-                            <span>📄</span>
-                            <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {file.name}
-                            </span>
-                          </div>
-                        ))}
+                        {item.attachments.map((file: any, index: number) => {
+                          const fileUrl = file.url || file.file_url || (typeof file === 'string' ? file : '');
+                          return (
+                            <a 
+                              key={index} 
+                              href={fileUrl || undefined}
+                              target={fileUrl ? "_blank" : undefined}
+                              rel="noopener noreferrer"
+                              download={file.name || true}
+                              className="comment-attachment-chip"
+                              style={{ margin: 0 }}
+                              title={fileUrl ? "Bấm để mở / tải về tệp" : undefined}
+                            >
+                              <span>{getFileIcon(file.name || '')}</span>
+                              <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {file.name || 'Tệp đính kèm'}
+                              </span>
+                              {file.size ? (
+                                <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>
+                                  ({formatFileSize(file.size)})
+                                </span>
+                              ) : null}
+                            </a>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -360,7 +417,10 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
           borderTop: '1px solid var(--color-border-light)', 
           paddingTop: '8px',
           flexShrink: 0,
-          background: 'var(--color-surface)'
+          position: 'sticky',
+          bottom: 0,
+          background: 'var(--color-surface)',
+          zIndex: 10
         }}>
           <div style={{ background: 'rgba(0, 0, 0, 0.015)', border: '1px solid var(--color-border-light)', padding: '10px', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.01)' }}>
             <div style={{ position: 'relative' }}>
@@ -371,6 +431,7 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                 style={{ 
                   width: '100%', 
                   minHeight: '65px', 
+                  maxHeight: '220px',
                   border: 'none',
                   borderRadius: 0,
                   outline: 'none', 
@@ -382,8 +443,8 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                 disabled={submittingComment}
               />
               {showAttachments && (
-                <label style={{ position: 'absolute', right: '10px', bottom: '10px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('Đính kèm file')}>
-                  <input type="file" onChange={handleFileChange} style={{ display: 'none' }} />
+                <label style={{ position: 'absolute', right: '10px', bottom: '10px', cursor: 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('Đính kèm tệp (PDF, Word, Excel, ZIP, Ảnh...)')}>
+                  <input type="file" multiple accept="*/*" onChange={handleFileChange} style={{ display: 'none' }} />
                   <Paperclip size={18} />
                 </label>
               )}

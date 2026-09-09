@@ -278,8 +278,8 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
   const [isSavingNote, setIsSavingNote] = useState(false);
 
   const handleNoteImagePaste = (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      addToast('Dung lượng tệp đính kèm không được vượt quá 10MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
       return;
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;

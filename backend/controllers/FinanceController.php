@@ -723,11 +723,15 @@ class FinanceController
         $stmt = $this->db->prepare("
             SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, 
                    u2.full_name as approver_name, u2.avatar_url as approver_avatar,
-                   u3.full_name as refunder_name, u3.avatar_url as refunder_avatar
+                   u3.full_name as refunder_name, u3.avatar_url as refunder_avatar,
+                   u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2,
+                   u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3
             FROM expenses e 
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN users u2 ON e.approver_id = u2.id
             LEFT JOIN users u3 ON e.refunder_id = u3.id
+            LEFT JOIN users u4 ON e.approver_id_2 = u4.id
+            LEFT JOIN users u5 ON e.approver_id_3 = u5.id
             WHERE $w ORDER BY e.date DESC LIMIT $limit OFFSET $offset
         ");
         $stmt->execute($params);
@@ -839,7 +843,7 @@ class FinanceController
 
     public function showExpense(array $auth, int $id): void
     {
-        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
+        $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
         $p = [$id, $auth['tenant_id']];
         if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
             $sql .= " AND e.created_by=?";
@@ -1277,12 +1281,16 @@ class FinanceController
             SELECT e.*, ee.amount as split_amount, 
                    u.full_name as creator_name, u.avatar_url as creator_avatar,
                    u2.full_name as approver_name, u2.avatar_url as approver_avatar,
-                   u3.full_name as refunder_name, u3.avatar_url as refunder_avatar
+                   u3.full_name as refunder_name, u3.avatar_url as refunder_avatar,
+                   u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2,
+                   u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3
             FROM expenses e
             JOIN expense_entities ee ON e.id = ee.expense_id
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN users u2 ON e.approver_id = u2.id
             LEFT JOIN users u3 ON e.refunder_id = u3.id
+            LEFT JOIN users u4 ON e.approver_id_2 = u4.id
+            LEFT JOIN users u5 ON e.approver_id_3 = u5.id
             WHERE $where
             ORDER BY e.date DESC
         ");

@@ -78,13 +78,15 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
   const handleConfirm = () => {
     if (isForeign) {
       onChange(foreignText.trim());
+    } else if (step === 1 && search.trim() && filteredCities.length === 0) {
+      onChange(search.trim());
     } else {
       const parts = [
         street.trim(),
-        selectedWard?.wnew || '',
+        selectedWard?.wnew || (step === 2 && search.trim() ? search.trim() : ''),
         selectedCity ? getCleanCityName(selectedCity.name) : '',
       ].filter(Boolean);
-      onChange(parts.join(', '));
+      onChange(parts.length > 0 ? parts.join(', ') : (search.trim() || ''));
     }
     setOpen(false);
   };
@@ -182,7 +184,15 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
 
               {/* Foreign toggle */}
               <button
-                onClick={() => setIsForeign(f => !f)}
+                onClick={() => {
+                  setIsForeign(f => {
+                    const next = !f;
+                    if (next && search.trim() && !foreignText.trim()) {
+                      setForeignText(search.trim());
+                    }
+                    return next;
+                  });
+                }}
                 style={{
                   marginTop: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px',
                   fontSize: '0.75rem', fontWeight: 700,
@@ -193,7 +203,7 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
                 }}
               >
                 <Globe size={12} />
-                Địa chỉ nước ngoài
+                Địa chỉ nước ngoài / Tự do
               </button>
             </div>
 
@@ -225,12 +235,58 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
                           autoFocus
                           type="text"
                           className="form-input"
-                          placeholder={step === 1 ? 'Tìm tỉnh / thành phố...' : 'Tìm quận, huyện, xã...'}
+                          placeholder={step === 1 ? 'Tìm hoặc dán địa chỉ tỉnh, thành phố...' : 'Tìm quận, huyện, xã...'}
                           value={search}
                           onChange={e => setSearch(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && search.trim() && (filteredCities.length === 0 || step === 2)) {
+                              e.preventDefault();
+                              if (step === 1 || !selectedCity) {
+                                onChange(search.trim());
+                              } else {
+                                const full = [search.trim(), getCleanCityName(selectedCity.name)].filter(Boolean).join(', ');
+                                onChange(full);
+                              }
+                              setOpen(false);
+                            }
+                          }}
                           style={{ paddingLeft: '0.875rem', borderRadius: '10px' }}
                         />
                       </div>
+                      {search.trim() && (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(189, 29, 45, 0.05)',
+                          border: '1px dashed var(--color-primary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px',
+                          fontSize: '0.8rem'
+                        }}>
+                          <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            Dùng nguyên văn: <strong>"{search.trim()}"</strong>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (step === 1 || !selectedCity) {
+                                onChange(search.trim());
+                              } else {
+                                const full = [search.trim(), getCleanCityName(selectedCity.name)].filter(Boolean).join(', ');
+                                onChange(full);
+                              }
+                              setOpen(false);
+                            }}
+                            className="btn primary sm"
+                            style={{ padding: '4px 10px', fontSize: '0.75rem', whiteSpace: 'nowrap', flexShrink: 0, borderRadius: '6px' }}
+                          >
+                            Lưu địa chỉ này
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -257,8 +313,69 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
                         </div>
                       ))}
                       {filteredCities.length === 0 && (
-                        <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                          Không tìm thấy tỉnh/thành phố nào
+                        <div style={{ padding: '2rem 1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'rgba(189, 29, 45, 0.08)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <MapPin size={22} />
+                          </div>
+                          <div>
+                            <h4 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              Không tìm thấy theo danh mục hành chính
+                            </h4>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)', maxWidth: '340px', lineHeight: 1.4 }}>
+                              Địa chỉ bạn nhập hoặc dán vào có thể là địa chỉ tự do hoặc nước ngoài. Bạn có thể bấm xác nhận để lưu trực tiếp địa chỉ này:
+                            </p>
+                          </div>
+                          {search.trim() && (
+                            <div style={{
+                              padding: '8px 14px',
+                              borderRadius: '10px',
+                              background: 'var(--color-bg)',
+                              border: '1px solid var(--color-border)',
+                              fontSize: '0.85rem',
+                              fontWeight: 650,
+                              color: 'var(--color-text)',
+                              wordBreak: 'break-word',
+                              maxWidth: '100%'
+                            }}>
+                              "{search.trim()}"
+                            </div>
+                          )}
+                          {search.trim() ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onChange(search.trim());
+                                setOpen(false);
+                              }}
+                              className="btn primary"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '10px 20px',
+                                borderRadius: '12px',
+                                fontWeight: 700,
+                                fontSize: '0.875rem',
+                                boxShadow: '0 4px 14px rgba(189, 29, 45, 0.25)',
+                                cursor: 'pointer',
+                                marginTop: '4px'
+                              }}
+                            >
+                              <Check size={16} />
+                              <span>Xác nhận sử dụng địa chỉ này</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (search.trim() && !foreignText.trim()) setForeignText(search.trim());
+                                setIsForeign(true);
+                              }}
+                              className="btn outline sm"
+                            >
+                              Chuyển sang chế độ Địa chỉ nước ngoài
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -298,6 +415,26 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
                             )}
                           </div>
                         ))
+                      )}
+                      {filteredWards.length === 0 && search && (
+                        <div style={{ padding: '2rem 1.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', margin: 0 }}>
+                            Không tìm thấy quận/huyện/xã phù hợp với "{search}".
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const full = [search.trim(), selectedCity ? getCleanCityName(selectedCity.name) : ''].filter(Boolean).join(', ');
+                              onChange(full);
+                              setOpen(false);
+                            }}
+                            className="btn primary"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '10px' }}
+                          >
+                            <Check size={16} />
+                            <span>Xác nhận dùng: "{search.trim()}{selectedCity ? `, ${getCleanCityName(selectedCity.name)}` : ''}"</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -362,11 +499,15 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
                 <button
                   className="btn primary"
                   onClick={handleConfirm}
-                  disabled={isForeign ? !foreignText.trim() : (step === 3 ? false : !selectedCity)}
+                  disabled={isForeign ? !foreignText.trim() : false}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Check size={16} />
-                  {step === 2 && !isForeign ? 'Bỏ qua xã/phường' : 'Xác nhận địa chỉ'}
+                  {isForeign
+                    ? 'Xác nhận địa chỉ'
+                    : step === 2 && !isForeign && !selectedWard
+                    ? 'Bỏ qua xã/phường'
+                    : 'Xác nhận địa chỉ'}
                 </button>
               )}
             </div>

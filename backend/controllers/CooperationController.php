@@ -1067,8 +1067,8 @@ class CooperationController {
             respond(500, null, 'Lỗi trong quá trình tải tệp lên server', false);
         }
 
-        if ($file['size'] > 10 * 1024 * 1024) {
-            respond(422, null, 'Dung lượng tệp tối đa cho phép là 10MB', false);
+        if ($file['size'] > 50 * 1024 * 1024) {
+            respond(422, null, 'Dung lượng tệp tối đa cho phép là 50MB', false);
         }
 
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));

@@ -63,9 +63,16 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
 
     setUploadingImg(true);
     try {
-      const compressedFile = await compressToWebP(file);
+      let fileToUpload: File = file;
+      if (file.type.startsWith('image/')) {
+        try {
+          fileToUpload = await compressToWebP(file);
+        } catch (cErr) {
+          fileToUpload = file;
+        }
+      }
       const uploadData = new FormData();
-      uploadData.append('file', compressedFile);
+      uploadData.append('file', fileToUpload);
       if (formData.image_url) {
         uploadData.append('previous_url', formData.image_url);
       }
@@ -74,12 +81,12 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
       });
       if (res.data && res.data.success && res.data.data?.url) {
         setFormData(prev => ({ ...prev, image_url: res.data.data.url }));
-        addToast('Tải lên và nén ảnh hóa đơn thành công!', 'success');
+        addToast('Tải lên tệp đính kèm thành công!', 'success');
       } else {
-        addToast('Tải ảnh thất bại', 'error');
+        addToast('Tải tệp thất bại', 'error');
       }
     } catch (err: any) {
-      addToast('Lỗi khi nén & tải ảnh: ' + (err.message || err), 'error');
+      addToast('Lỗi khi tải tệp: ' + (err.message || err), 'error');
     } finally {
       setUploadingImg(false);
     }
@@ -637,20 +644,26 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
                         background: 'var(--color-bg-alt)',
                         position: 'relative'
                       }}>
-                        <img 
-                          src={formData.image_url.startsWith('http') ? formData.image_url : `${import.meta.env.VITE_API_URL || '/backend'}/${formData.image_url.replace(/^\//, '')}`} 
-                          alt="Hóa đơn đính kèm" 
-                          style={{ 
-                            width: '64px', 
-                            height: '64px', 
-                            borderRadius: '8px', 
-                            objectFit: 'cover',
-                            border: '1px solid var(--color-border)'
-                          }} 
-                        />
+                        {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(formData.image_url) ? (
+                          <img 
+                            src={formData.image_url.startsWith('http') ? formData.image_url : `${import.meta.env.VITE_API_URL || '/backend'}/${formData.image_url.replace(/^\//, '')}`} 
+                            alt="Hóa đơn đính kèm" 
+                            style={{ 
+                              width: '64px', 
+                              height: '64px', 
+                              borderRadius: '8px', 
+                              objectFit: 'cover',
+                              border: '1px solid var(--color-border)'
+                            }} 
+                          />
+                        ) : (
+                          <div style={{ width: '64px', height: '64px', borderRadius: '8px', background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <FileText size={32} style={{ color: 'var(--color-primary)' }} />
+                          </div>
+                        )}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            Đã tải lên ảnh hóa đơn
+                            {formData.image_url.split('/').pop() || 'Đã tải lên tệp đính kèm'}
                           </p>
                           <a 
                             href={formData.image_url.startsWith('http') ? formData.image_url : `${import.meta.env.VITE_API_URL || '/backend'}/${formData.image_url.replace(/^\//, '')}`}
@@ -658,7 +671,7 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
                             rel="noopener noreferrer" 
                             style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'underline' }}
                           >
-                            Xem ảnh gốc
+                            Xem tệp đính kèm
                           </a>
                         </div>
                       </div>
@@ -668,7 +681,7 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="Dán link ảnh hoặc tải lên..."
+                          placeholder="Dán link file hoặc tải lên..."
                           value={formData.image_url}
                           onChange={e => setFormData({ ...formData, image_url: e.target.value })}
                           style={{ flex: 1 }}
@@ -692,12 +705,12 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
                         }}>
                           <input 
                             type="file" 
-                            accept="image/*" 
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*" 
                             onChange={handleImageUpload} 
                             style={{ display: 'none' }} 
                             disabled={uploadingImg}
                           />
-                          {uploadingImg ? 'Đang tải lên...' : 'Tải ảnh lên'}
+                          {uploadingImg ? 'Đang tải lên...' : 'Tải tệp / ảnh lên'}
                         </label>
                       </div>
                     )}

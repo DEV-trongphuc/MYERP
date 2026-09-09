@@ -66,9 +66,9 @@ class UploadController {
             }
         }
 
-        // Limit size to 10MB
-        if ($file['size'] > 10 * 1024 * 1024) {
-            respond(400, null, 'Dung lượng file quá lớn (tối đa 10MB)');
+        // Limit size to 50MB
+        if ($file['size'] > 50 * 1024 * 1024) {
+            respond(400, null, 'Dung lượng file quá lớn (tối đa 50MB)');
         }
 
         // Tenant-isolated storage directory

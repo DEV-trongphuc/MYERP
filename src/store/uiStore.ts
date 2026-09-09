@@ -27,6 +27,7 @@ export interface ConfirmModalState {
   requirePromptInput?: boolean;
   optionalPromptInput?: boolean;
   promptPlaceholder?: string;
+  promptDefaultValue?: string;
   onConfirm: (promptValue?: string) => void | Promise<void>;
   onCancel?: () => void;
   onExtra?: () => void;

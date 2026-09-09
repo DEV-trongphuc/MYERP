@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell } from 'lucide-react';
+import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell, FileText } from 'lucide-react';
 import api from '../api/axios';
 import { Avatar } from './ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -9,9 +9,17 @@ import { MentionInput } from './ui/MentionInput';
 import { ProcessFeed } from './ui/ProcessFeed';
 import { compressToWebP } from '../utils/imageCompress';
 import { numberToVietnameseText } from '../utils/numberToText';
+import { NoteDetailModal, NoteCell, renderLinkifiedText } from './ui/NoteDetailModal';
 
 const FMT = (n: number, currency: string = 'VND') => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(n);
+};
+
+const formatTimestamp = (raw: any) => {
+  if (!raw) return '—';
+  const str = String(raw).trim();
+  const d = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str);
+  return !isNaN(d.getTime()) ? d.toLocaleString('vi-VN') : '—';
 };
 
 interface ExpenseQuickViewDrawerProps {
@@ -31,6 +39,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 }) => {
   const { addToast } = useUIStore();
   const [viewItem, setViewItem] = useState<any>(null);
+  const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'comments' | 'history'>('comments');
   const [comments, setComments] = useState<any[]>([]);
@@ -415,12 +424,12 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 </div>
                 {sDetails.bg === '#10b981' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {viewItem.approved_at ? new Date(viewItem.approved_at).toLocaleString('vi-VN') : '—'}
+                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
                   </span>
                 )}
                 {sDetails.bg === '#ef4444' && (
                   <span style={{ fontSize: '0.725rem', color: '#ef4444', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✗ Bị từ chối lúc {viewItem.approved_at ? new Date(viewItem.approved_at).toLocaleString('vi-VN') : '—'}
+                    ✗ Bị từ chối lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
                   </span>
                 )}
                 {sDetails.bg === 'var(--color-primary)' && (
@@ -497,7 +506,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 </div>
                 {sDetails.bg === '#10b981' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt
+                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
                   </span>
                 )}
                 {sDetails.bg === 'var(--color-primary)' && (
@@ -579,7 +588,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 </div>
                 {sDetails.bg === '#10b981' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt
+                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
                   </span>
                 )}
                 {sDetails.bg === 'var(--color-primary)' && (
@@ -859,9 +868,38 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   <Copy size={14} style={{ color: 'var(--color-text-muted)' }} />
                 </button>
               )}
-              <span className={`badge ${viewItem.status === 'approved' ? (viewItem.is_refunded ? 'info' : 'success') : viewItem.status === 'rejected' ? 'danger' : 'warning'}`} style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '8px', fontWeight: 700 }}>
-                {viewItem.status === 'approved' ? (viewItem.is_refunded ? 'Đã thanh toán' : 'Đã duyệt') : viewItem.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt'}
-              </span>
+              {(() => {
+                const isL1 = viewItem.status_level_1 === 'approved';
+                const hasL2 = !!viewItem.approver_id_2;
+                const isL2 = viewItem.status_level_2 === 'approved';
+                const hasL3 = !!viewItem.approver_id_3;
+                
+                let badgeClass = 'warning';
+                let badgeText = 'Chờ duyệt';
+                
+                if (viewItem.status === 'approved') {
+                  badgeClass = viewItem.is_refunded ? 'info' : 'success';
+                  badgeText = viewItem.is_refunded ? 'Đã thanh toán' : 'Đã duyệt';
+                } else if (viewItem.status === 'rejected') {
+                  badgeClass = 'danger';
+                  badgeText = 'Từ chối';
+                } else if (isL1 && hasL2 && !isL2) {
+                  badgeClass = 'warning';
+                  badgeText = 'Chờ duyệt Cấp 2';
+                } else if (isL1 && isL2 && hasL3) {
+                  badgeClass = 'warning';
+                  badgeText = 'Chờ duyệt Cấp 3';
+                } else if (hasL2) {
+                  badgeClass = 'warning';
+                  badgeText = 'Chờ duyệt Cấp 1';
+                }
+
+                return (
+                  <span className={`badge ${badgeClass}`} style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '8px', fontWeight: 700 }}>
+                    {badgeText}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
@@ -1029,14 +1067,101 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Người duyệt</span>
-                    {viewItem.approver_name ? (
-                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: viewItem.status === 'approved' ? 'var(--color-success)' : 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
-                        {viewItem.approver_name}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa phê duyệt</span>
-                    )}
+                    {(() => {
+                      const isL1Approved = viewItem.status_level_1 === 'approved';
+                      const hasL2 = !!viewItem.approver_id_2;
+                      const isL2Approved = viewItem.status_level_2 === 'approved';
+                      const hasL3 = !!viewItem.approver_id_3;
+                      const isL3Approved = viewItem.status_level_3 === 'approved';
+                      const overall = (viewItem.status || 'pending').toLowerCase();
+
+                      if (overall === 'approved') {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                              {viewItem.approver_name}
+                              {hasL2 && <span style={{ fontSize: '0.7rem', color: 'var(--color-success)', fontWeight: 600 }}>(Đã duyệt)</span>}
+                            </span>
+                            {hasL2 && (
+                              <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 500 }}>
+                                ✓ Đã duyệt qua các cấp
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (overall === 'rejected') {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                              {viewItem.approver_name}
+                              <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>(Từ chối)</span>
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      if (isL1Approved && hasL2 && !isL2Approved) {
+                        const approver2 = viewItem.approver_name_2 
+                          ? { full_name: viewItem.approver_name_2, avatar_url: viewItem.approver_avatar_2 }
+                          : users.find(u => Number(u.id) === Number(viewItem.approver_id_2));
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Avatar src={approver2?.avatar_url} name={approver2?.full_name || 'Người duyệt Cấp 2'} size={18} />
+                              <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                {approver2?.full_name || 'Người duyệt Cấp 2'}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--color-warning)', fontWeight: 600 }}>(Chờ Cấp 2)</span>
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                              ✓ Cấp 1: {viewItem.approver_name || 'Quản lý'} đã duyệt
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      if (isL1Approved && isL2Approved && hasL3 && !isL3Approved) {
+                        const approver3 = viewItem.approver_name_3 
+                          ? { full_name: viewItem.approver_name_3, avatar_url: viewItem.approver_avatar_3 }
+                          : users.find(u => Number(u.id) === Number(viewItem.approver_id_3));
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Avatar src={approver3?.avatar_url} name={approver3?.full_name || 'Người duyệt Cấp 3'} size={18} />
+                              <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                {approver3?.full_name || 'Người duyệt Cấp 3'}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--color-warning)', fontWeight: 600 }}>(Chờ Cấp 3)</span>
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                              ✓ Cấp 1 & 2 đã duyệt
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      if (viewItem.approver_name) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                              {viewItem.approver_name}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-warning)', fontWeight: 600 }}>
+                              {hasL2 ? '(Chờ Cấp 1)' : '(Chờ duyệt)'}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Chưa phân công</span>
+                      );
+                    })()}
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
@@ -1209,8 +1334,12 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                                       {st.quantity} {st.unit}
                                     </span>
                                   </td>
-                                  <td style={{ padding: '10px 12px', color: st.notes ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: st.notes ? 'normal' : 'italic' }}>
-                                    {st.notes || '—'}
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <NoteCell
+                                      notes={st.notes}
+                                      itemName={st.name}
+                                      onOpenModal={(data) => setActiveNoteModal({ ...data, title: 'Ghi chú / Mục đích sử dụng' })}
+                                    />
                                   </td>
                                 </tr>
                               ))}
@@ -1227,7 +1356,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                                 Nội dung đề xuất / Giải trình
                               </span>
                               <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                                {contentVal}
+                                {renderLinkifiedText(contentVal)}
                               </div>
                             </div>
                           )}
@@ -1237,7 +1366,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                                 Lý do & Ý kiến đề xuất
                               </span>
                               <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                                {reasonVal}
+                                {renderLinkifiedText(reasonVal)}
                               </div>
                             </div>
                           )}
@@ -1540,12 +1669,21 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       {uploadingRefund ? (
                         <Loader2 size={24} className="spin text-primary" />
                       ) : refundImgUrl ? (
-                        <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                          <img 
-                            src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
-                            alt="Refund proof" 
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                          />
+                        <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(refundImgUrl) ? (
+                            <img 
+                              src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
+                              alt="Refund proof" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '4px' }}>
+                              <FileText size={22} style={{ color: 'var(--color-primary)' }} />
+                              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text)', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {refundImgUrl.split('/').pop()}
+                              </span>
+                            </div>
+                          )}
                           <button 
                             style={{
                               position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
@@ -1561,31 +1699,38 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       ) : (
                         <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
                           <Upload size={22} style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
-                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải ảnh UNC</span>
+                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải tệp / UNC</span>
                         </div>
                       )}
                       <input 
                         type="file" 
                         id="refund-image-upload-drawer" 
-                        accept="image/*" 
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*" 
                         style={{ display: 'none' }} 
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           setUploadingRefund(true);
                           try {
-                            const webpBlob = await compressToWebP(file);
-                            const compFile = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
+                            let fileToUpload: File = file;
+                            if (file.type.startsWith('image/')) {
+                              try {
+                                const webpBlob = await compressToWebP(file);
+                                fileToUpload = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
+                              } catch (cErr) {
+                                fileToUpload = file;
+                              }
+                            }
                             const fd = new FormData();
-                            fd.append('file', compFile);
+                            fd.append('file', fileToUpload);
                             const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
                             if (res.data && res.data.data?.url) {
                               setRefundImgUrl(res.data.data.url);
                             } else {
-                              addToast('Lỗi tải ảnh', 'error');
+                              addToast('Lỗi tải tệp', 'error');
                             }
                           } catch (err: any) {
-                            addToast('Lỗi tải ảnh: ' + err.message, 'error');
+                            addToast('Lỗi tải tệp: ' + err.message, 'error');
                           } finally {
                             setUploadingRefund(false);
                           }
@@ -1595,7 +1740,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                        {refundImgUrl ? 'Đã nhận ảnh chứng từ thành công.' : 'Vui lòng chọn ảnh chứng từ chuyển khoản để xác thực.'}
+                        {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng chọn chứng từ chuyển khoản để xác thực.'}
                       </span>
                       <button 
                         className="btn success" 
@@ -1746,10 +1891,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     loadingComments={loadingComments}
                     loadingHistory={loadingHistory}
                     currentUser={user}
-                    onAddComment={async (text) => {
-                      if (!text.trim() || !viewItem) return;
+                    onAddComment={async (text, fileAttachments) => {
+                      if ((!text.trim() && (!fileAttachments || fileAttachments.length === 0)) || !viewItem) return;
                       await api.post(`/expenses/${viewItem.id}/comments`, {
-                        body: text.trim()
+                        body: text.trim(),
+                        attachments: fileAttachments || []
                       });
                       addToast('Thêm bình luận thành công', 'success');
                       fetchComments(viewItem.id);
@@ -1868,6 +2014,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           </div>
         </div>
       )}
+
+      <NoteDetailModal
+        isOpen={!!activeNoteModal}
+        onClose={() => setActiveNoteModal(null)}
+        title={activeNoteModal?.title || 'Ghi chú / Mục đích sử dụng'}
+        itemName={activeNoteModal?.itemName}
+        notes={activeNoteModal?.notes || ''}
+      />
     </AnimatePresence>,
     document.body
   );

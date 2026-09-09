@@ -17,6 +17,7 @@ import { CustomModal } from './ui/CustomModal';
 import { ToggleSwitch } from './ui/ToggleSwitch';
 import { SignaturePadModal } from './ui/SignaturePadModal';
 import { AssignedAssetsSection, type AssignedAsset } from './ui/AssignedAssetsSection';
+import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUIStore } from '../store/uiStore';
@@ -711,8 +712,8 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
     const file = e.target.files?.[0];
     if (!file || !account?.id) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(t('Dung lượng tệp tối đa cho phép là 10MB'));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(t('Dung lượng tệp tối đa cho phép là 50MB'));
       return;
     }
 
@@ -1864,7 +1865,12 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                       </div>
                       <div className="form-group">
                         <label className="form-label">{t('Ngày sinh')}</label>
-                        <input type="date" className="form-input" value={dob} onChange={e => setDob(e.target.value)} />
+                        <VietnameseDateInput 
+                          value={dob} 
+                          onChange={val => setDob(val)} 
+                          hasLeftIcon={true}
+                          placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                        />
                       </div>
                       <div className="form-group">
                         <label className="form-label">{t('Số CCCD / Hộ chiếu')}</label>

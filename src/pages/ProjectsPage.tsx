@@ -786,8 +786,8 @@ export default function ProjectsPage() {
 
   const addLocalFileAttachment = (file: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      addToast('Dung lượng tệp đính kèm không được vượt quá 10MB', 'error');
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Dung lượng tệp đính kèm không được vượt quá 50MB', 'error');
       return;
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
@@ -1003,8 +1003,9 @@ export default function ProjectsPage() {
               {!isReply && (
                 <button
                   onClick={() => setReplyTo({ id: comment.id, userName: comment.user_name || 'Thành viên' })}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', padding: 0, cursor: 'pointer', fontWeight: 700 }}
-                  className="hover-lift"
+                  style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '0.72rem', padding: '2px 4px', cursor: 'pointer', fontWeight: 600, opacity: 0.85, transition: 'opacity 0.15s ease' }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.85')}
                 >
                   Phản hồi
                 </button>

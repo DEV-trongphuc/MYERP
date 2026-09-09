@@ -2106,12 +2106,12 @@ class HRMController {
             ];
         }
 
-        // 4. My Checkins
+        // 4. My Checkins (Chỉ lấy khi là đơn đề xuất chờ duyệt hoặc có lý do giải trình thực sự từ nhân viên)
         $stmtCheckins = $this->db->prepare("
             SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
             FROM check_ins c
             JOIN users u ON c.user_id = u.id
-            WHERE c.user_id = ? AND c.late_minutes > 0
+            WHERE c.user_id = ? AND (c.status = 'pending_approval' OR (c.reason IS NOT NULL AND TRIM(c.reason) != '' AND c.reason NOT LIKE 'Duyệt%' AND c.reason NOT LIKE 'Tự động%'))
             ORDER BY c.id DESC
             LIMIT 100
         ");
@@ -2549,13 +2549,14 @@ class HRMController {
             ];
         }
 
-        // 4. All Checkins
+        // 4. All Checkins (Chỉ lấy khi là đơn đề xuất chờ duyệt hoặc có lý do giải trình thực sự từ nhân viên)
+        $condCheckin = "(c.status = 'pending_approval' OR (c.reason IS NOT NULL AND TRIM(c.reason) != '' AND c.reason NOT LIKE 'Duyệt%' AND c.reason NOT LIKE 'Tự động%'))";
         if ($isHrAdmin) {
             $stmtCheckins = $this->db->prepare("
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
                 FROM check_ins c
                 JOIN users u ON c.user_id = u.id
-                WHERE u.tenant_id = ? AND c.late_minutes > 0
+                WHERE u.tenant_id = ? AND $condCheckin
                 ORDER BY c.id DESC
                 LIMIT 200
             ");
@@ -2565,7 +2566,7 @@ class HRMController {
                 SELECT c.id, c.check_in_date, c.check_in_time, c.late_minutes, c.reason, c.status, CONCAT(c.check_in_date, ' ', c.check_in_time) as created_at, c.user_id, u.full_name as employee_name
                 FROM check_ins c
                 JOIN users u ON c.user_id = u.id
-                WHERE u.tenant_id = ? AND c.late_minutes > 0 AND (c.user_id = ?";
+                WHERE u.tenant_id = ? AND $condCheckin AND (c.user_id = ?";
             $pC = [$auth['tenant_id'], $userId];
             if (!empty($managedUserIds)) {
                 $ph = implode(',', array_fill(0, count($managedUserIds), '?'));

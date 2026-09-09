@@ -287,9 +287,16 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     const file = e.target.files[0];
 
     try {
-      const compressedFile = await compressToWebP(file);
+      let fileToUpload: File = file;
+      if (file.type.startsWith('image/')) {
+        try {
+          fileToUpload = await compressToWebP(file);
+        } catch (cErr) {
+          fileToUpload = file;
+        }
+      }
       const formData = new FormData();
-      formData.append('file', compressedFile);
+      formData.append('file', fileToUpload);
 
       const res = await fetchAPI(`deposits/${selectedDepForManage.id}/milestones/${m.id}`, {
         method: 'POST',
@@ -297,7 +304,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       });
 
       if (res.success && res.data?.unc_file_path) {
-        addToast('Tải ảnh UNC thành công!', 'success');
+        addToast('Tải chứng từ UNC thành công!', 'success');
         const updated = [...tempMilestones];
         updated[index] = { ...updated[index], status: 'paid', unc_file_path: res.data.unc_file_path };
         setTempMilestones(updated);
@@ -1348,15 +1355,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                               <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
                                 {!m.unc_file_path && m.status !== 'approved' && canEditMilestones && (
                                   <label
-                                    className="btn sm"
                                     style={{
-                                      padding: '0 8px',
-                                      height: '30px',
-                                      cursor: actioningMilestoneId !== null ? 'not-allowed' : 'pointer',
                                       display: 'inline-flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
+                                      width: '32px',
+                                      height: '32px',
                                       borderRadius: '6px',
+                                      cursor: actioningMilestoneId !== null ? 'not-allowed' : 'pointer',
                                       border: '1px solid var(--color-border)',
                                       background: 'var(--color-surface)',
                                       color: 'var(--color-text-muted)',
@@ -1364,12 +1370,12 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                       pointerEvents: actioningMilestoneId !== null ? 'none' : 'auto',
                                       transition: 'all 0.15s'
                                     }}
-                                    title="Tải ảnh chuyển khoản (UNC)"
+                                    title="Tải chứng từ / UNC chuyển khoản"
                                   >
                                     <Upload size={13} />
                                     <input
                                       type="file"
-                                      accept="image/*"
+                                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*"
                                       style={{ display: 'none' }}
                                       disabled={actioningMilestoneId !== null}
                                       onChange={e => handleUploadUncFromModal(e, idx)}
@@ -1379,7 +1385,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
 
                                 {m.unc_file_path && (() => {
                                   const downloadUrl = m.unc_file_path.startsWith('uploads/') ? `${import.meta.env.VITE_API_URL || '/backend'}/${m.unc_file_path}` : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${m.unc_file_path}`;
-                                  const isPdf = m.unc_file_path.toLowerCase().endsWith('.pdf');
+                                  const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(m.unc_file_path);
                                   return (
                                     <a
                                       href={downloadUrl}
@@ -1401,14 +1407,14 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                       className="hover-scale"
                                       title="Bấm để xem chi tiết minh chứng"
                                     >
-                                      {isPdf ? (
-                                        <FileText size={16} color="var(--color-primary)" />
-                                      ) : (
+                                      {isImg ? (
                                         <img 
                                           src={downloadUrl} 
                                           alt="Minh chứng" 
                                           style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                                         />
+                                      ) : (
+                                        <FileText size={16} color="var(--color-primary)" />
                                       )}
                                     </a>
                                   );

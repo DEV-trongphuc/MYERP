@@ -1026,13 +1026,13 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       }}
                     >
                       <Upload size={13} />
-                      <span>Chọn nhiều ảnh</span>
+                      <span>Chọn nhiều tệp / ảnh</span>
                     </button>
                     <input
                       type="file"
                       ref={fileInputMultiRef}
                       multiple
-                      accept="image/*"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*"
                       style={{ display: 'none' }}
                       onChange={async (e) => {
                         const files = e.target.files;
@@ -1043,10 +1043,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           for (let i = 0; i < files.length; i++) {
                             const file = files[i];
                             try {
-                              const webpBlob = await compressToWebP(file);
-                              const compFile = new File([webpBlob], `expense_proof_${Date.now()}_${i}.webp`, { type: 'image/webp' });
+                              let fileToUpload: File = file;
+                              if (file.type.startsWith('image/')) {
+                                try {
+                                  const webpBlob = await compressToWebP(file);
+                                  fileToUpload = new File([webpBlob], `expense_proof_${Date.now()}_${i}.webp`, { type: 'image/webp' });
+                                } catch (cErr) {
+                                  fileToUpload = file;
+                                }
+                              }
                               const fd = new FormData();
-                              fd.append('file', compFile);
+                              fd.append('file', fileToUpload);
                               const res = await api.post('/upload', fd, {
                                 headers: { 'Content-Type': 'multipart/form-data' }
                               });
@@ -1057,14 +1064,14 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                                 successCount++;
                               }
                             } catch (err) {
-                              console.error('Error compressing file', file.name, err);
+                              console.error('Error uploading file', file.name, err);
                             }
                           }
                           if (successCount > 0) {
-                            addToast(`Đã tải lên & nén thành công ${successCount} ảnh!`, 'success');
+                            addToast(`Đã tải lên thành công ${successCount} tệp đính kèm!`, 'success');
                           }
                         } catch (err: any) {
-                          addToast('Lỗi khi tải ảnh: ' + (err.message || err), 'error');
+                          addToast('Lỗi khi tải tệp: ' + (err.message || err), 'error');
                         } finally {
                           setUploadingImg(false);
                           if (fileInputMultiRef.current) fileInputMultiRef.current.value = '';
@@ -1075,16 +1082,24 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
                   <PasteDropzoneArea
                     compact={true}
-                    placeholder="Chọn/kéo thả hoặc Ctrl+V để dán nhiều ảnh hóa đơn"
-                    subtext="Hỗ trợ tải lên hoặc dán nhiều ảnh cùng lúc, nén WEBP tự động"
+                    placeholder="Chọn/kéo thả hoặc Ctrl+V để dán nhiều ảnh, file PDF, hóa đơn"
+                    subtext="Hỗ trợ tải lên tất cả các loại tệp (PDF, Word, Excel, Ảnh...) hoặc dán ảnh từ Clipboard"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*"
                     onConfirmUpload={async (item) => {
                       if (item.file) {
                         setUploadingImg(true);
                         try {
-                          const webpBlob = await compressToWebP(item.file);
-                          const compFile = new File([webpBlob], `expense_proof_${Date.now()}.webp`, { type: 'image/webp' });
+                          let fileToUpload: File = item.file;
+                          if (item.file.type.startsWith('image/')) {
+                            try {
+                              const webpBlob = await compressToWebP(item.file);
+                              fileToUpload = new File([webpBlob], `expense_proof_${Date.now()}.webp`, { type: 'image/webp' });
+                            } catch (cErr) {
+                              fileToUpload = item.file;
+                            }
+                          }
                           const fd = new FormData();
-                          fd.append('file', compFile);
+                          fd.append('file', fileToUpload);
                           const res = await api.post('/upload', fd, {
                             headers: { 'Content-Type': 'multipart/form-data' }
                           });
@@ -1092,12 +1107,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                             const newUrl = res.data.data.url;
                             setImages(prev => [...prev, newUrl]);
                             setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
-                            addToast('Tải lên và nén ảnh hóa đơn thành công!', 'success');
+                            addToast('Tải lên tệp đính kèm thành công!', 'success');
                           } else {
-                            addToast('Tải ảnh thất bại', 'error');
+                            addToast('Tải tệp thất bại', 'error');
                           }
                         } catch (err: any) {
-                          addToast('Lỗi khi nén & tải ảnh: ' + (err.message || err), 'error');
+                          addToast('Lỗi khi tải tệp: ' + (err.message || err), 'error');
                         } finally {
                           setUploadingImg(false);
                         }
@@ -1108,60 +1123,86 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   {uploadingImg && (
                     <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div className="spinner sm"></div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Đang nén & tải lên ảnh...</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Đang xử lý & tải lên tệp...</span>
                     </div>
                   )}
 
-                  {/* Multi-image thumbnail gallery */}
+                  {/* Multi-attachment thumbnail & file gallery */}
                   {images.length > 0 && (
                     <div style={{ marginTop: '10px' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
-                        {images.map((imgUrl, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              position: 'relative',
-                              height: '80px',
-                              borderRadius: '10px',
-                              overflow: 'hidden',
-                              border: '1.5px solid var(--color-border)',
-                              background: '#0a0e17',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
-                            }}
-                          >
-                            <img
-                              src={imgUrl.startsWith('http') ? imgUrl : `${import.meta.env.VITE_API_URL || '/backend'}${imgUrl}`}
-                              alt={`Hóa đơn ${idx + 1}`}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = images.filter((_, i) => i !== idx);
-                                setImages(next);
-                                setForm((prev: any) => ({ ...prev, image_url: next[0] || '' }));
-                              }}
+                        {images.map((imgUrl, idx) => {
+                          const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(imgUrl);
+                          const fileUrl = imgUrl.startsWith('http') ? imgUrl : `${import.meta.env.VITE_API_URL || '/backend'}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`;
+                          const fileName = imgUrl.split('/').pop() || `Tệp ${idx + 1}`;
+                          return (
+                            <div
+                              key={idx}
                               style={{
-                                position: 'absolute',
-                                top: 4,
-                                right: 4,
-                                background: 'rgba(0,0,0,0.7)',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '50%',
-                                width: 20,
-                                height: 20,
+                                position: 'relative',
+                                height: '80px',
+                                borderRadius: '10px',
+                                overflow: 'hidden',
+                                border: '1.5px solid var(--color-border)',
+                                background: isImg ? '#0a0e17' : 'var(--color-bg-secondary)',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
                                 display: 'flex',
+                                flexDirection: 'column',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                cursor: 'pointer'
+                                padding: isImg ? 0 : '8px'
                               }}
-                              title="Xóa ảnh này"
                             >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ))}
+                              {isImg ? (
+                                <img
+                                  src={fileUrl}
+                                  alt={`Hóa đơn ${idx + 1}`}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : (
+                                <a
+                                  href={fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textDecoration: 'none', color: 'var(--color-text)', width: '100%', height: '100%', justifyContent: 'center' }}
+                                  title={fileName}
+                                >
+                                  <FileText size={24} style={{ color: 'var(--color-primary)' }} />
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 600, maxWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                                    {fileName}
+                                  </span>
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = images.filter((_, i) => i !== idx);
+                                  setImages(next);
+                                  setForm((prev: any) => ({ ...prev, image_url: next[0] || '' }));
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: 4,
+                                  right: 4,
+                                  background: 'rgba(0,0,0,0.7)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '50%',
+                                  width: 20,
+                                  height: 20,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  zIndex: 2
+                                }}
+                                title="Xóa tệp này"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

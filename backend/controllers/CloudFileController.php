@@ -137,8 +137,8 @@ class CloudFileController {
             $file = $_FILES['file'];
             if ($file['error'] !== UPLOAD_ERR_OK) respond(500, null, 'Lỗi trong quá trình tải tệp lên server', false);
 
-            // Security: Max file size 10MB
-            if ($file['size'] > 10 * 1024 * 1024) respond(422, null, 'Dung lượng tệp tối đa cho phép là 10MB', false);
+            // Security: Max file size 50MB
+            if ($file['size'] > 50 * 1024 * 1024) respond(422, null, 'Dung lượng tệp tối đa cho phép là 50MB', false);
 
             // Security: Blocklist extensions
             $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -369,20 +369,21 @@ class CloudFileController {
         $b = getBody();
         
         $name = trim($b['name'] ?? '');
-        $category = trim($b['category'] ?? 'general');
-        $visibility = trim($b['visibility'] ?? 'shared');
-        $project_id = isset($b['project_id']) && $b['project_id'] !== '' ? (int)$b['project_id'] : null;
-        $campaign_id = isset($b['campaign_id']) && $b['campaign_id'] !== '' ? (int)$b['campaign_id'] : null;
 
         if (!$name) {
             respond(422, null, 'Tên tệp là bắt buộc', false);
         }
 
         // Permission check: Only uploader or admin/manager
-        $checkStmt = $this->db->prepare("SELECT name, uploaded_by, category FROM cloud_files WHERE id = ? AND tenant_id = ?");
+        $checkStmt = $this->db->prepare("SELECT name, uploaded_by, category, visibility, project_id, campaign_id FROM cloud_files WHERE id = ? AND tenant_id = ?");
         $checkStmt->execute([$id, $tid]);
         $file = $checkStmt->fetch();
         if (!$file) respond(404, null, 'Không tìm thấy tệp tin', false);
+
+        $category = isset($b['category']) ? trim($b['category']) : ($file['category'] ?? 'general');
+        $visibility = isset($b['visibility']) ? trim($b['visibility']) : ($file['visibility'] ?? 'shared');
+        $project_id = isset($b['project_id']) ? ($b['project_id'] !== '' ? (int)$b['project_id'] : null) : ($file['project_id'] ?? null);
+        $campaign_id = isset($b['campaign_id']) ? ($b['campaign_id'] !== '' ? (int)$b['campaign_id'] : null) : ($file['campaign_id'] ?? null);
 
         // Enforce original extension
         $origExt = pathinfo($file['name'], PATHINFO_EXTENSION);

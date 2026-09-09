@@ -2234,6 +2234,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                   message: 'Nhập tên mới cho tài liệu:',
                                   requirePromptInput: true,
                                   promptPlaceholder: doc.name,
+                                  promptDefaultValue: doc.name,
                                   confirmText: 'Lưu',
                                   cancelText: 'Hủy',
                                   onConfirm: (newName) => {

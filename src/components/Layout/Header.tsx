@@ -1529,14 +1529,38 @@ export const Header = ({
               }
 
               if (activeCheckIn && (activeCheckIn.status === 'pending_approval' || activeCheckIn.pending_explanation_today)) {
+                const isBulk = Boolean(activeCheckIn.is_bulk_pending || activeCheckIn.id === 0);
+                const timeStr = activeCheckIn.check_in_time ? activeCheckIn.check_in_time.substring(0, 5) : '';
                 return (
                   <div 
-                    onClick={() => navigate('/attendance?user_id=' + (user?.id || ''))}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--color-warning)', borderRadius: '8px', padding: '4px 10px', height: '36px', fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
-                    title={t('Click để Xem bảng chấm công cá nhân')}
+                    onClick={() => navigate(isBulk ? '/approvals' : ('/attendance?user_id=' + (user?.id || '')))}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '4px', 
+                      background: 'rgba(245, 158, 11, 0.1)', 
+                      border: '1px solid rgba(245, 158, 11, 0.25)', 
+                      color: 'var(--color-warning)', 
+                      borderRadius: '8px', 
+                      padding: '4px 10px', 
+                      height: '36px', 
+                      fontSize: '0.72rem', 
+                      fontWeight: 700, 
+                      whiteSpace: 'nowrap', 
+                      cursor: 'pointer' 
+                    }}
+                    title={isBulk 
+                      ? `${t('Đang có Đơn bổ sung công')} (#${activeCheckIn.bulk_request_id || ''}) ${t('chờ Quản lý duyệt - Click để xem đơn')}` 
+                      : t('Click để Xem bảng chấm công cá nhân')
+                    }
                   >
                     <Clock size={12} />
-                    <span>{activeCheckIn.check_in_time ? `${t('Chờ duyệt')} (${activeCheckIn.check_in_time.substring(0, 5)})` : t('Chờ duyệt công')}</span>
+                    <span>
+                      {isBulk 
+                        ? `${t('Đơn bổ sung')} (${timeStr || '08:00'})` 
+                        : (timeStr ? `${t('Chờ duyệt')} (${timeStr})` : t('Chờ duyệt công'))
+                      }
+                    </span>
                   </div>
                 );
               }

@@ -53,7 +53,14 @@ class ContactController {
             if ($minOrderIndex === false) {
                 $minOrderIndex = 9;
             }
-            $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.order_index >= " . (int)$minOrderIndex . ")";
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+            } else {
+                $where[] = "1=0";
+            }
         } elseif ($role === 'accountant') {
             $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') ORDER BY order_index ASC LIMIT 1");
             $stmtStage->execute([$tid]);
@@ -61,7 +68,14 @@ class ContactController {
             if ($minOrderIndex === false) {
                 $minOrderIndex = 13;
             }
-            $where[] = "EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.order_index >= " . (int)$minOrderIndex . ")";
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+            } else {
+                $where[] = "1=0";
+            }
         }
 
         // Validating sort fields
@@ -148,19 +162,15 @@ class ContactController {
 
         // Lọc các liên hệ có từ 2 chương trình đổ lên (đa chương trình / hồ sơ nhân bản song song)
         if ($multiProgram) {
-            $where[] = "EXISTS (
-                SELECT 1 FROM contacts c2 
-                WHERE c2.deleted_at IS NULL 
-                  AND c2.tenant_id = c.tenant_id 
-                  AND c2.id != c.id 
-                  AND (
-                      (c.person_id > 0 AND c2.person_id = c.person_id)
-                      OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
-                      OR (c2.duplicate_with_id = c.id)
-                      OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
-                      OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
-                  )
+            $where[] = "(
+                (c.person_id > 0 AND c.person_id IN (SELECT person_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 GROUP BY person_id HAVING COUNT(*) > 1))
+                OR (c.duplicate_with_id > 0)
+                OR (c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0))
+                OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (SELECT phone FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL GROUP BY phone HAVING COUNT(*) > 1))
             )";
+            $params[] = $tid;
+            $params[] = $tid;
+            $params[] = $tid;
         }
         
         if ($dataType !== '') {
@@ -344,25 +354,33 @@ class ContactController {
                     $stageCounts['uncontacted'] = 0;
                 }
 
-                // Compute multi_program count (contacts with >= 2 programs/linked profiles)
+                // Compute multi_program count (contacts with >= 2 distinct academic programs or cloned profiles)
                 try {
                     $mpWhere = $baseWhere;
-                    $mpWhere[] = "EXISTS (
-                        SELECT 1 FROM contacts c2 
-                        WHERE c2.deleted_at IS NULL 
-                          AND c2.tenant_id = c.tenant_id 
-                          AND c2.id != c.id 
-                          AND (
-                              (c.person_id > 0 AND c2.person_id = c.person_id)
-                              OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
-                              OR (c2.duplicate_with_id = c.id)
-                              OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
-                              OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
-                          )
+                    $mpWhere[] = "(
+                        c.duplicate_with_id > 0
+                        OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
+                        OR (c.person_id > 0 AND c.person_id IN (
+                            SELECT person_id FROM contacts 
+                            WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
+                            GROUP BY person_id 
+                            HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                                OR COUNT(DISTINCT stage_id) >= 2 
+                                OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                        ))
+                        OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
+                            SELECT phone FROM contacts 
+                            WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
+                            GROUP BY phone 
+                            HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                                OR COUNT(DISTINCT stage_id) >= 2 
+                                OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                        ))
                     )";
                     $mpWhereStr = implode(' AND ', $mpWhere);
+                    $mpParams = array_merge($baseParams, [$tid, $tid, $tid, $tid]);
                     $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
-                    $mpStmt->execute($baseParams);
+                    $mpStmt->execute($mpParams);
                     $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
                 } catch (\Throwable $e) {
                     $stageCounts['multi_program'] = 0;
@@ -425,19 +443,30 @@ class ContactController {
         }
 
         if ($multiProgram) {
-            $where[] = "EXISTS (
-                SELECT 1 FROM contacts c2 
-                WHERE c2.deleted_at IS NULL 
-                  AND c2.tenant_id = c.tenant_id 
-                  AND c2.id != c.id 
-                  AND (
-                      (c.person_id > 0 AND c2.person_id = c.person_id)
-                      OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
-                      OR (c2.duplicate_with_id = c.id)
-                      OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
-                      OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
-                  )
+            $where[] = "(
+                c.duplicate_with_id > 0
+                OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
+                OR (c.person_id > 0 AND c.person_id IN (
+                    SELECT person_id FROM contacts 
+                    WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
+                    GROUP BY person_id 
+                    HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                        OR COUNT(DISTINCT stage_id) >= 2 
+                        OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                ))
+                OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
+                    SELECT phone FROM contacts 
+                    WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
+                    GROUP BY phone 
+                    HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                        OR COUNT(DISTINCT stage_id) >= 2 
+                        OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                ))
             )";
+            $params[] = $tid;
+            $params[] = $tid;
+            $params[] = $tid;
+            $params[] = $tid;
         }
 
         if ($isKanban) {
@@ -469,18 +498,7 @@ class ContactController {
                            u.avatar_url as owner_avatar,
                            COALESCE(ps.name, ps_fb.name) as stage_name, 
                            COALESCE(ps.color, ps_fb.color) as stage_color,
-                           (
-                               SELECT COUNT(DISTINCT c2.id)
-                               FROM contacts c2
-                               WHERE c2.deleted_at IS NULL AND c2.tenant_id = c.tenant_id AND (
-                                   c2.id = c.id
-                                   OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
-                                   OR (c2.duplicate_with_id = c.id)
-                                   OR (c.person_id > 0 AND c2.person_id = c.person_id)
-                                   OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
-                                   OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
-                               )
-                           ) as linked_profiles_count,
+                           1 as linked_profiles_count,
                            ROW_NUMBER() OVER (PARTITION BY c.stage_id ORDER BY c.id DESC) as rn
                     FROM contacts c
                     LEFT JOIN companies comp ON c.company_id = comp.id
@@ -495,6 +513,7 @@ class ContactController {
             $kStmt = $this->db->prepare($kanbanSql);
             $kStmt->execute($params);
             $data = $kStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $this->populateLinkedProfilesCount($data, $tid);
 
             $grouped = [];
             foreach ($data as &$row) {
@@ -568,18 +587,7 @@ class ContactController {
                        (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
                        (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
                    ) as last_interaction_at,
-                   (
-                        SELECT COUNT(DISTINCT c2.id)
-                        FROM contacts c2
-                        WHERE c2.deleted_at IS NULL AND c2.tenant_id = c.tenant_id AND (
-                            c2.id = c.id
-                            OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
-                            OR (c2.duplicate_with_id = c.id)
-                            OR (c.person_id > 0 AND c2.person_id = c.person_id)
-                            OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
-                            OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
-                        )
-                   ) as linked_profiles_count
+                   1 as linked_profiles_count
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
@@ -606,6 +614,7 @@ class ContactController {
         ");
         $stmt->execute($params);
         $data = $stmt->fetchAll();
+        $this->populateLinkedProfilesCount($data, $tid);
         // Parse JSON tags
         foreach ($data as &$row) $row['tags'] = json_decode($row['tags'] ?? '[]');
 
@@ -615,6 +624,113 @@ class ContactController {
             'total_pages' => ceil($total / $limit),
             'stage_counts' => $stageCounts
         ]);
+    }
+
+    private function populateLinkedProfilesCount(array &$data, int $tid): void {
+        if (empty($data)) return;
+        $pids = [];
+        $dwids = [];
+        $phones = [];
+        $cids = [];
+        foreach ($data as $c) {
+            $cids[] = (int)$c['id'];
+            if (!empty($c['person_id'])) $pids[] = (int)$c['person_id'];
+            if (!empty($c['duplicate_with_id'])) {
+                $dwids[] = (int)$c['duplicate_with_id'];
+                $cids[] = (int)$c['duplicate_with_id'];
+            }
+            if (!empty($c['phone'])) $phones[] = $c['phone'];
+            if (!empty($c['mobile'])) $phones[] = $c['mobile'];
+        }
+        $whereMatches = [];
+        $paramsMatches = [$tid];
+        if (!empty($pids)) {
+            $pids = array_unique($pids);
+            $inP = implode(',', array_fill(0, count($pids), '?'));
+            $whereMatches[] = "person_id IN ($inP)";
+            $paramsMatches = array_merge($paramsMatches, $pids);
+        }
+        if (!empty($dwids) || !empty($cids)) {
+            $allIds = array_unique(array_merge($dwids, $cids));
+            $inIds = implode(',', array_fill(0, count($allIds), '?'));
+            $whereMatches[] = "(duplicate_with_id IN ($inIds) OR id IN ($inIds))";
+            $paramsMatches = array_merge($paramsMatches, $allIds, $allIds);
+        }
+        if (!empty($phones)) {
+            $phones = array_unique($phones);
+            $inPhones = implode(',', array_fill(0, count($phones), '?'));
+            $whereMatches[] = "(phone IN ($inPhones) OR mobile IN ($inPhones))";
+            $paramsMatches = array_merge($paramsMatches, $phones, $phones);
+        }
+        if (empty($whereMatches)) {
+            foreach ($data as &$row) {
+                $row['linked_profiles_count'] = 1;
+            }
+            unset($row);
+            return;
+        }
+
+        try {
+            $matchSql = "SELECT id, person_id, duplicate_with_id, phone, mobile, program FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND (" . implode(' OR ', $whereMatches) . ")";
+            $matchStmt = $this->db->prepare($matchSql);
+            $matchStmt->execute($paramsMatches);
+            $allLinkedRows = $matchStmt->fetchAll();
+
+            foreach ($data as &$row) {
+                $currId = (int)$row['id'];
+                $currPid = (int)($row['person_id'] ?? 0);
+                $currDw = (int)($row['duplicate_with_id'] ?? 0);
+                $currPhone = trim((string)($row['phone'] ?? ''));
+                $currMobile = trim((string)($row['mobile'] ?? ''));
+
+                $matchedContacts = [$currId => $row];
+                foreach ($allLinkedRows as $lr) {
+                    $lid = (int)$lr['id'];
+                    $lpid = (int)($lr['person_id'] ?? 0);
+                    $ldw = (int)($lr['duplicate_with_id'] ?? 0);
+                    $lphone = trim((string)($lr['phone'] ?? ''));
+                    $lmobile = trim((string)($lr['mobile'] ?? ''));
+
+                    $isMatch = ($currPid > 0 && $currPid === $lpid)
+                        || ($currDw > 0 && ($lid === $currDw || $ldw === $currDw))
+                        || ($ldw === $currId)
+                        || ($currPhone !== '' && ($lphone === $currPhone || $lmobile === $currPhone))
+                        || ($currMobile !== '' && ($lphone === $currMobile || $lmobile === $currMobile));
+
+                    if ($isMatch) {
+                        $matchedContacts[$lid] = $lr;
+                    }
+                }
+
+                // Count distinct programs: treat empty/null as '__empty__' so an initial/enrolled profile with null program + a new cloned program counts as 2 programs!
+                $distinctPrograms = [];
+                $hasExplicitClone = false;
+                $distinctStages = [];
+                foreach ($matchedContacts as $mc) {
+                    $prog = trim((string)($mc['program'] ?? ''));
+                    $distinctPrograms[$prog !== '' ? mb_strtolower($prog) : '__empty__'] = true;
+                    if (!empty($mc['duplicate_with_id'])) {
+                        $hasExplicitClone = true;
+                    }
+                    if (!empty($mc['stage_id'])) {
+                        $distinctStages[(int)$mc['stage_id']] = true;
+                    }
+                }
+
+                $progCount = count($distinctPrograms);
+                if ($progCount >= 2 || $hasExplicitClone || count($distinctStages) >= 2) {
+                    $row['linked_profiles_count'] = max($progCount, count($matchedContacts));
+                } else {
+                    $row['linked_profiles_count'] = 1;
+                }
+            }
+            unset($row);
+        } catch (\Throwable $e) {
+            foreach ($data as &$row) {
+                $row['linked_profiles_count'] = 1;
+            }
+            unset($row);
+        }
     }
 
     private function resolveCompanyId(array $auth, array $b): ?int {
@@ -885,7 +1001,7 @@ class ContactController {
                     dr.status as ticket_status,
                     dr.reason as ticket_reason,
                     (
-                        SELECT COUNT(DISTINCT c2.id)
+                        SELECT COUNT(DISTINCT NULLIF(TRIM(c2.program), ''))
                         FROM contacts c2
                         WHERE c2.deleted_at IS NULL AND c2.tenant_id = c.tenant_id AND (
                             c2.id = c.id
@@ -1733,28 +1849,59 @@ class ContactController {
             }
         }
         
-        $this->restorePersonPublicStatus($id, $auth['tenant_id']);
+        // Check if there are other active sibling contacts for this customer (multi-profile / cloned contact)
+        $stmtSib = $this->db->prepare("
+            SELECT id FROM contacts 
+            WHERE tenant_id = ? AND id != ? AND deleted_at IS NULL
+              AND (
+                  (person_id = ? AND person_id IS NOT NULL)
+                  OR (duplicate_with_id = ? OR id = ?)
+                  OR (phone != '' AND phone IS NOT NULL AND (phone = ? OR mobile = ?))
+              )
+            ORDER BY id ASC
+        ");
+        $stmtSib->execute([
+            $auth['tenant_id'], $id,
+            $cRow['person_id'] ?: -1,
+            $id, $cRow['duplicate_with_id'] ?: -1,
+            $cRow['phone'] ?: '', $cRow['phone'] ?: ''
+        ]);
+        $remainingSiblingIds = $stmtSib->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $hasRemainingSiblings = !empty($remainingSiblingIds);
 
-        if ($isSelfEntered) {
-            // 1. Dọn sạch toàn bộ nhật ký / hoạt động liên quan đến khách hàng tự nhập
-            $delAct = $this->db->prepare("DELETE FROM activities WHERE contact_id = ? OR (related_type = 'contact' AND related_id = ?)");
-            $delAct->execute([$id, $id]);
+        // If this contact was the cluster root, re-point siblings to the first remaining sibling
+        if ($hasRemainingSiblings) {
+            $newRootId = (int)$remainingSiblingIds[0];
+            $stmtReRoot = $this->db->prepare("UPDATE contacts SET duplicate_with_id = NULL WHERE id = ? AND tenant_id = ?");
+            $stmtReRoot->execute([$newRootId, $auth['tenant_id']]);
 
-            // 2. Dọn sạch ghi chú (notes) liên quan
-            $delNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id = ?");
-            $delNotes->execute([$id]);
-
-            // 3. Dọn sạch deal nếu có
-            $stDeals = $this->db->prepare("SELECT id FROM deals WHERE contact_id = ? AND tenant_id = ?");
-            $stDeals->execute([$id, $auth['tenant_id']]);
-            $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
-            if (!empty($dealIds)) {
-                $inDeals = implode(',', array_map('intval', $dealIds));
-                $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
-                $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
+            if (count($remainingSiblingIds) > 1) {
+                $otherSiblings = array_slice($remainingSiblingIds, 1);
+                $inOther = implode(',', array_map('intval', $otherSiblings));
+                $this->db->query("UPDATE contacts SET duplicate_with_id = $newRootId WHERE id IN ($inOther) AND tenant_id = {$auth['tenant_id']}");
             }
+        }
 
-            // 4. Dọn sạch các dữ liệu lead / phân phối nếu SĐT này từng được tạo làm lead thủ công
+        // 1. Dọn sạch toàn bộ nhật ký / hoạt động liên quan đến riêng hồ sơ liên hệ này
+        $delAct = $this->db->prepare("DELETE FROM activities WHERE contact_id = ? OR (related_type = 'contact' AND related_id = ?)");
+        $delAct->execute([$id, $id]);
+
+        // 2. Dọn sạch ghi chú (notes) liên quan đến riêng hồ sơ liên hệ này
+        $delNotes = $this->db->prepare("DELETE FROM notes WHERE entity_type = 'contact' AND entity_id = ?");
+        $delNotes->execute([$id]);
+
+        // 3. Dọn sạch deal nếu có thuộc về liên hệ này
+        $stDeals = $this->db->prepare("SELECT id FROM deals WHERE contact_id = ? AND tenant_id = ?");
+        $stDeals->execute([$id, $auth['tenant_id']]);
+        $dealIds = $stDeals->fetchAll(PDO::FETCH_COLUMN);
+        if (!empty($dealIds)) {
+            $inDeals = implode(',', array_map('intval', $dealIds));
+            $this->db->query("DELETE FROM activities WHERE related_type = 'deal' AND related_id IN ($inDeals)");
+            $this->db->query("DELETE FROM deals WHERE id IN ($inDeals)");
+        }
+
+        // 4. Chỉ dọn sạch lead marketing/thủ công nếu khách hàng KHÔNG CÒN hồ sơ liên kết nào khác
+        if (!$hasRemainingSiblings && $isSelfEntered) {
             $phones = array_filter([$cRow['phone'] ?? null, $cRow['mobile'] ?? null]);
             if (!empty($phones)) {
                 require_once __DIR__ . '/../webhook_logic.php';
@@ -1782,29 +1929,32 @@ class ContactController {
                     }
                 }
             }
-
-            // 5. Xóa vĩnh viễn khách hàng tự nhập khỏi database
-            $delStmt = $this->db->prepare("DELETE FROM contacts WHERE id = ? AND tenant_id = ?");
-            $delStmt->execute([$id, $auth['tenant_id']]);
-
-            if (function_exists('logActivity')) {
-                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'contact', $id, json_encode(['id' => $id, 'self_entered' => true]));
-            }
-            respond(200, null, 'Đã xóa liên hệ và làm sạch toàn bộ nhật ký liên quan');
-        } else {
-            // Đối với lead hệ thống / marketing: soft-delete contact và ẩn/soft-delete nhật ký để không hiển thị rác
-            $sql = "UPDATE contacts SET deleted_at=NOW() WHERE id=? AND tenant_id=?";
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([$id, $auth['tenant_id']]);
-            
-            $delAct = $this->db->prepare("UPDATE activities SET deleted_at=NOW() WHERE (contact_id = ? OR (related_type = 'contact' AND related_id = ?)) AND deleted_at IS NULL");
-            $delAct->execute([$id, $id]);
-
-            if (function_exists('logActivity')) {
-                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'contact', $id, json_encode(['id' => $id, 'self_entered' => false]));
-            }
-            respond(200, null, 'Đã xóa liên hệ (vào thùng rác)');
         }
+
+        // 5. Luôn soft-delete hồ sơ liên hệ (để có thể khôi phục trong thùng rác và an toàn tuyệt đối)
+        $delStmt = $this->db->prepare("UPDATE contacts SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?");
+        $delStmt->execute([$id, $auth['tenant_id']]);
+
+        // Cập nhật trạng thái công khai của person sau khi contact đã bị xóa
+        $this->restorePersonPublicStatus($id, $auth['tenant_id']);
+
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'DELETE', 'contact', $id, json_encode([
+                'id' => $id, 
+                'self_entered' => $isSelfEntered,
+                'has_remaining_profiles' => $hasRemainingSiblings,
+                'program' => $cRow['program'] ?? ''
+            ]));
+        }
+
+        $msg = $hasRemainingSiblings 
+            ? 'Đã xóa bản nhân bản của khách hàng thành công. Các hồ sơ khác của khách hàng vẫn được giữ nguyên.' 
+            : 'Đã xóa liên hệ thành công (chuyển vào thùng rác).';
+            
+        respond(200, [
+            'has_remaining' => $hasRemainingSiblings, 
+            'remaining_id' => $remainingSiblingIds[0] ?? null
+        ], $msg);
     }
 
     public function bulkDelete(array $auth): void {
@@ -2406,22 +2556,31 @@ class ContactController {
         }
 
         // 2. Xác định Stage của pipeline và slug tương ứng
-        $stageId = !empty($b['stage_id']) ? (int)$b['stage_id'] : null;
-        $targetStageName = '';
-        if (!$stageId) {
+        $stageInput = !empty($b['stage_id']) ? $b['stage_id'] : (!empty($b['stage_slug']) ? $b['stage_slug'] : (!empty($b['stage']) ? $b['stage'] : null));
+        $stgRow = null;
+
+        if (!empty($stageInput)) {
+            if (is_numeric($stageInput)) {
+                $stmtSlug = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
+                $stmtSlug->execute([(int)$stageInput, $auth['tenant_id']]);
+                $stgRow = $stmtSlug->fetch(PDO::FETCH_ASSOC);
+            }
+            if (!$stgRow && is_string($stageInput)) {
+                $stmtSlug = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE system_slug = ? AND tenant_id = ? LIMIT 1");
+                $stmtSlug->execute([trim((string)$stageInput), $auth['tenant_id']]);
+                $stgRow = $stmtSlug->fetch(PDO::FETCH_ASSOC);
+            }
+        }
+
+        if (!$stgRow) {
             $s = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC LIMIT 1");
             $s->execute([$auth['tenant_id']]);
-            $stageRow = $s->fetch(PDO::FETCH_ASSOC);
-            $stageId = (int)($stageRow['id'] ?? 1);
-            $pipelineStatus = $stageRow['system_slug'] ?? 'new_lead';
-            $targetStageName = $stageRow['name'] ?? '';
-        } else {
-            $stmtSlug = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
-            $stmtSlug->execute([$stageId, $auth['tenant_id']]);
-            $stgRow = $stmtSlug->fetch(PDO::FETCH_ASSOC);
-            $pipelineStatus = $stgRow['system_slug'] ?? 'new_lead';
-            $targetStageName = $stgRow['name'] ?? '';
+            $stgRow = $s->fetch(PDO::FETCH_ASSOC);
         }
+
+        $stageId = (int)($stgRow['id'] ?? 31);
+        $pipelineStatus = $stgRow['system_slug'] ?? 'new_lead';
+        $targetStageName = $stgRow['name'] ?? '';
 
         // 2b. Xác định status phù hợp với pipeline status (học viên nếu enrolled/hoc_vien)
         $contactStatus = 'lead';

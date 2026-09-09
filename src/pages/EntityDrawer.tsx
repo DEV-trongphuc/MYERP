@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/authStore';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { createPortal } from 'react-dom';
 import styles from './EntityDrawer.module.css';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 interface EntityDrawerProps {
   isOpen: boolean;
@@ -170,12 +171,13 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
                           </div>
                           <div className="form-group">
                             <label className="form-label">Ngày sinh</label>
-                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                              <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                                <Calendar size={16} />
-                              </div>
-                              <input className="form-input" type="date" style={{ paddingLeft: '2.5rem', borderRadius: '10px', height: '42px' }} value={formData?.birthday || ''} onChange={e => setFormData((prev: any) => ({ ...prev, birthday: e.target.value }))} />
-                            </div>
+                            <VietnameseDateInput 
+                              value={formData?.birthday || ''} 
+                              onChange={val => setFormData((prev: any) => ({ ...prev, birthday: val }))}
+                              hasLeftIcon={true}
+                              inputStyle={{ height: '42px', borderRadius: '10px' }}
+                              placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                            />
                           </div>
                         </div>
 

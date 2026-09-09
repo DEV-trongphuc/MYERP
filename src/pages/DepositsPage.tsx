@@ -657,9 +657,16 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
         
         if (createdDepositId && createdMilestones.length > 0 && depositUncFile) {
           try {
-            const compressedFile = await compressToWebP(depositUncFile);
+            let fileToUpload: File = depositUncFile;
+            if (depositUncFile.type.startsWith('image/')) {
+              try {
+                fileToUpload = await compressToWebP(depositUncFile);
+              } catch (cErr) {
+                fileToUpload = depositUncFile;
+              }
+            }
             const formDataUpload = new FormData();
-            formDataUpload.append('file', compressedFile);
+            formDataUpload.append('file', fileToUpload);
             const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
             const uploadUrl = `${import.meta.env.VITE_API_URL || '/backend'}/api.php?action=deposits/${createdDepositId}/milestones/${createdMilestones[0].id}/unc&token=${token}`;
             
@@ -717,9 +724,16 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     const file = e.target.files[0];
 
     try {
-      const compressedFile = await compressToWebP(file);
+      let fileToUpload: File = file;
+      if (file.type.startsWith('image/')) {
+        try {
+          fileToUpload = await compressToWebP(file);
+        } catch (cErr) {
+          fileToUpload = file;
+        }
+      }
       const formData = new FormData();
-      formData.append('file', compressedFile);
+      formData.append('file', fileToUpload);
       const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
       const url = `${import.meta.env.VITE_API_URL || '/backend'}/api.php?action=deposits/${depositId}/milestones/${milestoneId}/unc&token=${token}`;
 
@@ -862,9 +876,16 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
     const file = e.target.files[0];
 
     try {
-      const compressedFile = await compressToWebP(file);
+      let fileToUpload: File = file;
+      if (file.type.startsWith('image/')) {
+        try {
+          fileToUpload = await compressToWebP(file);
+        } catch (cErr) {
+          fileToUpload = file;
+        }
+      }
       const formData = new FormData();
-      formData.append('file', compressedFile);
+      formData.append('file', fileToUpload);
       const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
       const url = `${import.meta.env.VITE_API_URL || '/backend'}/api.php?action=upload&token=${token}`;
 

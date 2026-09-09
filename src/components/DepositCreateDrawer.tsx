@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search } from 'lucide-react';
+import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText } from 'lucide-react';
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
@@ -1128,16 +1128,24 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                         
                         <PasteDropzoneArea
                           compact={true}
-                          placeholder="Chọn/kéo thả hoặc Ctrl+V để dán ảnh UNC"
-                          subtext="Nén WEBP tự động (Max 5MB)"
+                          placeholder="Chọn/kéo thả hoặc Ctrl+V để dán ảnh UNC / tệp hóa đơn"
+                          subtext="Hỗ trợ tải lên tất cả các tệp (PDF, Word, Excel, Ảnh...)"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*"
                           onConfirmUpload={async (item) => {
                             if (item.file) {
                               setUploadingDepositProof(true);
                               try {
-                                const webpBlob = await compressToWebP(item.file);
-                                const compFile = new File([webpBlob], 'unc_proof.webp', { type: 'image/webp' });
+                                let fileToUpload: File = item.file;
+                                if (item.file.type.startsWith('image/')) {
+                                  try {
+                                    const webpBlob = await compressToWebP(item.file);
+                                    fileToUpload = new File([webpBlob], 'unc_proof.webp', { type: 'image/webp' });
+                                  } catch (cErr) {
+                                    fileToUpload = item.file;
+                                  }
+                                }
                                 const fd = new FormData();
-                                fd.append('file', compFile);
+                                fd.append('file', fileToUpload);
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('Ideas_token') || '';
                                 const url = `${import.meta.env.VITE_API_URL || '/backend'}/api.php?action=upload&token=${token}`;
                                 
@@ -1152,12 +1160,12 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                                 const res = await response.json();
                                 if (res.success && res.data?.url) {
                                   setDepositProofImgUrl(res.data.url);
-                                  addToast('Tải ảnh UNC thành công!', 'success');
+                                  addToast('Tải chứng từ UNC thành công!', 'success');
                                 } else {
-                                  addToast(res.message || 'Lỗi nạp ảnh UNC', 'error');
+                                  addToast(res.message || 'Lỗi nạp tệp UNC', 'error');
                                 }
                               } catch (e: any) {
-                                addToast('Lỗi nạp ảnh UNC: ' + e.message, 'error');
+                                addToast('Lỗi nạp tệp UNC: ' + e.message, 'error');
                               } finally {
                                 setUploadingDepositProof(false);
                               }
@@ -1166,16 +1174,28 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                         />
 
                         {depositProofImgUrl && (
-                          <div style={{ marginTop: '8px', position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-                            <img
-                              src={depositProofImgUrl.startsWith('http') ? depositProofImgUrl : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${depositProofImgUrl}`}
-                              alt="UNC"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
+                          <div style={{ marginTop: '8px', position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-secondary)' }}>
+                            {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(depositProofImgUrl) ? (
+                              <img
+                                src={depositProofImgUrl.startsWith('http') ? depositProofImgUrl : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${depositProofImgUrl}`}
+                                alt="UNC"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <a
+                                href={depositProofImgUrl.startsWith('http') ? depositProofImgUrl : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${depositProofImgUrl}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', color: 'var(--color-primary)' }}
+                                title={depositProofImgUrl.split('/').pop()}
+                              >
+                                <FileText size={24} />
+                              </a>
+                            )}
                             <button
                               type="button"
                               onClick={() => setDepositProofImgUrl('')}
-                              style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2 }}
                             >
                               <X size={12} />
                             </button>

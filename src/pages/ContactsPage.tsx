@@ -838,8 +838,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   const [total, setTotal] = useState(0);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const isSearching = Boolean(debouncedSearch);
 
@@ -943,7 +943,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       setTotal(0);
       addToast('Không thể lấy danh sách liên hệ', 'error');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -3614,7 +3614,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             isOpen={!!profileContact}
             onClose={() => {
               setProfileContact(null);
-              fetchData();
+              fetchData(true);
             }}
             contact={profileContact}
             onUpdate={updated => {

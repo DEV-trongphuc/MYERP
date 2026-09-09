@@ -5,7 +5,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { toast } from 'react-hot-toast';
-import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, List, ListOrdered, Trash2 } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2 } from 'lucide-react';
 
 interface User {
   id: number;
@@ -45,13 +45,14 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; bottom?: number; upwards?: boolean } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top?: number; left: number; bottom?: number; upwards?: boolean } | null>(null);
   const [isEmpty, setIsEmpty] = useState(!value);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [savedRange, setSavedRange] = useState<Range | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef(false);
   const mentionRangeRef = useRef<{ node: Node; startOffset: number; endOffset: number } | null>(null);
 
@@ -88,15 +89,29 @@ export const MentionInput: React.FC<MentionInputProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (showDropdown && editorRef.current) {
-        const wrapper = editorRef.current.parentElement;
-        if (wrapper && !wrapper.contains(e.target as Node)) {
+      if (showDropdown) {
+        const target = e.target as Node;
+        const clickedInsideEditor = editorRef.current && editorRef.current.contains(target);
+        const clickedInsideDropdown = dropdownRef.current && dropdownRef.current.contains(target);
+        if (!clickedInsideEditor && !clickedInsideDropdown) {
           setShowDropdown(false);
         }
       }
     };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handleScroll = (e: Event) => {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
+        return;
+      }
+      setShowDropdown(false);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
   }, [showDropdown]);
 
   useEffect(() => {
@@ -157,16 +172,28 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           
           try {
             const rect = range.getBoundingClientRect();
-            const wrapper = editorRef.current?.closest('.rich-text-editor-wrapper');
-            if (rect && wrapper) {
-              const wrapperRect = wrapper.getBoundingClientRect();
-              const spaceBelow = window.innerHeight - rect.bottom;
-              const shouldOpenUpwards = spaceBelow < 220;
-              
+            const fallbackRect = editorRef.current?.getBoundingClientRect();
+            const useRect = (rect && rect.width > 0 && rect.bottom > 0) ? rect : fallbackRect;
+            
+            if (useRect) {
+              const viewportWidth = window.innerWidth;
+              const viewportHeight = window.innerHeight;
+              const dropdownWidth = 280;
+              const dropdownHeight = 260;
+
+              const spaceBelow = viewportHeight - useRect.bottom;
+              const shouldOpenUpwards = spaceBelow < dropdownHeight && useRect.top > dropdownHeight;
+
+              let left = useRect.left;
+              if (left + dropdownWidth > viewportWidth - 16) {
+                left = Math.max(16, viewportWidth - dropdownWidth - 16);
+              }
+              if (left < 16) left = 16;
+
               setDropdownPos({
-                top: rect.bottom - wrapperRect.top,
-                bottom: wrapperRect.bottom - rect.top + 4,
-                left: rect.left - wrapperRect.left,
+                top: shouldOpenUpwards ? undefined : Math.min(useRect.bottom + 6, viewportHeight - dropdownHeight),
+                bottom: shouldOpenUpwards ? Math.max(12, viewportHeight - useRect.top + 6) : undefined,
+                left: left,
                 upwards: shouldOpenUpwards
               });
             }
@@ -204,6 +231,8 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     mentionSpan.style.gap = '4px';
     mentionSpan.style.verticalAlign = 'middle';
     mentionSpan.style.userSelect = 'none';
+    mentionSpan.style.lineHeight = '1.2';
+    mentionSpan.style.maxHeight = '24px';
 
     let resolvedAvatarUrl = user.avatar_url || user.avatar || '';
     if (resolvedAvatarUrl && resolvedAvatarUrl.startsWith('uploads/')) {
@@ -220,10 +249,20 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     avatar.src = resolvedAvatarUrl;
     avatar.setAttribute('data-mention-avatar', 'true');
     avatar.className = 'mention-avatar';
-    avatar.style.width = '14px';
-    avatar.style.height = '14px';
+    avatar.style.width = '16px';
+    avatar.style.height = '16px';
+    avatar.style.minWidth = '16px';
+    avatar.style.minHeight = '16px';
+    avatar.style.maxWidth = '16px';
+    avatar.style.maxHeight = '16px';
     avatar.style.borderRadius = '50%';
     avatar.style.objectFit = 'cover';
+    avatar.style.display = 'inline-block';
+    avatar.style.verticalAlign = 'middle';
+    avatar.style.margin = '0 4px 0 0';
+    avatar.style.padding = '0';
+    avatar.style.border = 'none';
+    avatar.style.boxShadow = 'none';
     mentionSpan.appendChild(avatar);
 
     const textNode = document.createElement('span');
@@ -343,103 +382,153 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     );
   });
 
-  const handleUploadImage = async (file: File, range: Range | null) => {
-    const toastId = toast.loading('Đang tải ảnh lên...');
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-      const res = await api.post('/upload', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      const fileUrl = res.data?.data?.url || res.data?.url;
-      if (res.data && res.data.success && fileUrl) {
-        toast.success('Tải ảnh lên thành công!', { id: toastId });
-        
-        const apiBase = import.meta.env.VITE_API_URL || '/backend';
-        let resolvedUrl = fileUrl;
-        if (fileUrl && fileUrl.startsWith('uploads/')) {
-          resolvedUrl = `${apiBase}/${fileUrl}`;
-        } else if (fileUrl && fileUrl.startsWith('storage/uploads/')) {
-          resolvedUrl = `${apiBase}/${fileUrl.replace('storage/uploads/', 'uploads/')}`;
-        }
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
-        // Create image node directly
-        const img = document.createElement('img');
-        img.src = resolvedUrl;
-        img.alt = 'Uploaded Image';
-        img.style.maxWidth = '100%';
-        img.style.borderRadius = '8px';
-        img.style.margin = '8px 0';
-        img.style.display = 'block';
+  const getFileIcon = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    if (['pdf'].includes(ext)) return '📕';
+    if (['doc', 'docx'].includes(ext)) return '📘';
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
+    if (['ppt', 'pptx'].includes(ext)) return '📙';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return '📦';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return '🖼️';
+    return '📄';
+  };
 
-        if (editorRef.current) {
-          editorRef.current.focus();
-          const selection = window.getSelection();
-          if (selection) {
-            selection.removeAllRanges();
-            if (range) {
-              selection.addRange(range);
-            }
+  const handleUploadFiles = async (files: FileList | File[], initialRange: Range | null) => {
+    const fileList = Array.from(files);
+    if (fileList.length === 0) return;
+
+    const toastId = toast.loading(`Đang tải ${fileList.length} tệp lên...`);
+    let currentRange = initialRange;
+    let successCount = 0;
+
+    for (const file of fileList) {
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res = await api.post('/upload', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        const fileUrl = res.data?.data?.url || res.data?.url;
+        if (res.data && res.data.success && fileUrl) {
+          successCount++;
+          const apiBase = import.meta.env.VITE_API_URL || '/backend';
+          let resolvedUrl = fileUrl;
+          if (fileUrl && fileUrl.startsWith('uploads/')) {
+            resolvedUrl = `${apiBase}/${fileUrl}`;
+          } else if (fileUrl && fileUrl.startsWith('storage/uploads/')) {
+            resolvedUrl = `${apiBase}/${fileUrl.replace('storage/uploads/', 'uploads/')}`;
           }
 
-          if (selection && selection.rangeCount > 0) {
-            const r = selection.getRangeAt(0);
-            r.deleteContents();
-            r.insertNode(img);
-            r.setStartAfter(img);
-            r.setEndAfter(img);
-            selection.removeAllRanges();
-            selection.addRange(r);
+          let nodeToInsert: HTMLElement;
+          const isImage = file.type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name);
+          if (isImage) {
+            const img = document.createElement('img');
+            img.src = resolvedUrl;
+            img.alt = file.name;
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '220px';
+            img.style.width = 'auto';
+            img.style.height = 'auto';
+            img.style.objectFit = 'contain';
+            img.style.borderRadius = '8px';
+            img.style.margin = '6px 0';
+            img.style.display = 'block';
+            nodeToInsert = img;
           } else {
-            editorRef.current.appendChild(img);
+            const chip = document.createElement('a');
+            chip.href = resolvedUrl;
+            chip.target = '_blank';
+            chip.rel = 'noopener noreferrer';
+            chip.className = 'comment-attachment-chip';
+            chip.contentEditable = 'false';
+            chip.setAttribute('data-file-url', resolvedUrl);
+            chip.setAttribute('data-file-name', file.name);
+            chip.innerHTML = `<span style="font-size: 1rem;">${getFileIcon(file.name)}</span><span>${file.name}</span> <span style="font-size: 0.7rem; opacity: 0.7;">(${formatFileSize(file.size)})</span>`;
+            nodeToInsert = chip;
           }
 
-          const html = editorRef.current.innerHTML;
-          onChange({ target: { value: html } } as any);
-          checkEmpty();
+          if (editorRef.current) {
+            editorRef.current.focus();
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              if (currentRange) {
+                selection.addRange(currentRange);
+              }
+            }
+
+            if (selection && selection.rangeCount > 0) {
+              const r = selection.getRangeAt(0);
+              r.deleteContents();
+              r.insertNode(nodeToInsert);
+              const space = document.createTextNode(' ');
+              r.insertNode(space);
+              r.setStartAfter(space);
+              r.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(r);
+              currentRange = r.cloneRange();
+            } else {
+              editorRef.current.appendChild(nodeToInsert);
+              editorRef.current.appendChild(document.createTextNode(' '));
+            }
+
+            const html = editorRef.current.innerHTML;
+            onChange({ target: { value: html } } as any);
+            checkEmpty();
+          }
         }
-      } else {
-        toast.error(res.data?.message || 'Lỗi tải ảnh lên', { id: toastId });
+      } catch (err: any) {
+        console.error('Upload error for file ' + file.name, err);
       }
-    } catch (err: any) {
-      toast.error('Lỗi kết nối tải ảnh: ' + err.message, { id: toastId });
+    }
+
+    if (successCount > 0) {
+      toast.success(`Đã tải lên ${successCount}/${fileList.length} tệp thành công!`, { id: toastId });
+    } else {
+      toast.error('Lỗi khi tải tệp lên', { id: toastId });
     }
   };
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
     const items = e.clipboardData?.items;
-    if (!items) return;
+    const files = e.clipboardData?.files;
 
-    let imageFile: File | null = null;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        imageFile = items[i].getAsFile();
-        break;
-      }
-    }
-
-    if (imageFile) {
+    if (files && files.length > 0) {
       e.preventDefault();
       let savedRange: Range | null = null;
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
         savedRange = sel.getRangeAt(0).cloneRange();
       }
-      await handleUploadImage(imageFile, savedRange);
-    } else {
-      // Allow parent onFilePaste or onImagePaste handlers if needed
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file') {
-          const file = items[i].getAsFile();
-          if (file) {
-            if (onFilePaste) {
-              e.preventDefault();
-              onFilePaste(file);
-              return;
-            }
-          }
-        }
+      await handleUploadFiles(files, savedRange);
+      return;
+    }
+
+    if (!items) return;
+    const pastedFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file') {
+        const file = items[i].getAsFile();
+        if (file) pastedFiles.push(file);
       }
+    }
+
+    if (pastedFiles.length > 0) {
+      e.preventDefault();
+      let savedRange: Range | null = null;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        savedRange = sel.getRangeAt(0).cloneRange();
+      }
+      await handleUploadFiles(pastedFiles, savedRange);
     }
   };
 
@@ -480,7 +569,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     setShowLinkModal(false);
   };
 
-  const triggerImageUpload = () => {
+  const triggerFileUpload = (accept: string = '*/*') => {
     let savedRange: Range | null = null;
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
@@ -489,12 +578,12 @@ export const MentionInput: React.FC<MentionInputProps> = ({
 
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.multiple = true;
+    input.accept = accept;
     input.onchange = async (e) => {
       const target = e.target as HTMLInputElement;
-      const file = target.files?.[0];
-      if (file) {
-        await handleUploadImage(file, savedRange);
+      if (target.files && target.files.length > 0) {
+        await handleUploadFiles(target.files, savedRange);
       }
     };
     input.click();
@@ -545,6 +634,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     flex: 1,
     wordBreak: 'break-word',
     textAlign: 'left',
+    maxHeight: editorStyleProps.maxHeight || '240px',
     ...editorStyleProps,
     minHeight: finalEditorMinHeight // Must be after ...editorStyleProps to override!
   };
@@ -562,10 +652,11 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     border: '1px solid var(--color-border)',
     borderRadius: '10px',
     background: 'var(--color-surface)',
-    overflow: 'visible',
+    overflow: 'hidden',
     position: 'relative',
     width: '100%',
     padding: '0px', // Force override any padding from className
+    maxHeight: wrapperStyleProps.maxHeight || '320px',
     ...wrapperStyleProps,
     minHeight: finalWrapperMinHeight // Must be after ...wrapperStyleProps to override!
   };
@@ -627,12 +718,22 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={triggerImageUpload}
+          onClick={() => triggerFileUpload('*/*')}
           style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
-          title="Tải ảnh lên"
+          title="Đính kèm tệp / tài liệu (PDF, Word, Excel, ZIP...)"
+        >
+          <Paperclip size={13} />
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => triggerFileUpload('image/*')}
+          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text)' }}
+          title="Chèn hình ảnh"
         >
           <ImageIcon size={13} />
         </button>
+
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
@@ -688,99 +789,113 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         />
       </div>
 
-      {/* Mention Dropdown */}
-      <AnimatePresence>
-        {showDropdown && (
-          <motion.div
-            initial={{ opacity: 0, y: dropdownPos?.upwards ? 5 : -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: dropdownPos?.upwards ? 5 : -5 }}
-            style={{
-              position: 'absolute',
-              top: dropdownPos 
-                ? (dropdownPos.upwards ? undefined : dropdownPos.top + 16) 
-                : '100%',
-              bottom: dropdownPos && dropdownPos.upwards ? dropdownPos.bottom : undefined,
-              left: dropdownPos ? Math.max(0, Math.min(dropdownPos.left, (editorRef.current?.clientWidth || 300) - 260)) : 0,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-lg)',
-              maxHeight: '180px',
-              overflowY: 'auto',
-              zIndex: 100,
-              width: '260px',
-              marginBottom: '4px',
-              display: 'flex',
-              flexDirection: 'column'
-            }}
-          >
-            {/* Search input header */}
-            <div 
-              style={{ 
-                padding: '6px 8px', 
-                borderBottom: '1px solid var(--color-border-light)',
-                background: 'var(--color-bg-light)',
-                position: 'sticky',
-                top: 0,
-                zIndex: 10
+      {/* Mention Dropdown Portal */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showDropdown && dropdownPos && (
+            <motion.div
+              ref={dropdownRef}
+              initial={{ opacity: 0, y: dropdownPos.upwards ? 6 : -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: dropdownPos.upwards ? 6 : -6, scale: 0.98 }}
+              transition={{ duration: 0.12 }}
+              style={{
+                position: 'fixed',
+                top: dropdownPos.top !== undefined ? `${dropdownPos.top}px` : undefined,
+                bottom: dropdownPos.bottom !== undefined ? `${dropdownPos.bottom}px` : undefined,
+                left: `${dropdownPos.left}px`,
+                background: 'var(--color-surface, #ffffff)',
+                border: '1px solid var(--color-border, #cbd5e1)',
+                borderRadius: '10px',
+                boxShadow: '0 12px 36px rgba(0, 0, 0, 0.22), 0 4px 12px rgba(0, 0, 0, 0.1)',
+                maxHeight: '260px',
+                width: '280px',
+                zIndex: 9999999,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
               }}
-              onClick={e => e.stopPropagation()}
             >
-              <input
-                type="text"
-                placeholder="Gõ để tìm tên hoặc vai trò..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value.toLowerCase())}
-                style={{
-                  width: '100%',
-                  padding: '5px 8px',
-                  fontSize: '0.75rem',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-sm)',
-                  outline: 'none',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)'
+              {/* Search input header */}
+              <div 
+                style={{ 
+                  padding: '8px 10px', 
+                  borderBottom: '1px solid var(--color-border-light, #e2e8f0)',
+                  background: 'var(--color-bg-light, #f8fafc)',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 10
                 }}
-              />
-            </div>
+                onClick={e => e.stopPropagation()}
+              >
+                <input
+                  type="text"
+                  placeholder="Gõ để tìm tên hoặc vai trò..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value.toLowerCase())}
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    fontSize: '0.8rem',
+                    border: '1px solid var(--color-border, #cbd5e1)',
+                    borderRadius: '6px',
+                    outline: 'none',
+                    background: 'var(--color-surface, #ffffff)',
+                    color: 'var(--color-text, #1e293b)'
+                  }}
+                />
+              </div>
 
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {filteredUsers.length === 0 ? (
-                <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
-                  Không tìm thấy kết quả
-                </div>
-              ) : (
-                filteredUsers.map((u, idx) => {
-                  const fullName = u.full_name || 'Không tên';
-                  const roleName = u.role || 'user';
-                  return (
-                    <div
-                      key={u.id}
-                      onClick={() => handleSelectUser(u)}
-                      style={{
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid var(--color-border-light)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        color: 'var(--color-text)',
-                        background: idx === selectedIndex ? 'var(--color-bg)' : 'transparent'
-                      }}
-                      onMouseEnter={() => setSelectedIndex(idx)}
-                    >
-                      <Avatar name={fullName} src={u.avatar_url || u.avatar} size={20} />
-                      <div style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{fullName}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-light)', padding: '2px 6px', borderRadius: '4px' }}>{getRoleLabel(roleName)}</div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: '200px' }}>
+                {filteredUsers.length === 0 ? (
+                  <div style={{ padding: '16px', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                    Không tìm thấy kết quả
+                  </div>
+                ) : (
+                  filteredUsers.map((u, idx) => {
+                    const fullName = u.full_name || 'Không tên';
+                    const roleName = u.role || 'user';
+                    return (
+                      <div
+                        key={u.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSelectUser(u);
+                        }}
+                        onClick={() => handleSelectUser(u)}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid var(--color-border-light, #f1f5f9)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          color: 'var(--color-text, #1e293b)',
+                          background: idx === selectedIndex ? 'var(--color-bg, #f1f5f9)' : 'transparent',
+                          transition: 'background 0.1s ease'
+                        }}
+                        onMouseEnter={() => setSelectedIndex(idx)}
+                      >
+                        <Avatar name={fullName} src={u.avatar_url || u.avatar} size={22} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {fullName}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', background: 'var(--color-bg-light, #f1f5f9)', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                          {getRoleLabel(roleName)}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       <AnimatePresence>
         {showLinkModal && (

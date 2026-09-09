@@ -1706,8 +1706,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   // Comment Attachments Upload
   const addLocalTaskCommentAttachment = (file: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(t('Dung lượng tệp đính kèm không được vượt quá 10MB'));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(t('Dung lượng tệp đính kèm không được vượt quá 50MB'));
       return;
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
@@ -1798,8 +1798,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   // Subtask Comment Attachments Upload Helpers
   const addLocalSubtaskCommentAttachment = (file: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error(t('Dung lượng tệp đính kèm không được vượt quá 10MB'));
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(t('Dung lượng tệp đính kèm không được vượt quá 50MB'));
       return;
     }
     const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
@@ -6340,8 +6340,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              if (file.size > 5 * 1024 * 1024) {
-                                toast.error('Dung lượng tệp đính kèm không được vượt quá 5MB');
+                              if (file.size > 50 * 1024 * 1024) {
+                                toast.error('Dung lượng tệp đính kèm không được vượt quá 50MB');
                                 return;
                               }
                               const previewUrl = URL.createObjectURL(file);
