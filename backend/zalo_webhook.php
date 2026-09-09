@@ -46,17 +46,48 @@ if (!empty($secretToken)) {
     }
 }
 
+// Hỗ trợ kiểm tra kết nối từ Zalo Developer / Ping Check (GET request hoặc challenge)
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (isset($_GET['challenge'])) {
+        echo $_GET['challenge'];
+        exit;
+    }
+    if (isset($_GET['hub_challenge'])) {
+        echo $_GET['hub_challenge'];
+        exit;
+    }
+    http_response_code(200);
+    echo json_encode(["status" => "ok", "message" => "Zalo Webhook Endpoint is operational"]);
+    exit;
+}
+
+// Nếu payload rỗng hoặc ping test kiểm tra kết nối từ Zalo Bot
+if (empty(trim((string)$rawBody)) || trim((string)$rawBody) === '{}') {
+    http_response_code(200);
+    echo json_encode(["status" => "ok", "message" => "Webhook connection verified successfully"]);
+    exit;
+}
+
 $data = json_decode($rawBody, true);
 
-if (!$data || !isset($data['event_name'])) {
-    http_response_code(400);
-    echo json_encode(["message" => "Invalid payload"]);
+if (isset($data['test']) && $data['test'] == 1) {
+    http_response_code(200);
+    echo json_encode(["status" => "ok", "message" => "Webhook test connection OK"]);
+    exit;
+}
+
+$eventName = $data['event_name'] ?? $data['event'] ?? $data['type'] ?? '';
+if (empty($eventName) && isset($data['message'])) {
+    $eventName = 'user_send_text';
+}
+
+if (!$data || empty($eventName)) {
+    http_response_code(200);
+    echo json_encode(["status" => "ok", "message" => "Webhook received"]);
     exit;
 }
 // Lấy Bot Token một lần duy nhất từ DB
 $botToken = get_system_setting($conn, 'zalo_bot_token');
-
-$eventName = $data['event_name'] ?? '';
 
 if ($eventName === 'user_send_text' || $eventName === 'message.text.received') {
     // Hỗ trợ cả 2 định dạng (Zalo OA chuẩn và Zalo Mini App)
