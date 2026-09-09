@@ -385,13 +385,17 @@ class HRMController {
             respond(404, null, 'Yêu cầu nghỉ phép không tồn tại', false);
         }
 
-        $isCreator = ($auth['user_id'] == $leaveRow['user_id']);
-        $isApprover1 = ($auth['user_id'] == $leaveRow['approver_id']);
-        $isApprover2 = ($auth['user_id'] == $leaveRow['approver_id_2']);
+        $isCreator = ((int)$auth['user_id'] === (int)$leaveRow['user_id']);
+        if ($isCreator) {
+            respond(403, null, 'Người tạo đơn không được tự phê duyệt đề xuất của chính mình', false);
+        }
+
+        $isApprover1 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id']);
+        $isApprover2 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id_2']);
         $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
         $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
 
-        if (!$isApprover1 && !$isApprover2 && !$isPrivileged && !$isCreator) {
+        if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
         }
 
@@ -843,8 +847,13 @@ class HRMController {
             respond(404, null, 'Yêu cầu tạm ứng không tồn tại', false);
         }
 
-        $isApprover1 = ($auth['user_id'] == $advRow['approver_id']);
-        $isApprover2 = ($auth['user_id'] == $advRow['approver_id_2']);
+        $isCreator = ((int)$auth['user_id'] === (int)$advRow['user_id']);
+        if ($isCreator) {
+            respond(403, null, 'Người tạo đề xuất không được tự phê duyệt đề xuất của chính mình', false);
+        }
+
+        $isApprover1 = ((int)$auth['user_id'] === (int)$advRow['approver_id']);
+        $isApprover2 = ((int)$auth['user_id'] === (int)$advRow['approver_id_2']);
         $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true);
 
         if (!$isApprover1 && !$isApprover2 && !$isSuperAdmin) {

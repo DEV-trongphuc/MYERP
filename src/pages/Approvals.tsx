@@ -2786,13 +2786,20 @@ export default function Approvals() {
                     const userId = Number(user?.id || 0);
                     const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
                     
-                    let canApproveThisItem = isSuperAdmin;
-                    if (!canApproveThisItem) {
-                      const targetApproverId = (item as any)?.approver_id || (item as any)?.manager_id;
-                      if (targetApproverId && Number(targetApproverId) === userId) {
+                    const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
+                    const isCreator = creatorId > 0 && creatorId === userId;
+
+                    let canApproveThisItem = false;
+                    if (!isCreator) {
+                      if (isSuperAdmin) {
                         canApproveThisItem = true;
-                      } else if (!targetApproverId && role === 'hr') {
-                        canApproveThisItem = true;
+                      } else {
+                        const targetApproverId = (item as any)?.approver_id || (item as any)?.manager_id;
+                        if (targetApproverId && Number(targetApproverId) === userId) {
+                          canApproveThisItem = true;
+                        } else if (!targetApproverId && role === 'hr') {
+                          canApproveThisItem = true;
+                        }
                       }
                     }
 
@@ -7024,13 +7031,19 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const isMyTurnToApprove = () => {
     if (loading) return false;
     const overallStatus = (detail?.status || item.status || 'pending').toLowerCase();
-    const isPending = ['pending', 'pending_manager', 'pending_hr'].includes(overallStatus);
+    const isPending = ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(overallStatus);
     if (!isPending) return false;
 
     const role = (user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
     const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
     const isHrAdmin = ['superadmin', 'super_admin', 'admin', 'director', 'hr'].includes(role);
+
+    // CRITICAL SECURITY & BUSINESS RULE: The creator can NEVER approve their own proposal!
+    const creatorId = Number(detail?.user_id || detail?.created_by || item.user_id || (item as any)?.created_by || 0);
+    if (creatorId > 0 && creatorId === userId) {
+      return false;
+    }
 
     if (item.type === 'expense') {
       const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();
@@ -7051,17 +7064,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
 
       if (currentLevel === 1) {
-        if (app1 > 0 && app1 === userId) return true;
-        if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
-        if (Number(item.created_by || (item as any)?.user_id) === userId) return true;
-        return isSuperAdmin;
+        if (app1 > 0) return app1 === userId || isSuperAdmin;
+        return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
-        if (app2 > 0 && app2 === userId) return true;
+        if (app2 > 0) return app2 === userId || isSuperAdmin;
         return isSuperAdmin;
       }
       if (currentLevel === 3) {
-        if (app3 > 0 && app3 === userId) return true;
+        if (app3 > 0) return app3 === userId || isSuperAdmin;
         return isSuperAdmin;
       }
       return false;
@@ -7082,27 +7093,22 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
 
       if (currentLevel === 1) {
-        if (app1 > 0 && app1 === userId) return true;
-        if (app1 === 0 && (role === 'manager' || isSuperAdmin)) return true;
-        if (Number(item.user_id || detail?.user_id) === userId) return true;
-        return isSuperAdmin;
+        if (app1 > 0) return app1 === userId || isSuperAdmin;
+        return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
-        if (app2 > 0 && app2 === userId) return true;
+        if (app2 > 0) return app2 === userId || isSuperAdmin;
         return isSuperAdmin;
       }
       return false;
     }
 
     if (item.type === 'attendance_bulk' || item.type === 'checkin') {
-      const targetApproverId = detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id;
-      if (targetApproverId && Number(targetApproverId) === userId) return true;
-      if (Number(item.user_id || detail?.user_id) === userId) return true;
-      if (targetApproverId && Number(targetApproverId) !== userId) {
-        return isSuperAdmin;
+      const targetApproverId = Number(detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id || 0);
+      if (targetApproverId > 0) {
+        return targetApproverId === userId || isSuperAdmin;
       }
-      if (isHrAdmin) return true;
-      return false;
+      return isHrAdmin;
     }
     
     return isSuperAdmin;

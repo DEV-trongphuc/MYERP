@@ -172,6 +172,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
 
     const role = String(user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
+    if (Number(item.created_by || (item as any)?.user_id) === userId) {
+      return false; // Creator cannot approve their own expense
+    }
     const isSuperAdmin = ['superadmin', 'super_admin', 'admin'].includes(role);
 
     const s1 = String(item.status_level_1 || 'pending').toLowerCase();

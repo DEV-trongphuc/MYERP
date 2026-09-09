@@ -376,6 +376,11 @@ class PurchaseOrderController {
                 respond(404, null, 'Không tìm thấy đơn hàng đang chờ duyệt hoặc đơn hàng đã xử lý', false);
             }
 
+            if ((int)($po['created_by'] ?? 0) === (int)$userId) {
+                $this->db->rollBack();
+                respond(403, null, 'Người tạo đơn mua sắm không được tự phê duyệt đơn của chính mình', false);
+            }
+
             // Determine which level needs to be approved next
             $currentLevel = 0;
             if ($po['status_level_1'] === 'pending') {

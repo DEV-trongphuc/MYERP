@@ -1181,12 +1181,12 @@ class CheckInController {
             }
             $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
-            // Auto approve if approver is the creator
-            $isSelfApproved = ($approverId > 0 && $approverId === (int)$userId);
-            $initialStatus = $isSelfApproved ? 'approved' : 'pending_manager';
-            $approvedBy = $isSelfApproved ? $userId : null;
-            $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
-            $adminNote = $isSelfApproved ? 'Tự động duyệt do người lập kiêm người phê duyệt' : null;
+            // Creator CANNOT self-approve their own request
+            $isSelfApproved = false;
+            $initialStatus = 'pending_manager';
+            $approvedBy = null;
+            $approvedAt = null;
+            $adminNote = null;
 
             // Create bulk request
             $stmt = $this->db->prepare("
@@ -1461,10 +1461,16 @@ class CheckInController {
         // 4. Is team leader of creator
         $isAssignedApprover = ((int)($req['manager_id'] ?? 0) === (int)$auth['user_id']) || ((int)($req['hr_id'] ?? 0) === (int)$auth['user_id']);
         $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
+        if ($isCreator) {
+            respond(403, null, 'Người tạo đề xuất không được tự phê duyệt đề xuất của chính mình', false);
+            return;
+        }
+
+        $isAssignedApprover = ((int)($req['manager_id'] ?? 0) === (int)$auth['user_id']) || ((int)($req['hr_id'] ?? 0) === (int)$auth['user_id']);
         $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
 
         $isTeamLeader = false;
-        if (!$isAssignedApprover && !$isCreator && !$isPrivileged) {
+        if (!$isAssignedApprover && !$isPrivileged) {
             $stmtUserTeam = $this->db->prepare("SELECT team_id FROM users WHERE id = ?");
             $stmtUserTeam->execute([$req['user_id']]);
             $targetUserTeamId = $stmtUserTeam->fetchColumn();
@@ -1478,7 +1484,7 @@ class CheckInController {
             }
         }
 
-        if (!$isAssignedApprover && !$isCreator && !$isPrivileged && !$isTeamLeader) {
+        if (!$isAssignedApprover && !$isPrivileged && !$isTeamLeader) {
             respond(403, null, 'Bạn không có quyền phê duyệt đề xuất này', false);
             return;
         }

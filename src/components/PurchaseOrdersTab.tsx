@@ -264,8 +264,9 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                     let isActiveApprover = false;
                     const curUserId = Number(user?.id);
                     const isAdmin = ['admin', 'superadmin', 'super_admin', 'director'].includes(String(user?.role).toLowerCase());
+                    const isCreator = Number(o.created_by) === curUserId;
                     
-                    if (o.status === 'pending_approval') {
+                    if (o.status === 'pending_approval' && !isCreator) {
                       if (o.status_level_1 === 'pending') {
                         if (Number(o.approver_id) === curUserId || isAdmin) isActiveApprover = true;
                       } else if (o.status_level_1 === 'approved' && o.status_level_2 === 'pending') {

@@ -1335,9 +1335,14 @@ class FinanceController
                           ((int)($expenseRow['approver_id_2'] ?? 0) === (int)$auth['user_id']) || 
                           ((int)($expenseRow['approver_id_3'] ?? 0) === (int)$auth['user_id']);
             $isCreator = ((int)($expenseRow['created_by'] ?? 0) === (int)$auth['user_id']);
+            if ($isCreator) {
+                $this->db->rollBack();
+                respond(403, null, 'Người tạo đề xuất không được tự phê duyệt chi phí của chính mình', false);
+            }
+
             $isPrivileged = in_array($auth['role'], ['admin', 'manager', 'super_admin', 'superadmin', 'director', 'accountant', 'hr', 'sale_admin', 'saleadmin'], true);
 
-            if (!$isAssigned && !$isCreator && !$isPrivileged) {
+            if (!$isAssigned && !$isPrivileged) {
                 $this->db->rollBack();
                 respond(403, null, 'Bạn không có quyền duyệt chi phí này', false);
             }

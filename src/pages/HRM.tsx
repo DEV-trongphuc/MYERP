@@ -138,6 +138,7 @@ export default function HRM() {
   const [showOnlyMyPending, setShowOnlyMyPending] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState<{ type: 'leave' | 'advance', data: any } | null>(null);
   const isMyPendingRequest = (req: any) => {
+    if (Number(req.user_id) === Number(user?.id)) return false;
     const isGlobalAdmin = ['superadmin', 'admin', 'director', 'hr'].includes(user?.role || '');
     const isLevel1Active = req.status_level_1 === 'pending';
     const isLevel2Active = req.status_level_1 === 'approved' && req.status_level_2 === 'pending';
@@ -151,6 +152,13 @@ export default function HRM() {
     const isApproved = req.status === 'approved';
     
     if (isPending) {
+      if (Number(req.user_id) === Number(user?.id)) {
+        return (
+          <span className="badge warning" style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+            {t('Đang chờ duyệt')}
+          </span>
+        );
+      }
       const isLevel1Active = req.status_level_1 === 'pending';
       const isLevel2Active = req.status_level_1 === 'approved' && req.status_level_2 === 'pending';
       
