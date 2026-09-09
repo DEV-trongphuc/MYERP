@@ -218,6 +218,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
     let lastNewLeads: number | null = null;
+    let lastUnreadNotifs: number | null = null;
     let lastMaxContactId: number | null = null;
     let lastMaxLeadId: number | null = null;
 
@@ -246,12 +247,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             const hasNewLeadCount = typeof detail.new_leads === 'number' && lastNewLeads !== null && lastNewLeads !== detail.new_leads;
             const hasNewContact = typeof detail.latest_contact_id === 'number' && lastMaxContactId !== null && lastMaxContactId !== detail.latest_contact_id;
             const hasNewLead = typeof detail.latest_lead_id === 'number' && lastMaxLeadId !== null && lastMaxLeadId !== detail.latest_lead_id;
+            const hasNewNotifs = typeof detail.unread_notifications === 'number' && lastUnreadNotifs !== null && detail.unread_notifications > lastUnreadNotifs;
 
             if (hasNewLeadCount || hasNewContact || hasNewLead || detail.contact_changed || detail.lead_changed) {
               window.dispatchEvent(new Event('contact-updated'));
             }
 
+            if (hasNewNotifs) {
+              window.dispatchEvent(new CustomEvent('notification-trigger'));
+            }
+
             if (typeof detail.new_leads === 'number') lastNewLeads = detail.new_leads;
+            if (typeof detail.unread_notifications === 'number') lastUnreadNotifs = detail.unread_notifications;
             if (typeof detail.latest_contact_id === 'number') lastMaxContactId = detail.latest_contact_id;
             if (typeof detail.latest_lead_id === 'number') lastMaxLeadId = detail.latest_lead_id;
           }
