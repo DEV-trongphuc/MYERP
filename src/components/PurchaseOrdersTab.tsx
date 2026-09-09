@@ -5,7 +5,7 @@ import {
   ShoppingCart, Plus, Search, Filter, Calendar, 
   ChevronRight, ArrowUpRight, CheckCircle2, Clock, XCircle, Loader2,
   Truck, Package, Trash2, PlusCircle, MinusCircle, AlertCircle,
-  DollarSign
+  DollarSign, Building2, Users, User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -14,6 +14,7 @@ import { EmptyCard } from '../components/ui/EmptyCard';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from './ui/Avatar';
+import { resolveTeamLeaderId } from '../utils/teamLeader';
 
 interface Props {
   showModal: boolean;
@@ -36,7 +37,10 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [threshold, setThreshold] = useState<number>(5000000);
+  const [beneficiaryType, setBeneficiaryType] = useState<'supplier' | 'employee'>('supplier');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   
   const [formData, setFormData] = useState({
     supplier_id: '', 
@@ -50,10 +54,15 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
   });
 
   useEffect(() => {
-    if (showModal && defaultSupplierId) {
-      setFormData(prev => ({ ...prev, supplier_id: String(defaultSupplierId) }));
+    if (showModal) {
+      const leaderId = resolveTeamLeaderId(user, users, teams);
+      setFormData(prev => ({
+        ...prev,
+        supplier_id: defaultSupplierId ? String(defaultSupplierId) : prev.supplier_id,
+        approver_id: prev.approver_id || (leaderId ? String(leaderId) : '')
+      }));
     }
-  }, [showModal, defaultSupplierId]);
+  }, [showModal, defaultSupplierId, user, users, teams]);
 
   const fetchOrders = async () => {
     try {
@@ -68,18 +77,29 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
 
   const fetchSuppliersAndProducts = async () => {
     try {
-      const [sRes, pRes, uRes, setRes] = await Promise.all([
+      const [sRes, pRes, uRes, setRes, tRes] = await Promise.all([
         api.get('/suppliers'),
         api.get('/products'),
         api.get('/users?all=1'),
-        api.get('/api.php?action=get_settings')
+        api.get('/api.php?action=get_settings'),
+        api.get('/teams').catch(() => ({ data: [] }))
       ]);
       const sData = sRes.data.data;
       const pData = pRes.data.data;
       const uData = uRes.data.data || uRes.data;
+      const tData = tRes.data?.data || tRes.data || [];
+      const uList = Array.isArray(uData) ? uData : (uData?.items || []);
+      const tList = Array.isArray(tData) ? tData : [];
       setSuppliers(Array.isArray(sData) ? sData : (sData?.items || []));
       setProducts(Array.isArray(pData) ? pData : (pData?.items || []));
-      setUsers(Array.isArray(uData) ? uData : (uData?.items || []));
+      setUsers(uList);
+      setTeams(tList);
+
+      // Pre-fill leader approver if user is available
+      const leaderId = resolveTeamLeaderId(user, uList, tList);
+      if (leaderId) {
+        setFormData(prev => ({ ...prev, approver_id: prev.approver_id || String(leaderId) }));
+      }
       
       if (setRes.data?.success && setRes.data?.data?.po_three_level_threshold !== undefined) {
         setThreshold(Number(setRes.data.data.po_three_level_threshold));
@@ -145,7 +165,12 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.supplier_id) return addToast('Vui lòng chọn nhà cung cấp', 'error');
+    if (beneficiaryType === 'supplier' && !formData.supplier_id) {
+      return addToast('Vui lòng chọn nhà cung cấp', 'error');
+    }
+    if (beneficiaryType === 'employee' && !selectedEmployeeId) {
+      return addToast('Vui lòng chọn nhân viên cần thanh toán', 'error');
+    }
     if (formData.items.length === 0) return addToast('Vui lòng thêm ít nhất một sản phẩm', 'error');
     if (isSubmitting) return;
 
@@ -171,7 +196,9 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
       }
 
       await api.post('/purchase-orders', {
-        supplier_id: formData.supplier_id,
+        supplier_id: beneficiaryType === 'supplier' ? formData.supplier_id : null,
+        beneficiary_type: beneficiaryType,
+        beneficiary_id: beneficiaryType === 'employee' ? Number(selectedEmployeeId) : null,
         order_date: formData.order_date,
         notes: formData.notes,
         items: formData.items.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, unit_cost: i.unit_cost, subtotal: i.subtotal })),
@@ -184,6 +211,8 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
       });
       addToast('Đã tạo đơn nhập hàng mới', 'success');
       setShowModal(false);
+      setBeneficiaryType('supplier');
+      setSelectedEmployeeId('');
       setFormData({ supplier_id: '', order_date: new Date().toISOString().split('T')[0], notes: '', items: [], tax_rate: 0, approver_id: '', approver_id_2: '', approver_id_3: '' });
       fetchOrders();
     } catch (err: any) {
@@ -446,47 +475,164 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                   <div style={{ padding: '1.25rem 1.5rem 80px 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     
                     {/* Settings Form */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          <Truck size={13} /> Nhà cung cấp <span className="text-danger">*</span>
-                        </label>
-                        <CustomSelect 
-                          options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
-                          value={formData.supplier_id} 
-                          onChange={val => setFormData({...formData, supplier_id: String(val)})}
-                          placeholder="-- Chọn nhà cung cấp --"
-                          searchable
-                        />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 750, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                          Đối tượng thanh toán PO <span className="text-danger">*</span>
+                        </span>
+                        <div style={{ display: 'inline-flex', padding: '3px', background: 'var(--color-bg)', borderRadius: '10px', border: '1px solid var(--color-border)', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setBeneficiaryType('supplier')}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 12px',
+                              borderRadius: '7px',
+                              fontSize: '0.75rem',
+                              fontWeight: beneficiaryType === 'supplier' ? 750 : 500,
+                              border: 'none',
+                              background: beneficiaryType === 'supplier' ? 'var(--color-surface)' : 'transparent',
+                              color: beneficiaryType === 'supplier' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              boxShadow: beneficiaryType === 'supplier' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Truck size={13} />
+                            <span>Nhà cung cấp</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBeneficiaryType('employee')}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 12px',
+                              borderRadius: '7px',
+                              fontSize: '0.75rem',
+                              fontWeight: beneficiaryType === 'employee' ? 750 : 500,
+                              border: 'none',
+                              background: beneficiaryType === 'employee' ? 'var(--color-surface)' : 'transparent',
+                              color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              boxShadow: beneficiaryType === 'employee' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Users size={13} />
+                            <span>Nhân viên</span>
+                          </button>
+                        </div>
                       </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          <Calendar size={13} /> Ngày dự kiến
-                        </label>
-                        <input 
-                          type="date" 
-                          className="form-input"
-                          style={{ height: '2.5rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '10px' }}
-                          value={formData.order_date} 
-                          onChange={e => setFormData({...formData, order_date: e.target.value})} 
-                        />
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '1rem' }}>
+                        {beneficiaryType === 'supplier' ? (
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                              <Truck size={13} /> Nhà cung cấp <span className="text-danger">*</span>
+                            </label>
+                            <CustomSelect 
+                              options={suppliers.map(s => ({ value: String(s.id), label: s.name }))}
+                              value={formData.supplier_id} 
+                              onChange={val => setFormData({...formData, supplier_id: String(val)})}
+                              placeholder="-- Chọn nhà cung cấp --"
+                              searchable
+                            />
+                          </div>
+                        ) : (
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                              <Users size={13} /> Nhân viên thanh toán <span className="text-danger">*</span>
+                            </label>
+                            <CustomSelect 
+                              options={users.map((u: any) => ({
+                                value: String(u.id),
+                                label: u.full_name,
+                                avatar: u.avatar_url || u.avatar,
+                                sublabel: [
+                                  u.role || '',
+                                  u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
+                                ].filter(Boolean).join(' • ')
+                              }))}
+                              value={selectedEmployeeId}
+                              onChange={val => {
+                                const empId = String(val);
+                                setSelectedEmployeeId(empId);
+                                const emp = users.find((u: any) => String(u.id) === empId);
+                                if (emp && (emp.bank_name || emp.bank_account)) {
+                                  const bankInfo = `[Thông tin chuyển khoản]: ${emp.bank_name || ''} - STK: ${emp.bank_account || ''} - Chủ TK: ${(emp.full_name || '').toUpperCase()}`;
+                                  setFormData(prev => {
+                                    const clean = prev.notes ? prev.notes.replace(/\[Thông tin chuyển khoản\]:[^\n]*/g, '').trim() : '';
+                                    return {
+                                      ...prev,
+                                      notes: clean ? `${bankInfo}\n${clean}` : bankInfo
+                                    };
+                                  });
+                                  addToast(`Đã tự động điền STK của ${emp.full_name}`, 'success');
+                                }
+                              }}
+                              placeholder="-- Chọn nhân viên --"
+                              searchable
+                              showAvatars
+                            />
+                          </div>
+                        )}
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                            <Calendar size={13} /> Ngày dự kiến
+                          </label>
+                          <input 
+                            type="date" 
+                            className="form-input"
+                            style={{ height: '2.5rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '10px' }}
+                            value={formData.order_date} 
+                            onChange={e => setFormData({...formData, order_date: e.target.value})} 
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                            Thuế suất VAT (%)
+                          </label>
+                          <CustomSelect 
+                            options={[
+                              { value: '0', label: '0% (Không thuế)' },
+                              { value: '5', label: '5%' },
+                              { value: '8', label: '8%' },
+                              { value: '10', label: '10%' }
+                            ]}
+                            value={String(formData.tax_rate || 0)} 
+                            onChange={val => setFormData({...formData, tax_rate: Number(val)})}
+                            placeholder="Chọn thuế suất"
+                          />
+                        </div>
                       </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          Thuế suất VAT (%)
-                        </label>
-                        <CustomSelect 
-                          options={[
-                            { value: '0', label: '0% (Không thuế)' },
-                            { value: '5', label: '5%' },
-                            { value: '8', label: '8%' },
-                            { value: '10', label: '10%' }
-                          ]}
-                          value={String(formData.tax_rate || 0)} 
-                          onChange={val => setFormData({...formData, tax_rate: Number(val)})}
-                          placeholder="Chọn thuế suất"
-                        />
-                      </div>
+
+                      {beneficiaryType === 'employee' && selectedEmployeeId && (() => {
+                        const emp = users.find((u: any) => String(u.id) === selectedEmployeeId);
+                        if (!emp) return null;
+                        return (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            background: emp.bank_account ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                            border: `1px solid ${emp.bank_account ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                            fontSize: '0.78rem'
+                          }}>
+                            <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
+                              {emp.bank_account 
+                                ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || '').toUpperCase()})` 
+                                : '⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân'}
+                            </span>
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                              {emp.role || 'Nhân viên'}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Phê duyệt & Vận hành Card */}

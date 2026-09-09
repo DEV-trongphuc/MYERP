@@ -36,7 +36,7 @@ const SUPPLIER_TABS = [
 export const SuppliersPage: React.FC = () => {
   const { user } = useAuth();
   const userRole = (user?.role || '').toLowerCase();
-  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin'].includes(userRole);
+  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin', 'accountant', 'ke_toan'].includes(userRole);
   const isSale = ['sale', 'sales'].includes(userRole);
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);

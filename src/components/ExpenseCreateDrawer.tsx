@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check } from 'lucide-react';
+import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check, Users, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
@@ -10,6 +10,7 @@ import { ToggleSwitch } from './ui/ToggleSwitch';
 import { compressToWebP } from '../utils/imageCompress';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { PasteDropzoneArea } from './ui/PasteDropzoneArea';
+import { resolveTeamLeaderId } from '../utils/teamLeader';
 
 const CATEGORIES = [
   { label: 'Di chuyển', icon: Truck, color: '#3b82f6' },
@@ -81,6 +82,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [allocationType, setAllocationType] = useState<'contact' | 'company'>('contact');
   const [showParticipantDropdown, setShowParticipantDropdown] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
+  const [beneficiaryType, setBeneficiaryType] = useState<'vendor' | 'employee'>('vendor');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
 
   // Combine and filter suppliers and companies/partners for vendor search
   const filteredVendors = useMemo(() => {
@@ -332,26 +335,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           bank_account_name
         });
       } else {
-        // Find default manager approver based on team leader ("như chấm công v đó")
-        const currentUserId = user?.id;
-        const myUser = users.find((u: any) => Number(u.id) === Number(currentUserId));
-        const teamId = user?.team_id || myUser?.team_id;
-        const myTeam = teams.find((t: any) => Number(t.id) === Number(teamId));
-
-        let defaultApproverId = null;
-        if (myTeam && myTeam.leader_id && Number(myTeam.leader_id) !== Number(currentUserId)) {
-          defaultApproverId = Number(myTeam.leader_id);
-        } else {
-          // If proposer is the team leader or no team, fallback to Director / Admin / HR
-          const director = users.find((u: any) => ['director'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(currentUserId));
-          const admin = users.find((u: any) => ['admin'].includes(String(u.role).toLowerCase()) && Number(u.id) !== Number(currentUserId));
-          const hrLeader = users.find((u: any) => (u.full_name?.toLowerCase().includes('duy phương') || u.role === 'hr') && Number(u.id) !== Number(currentUserId));
-          const fallbackUser = users.find((u: any) => Number(u.id) !== Number(currentUserId) && !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()));
-
-          defaultApproverId = director?.id || hrLeader?.id || admin?.id || fallbackUser?.id || (users[0]?.id || null);
-        }
+        // Find default manager approver based on team leader
+        const defaultApproverId = resolveTeamLeaderId(user, users, teams) || (users[0]?.id || null);
 
         setImages([]);
+        setBeneficiaryType('vendor');
+        setSelectedEmployeeId('');
         setForm({
           ...EMPTY_FORM,
           date: initialDate || new Date().toISOString().split('T')[0],
@@ -363,7 +352,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         isInitializedRef.current = true;
       }, 50);
     }
-  }, [isOpen, editItem, initialDate, users, teams, contacts, companies]);
+  }, [isOpen, editItem, initialDate, users, teams, contacts, companies, user]);
+
+  // Keep approver_id updated with team leader once users and teams finish loading
+  useEffect(() => {
+    if (isOpen && !editItem && !form.approver_id && (users.length > 0 || teams.length > 0)) {
+      const leaderId = resolveTeamLeaderId(user, users, teams);
+      if (leaderId) {
+        setForm((prev: any) => ({ ...prev, approver_id: leaderId }));
+      }
+    }
+  }, [isOpen, editItem, users, teams, user, form.approver_id]);
 
   // Close vendor dropdown on click outside
   useEffect(() => {
@@ -594,65 +593,188 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Đơn vị thụ hưởng <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>(Thanh toán cho ai?)</span></label>
-                  <div style={{ position: 'relative' }} ref={vendorRef}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 1rem', height: '44px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)' }}>
-                      <input
-                        style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.875rem', color: 'var(--color-text)' }}
-                        placeholder="Tìm NCC hoặc nhập tự do..."
-                        value={vendorSearch}
-                        onChange={e => { setVendorSearch(e.target.value); setForm({ ...form, vendor_name: e.target.value }); setShowVendorDropdown(true); }}
-                        onFocus={() => setShowVendorDropdown(true)}
-                      />
-                      {vendorSearch && <button type="button" onClick={() => { setVendorSearch(''); setForm({ ...form, vendor_name: '' }); }} style={{ color: 'var(--color-text-muted)', display: 'flex' }}><X size={14} /></button>}
-                      <Building2 size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                      <ChevronDown size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                    <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
+                      Đơn vị thụ hưởng <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>(Thanh toán cho ai?)</span>
+                    </label>
 
-                    {showVendorDropdown && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-surface)', borderRadius: '14px', border: '1px solid var(--color-border-light)', boxShadow: '0 16px 32px -8px rgba(0,0,0,0.12)', zIndex: 200, overflow: 'hidden' }}>
-                        {filteredVendors.map(v => (
-                          <div
-                            key={v.id}
-                            onMouseDown={() => handleSelectVendor(v)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', cursor: 'pointer', transition: 'background 0.15s' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-primary-light)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <div style={{ 
-                              width: 30, 
-                              height: 30, 
-                              borderRadius: '8px', 
-                              background: v.type === 'company' ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-primary-light)', 
-                              color: v.type === 'company' ? '#3b82f6' : 'var(--color-primary)', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center', 
-                              fontWeight: 800, 
-                              fontSize: '0.8rem', 
-                              flexShrink: 0 
-                            }}>
-                              {v.name[0] || '?'}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</p>
-                              <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                                {v.type === 'company' ? 'Đối tác' : 'Nhà cung cấp'} {v.phone ? `· ${v.phone}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                        {vendorSearch && !filteredVendors.find(v => v.name === vendorSearch) && (
-                          <div
-                            onMouseDown={() => { setForm({ ...form, vendor_name: vendorSearch }); setShowVendorDropdown(false); }}
-                            style={{ padding: '9px 14px', cursor: 'pointer', borderTop: '1px solid var(--color-border-light)', fontSize: '0.8125rem', color: 'var(--color-primary)', fontWeight: 700 }}
-                          >
-                            + Dùng "{vendorSearch}" (nhập tự do)
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Toggle: Nhà cung cấp vs Nhân viên */}
+                    <div style={{ display: 'inline-flex', padding: '3px', background: 'var(--color-bg-light)', borderRadius: '10px', border: '1px solid var(--color-border-light)', gap: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBeneficiaryType('vendor');
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '4px 12px',
+                          borderRadius: '7px',
+                          fontSize: '0.78rem',
+                          fontWeight: beneficiaryType === 'vendor' ? 750 : 500,
+                          border: 'none',
+                          background: beneficiaryType === 'vendor' ? 'var(--color-surface)' : 'transparent',
+                          color: beneficiaryType === 'vendor' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                          boxShadow: beneficiaryType === 'vendor' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Building2 size={13} />
+                        <span>Nhà cung cấp / Đối tác</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBeneficiaryType('employee');
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '4px 12px',
+                          borderRadius: '7px',
+                          fontSize: '0.78rem',
+                          fontWeight: beneficiaryType === 'employee' ? 750 : 500,
+                          border: 'none',
+                          background: beneficiaryType === 'employee' ? 'var(--color-surface)' : 'transparent',
+                          color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                          boxShadow: beneficiaryType === 'employee' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Users size={13} />
+                        <span>Nhân viên</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {beneficiaryType === 'vendor' ? (
+                    <div style={{ position: 'relative' }} ref={vendorRef}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 1rem', height: '44px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)' }}>
+                        <input
+                          style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.875rem', color: 'var(--color-text)' }}
+                          placeholder="Tìm NCC hoặc nhập tự do..."
+                          value={vendorSearch}
+                          onChange={e => { setVendorSearch(e.target.value); setForm({ ...form, vendor_name: e.target.value }); setShowVendorDropdown(true); }}
+                          onFocus={() => setShowVendorDropdown(true)}
+                        />
+                        {vendorSearch && <button type="button" onClick={() => { setVendorSearch(''); setForm({ ...form, vendor_name: '' }); }} style={{ color: 'var(--color-text-muted)', display: 'flex' }}><X size={14} /></button>}
+                        <Building2 size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                        <ChevronDown size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                      </div>
+
+                      {showVendorDropdown && (
+                        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-surface)', borderRadius: '14px', border: '1px solid var(--color-border-light)', boxShadow: '0 16px 32px -8px rgba(0,0,0,0.12)', zIndex: 200, overflow: 'hidden' }}>
+                          {filteredVendors.map(v => (
+                            <div
+                              key={v.id}
+                              onMouseDown={() => handleSelectVendor(v)}
+                              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', cursor: 'pointer', transition: 'background 0.15s' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-primary-light)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <div style={{ 
+                                width: 30, 
+                                height: 30, 
+                                borderRadius: '8px', 
+                                background: v.type === 'company' ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-primary-light)', 
+                                color: v.type === 'company' ? '#3b82f6' : 'var(--color-primary)', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                fontWeight: 800, 
+                                fontSize: '0.8rem', 
+                                flexShrink: 0 
+                              }}>
+                                {v.name[0] || '?'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</p>
+                                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                                  {v.type === 'company' ? 'Đối tác' : 'Nhà cung cấp'} {v.phone ? `· ${v.phone}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                          {vendorSearch && !filteredVendors.find(v => v.name === vendorSearch) && (
+                            <div
+                              onMouseDown={() => { setForm({ ...form, vendor_name: vendorSearch }); setShowVendorDropdown(false); }}
+                              style={{ padding: '9px 14px', cursor: 'pointer', borderTop: '1px solid var(--color-border-light)', fontSize: '0.8125rem', color: 'var(--color-primary)', fontWeight: 700 }}
+                            >
+                              + Dùng "{vendorSearch}" (nhập tự do)
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <CustomSelect
+                        options={users.map((u: any) => ({
+                          value: String(u.id),
+                          label: u.full_name,
+                          avatar: u.avatar_url || u.avatar,
+                          sublabel: [
+                            u.role || '',
+                            u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
+                          ].filter(Boolean).join(' • ')
+                        }))}
+                        value={selectedEmployeeId}
+                        onChange={(val) => {
+                          const empId = String(val);
+                          setSelectedEmployeeId(empId);
+                          const emp = users.find((u: any) => String(u.id) === empId);
+                          if (emp) {
+                            const hasBank = !!(emp.bank_name || emp.bank_account);
+                            setForm((prev: any) => ({
+                              ...prev,
+                              vendor_name: emp.full_name || '',
+                              request_bank_transfer: true,
+                              bank_name: emp.bank_name || prev.bank_name || '',
+                              bank_account_number: emp.bank_account || prev.bank_account_number || '',
+                              bank_account_name: (emp.full_name || '').toUpperCase()
+                            }));
+                            if (hasBank) {
+                              addToast(`Đã tự động điền STK ngân hàng của ${emp.full_name}`, 'success');
+                            } else {
+                              addToast(`Nhân viên ${emp.full_name} chưa lưu STK trong hồ sơ. Vui lòng nhập STK ở bên dưới.`, 'info');
+                            }
+                          }
+                        }}
+                        placeholder="-- Chọn nhân viên cần thanh toán --"
+                        searchable
+                        showAvatars
+                      />
+                      {selectedEmployeeId && (() => {
+                        const emp = users.find((u: any) => String(u.id) === selectedEmployeeId);
+                        if (!emp) return null;
+                        return (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            background: emp.bank_account ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                            border: `1px solid ${emp.bank_account ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                            fontSize: '0.78rem'
+                          }}>
+                            <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
+                              {emp.bank_account 
+                                ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account}` 
+                                : '⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân'}
+                            </span>
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                              {emp.role || 'Nhân viên'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.8fr 1.1fr 1.1fr', gap: '1rem' }}>

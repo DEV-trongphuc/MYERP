@@ -14,8 +14,8 @@ class CompanyController {
             $permissionsJson = json_decode($resQ['permissions_json'], true);
         }
 
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'], true)) {
-            if (strtolower($auth['role'] ?? '') === 'marketing' && $action === 'delete') {
+        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan'], true)) {
+            if (in_array(strtolower($auth['role'] ?? ''), ['marketing', 'accountant', 'ke_toan'], true) && $action === 'delete') {
                 return 'none';
             }
             return 'all';
@@ -42,8 +42,8 @@ class CompanyController {
         if ($role === 'viewer') {
             return $action === 'read' ? 'all' : 'none';
         }
-        if ($role === 'accountant') {
-            return $action === 'read' ? 'all' : 'none';
+        if ($role === 'accountant' || $role === 'ke_toan') {
+            return $action === 'delete' ? 'none' : 'all';
         }
         if ($role === 'marketing') {
             return 'all';

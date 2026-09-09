@@ -739,10 +739,12 @@ switch ($resource) {
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
-        elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'clone' && $method === 'POST') $ctrl->cloneContact($auth, (int)$resourceId);
+        elseif ($resourceId  && $subResource === 'linked-profiles' && $method === 'GET') $ctrl->getLinkedProfiles($auth, (int)$resourceId);
         elseif ($resourceId  && in_array($subResource, ['stage', 'move', 'move-stage'], true) && in_array($method, ['PATCH', 'POST', 'PUT'], true)) $ctrl->moveStage($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'release-databank' && $method === 'POST') $ctrl->releaseDatabank($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'collaborators' && $method === 'GET') $ctrl->getCollaborators($auth, (int)$resourceId);
+        elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);

@@ -151,10 +151,23 @@ class ImportController {
             $projectId = $stmt->fetchColumn() ?: null;
         }
 
-        $stmt = $this->db->prepare("INSERT INTO contacts (tenant_id, full_name, email, phone, job_title, source, status, company_id, owner_id, created_by, notes, customer_type, temperature, project_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $rawPhone = $data['phone'] ?? null;
+        $secPhone = $data['mobile'] ?? $data['phone2'] ?? null;
+        if (!empty($rawPhone)) {
+            require_once __DIR__ . '/../webhook_logic.php';
+            $parsed = parseMultiplePhoneNumbers($rawPhone);
+            if (count($parsed) >= 2) {
+                $rawPhone = $parsed[0];
+                if (empty($secPhone)) {
+                    $secPhone = implode(', ', array_slice($parsed, 1));
+                }
+            }
+        }
+
+        $stmt = $this->db->prepare("INSERT INTO contacts (tenant_id, full_name, email, phone, mobile, phone2, job_title, source, status, company_id, owner_id, created_by, notes, customer_type, temperature, project_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         $stmt->execute([
             $auth['tenant_id'], $data['full_name'],
-            $data['email'] ?? null, $data['phone'] ?? null, $data['job_title'] ?? null,
+            $data['email'] ?? null, $rawPhone, $secPhone, $secPhone, $data['job_title'] ?? null,
             $data['source'] ?? 'other', $data['status'] ?? 'lead',
             $companyId, $auth['user_id'], $auth['user_id'],
             $data['notes'] ?? null, $data['customer_type'] ?? null, $data['temperature'] ?? null,

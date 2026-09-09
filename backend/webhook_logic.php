@@ -69,6 +69,81 @@ function normalizePhone($phoneRaw)
 }
 
 /**
+ * Tách một chuỗi chứa nhiều số điện thoại thành danh sách các SĐT chuẩn (chính và phụ)
+ */
+function parseMultiplePhoneNumbers(?string $raw): array {
+    if (!$raw) return [];
+    $raw = trim($raw);
+    if (empty($raw)) return [];
+
+    $results = [];
+
+    // Trường hợp 1: Có ký tự phân cách (/, ,, ;, |, -, newline, hoặc, va, or, and, hoặc 2+ spaces)
+    if (preg_match('/[\/,\r\n;|\&]|\s{2,}|\s+-\s+|\s+(?:hoặc|hoac|va|or|and)\s+/iu', $raw)) {
+        $parts = preg_split('/[\/,\r\n;|\&]+|\s{2,}|\s+-\s+|\s+(?:hoặc|hoac|va|or|and)\s+/iu', $raw);
+        foreach ($parts as $part) {
+            $digits = preg_replace('/[^0-9]/', '', $part);
+            if (strlen($digits) >= 9 && strlen($digits) <= 12) {
+                $norm = normalizePhone($digits);
+                if ($norm && !in_array($norm, $results, true)) {
+                    $results[] = $norm;
+                }
+            }
+        }
+    }
+
+    // Trường hợp 2: Ghép chuỗi số (18-35 số)
+    if (count($results) < 2) {
+        $digits = preg_replace('/[^0-9]/', '', $raw);
+        if (!str_starts_with($digits, '0') && preg_match('/^[35789]/', $digits) && strlen($digits) >= 18) {
+            $digits = '0' . $digits;
+        }
+
+        if (strlen($digits) >= 18) {
+            if (preg_match_all('/0[35789][0-9]{8}/', $digits, $matches)) {
+                $uniqueMatches = [];
+                foreach ($matches[0] as $m) {
+                    if (!in_array($m, $uniqueMatches, true)) {
+                        $uniqueMatches[] = $m;
+                    }
+                }
+                if (count($uniqueMatches) >= 2) {
+                    $results = $uniqueMatches;
+                }
+            }
+
+            if (count($results) < 2 && preg_match('/^(0[35789][0-9]{8})([0-9]{8,15})$/', $digits, $subM)) {
+                $p2Str = $subM[2];
+                if (str_starts_with($p2Str, '856')) {
+                    $p2Str = '+' . $p2Str;
+                }
+                $results = [$subM[1], $p2Str];
+            }
+        }
+    }
+
+    // Trường hợp 3: 2 số cách nhau bởi đúng 1 khoảng trắng
+    if (count($results) < 2 && strpos($raw, ' ') !== false) {
+        $parts = explode(' ', $raw);
+        $spaceMatches = [];
+        foreach ($parts as $p) {
+            $d = preg_replace('/[^0-9]/', '', $p);
+            if (strlen($d) >= 9 && strlen($d) <= 11) {
+                $norm = normalizePhone($d);
+                if ($norm && !in_array($norm, $spaceMatches, true)) {
+                    $spaceMatches[] = $norm;
+                }
+            }
+        }
+        if (count($spaceMatches) >= 2) {
+            $results = $spaceMatches;
+        }
+    }
+
+    return $results;
+}
+
+/**
  * Sanitize placeholder email and validate format.
  * Returns valid email string or null if empty/placeholder/invalid.
  */

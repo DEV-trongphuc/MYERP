@@ -563,7 +563,19 @@ class ContactController {
         $tags = json_encode($b['tags'] ?? []);
         
         // Blocked Lead Check
-        $phone = $b['phone'] ?? $b['mobile'] ?? null;
+        $rawPhone = $b['phone'] ?? null;
+        $mobile = $b['mobile'] ?? $b['phone2'] ?? null;
+        if (!empty($rawPhone)) {
+            require_once __DIR__ . '/../webhook_logic.php';
+            $parsedPhones = parseMultiplePhoneNumbers($rawPhone);
+            if (count($parsedPhones) >= 2) {
+                $rawPhone = $parsedPhones[0];
+                if (empty($mobile)) {
+                    $mobile = implode(', ', array_slice($parsedPhones, 1));
+                }
+            }
+        }
+        $phone = $rawPhone ?: $mobile;
         $email = $b['email'] ?? null;
         if ($phone || $email) {
             require_once __DIR__ . '/../webhook_logic.php';
@@ -649,17 +661,18 @@ class ContactController {
         $last_contact = empty($b['last_contact']) ? null : $b['last_contact'];
 
         $assignedOwnerId = (in_array($auth['role'], ['sale', 'sales'], true)) ? (int)$auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : (int)$auth['user_id']);
+        $secPhone = !empty($mobile) ? $mobile : null;
         $stmt = $this->db->prepare("
             INSERT INTO contacts (tenant_id,company_id,owner_id,created_by,full_name,
-                email,phone,mobile,job_title,department,source,status,tags,notes,stage_id,
+                email,phone,mobile,phone2,job_title,department,source,status,tags,notes,stage_id,
                 birthday,address,city,ward,expected_revenue,win_probability,last_contact,lead_score,person_id,collaborator_ids,pipeline_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ");
         $stmt->execute([
             $auth['tenant_id'],
             $company_id, $assignedOwnerId,
             $auth['user_id'], trim($b['full_name'] ?? ''),
-            $email, $phone, $phone,
+            $email, $phone, $secPhone, $secPhone,
             $b['job_title'] ?? null, $b['department'] ?? null,
             $b['source'] ?? 'other', $b['status'] ?? 'lead',
             $tags, $b['notes'] ?? null, $stageId,
@@ -974,6 +987,26 @@ class ContactController {
             if ($campProjId) {
                 $b['project_id'] = (int)$campProjId;
             }
+        }
+
+        // Auto-split multiple phones if passed in phone field
+        if (!empty($b['phone'])) {
+            require_once __DIR__ . '/../webhook_logic.php';
+            $parsedPhones = parseMultiplePhoneNumbers($b['phone']);
+            if (count($parsedPhones) >= 2) {
+                $b['phone'] = $parsedPhones[0];
+                $secPhone = implode(', ', array_slice($parsedPhones, 1));
+                if (empty($b['mobile']) && empty($b['phone2'])) {
+                    $b['mobile'] = $secPhone;
+                    $b['phone2'] = $secPhone;
+                }
+            }
+        }
+        // Synchronize mobile and phone2
+        if (array_key_exists('mobile', $b) && !array_key_exists('phone2', $b)) {
+            $b['phone2'] = $b['mobile'];
+        } elseif (array_key_exists('phone2', $b) && !array_key_exists('mobile', $b)) {
+            $b['mobile'] = $b['phone2'];
         }
 
         $fields = [
@@ -2229,7 +2262,308 @@ class ContactController {
             respond(500, null, 'Lỗi lấy gợi ý chương trình: ' . $e->getMessage(), false);
         }
     }
+
+    /**
+     * Nhân bản hồ sơ khách hàng sang một chương trình học mới
+     * Reset lại pipeline từ Bước 1, duy trì liên kết danh tính person_id
+     */
+    public function cloneContact(array $auth, int $id): void {
+        if ($auth['role'] === 'viewer') {
+            respond(403, null, 'Bạn không có quyền nhân bản hồ sơ', false);
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM contacts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmt->execute([$id, $auth['tenant_id']]);
+        $source = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$source) {
+            respond(404, null, 'Không tìm thấy hồ sơ gốc để nhân bản', false);
+        }
+
+        $b = getBody();
+        $newProgram = trim((string)($b['program'] ?? ''));
+        if (empty($newProgram)) {
+            respond(422, null, 'Vui lòng nhập hoặc chọn chương trình học mới cho hồ sơ nhân bản', false);
+        }
+
+        // 1. Đồng bộ và xác thực person_id (Master Identity Link)
+        $personId = !empty($source['person_id']) ? (int)$source['person_id'] : null;
+        $phone = $source['phone'] ?? $source['mobile'] ?? null;
+        if ($phone) {
+            require_once __DIR__ . '/../webhook_logic.php';
+            $phoneClean = normalizePhone($phone);
+            if ($phoneClean && !$personId) {
+                $fullName = trim($source['full_name'] ?? '');
+                $stmtPerson = $this->db->prepare("
+                    INSERT INTO persons (phone, email, full_name, is_public)
+                    VALUES (?, ?, ?, 0)
+                    ON DUPLICATE KEY UPDATE
+                        email = IF(email IS NULL OR email = '', VALUES(email), email),
+                        full_name = IF(full_name IS NULL OR full_name = '', VALUES(full_name), full_name)
+                ");
+                $stmtPerson->execute([$phoneClean, $source['email'] ?? null, $fullName]);
+                $stmtGetP = $this->db->prepare("SELECT id FROM persons WHERE phone = ? LIMIT 1");
+                $stmtGetP->execute([$phoneClean]);
+                $personId = (int)$stmtGetP->fetchColumn() ?: null;
+                if ($personId) {
+                    $this->db->prepare("UPDATE contacts SET person_id = ? WHERE id = ?")->execute([$personId, $id]);
+                }
+            }
+        }
+
+        // 2. Xác định Stage 1 của pipeline và slug tương ứng
+        $stageId = !empty($b['stage_id']) ? (int)$b['stage_id'] : null;
+        if (!$stageId) {
+            $s = $this->db->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC LIMIT 1");
+            $s->execute([$auth['tenant_id']]);
+            $stageRow = $s->fetch(PDO::FETCH_ASSOC);
+            $stageId = (int)($stageRow['id'] ?? 1);
+            $pipelineStatus = $stageRow['system_slug'] ?? 'new_lead';
+        } else {
+            $stmtSlug = $this->db->prepare("SELECT system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtSlug->execute([$stageId, $auth['tenant_id']]);
+            $pipelineStatus = $stmtSlug->fetchColumn() ?: 'new_lead';
+        }
+
+        // 3. Phân bổ người phụ trách (Owner)
+        $assignedOwnerId = !empty($b['owner_id']) ? (int)$b['owner_id'] : (!empty($source['owner_id']) ? (int)$source['owner_id'] : (int)$auth['user_id']);
+        if (in_array($auth['role'], ['sale', 'sales'], true) && empty($b['owner_id'])) {
+            $assignedOwnerId = (int)$auth['user_id'];
+        }
+
+        // 4. Duplicate cluster link
+        $duplicateWithId = !empty($source['duplicate_with_id']) ? (int)$source['duplicate_with_id'] : $id;
+        $initialNotes = trim((string)($b['notes'] ?? ''));
+
+        // 5. Khởi tạo bản sao contact mới với pipeline sạch từ đầu
+        $insertStmt = $this->db->prepare("
+            INSERT INTO contacts (
+                tenant_id, company_id, owner_id, created_by, full_name,
+                email, phone, mobile, phone2, job_title, department, company,
+                source, status, tags, notes, stage_id, pipeline_status, lead_status,
+                birthday, dob, gender, address, city, district, ward, preferred_location,
+                tax_code, citizen_id, passport, customer_type, industry,
+                facebook_link, fb_link, zalo_link, zalo_phone,
+                expected_revenue, win_probability, lead_score, budget,
+                person_id, duplicate_flag, duplicate_with_id, collaborator_ids,
+                program, last_contact, created_at, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, 'lead', ?, ?, ?, ?, 'active',
+                ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                0, 50, 0, ?,
+                ?, 1, ?, ?,
+                ?, NOW(), NOW(), NOW()
+            )
+        ");
+
+        $insertStmt->execute([
+            $auth['tenant_id'],
+            $source['company_id'] ?: null,
+            $assignedOwnerId,
+            $auth['user_id'],
+            trim($source['full_name'] ?? ''),
+            $source['email'] ?: null,
+            $source['phone'] ?: null,
+            $source['mobile'] ?: null,
+            $source['phone2'] ?? null,
+            $source['job_title'] ?? null,
+            $source['department'] ?? null,
+            $source['company'] ?? null,
+            $source['source'] ?: 'other',
+            $source['tags'] ?: '[]',
+            $initialNotes ?: ("Nhân bản từ hồ sơ #" . $id . " (" . ($source['program'] ?: 'Chương trình trước') . ")"),
+            $stageId,
+            $pipelineStatus,
+            $source['birthday'] ?? null,
+            $source['dob'] ?? null,
+            $source['gender'] ?? null,
+            $source['address'] ?? null,
+            $source['city'] ?? null,
+            $source['district'] ?? null,
+            $source['ward'] ?? null,
+            $source['preferred_location'] ?? null,
+            $source['tax_code'] ?? null,
+            $source['citizen_id'] ?? null,
+            $source['passport'] ?? null,
+            $source['customer_type'] ?? null,
+            $source['industry'] ?? null,
+            $source['facebook_link'] ?? $source['fb_link'] ?? null,
+            $source['fb_link'] ?? null,
+            $source['zalo_link'] ?? null,
+            $source['zalo_phone'] ?? null,
+            $source['budget'] ?? 0,
+            $personId,
+            $duplicateWithId,
+            $source['collaborator_ids'] ?? null,
+            $newProgram
+        ]);
+
+        $newContactId = (int)$this->db->lastInsertId();
+
+        // Đảm bảo source contact cũng được gắn duplicate_flag = 1 nếu chưa có
+        if (empty($source['duplicate_flag'])) {
+            $this->db->prepare("UPDATE contacts SET duplicate_flag = 1 WHERE id = ?")->execute([$id]);
+        }
+
+        // 6. Ghi log hoạt động & tương tác trên cả 2 hồ sơ
+        if (function_exists('logActivity')) {
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CLONE_CONTACT', 'contact', $newContactId, json_encode([
+                'from_contact_id' => $id,
+                'program' => $newProgram,
+                'full_name' => $source['full_name']
+            ]));
+        }
+
+        if (function_exists('logInteraction')) {
+            logInteraction(
+                $this->db, 
+                $auth['tenant_id'], 
+                $auth['user_id'], 
+                'note', 
+                'Nhân bản hồ sơ (Chương trình mới)', 
+                "Hồ sơ được nhân bản từ hồ sơ #$id để theo dõi & chăm sóc chương trình: \"$newProgram\".", 
+                'contact', 
+                $newContactId
+            );
+
+            logInteraction(
+                $this->db, 
+                $auth['tenant_id'], 
+                $auth['user_id'], 
+                'note', 
+                'Đã nhân bản thêm hồ sơ', 
+                "Đã tạo thêm hồ sơ mới #$newContactId cho khách hàng này để theo dõi chương trình: \"$newProgram\".", 
+                'contact', 
+                $id
+            );
+        }
+
+        // 7. Gửi thông báo phân bổ nếu gán cho nhân sự khác
+        if ($assignedOwnerId > 0 && $assignedOwnerId !== (int)$auth['user_id']) {
+            try {
+                $creatorName = $auth['full_name'] ?? 'Quản trị viên';
+                $custFullName = trim($source['full_name'] ?? '') ?: 'Khách hàng';
+                $stmtNotifOwner = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
+                    VALUES (?, ?, '🎉 Bạn được phân bổ hồ sơ nhân bản mới!', ?, 'contact', ?)
+                ");
+                $stmtNotifOwner->execute([
+                    $assignedOwnerId,
+                    $auth['tenant_id'],
+                    "Bạn vừa được $creatorName phân bổ hồ sơ nhân bản \"$custFullName\" - Chương trình: $newProgram.",
+                    "/contacts?open_contact_id=$newContactId"
+                ]);
+            } catch (\Throwable $notifEx) {
+                error_log("Notification error in cloneContact: " . $notifEx->getMessage());
+            }
+        }
+
+        // 8. Trả về hồ sơ mới vừa tạo
+        $this->show($auth, $newContactId);
+    }
+
+    /**
+     * Lấy danh sách toàn bộ hồ sơ liên kết (cùng 1 khách hàng theo học các chương trình khác nhau)
+     */
+    public function getLinkedProfiles(array $auth, int $id): void {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT id, person_id, phone, mobile, duplicate_with_id 
+                FROM contacts 
+                WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+                LIMIT 1
+            ");
+            $stmt->execute([$id, $auth['tenant_id']]);
+            $curr = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$curr) {
+                respond(404, null, 'Không tìm thấy hồ sơ', false);
+            }
+
+            $personId = !empty($curr['person_id']) ? (int)$curr['person_id'] : null;
+            $phone = !empty($curr['phone']) ? $curr['phone'] : (!empty($curr['mobile']) ? $curr['mobile'] : '');
+            $dupWithId = !empty($curr['duplicate_with_id']) ? (int)$curr['duplicate_with_id'] : 0;
+
+            require_once __DIR__ . '/../webhook_logic.php';
+            $phoneClean = $phone ? normalizePhone($phone) : '';
+
+            $sql = "
+                SELECT 
+                    c.id,
+                    c.full_name,
+                    c.phone,
+                    c.mobile,
+                    c.email,
+                    c.program,
+                    c.status,
+                    c.pipeline_status,
+                    c.stage_id,
+                    c.owner_id,
+                    c.person_id,
+                    c.duplicate_with_id,
+                    c.created_at,
+                    c.updated_at,
+                    u.full_name as owner_name,
+                    u.avatar_url as owner_avatar,
+                    ps.name as stage_name,
+                    ps.color as stage_color,
+                    ps.order_index as stage_order
+                FROM contacts c
+                LEFT JOIN users u ON c.owner_id = u.id
+                LEFT JOIN pipeline_stages ps ON c.stage_id = ps.id
+                WHERE c.tenant_id = ?
+                  AND c.deleted_at IS NULL
+                  AND (
+                      c.id = ?
+                      " . ($personId ? "OR c.person_id = ?" : "") . "
+                      " . ($phoneClean ? "OR c.phone = ? OR c.mobile = ? OR c.phone = ? OR c.mobile = ?" : "") . "
+                      OR c.duplicate_with_id = ?
+                      " . ($dupWithId > 0 ? "OR c.id = ? OR c.duplicate_with_id = ?" : "") . "
+                  )
+                ORDER BY c.id ASC
+            ";
+
+            $params = [$auth['tenant_id'], $id];
+            if ($personId) {
+                $params[] = $personId;
+            }
+            if ($phoneClean) {
+                $params[] = $phoneClean;
+                $params[] = $phoneClean;
+                $params[] = $phone;
+                $params[] = $phone;
+            }
+            $params[] = $id;
+            if ($dupWithId > 0) {
+                $params[] = $dupWithId;
+                $params[] = $dupWithId;
+            }
+
+            $stmtList = $this->db->prepare($sql);
+            $stmtList->execute($params);
+            $profiles = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            $uniqueProfiles = [];
+            $seen = [];
+            foreach ($profiles as $p) {
+                $pid = (int)$p['id'];
+                if (isset($seen[$pid])) continue;
+                $seen[$pid] = true;
+                $p['is_current'] = ($pid === $id);
+                $uniqueProfiles[] = $p;
+            }
+
+            respond(200, $uniqueProfiles, 'Danh sách hồ sơ liên kết');
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi lấy hồ sơ liên kết: ' . $e->getMessage(), false);
+        }
+    }
 }
+
 
 
 

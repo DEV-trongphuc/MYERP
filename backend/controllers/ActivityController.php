@@ -236,7 +236,7 @@ class ActivityController {
             return false;
         }
 
-        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin'], true)) {
+        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin', 'accountant'], true)) {
             return true;
         }
 
@@ -341,8 +341,8 @@ class ActivityController {
             }
         }
 
-        if (in_array($auth['role'], ['super_admin', 'superadmin', 'admin'], true)) {
-            // Super Admin / Admin: full oversight, can filter by team_id or user_id
+        if (in_array($auth['role'], ['super_admin', 'superadmin', 'admin', 'accountant'], true)) {
+            // Super Admin / Admin / Accountant: full oversight, can filter by team_id or user_id
         } else if (in_array($auth['role'], ['director'], true)) {
             // Director: oversight of company-wide tasks except private personal tasks
             $where[] = '(

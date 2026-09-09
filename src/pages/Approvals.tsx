@@ -25,6 +25,7 @@ import { Pagination } from '../components/ui/Pagination';
 import { useUIStore } from '../store/uiStore';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
+import { numberToVietnameseText } from '../utils/numberToText';
 
 const workflowList = [
   { id: 'payment', name: 'Đề nghị thanh toán', description: 'Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác.', category: 'finance', icon: FileSignature, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
@@ -8179,30 +8180,52 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             );
           })()}
 
-          {item.type === 'advance' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền tạm ứng')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formatApprovalCurrency(detail?.amount || 0, detail?.currency || item?.currency || 'VND')}
-                  disabled
-                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
-                />
+          {item.type === 'advance' && (() => {
+            const advAmount = Number(detail?.amount || 0);
+            const advCurr = detail?.currency || item?.currency || 'VND';
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền tạm ứng')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={formatApprovalCurrency(advAmount, advCurr)}
+                    disabled
+                    style={{ 
+                      fontSize: isMobile ? '0.95rem' : '1.05rem', 
+                      fontWeight: 800, 
+                      color: 'var(--color-primary, #2563eb)',
+                      background: 'rgba(37, 99, 235, 0.04)',
+                      borderColor: 'rgba(37, 99, 235, 0.2)'
+                    }}
+                  />
+                  {advAmount > 0 && (
+                    <div style={{ 
+                      fontSize: isMobile ? '0.75rem' : '0.825rem', 
+                      fontStyle: 'italic', 
+                      color: 'var(--color-primary, #2563eb)', 
+                      fontWeight: 650, 
+                      marginTop: '4px',
+                      paddingLeft: '2px' 
+                    }}>
+                      {t('Bằng chữ:')} {numberToVietnameseText(advAmount, advCurr)}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày đề nghị')}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={detail?.request_date ? new Date(detail.request_date).toLocaleDateString('vi-VN') : ''}
+                    disabled
+                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
+                  />
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày đề nghị')}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={detail?.request_date ? new Date(detail.request_date).toLocaleDateString('vi-VN') : ''}
-                  disabled
-                  style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
-                />
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {item.type === 'expense' && (
             isZeroCostWorkflow ? (
@@ -8240,40 +8263,62 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   </div>
                 )}
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formatApprovalCurrency(detail?.amount ?? (item as any)?.amount ?? 0, detail?.currency || (item as any)?.currency || 'VND')}
-                    disabled
-                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
-                  />
+            ) : (() => {
+              const expAmount = Number(detail?.amount ?? (item as any)?.amount ?? 0);
+              const expCurr = detail?.currency || (item as any)?.currency || 'VND';
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={formatApprovalCurrency(expAmount, expCurr)}
+                      disabled
+                      style={{ 
+                        fontSize: isMobile ? '0.95rem' : '1.05rem', 
+                        fontWeight: 800, 
+                        color: 'var(--color-primary, #2563eb)',
+                        background: 'rgba(37, 99, 235, 0.04)',
+                        borderColor: 'rgba(37, 99, 235, 0.2)'
+                      }}
+                    />
+                    {expAmount > 0 && (
+                      <div style={{ 
+                        fontSize: isMobile ? '0.75rem' : '0.825rem', 
+                        fontStyle: 'italic', 
+                        color: 'var(--color-primary, #2563eb)', 
+                        fontWeight: 650, 
+                        marginTop: '4px',
+                        paddingLeft: '2px' 
+                      }}>
+                        {t('Bằng chữ:')} {numberToVietnameseText(expAmount, expCurr)}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Danh mục chi')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={detail?.category || (item as any)?.category || 'Vận hành'}
+                      disabled
+                      style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày chứng từ')}</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={detail?.date ? new Date(detail.date).toLocaleDateString('vi-VN') : ((item as any)?.date ? new Date((item as any).date).toLocaleDateString('vi-VN') : new Date(detail?.created_at || item.created_at).toLocaleDateString('vi-VN'))}
+                      disabled
+                      style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
+                    />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Danh mục chi')}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={detail?.category || (item as any)?.category || 'Vận hành'}
-                    disabled
-                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày chứng từ')}</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={detail?.date ? new Date(detail.date).toLocaleDateString('vi-VN') : ((item as any)?.date ? new Date((item as any).date).toLocaleDateString('vi-VN') : new Date(detail?.created_at || item.created_at).toLocaleDateString('vi-VN'))}
-                    disabled
-                    style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
-                  />
-                </div>
-              </div>
-            )
+              );
+            })()
           )}
 
           {item.type === 'checkin' && (
@@ -8619,8 +8664,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       >
                         <div style={{
                           position: 'relative',
-                          height: imageFiles.length === 1 ? '240px' : '150px',
-                          background: '#090d16',
+                          height: imageFiles.length === 1 ? '320px' : '160px',
+                          background: 'rgba(0, 0, 0, 0.02)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',

@@ -1718,6 +1718,45 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [setIsSubmitting, setShowDealModal]);
   const lastLoadedContactIdRef = React.useRef<number | null>(null);
   const [formData, setFormData] = useState<any>(() => contact || {});
+
+  // ── Multi-Program Linked Profiles & Clone State ──
+  const [activeContactId, setActiveContactId] = useState<number | null>(() => contact?.id || null);
+  const effectiveContactId = activeContactId || contact?.id;
+  const [linkedProfiles, setLinkedProfiles] = useState<any[]>([]);
+  const [loadingLinkedProfiles, setLoadingLinkedProfiles] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloningProfile, setCloningProfile] = useState(false);
+  const [cloneProgram, setCloneProgram] = useState('');
+  const [cloneOwnerId, setCloneOwnerId] = useState<string>('');
+  const [cloneNotes, setCloneNotes] = useState('');
+
+  useEffect(() => {
+    if (contact?.id) {
+      setActiveContactId(contact.id);
+    }
+  }, [contact?.id]);
+
+  const fetchLinkedProfiles = useCallback(async (contactId: number) => {
+    if (!contactId) return;
+    setLoadingLinkedProfiles(true);
+    try {
+      const res = await api.get(`/contacts/${contactId}/linked-profiles`);
+      const list = res.data?.data || [];
+      if (Array.isArray(list)) {
+        setLinkedProfiles(list);
+      }
+    } catch (err) {
+      console.error('Error fetching linked profiles:', err);
+    } finally {
+      setLoadingLinkedProfiles(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && effectiveContactId) {
+      fetchLinkedProfiles(effectiveContactId);
+    }
+  }, [isOpen, effectiveContactId, fetchLinkedProfiles]);
   const [showScoringSystemModal, setShowScoringSystemModal] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [baseTags, setBaseTags] = useState<string[]>([]);
@@ -1819,7 +1858,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     // Allowed fields that are editable in the form
     const editableFields = [
       'company_id', 'company_name', 'owner_id', 'full_name', 'email', 'phone',
-      'mobile', 'job_title', 'department', 'source', 'status', 'notes',
+      'mobile', 'phone2', 'job_title', 'department', 'source', 'status', 'notes',
       'birthday', 'address', 'city', 'ward', 'expected_revenue', 'win_probability', 'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range',
       'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data', 'citizen_id', 'passport',
       'program', 'admission_date', 'student_id'
@@ -1858,7 +1897,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     // Only send fields that ContactController accepts
     const allowedFields = [
       'company_id', 'company_name', 'owner_id', 'full_name', 'email', 'phone',
-      'mobile', 'job_title', 'department', 'source', 'status', 'notes',
+      'mobile', 'phone2', 'job_title', 'department', 'source', 'status', 'notes',
       'birthday', 'address', 'city', 'ward', 'expected_revenue', 'win_probability', 'last_contact', 'created_at',
       'gender', 'zalo_link', 'fb_link', 'customer_type', 'industry', 'budget_range', 'project_id', 'campaign_id', 'ttl1_completed', 'ttl1_data',
       'stage_id', 'pipeline_status', 'temperature', 'suggested_temperature', 'collaborator_ids', 'citizen_id', 'passport',
@@ -1867,6 +1906,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     ];
     const payload: Record<string, any> = {};
     allowedFields.forEach(f => { if (formData[f] !== undefined) payload[f] = formData[f]; });
+    if (formData.mobile !== undefined || formData.phone2 !== undefined) {
+      const sec = formData.mobile || formData.phone2 || null;
+      payload.mobile = sec;
+      payload.phone2 = sec;
+    }
     payload.tags = tags;
     payload.lead_score = score;
     if (formData.custom_fields && Array.isArray(formData.custom_fields)) {
@@ -3686,6 +3730,50 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     });
   };
 
+  const parseAndSplitPhones = (val: string): { primary: string; secondary: string } => {
+    if (!val) return { primary: '', secondary: '' };
+    const str = val.trim();
+
+    // 1. Phân tách theo ký tự: /, ,, ;, |, newline, 'hoặc', 'va', 'or', 'and', hoặc 2+ spaces
+    if (/[\/,\r\n;|\&]|\s{2,}|\s+-\s+|\s+(?:hoặc|hoac|va|or|and)\s+/i.test(str)) {
+      const parts = str.split(/[\/,\r\n;|\&]+|\s{2,}|\s+-\s+|\s+(?:hoặc|hoac|va|or|and)\s+/i)
+        .map(p => p.trim())
+        .filter(p => p.replace(/[^0-9]/g, '').length >= 8);
+      if (parts.length >= 2) {
+        return { primary: parts[0], secondary: parts.slice(1).join(', ') };
+      }
+    }
+
+    // 2. Dãy số dính liền (18 - 35 chữ số)
+    const digits = str.replace(/[^0-9]/g, '');
+    if (digits.length >= 18) {
+      const normDigits = (!digits.startsWith('0') && /^[35789]/.test(digits)) ? ('0' + digits) : digits;
+      const matches = normDigits.match(/0[35789][0-9]{8}/g);
+      if (matches && matches.length >= 2) {
+        const uniqueMatches = Array.from(new Set(matches));
+        if (uniqueMatches.length >= 2) {
+          return { primary: uniqueMatches[0], secondary: uniqueMatches.slice(1).join(', ') };
+        }
+      }
+      const sub = normDigits.match(/^(0[35789][0-9]{8})([0-9]{8,15})$/);
+      if (sub) {
+        let p2 = sub[2];
+        if (p2.startsWith('856')) p2 = '+' + p2;
+        return { primary: sub[1], secondary: p2 };
+      }
+    }
+
+    // 3. Phân tách bởi khoảng trắng đơn
+    if (str.includes(' ')) {
+      const spaceParts = str.split(' ').map(p => p.trim()).filter(p => p.replace(/[^0-9]/g, '').length >= 8);
+      if (spaceParts.length >= 2) {
+        return { primary: spaceParts[0], secondary: spaceParts.slice(1).join(', ') };
+      }
+    }
+
+    return { primary: val, secondary: '' };
+  };
+
   const normalizeContactData = (c: any) => {
     if (!c) return c;
     const newC = { ...c };
@@ -3711,6 +3799,25 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       const med = String(newC.utm_medium).trim();
       if (med.toLowerCase() === 'fb ads' || med.toLowerCase() === 'fb_ads' || med.toLowerCase() === 'fb') {
         newC.utm_medium = 'Facebook Ads';
+      }
+    }
+
+    // Ensure mobile and phone2 are populated if one is set
+    if (!newC.mobile && newC.phone2) {
+      newC.mobile = newC.phone2;
+    } else if (!newC.phone2 && newC.mobile) {
+      newC.phone2 = newC.mobile;
+    }
+
+    // Auto-split phone if it contains multiple numbers
+    if (newC.phone) {
+      const split = parseAndSplitPhones(newC.phone);
+      if (split.secondary) {
+        newC.phone = split.primary;
+        if (!newC.mobile && !newC.phone2) {
+          newC.mobile = split.secondary;
+          newC.phone2 = split.secondary;
+        }
       }
     }
 
@@ -3771,13 +3878,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     });
   };
 
-  const fetchData = useCallback(async (targetTab?: string, forceFreshContact = false) => {
-    if (!contact?.id) return;
+  const fetchData = useCallback(async (targetTab?: string, forceFreshContact = false, overrideContactId?: number) => {
+    const currentCId = overrideContactId || activeContactId || contact?.id;
+    if (!currentCId) return;
     const tabToLoad = targetTab || activeTab;
 
     setLoadingRelated(true);
     try {
-      const shouldFetchContact = forceFreshContact || !targetTab || contact.id !== lastLoadedContactIdRef.current;
+      const shouldFetchContact = forceFreshContact || !targetTab || currentCId !== lastLoadedContactIdRef.current;
       const isTaskOrTimelineTab = tabToLoad === 'tasks' || tabToLoad === 'timeline';
       const needNotes = shouldFetchContact || tabToLoad === 'timeline' || tabToLoad === 'tags';
       const needProjects = tabToLoad === 'info' && (!globalProjectsCache || globalProjectsCache.length === 0) && projectsList.length === 0;
@@ -3795,13 +3903,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         notesRes,
         tasksRes
       ] = await Promise.all([
-        shouldFetchContact ? api.get(`/contacts/${contact.id}`) : Promise.resolve(null),
+        shouldFetchContact ? api.get(`/contacts/${currentCId}`) : Promise.resolve(null),
         needStages ? api.get('/pipeline-stages') : Promise.resolve(null),
         needProjects ? api.get(`/projects${currentUser?.role === 'sale' ? '' : '?bypass_roster=1'}`) : Promise.resolve(null),
         needCompanies ? api.get('/companies?limit=2000') : Promise.resolve(null),
         needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
-        needNotes ? api.get(`/notes?entity_type=contact&entity_id=${contact.id}`) : Promise.resolve(null),
-        (shouldFetchContact || isTaskOrTimelineTab) ? api.get(`/activities?related_type=contact&related_id=${contact.id}`) : Promise.resolve(null)
+        needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`) : Promise.resolve(null),
+        (shouldFetchContact || isTaskOrTimelineTab) ? api.get(`/activities?related_type=contact&related_id=${currentCId}`) : Promise.resolve(null)
       ]);
 
       // 2. Xử lý Fresh Contact Details
@@ -3955,7 +4063,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       if (tabToLoad === 'deals' || tabToLoad === 'cooperation') {
         if (tabToLoad === 'cooperation') {
-          api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`)
+          api.get(`/cloud-files?contact_id=${currentCId}&limit=1000`)
             .then(res => {
               const docsData = res.data.data?.items || [];
               const mappedDocs = docsData.map((d: any) => ({
@@ -3972,7 +4080,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             .catch(err => console.error("Error pre-fetching cloud-files for cooperation check:", err));
         }
 
-        const depositsRes = await api.get(`/deposits?contact_id=${contact.id}`).catch(() => ({ data: { data: [] } }));
+        const depositsRes = await api.get(`/deposits?contact_id=${currentCId}`).catch(() => ({ data: { data: [] } }));
         const depositsList = (depositsRes.data.data || []).map((d: any) => ({
           ...d,
           id: d.id,
@@ -4016,7 +4124,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           const totalRev = depositsList.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
           const avgProb = Math.round(depositsList.reduce((total, d) => total + (Number(d.prob) || 0), 0) / depositsList.length);
           if (totalRev !== Number(formData.expected_revenue || 0) || avgProb !== Number(formData.win_probability || 0)) {
-            api.put(`/contacts/${contact.id}`, {
+            api.put(`/contacts/${currentCId}`, {
               expected_revenue: totalRev,
               win_probability: avgProb
             }).then(() => {
@@ -4030,31 +4138,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       }
 
       if (tabToLoad === 'invoices') {
-        const invoicesRes = await api.get(`/invoices?contact_id=${contact.id}`);
+        const invoicesRes = await api.get(`/invoices?contact_id=${currentCId}`);
         const invData = invoicesRes.data.data;
         setDrawerInvoices(Array.isArray(invData) ? invData : (invData?.items || []));
       }
 
       if (tabToLoad === 'quotes') {
-        const quotesRes = await api.get(`/quotes?contact_id=${contact.id}`);
+        const quotesRes = await api.get(`/quotes?contact_id=${currentCId}`);
         const qData = quotesRes.data.data;
         setDrawerQuotes(Array.isArray(qData) ? qData : (qData?.items || []));
       }
 
       if (tabToLoad === 'expenses') {
-        const expensesRes = await api.get(`/expenses/entity/contact/${contact.id}`);
+        const expensesRes = await api.get(`/expenses/entity/contact/${currentCId}`);
         const expData = expensesRes.data.data;
         setDrawerExpenses(Array.isArray(expData) ? expData : (expData?.items || []));
       }
 
       if (tabToLoad === 'tickets') {
-        const ticketsRes = await api.get(`/tickets?contact_id=${contact.id}`);
+        const ticketsRes = await api.get(`/tickets?contact_id=${currentCId}`);
         const tData = ticketsRes.data.data;
         setDrawerTickets(Array.isArray(tData) ? tData : (tData?.items || []));
       }
 
       if (tabToLoad === 'docs') {
-        const docsRes = await api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`);
+        const docsRes = await api.get(`/cloud-files?contact_id=${currentCId}&limit=1000`);
         const docsData = docsRes.data.data?.items || [];
         const mappedDocs = docsData.map((d: any) => ({
           id: d.id,
@@ -4077,10 +4185,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         let activeCoopSlip = coopSlip;
         if (!activeCoopSlip) {
           try {
-            const resSlips = await fetchAPI(`cooperation-slips?contact_id=${contact.id}`);
+            const resSlips = await fetchAPI(`cooperation-slips?contact_id=${currentCId}`);
             if (resSlips.success) {
               const slipsList = Array.isArray(resSlips.data) ? resSlips.data : (resSlips.data ? [resSlips.data] : []);
-              activeCoopSlip = slipsList.find((s: any) => Number(s.contact_id) === Number(contact.id)) || slipsList[0] || null;
+              activeCoopSlip = slipsList.find((s: any) => Number(s.contact_id) === Number(currentCId)) || slipsList[0] || null;
             }
           } catch (coopErr) {
             console.error("Lỗi khi tải thông tin hợp tác cho tài liệu:", coopErr);
@@ -4106,7 +4214,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
         // Fetch and include deposit milestone payment proofs (UNC) dynamically
         try {
-          const resDep = await api.get(`/deposits?contact_id=${contact.id}`);
+          const resDep = await api.get(`/deposits?contact_id=${currentCId}`);
           const customerDeposits = resDep.data?.data || [];
           (Array.isArray(customerDeposits) ? customerDeposits : []).forEach((dep: any) => {
             const milestones = dep.milestones || [];
@@ -4146,20 +4254,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     } finally {
       setLoadingRelated(false);
     }
-  }, [contact?.id, activeTab, stages.length, projectsList.length, companiesList.length]);
+  }, [contact?.id, activeContactId, activeTab, stages.length, projectsList.length, companiesList.length]);
 
   // Sync data whenever active tab, contact, or open status changes
   useEffect(() => {
-    if (isOpen && contact?.id) {
+    if (isOpen && effectiveContactId) {
       fetchData(activeTab);
     }
-  }, [activeTab, isOpen, contact?.id, fetchData]);
+  }, [activeTab, isOpen, effectiveContactId, fetchData]);
 
   useEffect(() => {
-    if (isOpen && contact?.id) {
+    if (isOpen && effectiveContactId) {
       setLoadingContactDetails(true);
     }
-  }, [isOpen, contact?.id]);
+  }, [isOpen, effectiveContactId]);
 
   useEffect(() => {
     const handleQuoteUpdate = () => {
@@ -4220,6 +4328,276 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       window.removeEventListener('deposit-created', handleDepositCreated);
     };
   }, [isOpen, contact?.id, fetchData, formData, currentUser, onUpdate]);
+
+  // ── Profile Switching & Cloning Handlers ──
+  const executeSwitchProfile = useCallback(async (targetContactId: number) => {
+    setLoadingContactDetails(true);
+    try {
+      const res = await api.get(`/contacts/${targetContactId}`);
+      const fresh = res.data?.data || res.data;
+      if (fresh && fresh.id) {
+        const normalized = normalizeContactData(fresh);
+        setActiveContactId(fresh.id);
+        setFormData(normalized);
+        setBaseData(normalized);
+        lastLoadedContactIdRef.current = fresh.id;
+
+        // Sync tags
+        let parsedTags = [];
+        try {
+          parsedTags = typeof fresh.tags === 'string' ? JSON.parse(fresh.tags) : (fresh.tags || []);
+        } catch (e) {
+          parsedTags = [];
+        }
+        setTags(parsedTags);
+        setBaseTags(parsedTags);
+
+        // Update URL query id
+        try {
+          const params = new URLSearchParams(window.location.search);
+          params.set('id', String(fresh.id));
+          window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+        } catch (e) {}
+
+        // Fetch tab data for newly active contact
+        fetchData(activeTab, true, fresh.id);
+        fetchLinkedProfiles(fresh.id);
+
+        addToast(`Đã chuyển sang hồ sơ "${fresh.full_name}" (${fresh.program || 'Chương trình khác'})`, 'info');
+      }
+    } catch (e: any) {
+      addToast('Không thể chuyển hồ sơ: ' + (e.response?.data?.message || e.message), 'error');
+    } finally {
+      setLoadingContactDetails(false);
+    }
+  }, [activeTab, addToast, fetchData, fetchLinkedProfiles]);
+
+  const handleSwitchProfile = useCallback((targetContactId: number) => {
+    if (targetContactId === effectiveContactId) return;
+    if (hasChanges) {
+      showConfirm({
+        title: 'Bỏ qua thay đổi chưa lưu?',
+        message: 'Bạn có các thay đổi chưa lưu trên hồ sơ hiện tại. Bạn có muốn tiếp tục chuyển hồ sơ mà không lưu không?',
+        confirmText: 'Chuyển hồ sơ',
+        cancelText: 'Ở lại',
+        onConfirm: async () => {
+          await executeSwitchProfile(targetContactId);
+        }
+      });
+      return;
+    }
+    executeSwitchProfile(targetContactId);
+  }, [effectiveContactId, hasChanges, showConfirm, executeSwitchProfile]);
+
+  const handleOpenCloneModal = () => {
+    setCloneProgram('');
+    setCloneOwnerId(String(formData.owner_id || contact?.owner_id || currentUser?.id || ''));
+    setCloneNotes('');
+    setShowCloneModal(true);
+  };
+
+  const handleExecuteClone = async () => {
+    if (!effectiveContactId) return;
+    const trimmedProgram = cloneProgram.trim();
+    if (!trimmedProgram) {
+      addToast('Vui lòng nhập hoặc chọn chương trình học cho hồ sơ nhân bản', 'warning');
+      return;
+    }
+
+    setCloningProfile(true);
+    try {
+      const res = await api.post(`/contacts/${effectiveContactId}/clone`, {
+        program: trimmedProgram,
+        owner_id: cloneOwnerId ? Number(cloneOwnerId) : undefined,
+        notes: cloneNotes.trim() || undefined
+      });
+
+      const newContact = res.data?.data || res.data;
+      if (newContact && newContact.id) {
+        addToast(`Nhân bản hồ sơ thành công cho chương trình "${trimmedProgram}"!`, 'success');
+        setShowCloneModal(false);
+        triggerFullConfetti();
+        onUpdate?.(newContact);
+        window.dispatchEvent(new CustomEvent('contact-updated'));
+        await executeSwitchProfile(newContact.id);
+      } else {
+        addToast('Đã tạo bản sao nhưng không nhận được thông tin phản hồi từ máy chủ.', 'warning');
+        setShowCloneModal(false);
+        onUpdate?.(null);
+      }
+    } catch (e: any) {
+      const errMsg = e.response?.data?.message || e.message || 'Lỗi nhân bản hồ sơ khách hàng';
+      addToast(errMsg, 'error');
+    } finally {
+      setCloningProfile(false);
+    }
+  };
+
+  const renderConnectedProfilesBar = () => {
+    // Chỉ hiển thị thanh chuyển chương trình khi có từ 2 chương trình trở lên
+    if (!linkedProfiles || linkedProfiles.length < 2) return null;
+
+    return (
+      <div 
+        className="connected-profiles-bar"
+        style={{
+          padding: '8px 16px',
+          background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)',
+          borderBottom: '1px solid var(--color-border-light)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          overflowX: 'auto',
+          flexShrink: 0
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '6px',
+            background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+          }}>
+            <Layers size={13} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ 
+              fontSize: '0.725rem', 
+              fontWeight: 800, 
+              color: 'var(--color-text)', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.04em' 
+            }}>
+              Chương trình ({linkedProfiles.length})
+            </span>
+            {loadingLinkedProfiles && (
+              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', color: '#3b82f6' }} />
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '2px 0', flex: 1, minWidth: 0 }}>
+          {linkedProfiles.map((p: any) => {
+            const isCurrent = Number(p.id) === Number(effectiveContactId);
+            const stageColor = p.stage_color || '#3b82f6';
+            const programTitle = p.program || 'Chưa đặt tên CT';
+            
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handleSwitchProfile(Number(p.id))}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: isCurrent ? '4px 12px' : '4px 10px',
+                  borderRadius: '20px',
+                  fontSize: '0.75rem',
+                  fontWeight: isCurrent ? 800 : 600,
+                  cursor: isCurrent ? 'default' : 'pointer',
+                  border: isCurrent ? '2px solid #2563eb' : '1px solid var(--color-border)',
+                  background: isCurrent ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
+                  color: isCurrent ? '#1d4ed8' : 'var(--color-text)',
+                  boxShadow: isCurrent ? '0 2px 8px rgba(37, 99, 235, 0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+                onMouseEnter={(e) => {
+                  if (!isCurrent) {
+                    e.currentTarget.style.borderColor = '#93c5fd';
+                    e.currentTarget.style.background = '#ffffff';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCurrent) {
+                    e.currentTarget.style.borderColor = 'var(--color-border)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.75)';
+                  }
+                }}
+                title={`Hồ sơ #${p.id} - ${programTitle}\nTrạng thái: ${p.stage_name || p.pipeline_status || 'Giai đoạn 1'}\nPhụ trách: ${p.owner_name || 'Chưa gán'}`}
+              >
+                <span style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  background: stageColor,
+                  flexShrink: 0
+                }} />
+                <span style={{ fontWeight: 800 }}>{programTitle}</span>
+                <span style={{
+                  fontSize: '0.65rem',
+                  padding: '1px 6px',
+                  borderRadius: '8px',
+                  background: `${stageColor}18`,
+                  color: stageColor,
+                  fontWeight: 700
+                }}>
+                  {p.stage_name || p.pipeline_status || 'Giai đoạn 1'}
+                </span>
+                {isCurrent && (
+                  <span style={{
+                    fontSize: '0.625rem',
+                    fontWeight: 800,
+                    color: '#2563eb',
+                    background: '#eff6ff',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(37, 99, 235, 0.25)'
+                  }}>
+                    Đang xem
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Quick Clone / Add Program button */}
+          <button
+            type="button"
+            onClick={handleOpenCloneModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              fontSize: '0.725rem',
+              fontWeight: 700,
+              color: '#2563eb',
+              background: 'rgba(37, 99, 235, 0.08)',
+              border: '1px dashed #3b82f6',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#2563eb';
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.borderStyle = 'solid';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
+              e.currentTarget.style.color = '#2563eb';
+              e.currentTarget.style.borderStyle = 'dashed';
+            }}
+            title="Nhân bản thêm hồ sơ cho khách hàng này với chương trình học khác"
+          >
+            <Plus size={13} />
+            <span>Thêm CT mới</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (contact) {
@@ -6608,53 +6986,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             {copiedField === 'name' ? <Check size={13} className="text-success" /> : <Copy size={13} />}
                           </button>
                         </h2>
-                        <span className={`badge ${formData.status === 'customer' ? 'success' : formData.status === 'qualified' ? 'warning' : 'info'}`} style={{ padding: '2px 8px', fontSize: '0.6875rem', borderRadius: '6px' }}>
-                          {formData.status === 'customer' ? 'Khách hàng VIP' : formData.status === 'qualified' ? 'Đã thẩm định' : 'Tiềm năng'}
-                        </span>
-                        {formData.temperature && tempLabels[formData.temperature] && (
-                          <span 
-                            style={{ 
-                              padding: '2px 8px', 
-                              fontSize: '0.6875rem', 
-                              borderRadius: '6px',
-                              fontWeight: 700,
-                              color: tempLabels[formData.temperature].color,
-                              background: tempLabels[formData.temperature].bg,
-                              border: `1px solid ${tempLabels[formData.temperature].color}33`,
-                              marginLeft: '6px'
-                            }}
-                            title={`Nhiệt độ sale chốt: ${tempLabels[formData.temperature].label}`}
-                          >
-                            Nhiệt: {tempLabels[formData.temperature].label}
-                          </span>
-                        )}
-                        {formData.suggested_temperature && tempLabels[formData.suggested_temperature] && (
-                          <span 
-                            style={{ 
-                              padding: '2px 8px', 
-                              fontSize: '0.6875rem', 
-                              borderRadius: '6px',
-                              fontWeight: 600,
-                              color: '#64748b',
-                              background: 'var(--color-bg)',
-                              border: '1px solid var(--color-border-light)',
-                              marginLeft: '6px'
-                            }}
-                            title={`Máy đề xuất: ${tempLabels[formData.suggested_temperature].label}`}
-                          >
-                            AI: {tempLabels[formData.suggested_temperature].label}
-                          </span>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '6px', flexWrap: 'wrap' }}>
-                        <p style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-light)', fontSize: '0.75rem' }}>
-                          <Clock size={12} /> <span>Tạo lúc: <strong style={{ color: 'var(--color-text)' }}>{formatDateTime(formData.created_at)}</strong></span>
-                        </p>
-                        <p style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-text-light)', fontSize: '0.75rem' }}>
-                          <span style={{ color: 'var(--color-text-muted)' }}>|</span>
-                          <span>Cập nhật: <strong style={{ color: 'var(--color-text)' }}>{formatDateTime(formData.updated_at || formData.created_at)}</strong></span>
-                        </p>
                       </div>
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
@@ -6674,6 +7005,23 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </button>
                           )}
                         </div>
+                        {(formData.mobile || formData.phone2) && (formData.mobile || formData.phone2) !== formData.phone && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--color-surface-hover, #f1f5f9)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => showCall(formData.mobile || formData.phone2)}>
+                              <Phone size={12} style={{ color: 'var(--color-text-muted)' }} />
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Phụ:</span>
+                            <PhoneLink phone={formData.mobile || formData.phone2} style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }} />
+                            <button
+                              className="btn-icon xs"
+                              style={{ color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '-2px' }}
+                              onClick={() => copyToClipboard(formData.mobile || formData.phone2, 'phone2')}
+                              title="Sao chép SĐT phụ"
+                            >
+                              {copiedField === 'phone2' ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Mail size={12} className="text-muted" />
@@ -7152,6 +7500,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 </div>
               )}
 
+              {/* ── Connected Multi-Program Profiles Switcher Bar ── */}
+              {renderConnectedProfilesBar()}
+
               {/* ── Pipeline Stepper Bar (Desktop Only) ── */}
               {!isMobileOrTablet && pipelineStepperBar}
 
@@ -7226,6 +7577,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       <Phone size={12} className="text-primary" style={{ flexShrink: 0 }} />
                                       <PhoneLink phone={formData.phone} style={{ fontSize: '0.8125rem', fontWeight: 700 }} />
                                     </div>
+                                    {(formData.mobile || formData.phone2) && (formData.mobile || formData.phone2) !== formData.phone && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '1px 4px', borderRadius: '4px' }}>Phụ:</span>
+                                        <PhoneLink phone={formData.mobile || formData.phone2} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }} />
+                                      </div>
+                                    )}
                                     {formData.email && (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                                         <Mail size={12} className="text-muted" style={{ flexShrink: 0 }} />
@@ -7779,9 +8136,37 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 );
                               });
                             })()}
+
+                            {/* ── Action: Clone Profile Button at bottom of Mobile Sidebar ── */}
+                            <div style={{ marginTop: '16px', marginBottom: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={handleOpenCloneModal}
+                                style={{
+                                  width: '100%',
+                                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
+                                  border: '1.5px dashed #3b82f6',
+                                  borderRadius: '8px',
+                                  color: '#2563eb',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '8px',
+                                  padding: '11px 16px',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 2px rgba(59, 130, 246, 0.06)'
+                                }}
+                              >
+                                <Copy size={16} />
+                                <span>Nhân bản hồ sơ</span>
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <>
+
                             {(() => {
                               const tabGroups = [
                                 {
@@ -7985,7 +8370,47 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 );
                               });
                             })()}
-                            <div style={{ marginTop: 'auto', padding: '1rem 0 0 0', borderTop: '1px solid var(--color-border)' }}>
+
+                            {/* ── Action: Clone Profile Button at bottom of Desktop Sidebar ── */}
+                            <div style={{ marginTop: 'auto', padding: '12px 4px 8px 4px' }}>
+                              <button
+                                type="button"
+                                onClick={handleOpenCloneModal}
+                                title="Nhân bản hồ sơ khách hàng"
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '8px',
+                                  padding: '9px 12px',
+                                  borderRadius: '8px',
+                                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
+                                  border: '1.5px dashed #3b82f6',
+                                  color: '#2563eb',
+                                  fontSize: '0.825rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  boxShadow: '0 1px 2px rgba(59, 130, 246, 0.06)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = '#2563eb';
+                                  e.currentTarget.style.color = '#ffffff';
+                                  e.currentTarget.style.borderStyle = 'solid';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)';
+                                  e.currentTarget.style.color = '#2563eb';
+                                  e.currentTarget.style.borderStyle = 'dashed';
+                                }}
+                              >
+                                <Copy size={16} />
+                                <span>Nhân bản hồ sơ</span>
+                              </button>
+                            </div>
+
+                            <div style={{ padding: '0.75rem 0 0 0', borderTop: '1px solid var(--color-border)' }}>
                               <p style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>Enterprise CRM</p>
                             </div>
                           </>
@@ -8401,14 +8826,27 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               </div>
                               <input className="form-input form-input-icon-left" type="tel" placeholder="09xx xxx xxx" value={formData.phone || ''} onChange={e => {
                                 const val = e.target.value;
-                                setFormData((prev: any) => {
-                                  const next = { ...prev, phone: val };
-                                  if (zaloSource === 'primary') {
-                                    const cleanPhone = val.replace(/[^0-9]/g, '');
-                                    next.zalo_link = cleanPhone ? `https://zalo.me/${cleanPhone}` : '';
-                                  }
-                                  return next;
-                                });
+                                const split = parseAndSplitPhones(val);
+                                if (split.secondary) {
+                                  setFormData((prev: any) => {
+                                    const next = { ...prev, phone: split.primary, mobile: split.secondary, phone2: split.secondary };
+                                    if (zaloSource === 'primary') {
+                                      const cleanPhone = split.primary.replace(/[^0-9]/g, '');
+                                      next.zalo_link = cleanPhone ? `https://zalo.me/${cleanPhone}` : '';
+                                    }
+                                    return next;
+                                  });
+                                  addToast(`Đã tự động tách SĐT phụ: ${split.secondary}`, 'info');
+                                } else {
+                                  setFormData((prev: any) => {
+                                    const next = { ...prev, phone: val };
+                                    if (zaloSource === 'primary') {
+                                      const cleanPhone = val.replace(/[^0-9]/g, '');
+                                      next.zalo_link = cleanPhone ? `https://zalo.me/${cleanPhone}` : '';
+                                    }
+                                    return next;
+                                  });
+                                }
                               }} />
                             </div>
                           </div>
@@ -8432,13 +8870,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               <label className="form-label" style={{ margin: 0 }}>Số điện thoại phụ</label>
                               <span 
                                 onClick={() => {
-                                  if (isViewer || !formData.mobile?.trim()) return;
+                                  const sec = (formData.mobile || formData.phone2 || '').trim();
+                                  if (isViewer || !sec) return;
                                   if (zaloSource === 'secondary') {
                                     setZaloSource('none');
                                     setFormData((prev: any) => ({ ...prev, zalo_link: '' }));
                                   } else {
                                     setZaloSource('secondary');
-                                    const cleanPhone = (formData.mobile || '').replace(/[^0-9]/g, '');
+                                    const cleanPhone = sec.replace(/[^0-9]/g, '');
                                     setFormData((prev: any) => ({ ...prev, zalo_link: cleanPhone ? `https://zalo.me/${cleanPhone}` : '' }));
                                   }
                                 }}
@@ -8446,10 +8885,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: '6px',
-                                  cursor: isViewer || !formData.mobile?.trim() ? 'not-allowed' : 'pointer',
+                                  cursor: isViewer || !(formData.mobile || formData.phone2)?.trim() ? 'not-allowed' : 'pointer',
                                   fontSize: '0.72rem',
                                   fontWeight: 600,
-                                  color: zaloSource === 'secondary' && formData.mobile?.trim() ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                                  color: zaloSource === 'secondary' && (formData.mobile || formData.phone2)?.trim() ? 'var(--color-primary)' : 'var(--color-text-muted)',
                                   userSelect: 'none'
                                 }}
                               >
@@ -8457,10 +8896,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   width: '32px',
                                   height: '18px',
                                   borderRadius: '9px',
-                                  background: zaloSource === 'secondary' && formData.mobile?.trim() ? 'var(--color-primary)' : 'var(--color-border)',
+                                  background: zaloSource === 'secondary' && (formData.mobile || formData.phone2)?.trim() ? 'var(--color-primary)' : 'var(--color-border)',
                                   position: 'relative',
                                   transition: 'background-color 0.2s',
-                                  opacity: isViewer || !formData.mobile?.trim() ? 0.5 : 1
+                                  opacity: isViewer || !(formData.mobile || formData.phone2)?.trim() ? 0.5 : 1
                                 }}>
                                   <div style={{
                                     width: '14px',
@@ -8469,7 +8908,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     background: 'var(--color-surface)',
                                     position: 'absolute',
                                     top: '2px',
-                                    left: zaloSource === 'secondary' && formData.mobile?.trim() ? '16px' : '2px',
+                                    left: zaloSource === 'secondary' && (formData.mobile || formData.phone2)?.trim() ? '16px' : '2px',
                                     transition: 'left 0.2s',
                                     boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
                                   }} />
@@ -8481,10 +8920,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               <div style={{ position: 'absolute', left: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
                                 <Phone size={16} />
                               </div>
-                              <input className="form-input form-input-icon-left" type="tel" placeholder="08xx xxx xxx" value={formData.mobile || ''} onChange={e => {
+                              <input className="form-input form-input-icon-left" type="tel" placeholder="08xx xxx xxx" value={formData.mobile || formData.phone2 || ''} onChange={e => {
                                 const val = e.target.value;
                                 setFormData((prev: any) => {
-                                  const next = { ...prev, mobile: val };
+                                  const next = { ...prev, mobile: val, phone2: val };
                                   if (zaloSource === 'secondary') {
                                     const cleanPhone = val.replace(/[^0-9]/g, '');
                                     next.zalo_link = cleanPhone ? `https://zalo.me/${cleanPhone}` : '';
@@ -16369,6 +16808,206 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   <Eye size={15} /> Xem khách hàng này
                 </button>
               )}
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
+      {/* ── Modal: Clone Profile for New Program ── */}
+      {showCloneModal && (
+        <CustomModal
+          isOpen={showCloneModal}
+          onClose={() => !cloningProfile && setShowCloneModal(false)}
+          title="Nhân bản hồ sơ khách hàng (Chương trình mới)"
+          maxWidth="560px"
+          zIndex={zIndex ? zIndex + 50 : 1000200}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '4px 0' }}>
+            {/* Header summary of current profile */}
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border-light)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Avatar name={formData.full_name || ''} src={formData.avatar_url} size={36} />
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                    {formData.full_name || 'Khách hàng'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    {formData.phone || formData.mobile || 'Không có SĐT'} {formData.email ? `• ${formData.email}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', display: 'block' }}>Chương trình hiện tại</span>
+                <span style={{ fontSize: '0.775rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+                  {formData.program || 'Chưa đặt tên CT'}
+                </span>
+              </div>
+            </div>
+
+            {/* Information note */}
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: '8px',
+              background: 'rgba(59, 130, 246, 0.08)',
+              border: '1px solid rgba(59, 130, 246, 0.2)',
+              fontSize: '0.75rem',
+              color: '#1e40af',
+              lineHeight: 1.5
+            }}>
+              💡 <strong>Cơ chế chăm sóc song song:</strong> Bản sao sẽ kế thừa đầy đủ thông tin cá nhân (SĐT, Email, CCCD, địa chỉ, công ty, nguồn gốc), nhưng bắt đầu lại từ <strong>Bước 1 của Pipeline</strong> với các tương tác, công việc, deals học phí và tài liệu hoàn toàn độc lập cho chương trình mới.
+            </div>
+
+            {/* Program input & suggestions */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text)' }}>
+                Chương trình học mới cần tư vấn / chăm sóc <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Nhập hoặc chọn chương trình (VD: DBA, MBA Standard, CFO...)"
+                value={cloneProgram}
+                onChange={(e) => setCloneProgram(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)'
+                }}
+              />
+              {programSuggestions.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>
+                    Gợi ý nhanh chương trình:
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {programSuggestions.slice(0, 12).map((prog, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setCloneProgram(prog)}
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          border: cloneProgram === prog ? '1px solid #2563eb' : '1px solid var(--color-border)',
+                          background: cloneProgram === prog ? '#eff6ff' : 'var(--color-surface)',
+                          color: cloneProgram === prog ? '#1d4ed8' : 'var(--color-text)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {prog}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sales Owner Dropdown */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text)' }}>
+                Chuyên viên tư vấn phụ trách chương trình này
+              </label>
+              <select
+                className="form-select"
+                value={cloneOwnerId}
+                onChange={(e) => setCloneOwnerId(e.target.value)}
+                style={{
+                  width: '100%',
+                  fontSize: '0.85rem',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)'
+                }}
+              >
+                {users.map((u: any) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name || u.name || u.username} ({u.role || 'user'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Initial Note */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text)' }}>
+                Ghi chú ban đầu khi nhân bản (Tùy chọn)
+              </label>
+              <textarea
+                className="form-input"
+                rows={3}
+                placeholder="Ghi chú nhu cầu tư vấn khóa học mới..."
+                value={cloneNotes}
+                onChange={(e) => setCloneNotes(e.target.value)}
+                style={{
+                  width: '100%',
+                  fontSize: '0.825rem',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '6px', paddingTop: '12px', borderTop: '1px solid var(--color-border-light)' }}>
+              <button
+                type="button"
+                disabled={cloningProfile}
+                onClick={() => setShowCloneModal(false)}
+                className="btn"
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={cloningProfile || !cloneProgram.trim()}
+                onClick={handleExecuteClone}
+                className="btn primary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  background: '#2563eb',
+                  borderColor: '#2563eb',
+                  color: '#ffffff',
+                  cursor: cloningProfile || !cloneProgram.trim() ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {cloningProfile ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Đang nhân bản...</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} />
+                    <span>Xác nhận nhân bản</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </CustomModal>

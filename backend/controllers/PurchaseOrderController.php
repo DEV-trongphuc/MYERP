@@ -117,19 +117,44 @@ class PurchaseOrderController {
         }
 
         $b = getBody();
-        if (empty($b['supplier_id']) || empty($b['items'])) {
+        $supplier_id = !empty($b['supplier_id']) ? (int)$b['supplier_id'] : null;
+        $beneficiary_type = !empty($b['beneficiary_type']) ? $b['beneficiary_type'] : 'supplier';
+        $beneficiary_id = !empty($b['beneficiary_id']) ? (int)$b['beneficiary_id'] : null;
+
+        // If beneficiary is an employee, create or find corresponding supplier record
+        if ($beneficiary_type === 'employee' && $beneficiary_id) {
+            $uStmt = $this->db->prepare("SELECT id, full_name, email, phone, bank_name, bank_account FROM users WHERE id=? AND tenant_id=?");
+            $uStmt->execute([$beneficiary_id, $auth['tenant_id']]);
+            $uRow = $uStmt->fetch();
+            if ($uRow) {
+                $supName = '[Nhân viên] ' . $uRow['full_name'];
+                $sCheck = $this->db->prepare("SELECT id FROM suppliers WHERE name=? AND tenant_id=? LIMIT 1");
+                $sCheck->execute([$supName, $auth['tenant_id']]);
+                $existingSup = $sCheck->fetch();
+                if ($existingSup) {
+                    $supplier_id = (int)$existingSup['id'];
+                } else {
+                    $bankStr = trim(($uRow['bank_name'] ? $uRow['bank_name'] . ' ' : '') . ($uRow['bank_account'] ?? ''));
+                    $insSup = $this->db->prepare("INSERT INTO suppliers (tenant_id, name, phone, email, bank_account, created_by) VALUES (?, ?, ?, ?, ?, ?)");
+                    $insSup->execute([$auth['tenant_id'], $supName, $uRow['phone'] ?? '', $uRow['email'] ?? '', $bankStr, $auth['user_id']]);
+                    $supplier_id = (int)$this->db->lastInsertId();
+                }
+            }
+        }
+
+        if (empty($supplier_id) || empty($b['items'])) {
             respond(422, null, 'Thiếu thông tin đối tác / nhà cung cấp hoặc danh sách sản phẩm', false);
         }
         if (($b['total'] ?? 0) < 0) respond(422, null, 'Tổng tiền đơn hàng không được âm', false);
 
         // Đảm bảo Role Nhân sự (HR) chỉ lên PO cho Đối tác / Nhà cung cấp (như phí giảng viên)
-        if (in_array($auth['role'], ['hr', 'human_resources'], true) && empty($b['supplier_id'])) {
+        if (in_array($auth['role'], ['hr', 'human_resources'], true) && empty($supplier_id)) {
             respond(403, null, 'Bộ phận Nhân sự chỉ có quyền tạo PO trả phí cho Đối tác / Nhà cung cấp', false);
         }
 
         $checkSup = $this->db->prepare("SELECT id FROM suppliers WHERE id=? AND tenant_id=?");
-        $checkSup->execute([(int)$b['supplier_id'], $auth['tenant_id']]);
-        if (!$checkSup->fetch()) respond(404, null, 'Nhà cung cấp không hợp lệ', false);
+        $checkSup->execute([$supplier_id, $auth['tenant_id']]);
+        if (!$checkSup->fetch()) respond(404, null, 'Nhà cung cấp hoặc đơn vị thụ hưởng không hợp lệ', false);
 
         // Fetch threshold for 3-level approval
         $threshold = 5000000;
@@ -145,6 +170,7 @@ class PurchaseOrderController {
         $approver_id = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
         $approver_id_2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;
         $approver_id_3 = !empty($b['approver_id_3']) ? (int)$b['approver_id_3'] : null;
+        $related_user_ids = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? implode(',', $b['related_user_ids']) : (string)$b['related_user_ids']) : null;
 
         if (empty($approver_id)) {
             respond(422, null, 'Đơn hàng yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1.', false);
@@ -170,16 +196,18 @@ class PurchaseOrderController {
                     tenant_id, supplier_id, created_by, po_number, order_date, 
                     status, subtotal, tax, total, notes, 
                     approver_id, approver_id_2, approver_id_3, 
-                    status_level_1, status_level_2, status_level_3, approval_status
+                    status_level_1, status_level_2, status_level_3, approval_status,
+                    related_user_ids
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
-                $auth['tenant_id'], $b['supplier_id'], $auth['user_id'], $po_number,
+                $auth['tenant_id'], $supplier_id, $auth['user_id'], $po_number,
                 empty($b['order_date']) ? date('Y-m-d') : $b['order_date'], $status,
                 $b['subtotal'] ?? 0, $b['tax'] ?? 0, $b['total'] ?? 0, $b['notes'] ?? null,
                 $approver_id, $approver_id_2, $approver_id_3,
-                $status_level_1, $status_level_2, $status_level_3, $approval_status
+                $status_level_1, $status_level_2, $status_level_3, $approval_status,
+                $related_user_ids
             ]);
             $poId = (int)$this->db->lastInsertId();
 
@@ -226,6 +254,31 @@ class PurchaseOrderController {
                     ]);
                 } catch (\Throwable $notifEx) {
                     error_log("PO Notification Error: " . $notifEx->getMessage());
+                }
+            }
+
+            // Send notification to related users if any
+            if (!empty($related_user_ids)) {
+                try {
+                    $relIds = array_filter(array_map('intval', explode(',', $related_user_ids)));
+                    foreach ($relIds as $rUserId) {
+                        if ($rUserId !== (int)$auth['user_id'] && $rUserId !== $approver_id) {
+                            $stmtNotif = $this->db->prepare("
+                                INSERT INTO notifications (tenant_id, user_id, title, message, link, type, is_read, created_at)
+                                VALUES (?, ?, ?, ?, ?, 'purchase_order', 0, NOW())
+                            ");
+                            $creatorName = !empty($auth['full_name']) ? $auth['full_name'] : 'Thành viên hệ thống';
+                            $stmtNotif->execute([
+                                $auth['tenant_id'],
+                                $rUserId,
+                                'Bạn được gắn liên quan trong đơn mua/chi phí: ' . $po_number,
+                                'Người tạo: ' . $creatorName . ' - Số tiền: ' . number_format($total, 0, ',', '.') . ' đ',
+                                '/inventory/purchase-orders?po_id=' . $poId
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $relEx) {
+                    error_log("PO Related User Notification Error: " . $relEx->getMessage());
                 }
             }
 

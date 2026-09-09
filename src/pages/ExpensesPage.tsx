@@ -2145,74 +2145,124 @@ export const ExpensesPage: React.FC = () => {
                     })()}
 
                     {/* Attachments Section */}
-                    {(viewItem.image_url || viewItem.refund_image_url) && (
-                      <div style={{ 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '12px', 
-                        background: 'var(--color-surface)', 
-                        padding: '1.5rem', 
-                        borderRadius: '16px', 
-                        border: '1px solid var(--color-border-light)',
-                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
-                      }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px', marginBottom: '4px' }}>
-                          Tài liệu đính kèm
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '16px' }}>
-                          {viewItem.image_url && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Ảnh hóa đơn đề xuất:</span>
-                              <div 
-                                onClick={() => window.open(viewItem.image_url.startsWith('http') ? viewItem.image_url : `${import.meta.env.VITE_API_URL || '/backend'}${viewItem.image_url}`, '_blank')}
-                                style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.opacity = '0.9';
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.opacity = '1';
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                }}
-                              >
-                                <img 
-                                  src={viewItem.image_url.startsWith('http') ? viewItem.image_url : `${import.meta.env.VITE_API_URL || '/backend'}${viewItem.image_url}`} 
-                                  alt="Hóa đơn" 
-                                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-                                />
-                              </div>
-                            </div>
-                          )}
+                    {(() => {
+                      const formatImgUrl = (rawUrl: string) => {
+                        if (!rawUrl) return '';
+                        if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) return rawUrl;
+                        const baseUrl = (import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '');
+                        const cleanPath = rawUrl.replace(/^\/?(backend\/)?/, '');
+                        return `${baseUrl}/${cleanPath}`;
+                      };
 
-                          {viewItem.refund_image_url && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Ủy nhiệm chi / Chuyển khoản:</span>
-                              <div 
-                                onClick={() => {
-                                  const imgLink = viewItem.refund_image_url.startsWith('http') ? viewItem.refund_image_url : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${viewItem.refund_image_url.replace(/^\/?(backend\/)?/, '')}`;
-                                  window.open(imgLink, '_blank');
-                                }}
-                                style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.opacity = '0.9';
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.opacity = '1';
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                }}
-                              >
-                                <img 
-                                  src={viewItem.refund_image_url.startsWith('http') ? viewItem.refund_image_url : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${viewItem.refund_image_url.replace(/^\/?(backend\/)?/, '')}`} 
-                                  alt="UNC" 
-                                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-                                />
+                      const extractedImgs: string[] = [];
+                      if (viewItem.image_url) {
+                        extractedImgs.push(viewItem.image_url);
+                      }
+                      if (viewItem.notes) {
+                        const matches = viewItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+                        for (const m of matches) {
+                          const url = m[2].trim();
+                          if (url && !extractedImgs.some(img => img === url || img.endsWith(url))) {
+                            extractedImgs.push(url);
+                          }
+                        }
+                      }
+
+                      if (extractedImgs.length === 0 && !viewItem.refund_image_url) return null;
+
+                      return (
+                        <div style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '12px', 
+                          background: 'var(--color-surface)', 
+                          padding: '1.5rem', 
+                          borderRadius: '16px', 
+                          border: '1px solid var(--color-border-light)',
+                          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
+                        }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Tài liệu đính kèm</span>
+                            {extractedImgs.length > 0 && (
+                              <span style={{ color: 'var(--color-primary)', fontWeight: 750, fontSize: '0.72rem' }}>
+                                {extractedImgs.length} ảnh chứng từ
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+                            {extractedImgs.map((imgSrc, idx) => {
+                              const fullImg = formatImgUrl(imgSrc);
+                              return (
+                                <div key={`page-exp-img-${idx}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    Ảnh hóa đơn {extractedImgs.length > 1 ? `#${idx + 1}` : 'đề xuất'}:
+                                  </span>
+                                  <div 
+                                    onClick={() => window.open(fullImg, '_blank')}
+                                    style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.opacity = '0.9';
+                                      e.currentTarget.style.transform = 'translateY(-2px)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.opacity = '1';
+                                      e.currentTarget.style.transform = 'translateY(0)';
+                                    }}
+                                  >
+                                    <img 
+                                      src={fullImg} 
+                                      alt={`Hóa đơn ${idx + 1}`} 
+                                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                                      onError={(e) => {
+                                        const target = e.currentTarget;
+                                        if (!target.dataset.tried) {
+                                          target.dataset.tried = '1';
+                                          target.src = `/backend/${imgSrc.replace(/^\/?(backend\/)?/, '')}`;
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {viewItem.refund_image_url && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Ủy nhiệm chi / Chuyển khoản:</span>
+                                <div 
+                                  onClick={() => {
+                                    const imgLink = formatImgUrl(viewItem.refund_image_url);
+                                    window.open(imgLink, '_blank');
+                                  }}
+                                  style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.opacity = '0.9';
+                                    e.currentTarget.style.transform = 'translateY(-2px)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.opacity = '1';
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                  }}
+                                >
+                                  <img 
+                                    src={formatImgUrl(viewItem.refund_image_url)} 
+                                    alt="UNC" 
+                                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                                    onError={(e) => {
+                                      const target = e.currentTarget;
+                                      if (!target.dataset.tried) {
+                                        target.dataset.tried = '1';
+                                        target.src = `/backend/${viewItem.refund_image_url.replace(/^\/?(backend\/)?/, '')}`;
+                                      }
+                                    }}
+                                  />
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Refund confirmation for Accountant/Admin if approved but not yet refunded */}
                     {viewItem.status === 'approved' && !viewItem.is_refunded && (

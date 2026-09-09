@@ -22,7 +22,7 @@ const PAGE_SIZE = 10;
 export const CompaniesPage: React.FC = () => {
   const { user } = useAuth();
   const userRole = (user?.role || '').toLowerCase();
-  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'].includes(userRole);
+  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan'].includes(userRole);
   const isSale = ['sale', 'sales'].includes(userRole);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {

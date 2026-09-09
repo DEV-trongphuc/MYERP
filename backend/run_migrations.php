@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 247;
+$targetVersion = 248;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2619,8 +2619,36 @@ try {
         $logMsg("Nâng cấp lên phiên bản 247 hoàn tất.", "success");
     }
 
+    // Migration 248: Thêm cột related_user_ids, beneficiary_type, beneficiary_id vào purchase_orders & cập nhật bank account cho nhân viên
+    if ($currentVersion < 248 && $apply) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 248 (Bổ sung related_user_ids cho PO và cập nhật thông tin ngân hàng nhân viên)...", "info");
+        try {
+            $chkCol1 = $conn->query("SHOW COLUMNS FROM purchase_orders LIKE 'related_user_ids'");
+            if ($chkCol1 && $chkCol1->num_rows === 0) {
+                $conn->query("ALTER TABLE purchase_orders ADD COLUMN related_user_ids TEXT NULL AFTER approval_status");
+                $logMsg("Đã thêm cột related_user_ids vào bảng purchase_orders.", "success");
+            }
+            $chkCol2 = $conn->query("SHOW COLUMNS FROM purchase_orders LIKE 'beneficiary_type'");
+            if ($chkCol2 && $chkCol2->num_rows === 0) {
+                $conn->query("ALTER TABLE purchase_orders ADD COLUMN beneficiary_type VARCHAR(50) DEFAULT 'supplier' AFTER supplier_id");
+                $logMsg("Đã thêm cột beneficiary_type vào bảng purchase_orders.", "success");
+            }
+            $chkCol3 = $conn->query("SHOW COLUMNS FROM purchase_orders LIKE 'beneficiary_id'");
+            if ($chkCol3 && $chkCol3->num_rows === 0) {
+                $conn->query("ALTER TABLE purchase_orders ADD COLUMN beneficiary_id INT NULL AFTER beneficiary_type");
+                $logMsg("Đã thêm cột beneficiary_id vào bảng purchase_orders.", "success");
+            }
+            // Update bank info for Linh Dan
+            $conn->query("UPDATE users SET bank_name = 'BIDV', bank_account = '1351332212' WHERE email = 'danntl@ideas.edu.vn'");
+            $logMsg("Đã cập nhật STK BIDV cho nhân viên Nguyễn Thị Linh Đan.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 248: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 248 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '247') ON DUPLICATE KEY UPDATE setting_value = '247'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '248') ON DUPLICATE KEY UPDATE setting_value = '248'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

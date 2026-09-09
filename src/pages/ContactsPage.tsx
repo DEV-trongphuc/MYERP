@@ -2616,7 +2616,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       </th>
                     )}
                     {columns.find(c => c.id === 'name')?.visible && (
-                      <th style={{ width: '150px', maxWidth: '180px', padding: '0.85rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                      <th style={{ width: isSale ? '230px' : '170px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
                         Họ tên
                       </th>
                     )}
@@ -2641,7 +2641,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     )}
                     {columns.find(c => c.id === 'deal')?.visible && <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Deal đang mở</th>}
                     {columns.find(c => c.id === 'owner')?.visible && (
-                      <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                      <th style={{ width: isSale ? '250px' : undefined, maxWidth: isSale ? '280px' : undefined, padding: isSale ? '0.85rem 0.6rem' : '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
                         {isSale ? 'Tương tác gần nhất' : 'Sale phụ trách'}
                       </th>
                     )}
@@ -2692,7 +2692,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {columns.find(col => col.id === 'name')?.visible && (
-                          <td style={{ width: '150px', maxWidth: '180px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: isSale ? '230px' : '170px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <Avatar name={fullName} size={32} />
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
@@ -2720,9 +2720,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         {(columns.find(col => col.id === 'email')?.visible || columns.find(col => col.id === 'phone')?.visible) && (
                           <td style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>
-                              {columns.find(col => col.id === 'phone')?.visible && c.phone ? (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <PhoneLink phone={c.phone} style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }} />
+                              {columns.find(col => col.id === 'phone')?.visible && (c.phone || c.mobile || c.phone2) ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  {c.phone && (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <PhoneLink phone={c.phone} style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }} />
+                                    </div>
+                                  )}
+                                  {(c.mobile || c.phone2) && (c.mobile || c.phone2) !== c.phone && (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', background: 'var(--color-bg, #f1f5f9)', padding: '1px 4px', borderRadius: '4px', border: '1px solid var(--color-border-light, #e2e8f0)', lineHeight: '1.2' }}>Phụ:</span>
+                                      <PhoneLink phone={c.mobile || c.phone2} style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)' }} />
+                                    </div>
+                                  )}
                                 </div>
                               ) : null}
                               {columns.find(col => col.id === 'email')?.visible && c.email ? (
@@ -2907,7 +2917,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
                         {columns.find(col => col.id === 'owner')?.visible && (
-                          <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: isSale ? '250px' : undefined, maxWidth: isSale ? '280px' : undefined, padding: isSale ? '0.85rem 0.6rem' : '1rem', borderBottom: '1px solid var(--color-border)' }}>
                             {isSale ? (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {renderInteractionInfo(c)}
@@ -2918,8 +2928,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     fontSize: '0.725rem', 
                                     color: c.last_interaction ? 'var(--color-text)' : 'var(--color-text-muted)',
                                     fontWeight: c.last_interaction ? 500 : 400,
-                                    minWidth: '200px',
-                                    maxWidth: '350px',
+                                    minWidth: '170px',
+                                    maxWidth: '270px',
                                     maxHeight: '70px',
                                     overflowY: 'auto',
                                     whiteSpace: 'normal',

@@ -9,13 +9,13 @@ class UserController {
         // Allow all authenticated users within the same tenant to retrieve the user list (e.g., for task assignment and mentions)
         
         
-        $where = ["tenant_id = ?"];
+        $where = ["tenant_id = ? AND is_active = 1"];
         $params = [$auth['tenant_id']];
         
-        $all = isset($_GET['all']) && (string)$_GET['all'] === '1';
-        if (!$all) {
+        $teamOnly = isset($_GET['team_only']) && (string)$_GET['team_only'] === '1';
+        if ($teamOnly) {
             if ($auth['role'] === 'manager') {
-                $where[] = "(id = ? OR team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?))";
+                $where[] = "(id = ? OR team_id IN (SELECT id FROM teams WHERE leader_id = ?) OR team_id = (SELECT team_id FROM users WHERE id = ?) OR role IN ('admin', 'super_admin', 'superadmin', 'director', 'accountant', 'hr'))";
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
                 $params[] = $auth['user_id'];
@@ -25,10 +25,10 @@ class UserController {
                 $teamRow = $tStmt->fetch();
                 $teamId = $teamRow ? $teamRow['team_id'] : null;
                 if ($teamId) {
-                    $where[] = "(role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager') OR team_id = ?)";
+                    $where[] = "(role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'hr') OR team_id = ?)";
                     $params[] = $teamId;
                 } else {
-                    $where[] = "(role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager') OR id = ?)";
+                    $where[] = "(role IN ('admin', 'super_admin', 'superadmin', 'director', 'manager', 'accountant', 'hr') OR id = ?)";
                     $params[] = $auth['user_id'];
                 }
             }
