@@ -41,6 +41,7 @@ class ContactController {
         $showLost = isset($_GET['show_lost']) && in_array(strtolower((string)$_GET['show_lost']), ['1', 'true', 'yes'], true);
         $stageOp = strtolower(trim((string)($_GET['stage_op'] ?? 'in')));
         $statusOp = strtolower(trim((string)($_GET['status_op'] ?? 'in')));
+        $multiProgram = !empty($_GET['multi_program']) && in_array(strtolower((string)$_GET['multi_program']), ['1', 'true', 'yes', '2'], true);
 
         $where  = ['c.tenant_id = ?', 'c.deleted_at IS NULL', 'c.owner_id IS NOT NULL'];
         $params = [$tid];
@@ -144,6 +145,23 @@ class ContactController {
         if ($projectId !== '') { $where[] = 'c.project_id = ?'; $params[] = (int)$projectId; }
         if ($campaignId !== '') { $where[] = 'c.campaign_id = ?'; $params[] = (int)$campaignId; }
         if ($tag !== '') { $where[] = 'c.tags LIKE ?'; $params[] = '%"' . $tag . '"%'; }
+
+        // Lọc các liên hệ có từ 2 chương trình đổ lên (đa chương trình / hồ sơ nhân bản song song)
+        if ($multiProgram) {
+            $where[] = "EXISTS (
+                SELECT 1 FROM contacts c2 
+                WHERE c2.deleted_at IS NULL 
+                  AND c2.tenant_id = c.tenant_id 
+                  AND c2.id != c.id 
+                  AND (
+                      (c.person_id > 0 AND c2.person_id = c.person_id)
+                      OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
+                      OR (c2.duplicate_with_id = c.id)
+                      OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
+                      OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
+                  )
+            )";
+        }
         
         if ($dataType !== '') {
             $errorCond = "(
@@ -325,6 +343,30 @@ class ContactController {
                 } catch (\Throwable $e) {
                     $stageCounts['uncontacted'] = 0;
                 }
+
+                // Compute multi_program count (contacts with >= 2 programs/linked profiles)
+                try {
+                    $mpWhere = $baseWhere;
+                    $mpWhere[] = "EXISTS (
+                        SELECT 1 FROM contacts c2 
+                        WHERE c2.deleted_at IS NULL 
+                          AND c2.tenant_id = c.tenant_id 
+                          AND c2.id != c.id 
+                          AND (
+                              (c.person_id > 0 AND c2.person_id = c.person_id)
+                              OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
+                              OR (c2.duplicate_with_id = c.id)
+                              OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
+                              OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
+                          )
+                    )";
+                    $mpWhereStr = implode(' AND ', $mpWhere);
+                    $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
+                    $mpStmt->execute($baseParams);
+                    $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
+                } catch (\Throwable $e) {
+                    $stageCounts['multi_program'] = 0;
+                }
             } catch (\Exception $e) {
                 $stageCounts = [];
             }
@@ -382,6 +424,22 @@ class ContactController {
             )";
         }
 
+        if ($multiProgram) {
+            $where[] = "EXISTS (
+                SELECT 1 FROM contacts c2 
+                WHERE c2.deleted_at IS NULL 
+                  AND c2.tenant_id = c.tenant_id 
+                  AND c2.id != c.id 
+                  AND (
+                      (c.person_id > 0 AND c2.person_id = c.person_id)
+                      OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
+                      OR (c2.duplicate_with_id = c.id)
+                      OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
+                      OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
+                  )
+            )";
+        }
+
         if ($isKanban) {
             $whereStr = implode(' AND ', $where);
             $limitPerStage = min(100, max(10, (int)($_GET['limit_per_stage'] ?? 30)));
@@ -411,6 +469,18 @@ class ContactController {
                            u.avatar_url as owner_avatar,
                            COALESCE(ps.name, ps_fb.name) as stage_name, 
                            COALESCE(ps.color, ps_fb.color) as stage_color,
+                           (
+                               SELECT COUNT(DISTINCT c2.id)
+                               FROM contacts c2
+                               WHERE c2.deleted_at IS NULL AND c2.tenant_id = c.tenant_id AND (
+                                   c2.id = c.id
+                                   OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
+                                   OR (c2.duplicate_with_id = c.id)
+                                   OR (c.person_id > 0 AND c2.person_id = c.person_id)
+                                   OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
+                                   OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
+                               )
+                           ) as linked_profiles_count,
                            ROW_NUMBER() OVER (PARTITION BY c.stage_id ORDER BY c.id DESC) as rn
                     FROM contacts c
                     LEFT JOIN companies comp ON c.company_id = comp.id
@@ -497,7 +567,19 @@ class ContactController {
                    COALESCE(
                        (SELECT n.created_at FROM notes n WHERE n.tenant_id = c.tenant_id AND n.entity_type = 'contact' AND n.entity_id = c.id ORDER BY n.id DESC LIMIT 1),
                        (SELECT a.created_at FROM activities a WHERE a.tenant_id = c.tenant_id AND a.related_type = 'contact' AND a.related_id = c.id AND a.deleted_at IS NULL ORDER BY a.id DESC LIMIT 1)
-                   ) as last_interaction_at
+                   ) as last_interaction_at,
+                   (
+                        SELECT COUNT(DISTINCT c2.id)
+                        FROM contacts c2
+                        WHERE c2.deleted_at IS NULL AND c2.tenant_id = c.tenant_id AND (
+                            c2.id = c.id
+                            OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
+                            OR (c2.duplicate_with_id = c.id)
+                            OR (c.person_id > 0 AND c2.person_id = c.person_id)
+                            OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
+                            OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
+                        )
+                   ) as linked_profiles_count
              FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
@@ -801,7 +883,19 @@ class ContactController {
                     dl.round_id as dl_round_id,
                     dl.status as dl_status,
                     dr.status as ticket_status,
-                    dr.reason as ticket_reason
+                    dr.reason as ticket_reason,
+                    (
+                        SELECT COUNT(DISTINCT c2.id)
+                        FROM contacts c2
+                        WHERE c2.deleted_at IS NULL AND c2.tenant_id = c.tenant_id AND (
+                            c2.id = c.id
+                            OR (c.duplicate_with_id > 0 AND (c2.id = c.duplicate_with_id OR c2.duplicate_with_id = c.duplicate_with_id))
+                            OR (c2.duplicate_with_id = c.id)
+                            OR (c.person_id > 0 AND c2.person_id = c.person_id)
+                            OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
+                            OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
+                        )
+                    ) as linked_profiles_count
             FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
@@ -2311,18 +2405,32 @@ class ContactController {
             }
         }
 
-        // 2. Xác định Stage 1 của pipeline và slug tương ứng
+        // 2. Xác định Stage của pipeline và slug tương ứng
         $stageId = !empty($b['stage_id']) ? (int)$b['stage_id'] : null;
+        $targetStageName = '';
         if (!$stageId) {
-            $s = $this->db->prepare("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC LIMIT 1");
+            $s = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE tenant_id = ? ORDER BY order_index ASC LIMIT 1");
             $s->execute([$auth['tenant_id']]);
             $stageRow = $s->fetch(PDO::FETCH_ASSOC);
             $stageId = (int)($stageRow['id'] ?? 1);
             $pipelineStatus = $stageRow['system_slug'] ?? 'new_lead';
+            $targetStageName = $stageRow['name'] ?? '';
         } else {
-            $stmtSlug = $this->db->prepare("SELECT system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $stmtSlug = $this->db->prepare("SELECT id, name, system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
             $stmtSlug->execute([$stageId, $auth['tenant_id']]);
-            $pipelineStatus = $stmtSlug->fetchColumn() ?: 'new_lead';
+            $stgRow = $stmtSlug->fetch(PDO::FETCH_ASSOC);
+            $pipelineStatus = $stgRow['system_slug'] ?? 'new_lead';
+            $targetStageName = $stgRow['name'] ?? '';
+        }
+
+        // 2b. Xác định status phù hợp với pipeline status (học viên nếu enrolled/hoc_vien)
+        $contactStatus = 'lead';
+        if (in_array($pipelineStatus, ['enrolled', 'hoc_vien'], true)) {
+            $contactStatus = 'customer';
+        } elseif (in_array($pipelineStatus, ['lost', 'not_lead'], true)) {
+            $contactStatus = 'churned';
+        } elseif (!in_array($pipelineStatus, ['new_lead', 'chua_xac_dinh'], true)) {
+            $contactStatus = 'qualified';
         }
 
         // 3. Phân bổ người phụ trách (Owner)
@@ -2350,7 +2458,7 @@ class ContactController {
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
-                ?, 'lead', ?, ?, ?, ?, 'active',
+                ?, ?, ?, ?, ?, ?, 'active',
                 ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
@@ -2374,6 +2482,7 @@ class ContactController {
             $source['department'] ?? null,
             $source['company'] ?? null,
             $source['source'] ?: 'other',
+            $contactStatus,
             $source['tags'] ?: '[]',
             $initialNotes ?: ("Nhân bản từ hồ sơ #" . $id . " (" . ($source['program'] ?: 'Chương trình trước') . ")"),
             $stageId,
@@ -2419,13 +2528,14 @@ class ContactController {
         }
 
         if (function_exists('logInteraction')) {
+            $stageDesc = $targetStageName ? " (Giai đoạn: $targetStageName)" : "";
             logInteraction(
                 $this->db, 
                 $auth['tenant_id'], 
                 $auth['user_id'], 
                 'note', 
                 'Nhân bản hồ sơ (Chương trình mới)', 
-                "Hồ sơ được nhân bản từ hồ sơ #$id để theo dõi & chăm sóc chương trình: \"$newProgram\".", 
+                "Hồ sơ được nhân bản từ hồ sơ #$id để theo dõi & chăm sóc chương trình: \"$newProgram\"$stageDesc.", 
                 'contact', 
                 $newContactId
             );
@@ -2436,7 +2546,7 @@ class ContactController {
                 $auth['user_id'], 
                 'note', 
                 'Đã nhân bản thêm hồ sơ', 
-                "Đã tạo thêm hồ sơ mới #$newContactId cho khách hàng này để theo dõi chương trình: \"$newProgram\".", 
+                "Đã tạo thêm hồ sơ mới #$newContactId cho khách hàng này để theo dõi chương trình: \"$newProgram\"$stageDesc.", 
                 'contact', 
                 $id
             );

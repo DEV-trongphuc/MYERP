@@ -1729,6 +1729,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [cloneProgram, setCloneProgram] = useState('');
   const [cloneOwnerId, setCloneOwnerId] = useState<string>('');
   const [cloneNotes, setCloneNotes] = useState('');
+  const [cloneStageId, setCloneStageId] = useState<string>('');
 
   useEffect(() => {
     if (contact?.id) {
@@ -1840,9 +1841,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setBaseTags(filtered);
     setFormData((prev: any) => ({ ...prev, tags: filtered }));
     setBaseData((prev: any) => ({ ...prev, tags: filtered }));
-    if (contact?.id) {
+    if (effectiveContactId) {
       try {
-        await api.put(`/contacts/${contact.id}`, { tags: filtered });
+        await api.put(`/contacts/${effectiveContactId}`, { tags: filtered });
         onUpdate?.({ ...formData, tags: filtered });
         window.dispatchEvent(new CustomEvent('contact-updated'));
       } catch (e) {
@@ -1923,10 +1924,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       }
       payload.custom_fields = formData.custom_fields.map((f: any) => ({ field_id: f.id, value: f.value }));
     }
-    if (isSubmitting) return;
+    if (isSubmitting || !effectiveContactId) return;
     setIsSubmitting(true);
     try {
-      const res = await api.put(`/contacts/${contact.id}`, payload);
+      const res = await api.put(`/contacts/${effectiveContactId}`, payload);
       const updated = res.data?.data || { ...formData, tags };
       setFormData(updated);
       setBaseData(updated);
@@ -1943,7 +1944,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           return prev;
         });
       }
-      addToast(`Đã lưu thông tin hồ sơ của khách hàng ${fullName || ''} thành công!`, 'success');
+      const savedName = (formData.full_name || '').trim();
+      addToast(`Đã lưu thông tin hồ sơ của khách hàng ${savedName || ''} thành công!`, 'success');
     } catch (e: any) {
       const errData = e?.response?.data;
       const dupInfo = errData?.data?.duplicate_contact;
@@ -1961,7 +1963,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, tags, isSubmitting, contact, onUpdate, addToast]);
+  }, [formData, tags, isSubmitting, effectiveContactId, onUpdate, addToast]);
 
   const handleClose = useCallback(() => {
     if (hasChanges) {
@@ -2003,16 +2005,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [contact, currentUser, formData.owner_id, formData.created_by, formData.source, formData.dl_status]);
 
   const handleDeleteContact = useCallback(() => {
-    if (!contact) return;
+    if (!effectiveContactId) return;
     showConfirm({
-      title: `Xóa khách hàng "${contact.full_name || formData.full_name || 'này'}"?`,
+      title: `Xóa khách hàng "${formData.full_name || contact?.full_name || 'này'}"?`,
       message: 'Bạn có chắc chắn muốn xóa khách hàng này? Thao tác này sẽ chuyển khách hàng vào thùng rác.',
       isDanger: true,
       confirmText: 'Xác nhận xóa',
       cancelText: 'Hủy',
       onConfirm: async () => {
         try {
-          await api.delete(`/contacts/${contact.id}`);
+          await api.delete(`/contacts/${effectiveContactId}`);
           addToast('Đã xóa khách hàng thành công', 'success');
           onUpdate?.(null);
           onClose();
@@ -2021,7 +2023,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         }
       }
     });
-  }, [contact, formData.full_name, showConfirm, addToast, onUpdate, onClose]);
+  }, [effectiveContactId, formData.full_name, contact?.full_name, showConfirm, addToast, onUpdate, onClose]);
   const [showCallLogger, setShowCallLogger] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [meetingToComplete, setMeetingToComplete] = useState<any | null>(null);
@@ -2556,12 +2558,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     addToast('Đang chuẩn bị nén ZIP toàn bộ hồ sơ tài liệu...', 'info');
 
     const rawName = contact.full_name || formData.full_name || 'Khach_hang';
-    const safeName = rawName.replace(/[^\p{L}\p{N}\s_-]/gu, '').trim() || `Khach_hang_${contact.id}`;
+    const safeName = rawName.replace(/[^\p{L}\p{N}\s_-]/gu, '').trim() || `Khach_hang_${effectiveContactId}`;
     const zipFileName = `${safeName} - Ho so tai lieu.zip`;
 
     // 1. First attempt: Fast streaming ZIP from backend
     try {
-      const response = await api.get(`/cloud-files/download-contact-zip?contact_id=${contact.id}`, {
+      const response = await api.get(`/cloud-files/download-contact-zip?contact_id=${effectiveContactId}`, {
         responseType: 'blob',
         timeout: 60000
       });
@@ -2827,7 +2829,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setFormData((prev: any) => ({ ...prev, ttl1_completed: completed, ttl1_data: JSON.stringify(updatedData) }));
 
     try {
-      await api.put(`/contacts/${contact.id}`, {
+      await api.put(`/contacts/${effectiveContactId}`, {
         ttl1_completed: completed,
         ttl1_data: JSON.stringify(updatedData)
       });
@@ -2993,17 +2995,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   const fetchCoopSlip = async (forceLoadDetails = false) => {
-    if (!contact?.id) return;
+    if (!effectiveContactId) return;
     setCoopLoading(true);
     setCoopError('');
     try {
       // 1. Fetch only this contact's cooperation slip (fast indexed lookup)
-      const resSlips = await fetchAPI(`cooperation-slips?contact_id=${contact.id}`);
+      const resSlips = await fetchAPI(`cooperation-slips?contact_id=${effectiveContactId}`);
 
       const slipsList = resSlips?.success && Array.isArray(resSlips.data) 
         ? resSlips.data 
         : (resSlips?.data ? [resSlips.data] : []);
-      const found = slipsList.find((s: any) => Number(s.contact_id) === Number(contact.id)) || slipsList[0] || null;
+      const found = slipsList.find((s: any) => Number(s.contact_id) === Number(effectiveContactId)) || slipsList[0] || null;
 
       setCoopSlip(found || null);
       setIsRequestingChange(false);
@@ -3045,8 +3047,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       // 3. Only fetch cloud-files & deposits if this contact has a coop slip, or if requested for deals/docs tab
       if (found || forceLoadDetails) {
         const [resDocs, resDeposits] = await Promise.all([
-          api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`).catch(() => ({ data: { data: { items: [] } } })),
-          api.get(`/deposits?contact_id=${contact.id}`).catch(() => ({ data: { data: [] } }))
+          api.get(`/cloud-files?contact_id=${effectiveContactId}&limit=1000`).catch(() => ({ data: { data: { items: [] } } })),
+          api.get(`/deposits?contact_id=${effectiveContactId}`).catch(() => ({ data: { data: [] } }))
         ]);
 
         const docsData = resDocs?.data?.data?.items || [];
@@ -3189,7 +3191,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setIsCreateCoopModalOpen(true);
     setLoadingSuggestions(true);
     try {
-      const res = await fetchAPI(`cooperation-slips/suggestions?contact_id=${contact.id}`);
+      const res = await fetchAPI(`cooperation-slips/suggestions?contact_id=${effectiveContactId}`);
       if (res.success) {
         setSuggestedSales(res.data || []);
       }
@@ -3298,7 +3300,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     
     const fData = new FormData();
     fData.append('file', renamedFile);
-    fData.append('contact_id', String(contact.id));
+    fData.append('contact_id', String(effectiveContactId));
     fData.append('category', 'general');
     fData.append('visibility', 'shared');
     
@@ -3368,7 +3370,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     }));
     
     try {
-      await api.put(`/contacts/${contact.id}`, { 
+      await api.put(`/contacts/${effectiveContactId}`, { 
         pipeline_status: targetId, 
         status: calculatedStatus,
         ttl1_completed: formData.ttl1_completed,
@@ -3380,8 +3382,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         body: note || null,
         status: 'done',
         related_type: 'contact',
-        related_id: contact.id,
-        contact_id: contact.id,
+        related_id: effectiveContactId,
+        contact_id: effectiveContactId,
         user_id: currentUser?.id,
         due_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
         done_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -3613,7 +3615,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         name: driveLinkName.trim(),
         link_url: driveLinkUrl.trim(),
         is_link: 1,
-        contact_id: contact.id,
+        contact_id: effectiveContactId,
         category: currentFolder || 'general',
         visibility: 'shared'
       };
@@ -3636,16 +3638,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   };
 
   useEffect(() => {
-    if (contact?.id) {
+    if (effectiveContactId) {
       setCurrentFolder('');
       try {
-        const saved = localStorage.getItem(`Ideas_folders_contact_${contact.id}`);
+        const saved = localStorage.getItem(`Ideas_folders_contact_${effectiveContactId}`);
         setLocalFolders(saved ? JSON.parse(saved) : []);
       } catch {
         setLocalFolders([]);
       }
     }
-  }, [contact?.id]);
+  }, [effectiveContactId]);
 
   const allFolders = useMemo(() => {
     const docCategories = docs
@@ -3688,7 +3690,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     reader.onloadend = async () => {
       const base64 = reader.result as string;
       try {
-        await api.put(`/contacts/${contact.id}`, { avatar_url: base64 });
+        await api.put(`/contacts/${effectiveContactId}`, { avatar_url: base64 });
         setFormData((prev: any) => ({ ...prev, avatar_url: base64 }));
         addToast('Đã cập nhật ảnh đại diện', 'success');
         onUpdate?.({ ...formData, avatar_url: base64 });
@@ -4283,7 +4285,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           const { targetId, targetLabel, note } = transition;
           const calculatedStatus = (targetId === 'hoc_vien') ? 'customer' : 'qualified';
           try {
-            await api.put(`/contacts/${contact.id}`, { 
+            await api.put(`/contacts/${effectiveContactId}`, { 
               pipeline_status: targetId, 
               status: calculatedStatus,
               ttl1_completed: formData.ttl1_completed,
@@ -4296,8 +4298,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               body: note || null,
               status: 'done',
               related_type: 'contact',
-              related_id: contact.id,
-              contact_id: contact.id,
+              related_id: effectiveContactId,
+              contact_id: effectiveContactId,
               user_id: currentUser?.id,
               due_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
               done_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -4364,13 +4366,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         fetchLinkedProfiles(fresh.id);
 
         addToast(`Đã chuyển sang hồ sơ "${fresh.full_name}" (${fresh.program || 'Chương trình khác'})`, 'info');
+        onUpdate?.(fresh);
       }
     } catch (e: any) {
       addToast('Không thể chuyển hồ sơ: ' + (e.response?.data?.message || e.message), 'error');
     } finally {
       setLoadingContactDetails(false);
     }
-  }, [activeTab, addToast, fetchData, fetchLinkedProfiles]);
+  }, [activeTab, addToast, fetchData, fetchLinkedProfiles, onUpdate]);
 
   const handleSwitchProfile = useCallback((targetContactId: number) => {
     if (targetContactId === effectiveContactId) return;
@@ -4392,6 +4395,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const handleOpenCloneModal = () => {
     setCloneProgram('');
     setCloneOwnerId(String(formData.owner_id || contact?.owner_id || currentUser?.id || ''));
+    const sorted = pipelineStages && pipelineStages.length > 0
+      ? [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0))
+      : [];
+    setCloneStageId(sorted[0] ? String(sorted[0].id) : '');
     setCloneNotes('');
     setShowCloneModal(true);
   };
@@ -4408,6 +4415,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     try {
       const res = await api.post(`/contacts/${effectiveContactId}/clone`, {
         program: trimmedProgram,
+        stage_id: cloneStageId ? Number(cloneStageId) : undefined,
         owner_id: cloneOwnerId ? Number(cloneOwnerId) : undefined,
         notes: cloneNotes.trim() || undefined
       });
@@ -5144,7 +5152,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       const docsArray = noteDocsSent ? noteDocsSent.split(', ').map(d => d.trim()) : [];
       const docsFinal = docsArray.map(d => d === 'Khác' ? (customDocs.trim() || 'Khác') : d).filter(Boolean).join(', ');
 
-      await api.post(`/notes?entity_type=contact&entity_id=${contact.id}`, {
+      await api.post(`/notes?entity_type=contact&entity_id=${effectiveContactId}`, {
         body: text,
         type: 'internal',
         attachment_url: uploadedUrl || null,
@@ -5212,8 +5220,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     formData.append('name', file.name);
     formData.append('category', 'general');
     formData.append('visibility', 'shared');
-    if (contact?.id) {
-      formData.append('contact_id', contact.id.toString());
+    if (effectiveContactId) {
+      formData.append('contact_id', effectiveContactId.toString());
     }
     try {
       const res = await api.post('/cloud-files', formData, {
@@ -5378,8 +5386,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     formData.append('name', file.name);
     formData.append('category', 'general');
     formData.append('visibility', 'shared');
-    if (contact?.id) {
-      formData.append('contact_id', contact.id.toString());
+    if (effectiveContactId) {
+      formData.append('contact_id', effectiveContactId.toString());
     }
     try {
       const res = await api.post('/cloud-files', formData, {
@@ -5415,7 +5423,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setIsSubmitting(true);
 
     const additionalContactIds = Array.from(new Set([
-      Number(contact.id),
+      Number(effectiveContactId),
       ...(taskForm.related_contact_ids || [])
         .filter((id: any) => id !== 'all' && id !== '')
         .map(Number)
@@ -5448,7 +5456,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       .join(',');
 
     let relatedType = 'contact';
-    let relatedId = contact.id;
+    let relatedId = effectiveContactId;
 
     if (taskForm.project_id) {
       relatedType = 'project';
@@ -5721,7 +5729,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     try {
       // 1. Create the deposit slip and milestones
       const res = await api.post('/deposits', {
-        contact_id: contact.id,
+        contact_id: effectiveContactId,
         project_id: Number(depositProjectId),
         unit_code: depositUnitCode,
         price: parseFloat(depositPrice),
@@ -5757,8 +5765,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       // Auto-register "Đặt cọc" folder for Customer Documents
       const updatedFolders = Array.from(new Set([...localFolders, 'Đặt cọc']));
       setLocalFolders(updatedFolders);
-      if (contact?.id) {
-        localStorage.setItem(`Ideas_folders_contact_${contact.id}`, JSON.stringify(updatedFolders));
+      if (effectiveContactId) {
+        localStorage.setItem(`Ideas_folders_contact_${effectiveContactId}`, JSON.stringify(updatedFolders));
       }
 
       // 3. Complete pipeline stage transition if pending
@@ -5766,7 +5774,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         const { targetId, targetLabel, note } = pendingPipelineTransition;
         const calculatedStatus = (targetId === 'hoc_vien') ? 'customer' : 'qualified';
 
-        await api.put(`/contacts/${contact.id}`, { 
+        await api.put(`/contacts/${effectiveContactId}`, { 
           pipeline_status: targetId, 
           status: calculatedStatus,
           ttl1_completed: formData.ttl1_completed,
@@ -5779,8 +5787,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           body: note || null,
           status: 'done',
           related_type: 'contact',
-          related_id: contact.id,
-          contact_id: contact.id,
+          related_id: effectiveContactId,
+          contact_id: effectiveContactId,
           user_id: currentUser?.id,
           due_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
           done_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -6025,7 +6033,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       isDanger: true,
       onConfirm: async () => {
         try {
-          const res = await api.post(`/contacts/${contact.id}/release-databank`);
+          const res = await api.post(`/contacts/${effectiveContactId}/release-databank`);
           if (res.data.success || res.data) {
             addToast(res.data.message || 'Thao tác thành công', 'success');
             onUpdate?.(null);
@@ -6056,7 +6064,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setIsSubmitting(true);
     try {
       await api.post('/tickets', {
-        contact_id: contact.id,
+        contact_id: effectiveContactId,
         customer_name: fullName,
         subject: ticketForm.subject,
         category: ticketForm.category || 'technical_support',
@@ -6541,7 +6549,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 finalUrl = uploadRes.data.data?.url ?? '';
                               }
 
-                              await api.put(`/contacts/${contact.id}`, { avatar_url: finalUrl });
+                              await api.put(`/contacts/${effectiveContactId}`, { avatar_url: finalUrl });
                               setFormData((prev: any) => ({ ...prev, avatar_url: finalUrl }));
                               addToast('Đã cập nhật ảnh đại diện', 'success');
                               setShowAvatarModal(false);
@@ -6860,7 +6868,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px', color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}
                             onClick={async () => {
                               try {
-                                const res = await api.put(`/contacts/${contact.id}`, { pipeline_status: 'not_lead' });
+                                const res = await api.put(`/contacts/${effectiveContactId}`, { pipeline_status: 'not_lead' });
                                 if (res.data.success) {
                                   setFormData((prev: any) => ({ ...prev, pipeline_status: 'not_lead', not_lead_proposed: 0 }));
                                   addToast('Đã phê duyệt Not Lead thành công!', 'success');
@@ -6879,7 +6887,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             style={{ padding: '4px 10px', fontSize: '0.75rem', height: '28px' }}
                             onClick={async () => {
                               try {
-                                const res = await api.put(`/contacts/${contact.id}`, { not_lead_proposed: 0 });
+                                const res = await api.put(`/contacts/${effectiveContactId}`, { not_lead_proposed: 0 });
                                 if (res.data.success) {
                                   setFormData((prev: any) => ({ ...prev, not_lead_proposed: 0 }));
                                   addToast('Đã từ chối đề xuất Not Lead!', 'success');
@@ -13037,7 +13045,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       }
                                       const next = [...localFolders, trimmed];
                                       setLocalFolders(next);
-                                      localStorage.setItem(`Ideas_folders_contact_${contact.id}`, JSON.stringify(next));
+                                      localStorage.setItem(`Ideas_folders_contact_${effectiveContactId}`, JSON.stringify(next));
                                       addToast('Đã tạo thư mục mới.', 'success');
                                     }
                                   }
@@ -13126,7 +13134,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   const fData = new FormData();
                                   fData.append('file', renamedFile);
                                   fData.append('name', finalName);
-                                  fData.append('contact_id', String(contact.id));
+                                  fData.append('contact_id', String(effectiveContactId));
                                   fData.append('category', currentFolder || 'general');
                                   fData.append('visibility', 'shared');
 
@@ -13293,7 +13301,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                                 
                                                 const next = localFolders.map(f => f === folder ? trimmed : f);
                                                 setLocalFolders(next);
-                                                localStorage.setItem(`Ideas_folders_contact_${contact.id}`, JSON.stringify(next));
+                                                localStorage.setItem(`Ideas_folders_contact_${effectiveContactId}`, JSON.stringify(next));
                                                 
                                                 fetchData();
                                                 addToast('Đã đổi tên thư mục thành công.', 'success');
@@ -13341,7 +13349,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                               
                                               const next = localFolders.filter(f => f !== folder);
                                               setLocalFolders(next);
-                                              localStorage.setItem(`Ideas_folders_contact_${contact.id}`, JSON.stringify(next));
+                                              localStorage.setItem(`Ideas_folders_contact_${effectiveContactId}`, JSON.stringify(next));
                                               
                                               fetchData();
                                               addToast('Đã xóa thư mục thành công.', 'success');
@@ -13432,7 +13440,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 const fData = new FormData();
                                 fData.append('file', renamedFile);
                                 fData.append('name', finalName);
-                                fData.append('contact_id', String(contact.id));
+                                fData.append('contact_id', String(effectiveContactId));
                                 fData.append('category', currentFolder || 'general');
                                 fData.append('visibility', 'shared');
 
@@ -14982,7 +14990,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       // Check Coop required documents if applicable
                       if (coopEligibleStatuses.includes(targetId)) {
                         try {
-                          const docsRes = await api.get(`/cloud-files?contact_id=${contact.id}&limit=1000`);
+                          const docsRes = await api.get(`/cloud-files?contact_id=${effectiveContactId}&limit=1000`);
                           const currentCloudFiles = docsRes.data.data?.items || [];
                           const coopFiles = coopSlip?.attachment_url ? coopSlip.attachment_url.split(',') : [];
                           
@@ -15070,8 +15078,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                         setFormData((prev: any) => ({ ...prev, ...updatedFields }));
 
-                        // Persist to backend via move-stage or contacts update
-                        await api.put(`/contacts/${contact.id}/move-stage`, {
+                        // Persist to backend via move-stage on the currently viewed/active contact
+                        await api.put(`/contacts/${effectiveContactId}/move-stage`, {
                           stage_id: targetStage?.id || targetId,
                           pipeline_status: targetId,
                           lead_status: pipelineModal.leadStatus,
@@ -15087,19 +15095,23 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           note: note || ''
                         });
 
-                        await fetchData(activeTab || 'timeline', true);
+                        await fetchData(activeTab || 'timeline', true, effectiveContactId);
+                        if (effectiveContactId) {
+                          fetchLinkedProfiles(effectiveContactId);
+                        }
                         addToast(`Đã chuyển Pipeline thành công sang "${targetLabel}"`, 'success');
                         if (targetId === 'enrolled' || targetId === 'hoc_vien') {
                           triggerFullConfetti();
                         }
-                        onUpdate?.({ ...formData, ...updatedFields });
+                        const updatedContactData = { ...formData, ...updatedFields, id: effectiveContactId };
+                        onUpdate?.(updatedContactData);
                         window.dispatchEvent(new CustomEvent('contact-updated'));
                       } catch (e: any) {
                         // Rollback optimistic update
                         setFormData((prev: any) => ({ 
                           ...prev, 
-                          pipeline_status: contact.pipeline_status, 
-                          status: contact.status 
+                          pipeline_status: baseData?.pipeline_status || contact.pipeline_status, 
+                          status: baseData?.status || contact.status 
                         }));
                         addToast(e?.response?.data?.message || 'Lỗi khi cập nhật Pipeline', 'error');
                       } finally {
@@ -16167,7 +16179,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   const res = await fetchAPI('cooperation-slips', {
                     method: 'POST',
                     body: JSON.stringify({ 
-                      contact_id: contact.id, 
+                      contact_id: effectiveContactId, 
                       collaborators: selectedCollaborators 
                     })
                   });
@@ -16873,7 +16885,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               color: '#1e40af',
               lineHeight: 1.5
             }}>
-              💡 <strong>Cơ chế chăm sóc song song:</strong> Bản sao sẽ kế thừa đầy đủ thông tin cá nhân (SĐT, Email, CCCD, địa chỉ, công ty, nguồn gốc), nhưng bắt đầu lại từ <strong>Bước 1 của Pipeline</strong> với các tương tác, công việc, deals học phí và tài liệu hoàn toàn độc lập cho chương trình mới.
+              💡 <strong>Cơ chế chăm sóc song song:</strong> Bản sao sẽ kế thừa đầy đủ thông tin cá nhân (SĐT, Email, CCCD, địa chỉ, công ty, nguồn gốc), bắt đầu theo <strong>Giai đoạn Pipeline</strong> bạn chọn bên dưới với các tương tác, công việc, deals học phí và tài liệu hoàn toàn độc lập cho chương trình mới.
             </div>
 
             {/* Program input & suggestions */}
@@ -16926,6 +16938,42 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Pipeline Stage Selection */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                  Giai đoạn Pipeline ban đầu <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                  (Mặc định: Bước 1 Pipeline)
+                </span>
+              </div>
+              <select
+                className="form-select"
+                value={cloneStageId}
+                onChange={(e) => setCloneStageId(e.target.value)}
+                style={{
+                  width: '100%',
+                  fontSize: '0.85rem',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontWeight: 600
+                }}
+              >
+                {(pipelineStages && pipelineStages.length > 0
+                  ? [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0))
+                  : []
+                ).map((st: any) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name} {st.system_slug ? `(${st.system_slug})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Sales Owner Dropdown */}

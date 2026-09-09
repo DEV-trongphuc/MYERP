@@ -515,6 +515,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     const uc = searchParams.get('uncontacted');
     return uc === '1' || uc === 'true' || searchParams.get('status') === 'not_contacted';
   });
+  const [filterMultiProgram, setFilterMultiProgram] = useState<boolean>(() => {
+    const mp = searchParams.get('multi_program');
+    return mp === '1' || mp === 'true' || mp === '2';
+  });
 
   // Advanced Filter state
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -652,6 +656,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       if (statusParam === 'not_contacted') newParams.delete('status');
       if (uncontactedParam) newParams.delete('uncontacted');
       setSearchParams(newParams, { replace: true });
+    }
+    const mpParam = searchParams.get('multi_program');
+    if (mpParam === '1' || mpParam === 'true' || mpParam === '2') {
+      setFilterMultiProgram(true);
     }
 
     const projectIdParam = searchParams.get('project_id');
@@ -869,6 +877,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           params.uncontacted = 1;
         }
 
+        if (filterMultiProgram) {
+          params.multi_program = 1;
+        }
+
         if (activeFilters.status) {
           if (/^\d+$/.test(activeFilters.status)) {
             params.stage_id = activeFilters.status;
@@ -939,7 +951,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (initialMetadataLoaded) {
       fetchData();
     }
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted, filterMultiProgram]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -1059,6 +1071,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
   const handleResetFilters = () => {
     setFilterUncontacted(false);
+    setFilterMultiProgram(false);
     setFilterStatus('');
     setFilterStageOp('in');
     setFilterLeadStatus('');
@@ -1637,6 +1650,49 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
                       </button>
 
+                      {/* Quick Filter: Đa chương trình */}
+                      <button
+                        onClick={() => {
+                          setFilterMultiProgram(!filterMultiProgram);
+                          setPage(1);
+                          setShowMobileActions(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: 'none',
+                          background: filterMultiProgram ? 'rgba(139, 92, 246, 0.08)' : 'transparent',
+                          color: filterMultiProgram ? '#7c3aed' : 'var(--color-text)',
+                          borderRadius: '8px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Layers size={12} style={{ color: filterMultiProgram ? '#7c3aed' : 'inherit' }} />
+                        <span>Đa chương trình (≥ 2)</span>
+                        {typeof stageCounts['multi_program'] === 'number' && (
+                          <span
+                            style={{
+                              background: filterMultiProgram ? '#7c3aed' : 'var(--color-bg-light)',
+                              color: filterMultiProgram ? '#ffffff' : 'var(--color-text-muted)',
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              borderRadius: '10px',
+                              padding: '1px 6px',
+                              marginLeft: 'auto',
+                              lineHeight: 1.4
+                            }}
+                          >
+                            {stageCounts['multi_program']}
+                          </span>
+                        )}
+                      </button>
+
                       <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
  
                       {/* Sorting Dropdowns inside mobile menu */}
@@ -1953,6 +2009,56 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   </span>
                 )}
                 {filterUncontacted && <X size={12} style={{ marginLeft: '2px', opacity: 0.8 }} />}
+              </button>
+
+              {/* Quick Filter: Đa chương trình */}
+              <button 
+                type="button"
+                onClick={() => {
+                  setFilterMultiProgram(prev => !prev);
+                  setPage(1);
+                }}
+                style={{
+                  height: '38px',
+                  padding: '0 0.875rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  border: filterMultiProgram ? '1.5px solid #7c3aed' : '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  background: filterMultiProgram ? 'rgba(139, 92, 246, 0.08)' : 'var(--color-surface)',
+                  color: filterMultiProgram ? '#7c3aed' : 'var(--color-text)',
+                  fontWeight: filterMultiProgram ? 700 : 600,
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s',
+                  boxShadow: filterMultiProgram ? '0 2px 8px rgba(139, 92, 246, 0.2)' : 'var(--shadow-sm)',
+                  outline: 'none',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+                title={filterMultiProgram ? "Bỏ lọc Đa chương trình" : "Lọc nhanh các khách hàng có từ 2 chương trình/hồ sơ trở lên"}
+              >
+                <Layers size={14} style={{ color: filterMultiProgram ? '#7c3aed' : 'var(--color-text-muted)' }} />
+                <span>Đa chương trình (≥ 2)</span>
+                {typeof stageCounts['multi_program'] === 'number' && (
+                  <span
+                    style={{
+                      background: filterMultiProgram ? '#7c3aed' : 'var(--color-bg-light)',
+                      color: filterMultiProgram ? '#ffffff' : 'var(--color-text-muted)',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '10px',
+                      padding: '1px 6px',
+                      marginLeft: '2px',
+                      lineHeight: 1.4
+                    }}
+                  >
+                    {stageCounts['multi_program']}
+                  </span>
+                )}
+                {filterMultiProgram && <X size={12} style={{ marginLeft: '2px', opacity: 0.8 }} />}
               </button>
 
             </div>
@@ -2375,6 +2481,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       style={{ height: '38px', borderRadius: '10px' }}
                     />
                   </div>
+
+                  {/* Số lượng chương trình */}
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '4px', display: 'block' }}>Số lượng chương trình</label>
+                    <CustomSelect
+                      value={filterMultiProgram ? 'multi' : ''}
+                      onChange={v => setFilterMultiProgram(v === 'multi')}
+                      options={[
+                        { value: '', label: 'Tất cả hồ sơ' },
+                        { value: 'multi', label: 'Đa chương trình (≥ 2 CT)' }
+                      ]}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2707,6 +2826,29 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       <User size={12} />
                                     </span>
                                   ) : null}
+                                  {Number(c.linked_profiles_count) >= 2 && (
+                                    <span 
+                                      title={`Khách hàng có ${c.linked_profiles_count} chương trình/hồ sơ liên kết`} 
+                                      style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '2px', 
+                                        marginLeft: '6px', 
+                                        padding: '1px 5px', 
+                                        borderRadius: '4px', 
+                                        background: 'rgba(139, 92, 246, 0.12)', 
+                                        color: '#7c3aed', 
+                                        border: '1px solid rgba(139, 92, 246, 0.25)', 
+                                        fontSize: '0.625rem', 
+                                        fontWeight: 700, 
+                                        flexShrink: 0,
+                                        lineHeight: 1.2
+                                      }}
+                                    >
+                                      <Layers size={10} />
+                                      {c.linked_profiles_count} CT
+                                    </span>
+                                  )}
                                 </p>
                                 {columns.find(col => col.id === 'company')?.visible && c.company_name && (
                                   <p style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -3200,9 +3342,32 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               </div>
                             )}
                             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', lineHeight: 1.2 }}>
-                                {fullName}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', lineHeight: 1.2 }}>
+                                  {fullName}
+                                </span>
+                                {Number(c.linked_profiles_count) >= 2 && (
+                                  <span 
+                                    title={`Khách hàng có ${c.linked_profiles_count} chương trình/hồ sơ liên kết`} 
+                                    style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '2px', 
+                                      padding: '1px 5px', 
+                                      borderRadius: '4px', 
+                                      background: 'rgba(139, 92, 246, 0.12)', 
+                                      color: '#7c3aed', 
+                                      border: '1px solid rgba(139, 92, 246, 0.25)', 
+                                      fontSize: '0.625rem', 
+                                      fontWeight: 700, 
+                                      lineHeight: 1.2
+                                    }}
+                                  >
+                                    <Layers size={10} />
+                                    {c.linked_profiles_count} CT
+                                  </span>
+                                )}
+                              </div>
                               <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
                                 Điện thoại: {c.phone || '—'}
                               </span>
@@ -3235,17 +3400,38 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                                 <Avatar name={fullName} size={42} />
                                 <div>
-                                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: '2px', lineHeight: 1.2, display: 'flex', alignItems: 'center' }}>
-                                    {fullName}
+                                  <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: '2px', lineHeight: 1.2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                    <span>{fullName}</span>
                                     {c.dl_status === 'databank_claim' || c.source === 'databank' ? (
-                                      <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                      <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', color: 'var(--color-text-muted)', flexShrink: 0 }}>
                                         <Layers size={14} />
                                       </span>
                                     ) : (!c.dl_status && c.source !== 'databank') || (c.source === 'ca_nhan' || c.source === 'gioi_thieu') ? (
-                                      <span title="Khách hàng cá nhân" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                                      <span title="Khách hàng cá nhân" style={{ display: 'inline-flex', color: 'var(--color-text-muted)', flexShrink: 0 }}>
                                         <User size={14} />
                                       </span>
                                     ) : null}
+                                    {Number(c.linked_profiles_count) >= 2 && (
+                                      <span 
+                                        title={`Khách hàng có ${c.linked_profiles_count} chương trình/hồ sơ liên kết`} 
+                                        style={{ 
+                                          display: 'inline-flex', 
+                                          alignItems: 'center', 
+                                          gap: '2px', 
+                                          padding: '1px 5px', 
+                                          borderRadius: '4px', 
+                                          background: 'rgba(139, 92, 246, 0.12)', 
+                                          color: '#7c3aed', 
+                                          border: '1px solid rgba(139, 92, 246, 0.25)', 
+                                          fontSize: '0.625rem', 
+                                          fontWeight: 700, 
+                                          lineHeight: 1.2
+                                        }}
+                                      >
+                                        <Layers size={10} />
+                                        {c.linked_profiles_count} CT
+                                      </span>
+                                    )}
                                   </h3>
                                   <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Building2 size={11} /> {c.company_name || 'Khách hàng cá nhân'}
@@ -3435,8 +3621,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 fetchData();
                 return;
               }
-              setContacts(p=>p.map(c=>c.id===updated?.id?{...c,...updated,score:calcScore(updated, scoringRules, decayDays)}:c));
-              setProfileContact(prev => prev && prev.id === updated?.id ? { ...prev, ...updated } : prev);
+              setContacts(p => {
+                const exists = p.some(c => c.id === updated?.id);
+                if (exists) {
+                  return p.map(c => c.id === updated?.id ? { ...c, ...updated, score: calcScore(updated, scoringRules, decayDays) } : c);
+                } else {
+                  return [{ ...updated, score: calcScore(updated, scoringRules, decayDays) }, ...p];
+                }
+              });
+              setProfileContact(updated);
             }}
           />
         </Suspense>
