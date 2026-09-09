@@ -1799,18 +1799,28 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   });
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        programDropdownRef.current && !programDropdownRef.current.contains(e.target as Node) &&
-        programDropdownMobileRef.current && !programDropdownMobileRef.current.contains(e.target as Node) &&
-        bodyProgramDropdownRef.current && !bodyProgramDropdownRef.current.contains(e.target as Node)
-      ) {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (!target) return;
+
+      const isInsideDesktop = programDropdownRef.current ? programDropdownRef.current.contains(target) : false;
+      const isInsideMobile = programDropdownMobileRef.current ? programDropdownMobileRef.current.contains(target) : false;
+      if (!isInsideDesktop && !isInsideMobile) {
         setShowProgramDropdown(false);
+      }
+
+      const isInsideBody = bodyProgramDropdownRef.current ? bodyProgramDropdownRef.current.contains(target) : false;
+      if (!isInsideBody) {
         setShowBodyProgramDropdown(false);
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   useEffect(() => {
@@ -7189,6 +7199,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 value={formData.program || ''}
                                 placeholder="Nhập / chọn CT học..."
                                 onFocus={() => setShowProgramDropdown(true)}
+                                onBlur={(e) => {
+                                  if (
+                                    programDropdownRef.current?.contains(e.relatedTarget as Node) ||
+                                    programDropdownMobileRef.current?.contains(e.relatedTarget as Node)
+                                  ) {
+                                    return;
+                                  }
+                                  setShowProgramDropdown(false);
+                                }}
                                 onChange={e => {
                                   const val = e.target.value;
                                   setFormData((prev: any) => ({ ...prev, program: val }));
@@ -7262,6 +7281,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     onMouseDown={(e) => {
                                       e.preventDefault();
                                       setFormData((prev: any) => ({ ...prev, program: '' }));
+                                      setShowProgramDropdown(false);
                                     }}
                                     style={{
                                       background: 'transparent',
@@ -7586,6 +7606,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       value={formData.program || ''}
                                       placeholder="Nhập hoặc chọn chương trình..."
                                       onFocus={() => setShowProgramDropdown(true)}
+                                      onBlur={(e) => {
+                                        if (
+                                          programDropdownRef.current?.contains(e.relatedTarget as Node) ||
+                                          programDropdownMobileRef.current?.contains(e.relatedTarget as Node)
+                                        ) {
+                                          return;
+                                        }
+                                        setShowProgramDropdown(false);
+                                      }}
                                       onChange={e => {
                                         const val = e.target.value;
                                         setFormData((prev: any) => ({ ...prev, program: val }));
@@ -7654,6 +7683,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             onMouseDown={(e) => {
                                               e.preventDefault();
                                               setFormData((prev: any) => ({ ...prev, program: '' }));
+                                              setShowProgramDropdown(false);
                                             }}
                                             style={{
                                               background: 'transparent',
@@ -8994,6 +9024,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     placeholder="Chọn tag hoặc nhập..." 
                                     value={formData.program || ''} 
                                     onFocus={() => setShowBodyProgramDropdown(true)}
+                                    onBlur={(e) => {
+                                      if (bodyProgramDropdownRef.current?.contains(e.relatedTarget as Node)) {
+                                        return;
+                                      }
+                                      setShowBodyProgramDropdown(false);
+                                    }}
                                     onChange={e => {
                                       const val = e.target.value;
                                       setFormData((prev: any) => ({ ...prev, program: val }));
@@ -9052,6 +9088,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           onMouseDown={(e) => {
                                             e.preventDefault();
                                             setFormData((prev: any) => ({ ...prev, program: '' }));
+                                            setShowBodyProgramDropdown(false);
                                           }}
                                           style={{
                                             background: 'transparent',
