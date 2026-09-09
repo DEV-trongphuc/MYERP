@@ -6801,27 +6801,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     </h3>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {canDeleteContact && (
-                      <button
-                        type="button"
-                        onClick={handleDeleteContact}
-                        title="Xóa khách hàng"
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '10px',
-                          height: isMobileOrTablet ? '36px' : '32px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          color: '#dc2626',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
                     <button
                       disabled={isSubmitting}
                       onClick={handleSave}
@@ -7438,39 +7417,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       >
                         <LeadScoreRing score={score} size={44} showLabel={true} />
                       </div>
-
-                      {canDeleteContact && (
-                        <button
-                          type="button"
-                          onClick={handleDeleteContact}
-                          title="Xóa khách hàng này"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '8px 14px',
-                            borderRadius: '10px',
-                            height: '40px',
-                            fontSize: '0.85rem',
-                            fontWeight: 600,
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                            color: '#dc2626',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#dc2626';
-                            e.currentTarget.style.color = '#fff';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                            e.currentTarget.style.color = '#dc2626';
-                          }}
-                        >
-                          <Trash2 size={15} /> Xóa
-                        </button>
-                      )}
 
                       <button
                         disabled={isSubmitting}
@@ -8162,6 +8108,32 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <Copy size={16} />
                                 <span>Nhân bản hồ sơ</span>
                               </button>
+                              {canDeleteContact && (
+                                <button
+                                  type="button"
+                                  onClick={handleDeleteContact}
+                                  title="Xóa khách hàng"
+                                  style={{
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    marginTop: '8px',
+                                    padding: '8px 12px',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#ef4444',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    borderRadius: '6px'
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                  <span>Xóa khách hàng</span>
+                                </button>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -8408,6 +8380,44 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 <Copy size={16} />
                                 <span>Nhân bản hồ sơ</span>
                               </button>
+
+                              {canDeleteContact && (
+                                <button
+                                  type="button"
+                                  onClick={handleDeleteContact}
+                                  title="Xóa khách hàng này"
+                                  style={{
+                                    width: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    marginTop: '8px',
+                                    padding: '6px 8px',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#ef4444',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    borderRadius: '6px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.color = '#dc2626';
+                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                                    e.currentTarget.style.textDecoration = 'underline';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = '#ef4444';
+                                    e.currentTarget.style.background = 'transparent';
+                                    e.currentTarget.style.textDecoration = 'none';
+                                  }}
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Xóa khách hàng</span>
+                                </button>
+                              )}
                             </div>
 
                             <div style={{ padding: '0.75rem 0 0 0', borderTop: '1px solid var(--color-border)' }}>
