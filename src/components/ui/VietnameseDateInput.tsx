@@ -118,7 +118,7 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
   className = 'form-input',
   style,
   inputStyle,
-  placeholder = 'dd/mm/yyyy',
+  placeholder = 'DD/MM/YYYY',
   disabled = false,
   min,
   max,

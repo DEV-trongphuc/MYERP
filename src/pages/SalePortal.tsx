@@ -11493,7 +11493,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           value={editDob}
                           onChange={(val) => setEditDob(val)}
                           hasLeftIcon={true}
-                          placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                          placeholder="DD/MM/YYYY"
                         />
                       </div>
                       <div className="form-group">

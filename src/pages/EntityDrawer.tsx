@@ -176,7 +176,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
                               onChange={val => setFormData((prev: any) => ({ ...prev, birthday: val }))}
                               hasLeftIcon={true}
                               inputStyle={{ height: '42px', borderRadius: '10px' }}
-                              placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                              placeholder="DD/MM/YYYY"
                             />
                           </div>
                         </div>

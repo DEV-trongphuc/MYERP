@@ -9484,7 +9484,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             <VietnameseDateInput 
                               value={formData.birthday || ''} 
                               onChange={val => setFormData((prev: any) => ({ ...prev, birthday: val }))}
-                              placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                              placeholder="DD/MM/YYYY"
                             />
                           </div>
 

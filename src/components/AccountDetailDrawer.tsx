@@ -1869,7 +1869,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                           value={dob} 
                           onChange={val => setDob(val)} 
                           hasLeftIcon={true}
-                          placeholder="DD/MM/YYYY (hỗ trợ bôi chép, dán)"
+                          placeholder="DD/MM/YYYY"
                         />
                       </div>
                       <div className="form-group">
