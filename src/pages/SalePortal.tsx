@@ -5733,19 +5733,33 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            flexWrap: 'nowrap',
+            gap: isMobile ? '8px' : '6px',
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
             flex: isMobile ? 'none' : '1 1 auto',
-            justifyContent: 'flex-end',
+            justifyContent: isMobile ? 'flex-start' : 'flex-end',
             width: isMobile ? '100%' : 'auto',
-            minWidth: 0
+            minWidth: 0,
+            boxSizing: 'border-box'
           }}>
             {/* Search Input (Dài hơn và nằm bên trái cụm điều khiển) */}
             <div style={{ 
               position: 'relative', 
-              flex: isMobile ? '1 1 auto' : '0 1 320px', 
-              minWidth: isMobile ? '120px' : '260px' 
+              flex: isMobile ? '1 1 100%' : '0 1 320px', 
+              width: isMobile ? '100%' : 'auto',
+              minWidth: isMobile ? '100%' : '260px',
+              boxSizing: 'border-box'
             }}>
+              <Search 
+                size={14} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '10px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  color: 'var(--color-text-muted)', 
+                  pointerEvents: 'none' 
+                }} 
+              />
               <input
                 type="text"
                 className="form-input"
@@ -5753,14 +5767,37 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 value={wsSearch}
                 onChange={e => setWsSearch(e.target.value)}
                 style={{ 
-                  height: '32px', 
+                  height: '34px', 
                   fontSize: '0.8rem', 
-                  padding: '4px 8px', 
-                  borderRadius: '6px', 
+                  padding: '4px 10px 4px 30px', 
+                  borderRadius: '8px', 
                   width: '100%',
-                  border: '1px solid var(--color-border)'
+                  boxSizing: 'border-box',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)'
                 }}
               />
+              {wsSearch && (
+                <button
+                  type="button"
+                  onClick={() => setWsSearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: 'var(--color-text-muted)',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
 
             {/* Filter Trigger Button */}
@@ -5817,7 +5854,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
             {/* Toggle Switch Hiện việc đã xong */}
             <div
-              onClick={() => setShowDoneTasks(prev => !prev)}
+              onClick={() => {
+                setLoadingWsTasks(true);
+                setShowDoneTasks(prev => !prev);
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setLoadingWsTasks(true);
+                  setShowDoneTasks(prev => !prev);
+                }
+              }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5834,16 +5883,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               }}
               title={showDoneTasks ? t('Đang hiện việc đã hoàn thành. Bấm để ẩn') : t('Bấm để hiển thị cả việc đã xong')}
             >
-              <ToggleSwitch
-                checked={showDoneTasks}
-                onChange={setShowDoneTasks}
-                small={true}
-              />
+              <div style={{ pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+                <ToggleSwitch
+                  checked={showDoneTasks}
+                  onChange={() => {}}
+                  small={true}
+                />
+              </div>
               <span style={{
                 fontSize: '0.78rem',
                 fontWeight: showDoneTasks ? 700 : 600,
                 color: showDoneTasks ? '#10b981' : 'var(--color-text)',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none'
               }}>
                 {t('Hiện việc đã xong')}
               </span>
@@ -6089,8 +6141,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)', cursor: 'pointer', userSelect: 'none' }}>
                       <input
                         type="checkbox"
-                        checked={wsStatus === 'all'}
-                        onChange={() => setWsStatus(wsStatus === 'all' ? 'planned' : 'all')}
+                        checked={showDoneTasks || wsStatus === 'all'}
+                        onChange={() => {
+                          setLoadingWsTasks(true);
+                          const next = !(showDoneTasks || wsStatus === 'all');
+                          setShowDoneTasks(next);
+                          setWsStatus(next ? 'all' : 'planned');
+                        }}
                         style={{ cursor: 'pointer', width: '14px', height: '14px' }}
                       />
                       <span>{t('Hiện việc đã xong')}</span>
@@ -6100,7 +6157,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       <input
                         type="checkbox"
                         checked={wsStatus === 'hidden'}
-                        onChange={() => setWsStatus(wsStatus === 'hidden' ? 'planned' : 'hidden')}
+                        onChange={() => {
+                          setLoadingWsTasks(true);
+                          setWsStatus(wsStatus === 'hidden' ? 'planned' : 'hidden');
+                        }}
                         style={{ cursor: 'pointer', width: '14px', height: '14px' }}
                       />
                       <span>{t('Hiện việc đã ẩn')}</span>
@@ -6111,8 +6171,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     type="button"
                     className="btn outline sm"
                     onClick={() => {
+                      setLoadingWsTasks(true);
                       setWsPriority('');
                       setWsStatus('planned');
+                      setShowDoneTasks(false);
                       setWsDatePreset('all');
                       setWsStartDate('');
                       setWsEndDate('');
@@ -6294,20 +6356,86 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           </div>
         ) : (
           <>
-            {wsViewMode !== 'focus' && loadingWsTasks && wsTasks.length === 0 ? (
+            {wsViewMode !== 'focus' && loadingWsTasks ? (
               wsViewMode === 'kanban' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }}>
                   {[1, 2, 3].map((col) => (
                     <div key={col} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--color-bg)', padding: '1rem', borderRadius: '12px' }}>
-                      <CardSkeleton height={140} />
-                      <CardSkeleton height={140} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                        <Skeleton width={80} height={14} borderRadius={4} />
+                        <Skeleton width={24} height={18} borderRadius={10} />
+                      </div>
+                      {[1, 2].map((idx) => (
+                        <div key={idx} style={{
+                          background: 'var(--color-surface)',
+                          border: '1px solid var(--color-border-light)',
+                          borderRadius: '16px',
+                          padding: '1.25rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                          minHeight: '160px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Skeleton width="60%" height={16} borderRadius={6} />
+                            <Skeleton width={16} height={16} borderRadius={4} />
+                          </div>
+                          <Skeleton width="90%" height={11} borderRadius={4} />
+                          <Skeleton width="45%" height={11} borderRadius={4} />
+                          <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <Skeleton width="28%" height={10} borderRadius={4} />
+                              <Skeleton width="15%" height={10} borderRadius={4} />
+                            </div>
+                            <Skeleton width="100%" height={6} borderRadius={99} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--color-border-light)' }}>
+                            <Skeleton width={75} height={20} borderRadius={20} />
+                            <Skeleton width={26} height={26} borderRadius="50%" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '100px' : '40px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                    <CardSkeleton key={i} height={150} />
+                    <div key={i} style={{
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border-light)',
+                      borderRadius: '16px',
+                      padding: '1.25rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                      minHeight: '160px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Skeleton width={`${50 + (i % 4) * 10}%`} height={16} borderRadius={6} />
+                        <Skeleton width={16} height={16} borderRadius={4} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <Skeleton width="90%" height={11} borderRadius={4} />
+                        <Skeleton width={`${40 + (i % 3) * 15}%`} height={11} borderRadius={4} />
+                      </div>
+                      <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <Skeleton width="28%" height={10} borderRadius={4} />
+                          <Skeleton width="15%" height={10} borderRadius={4} />
+                        </div>
+                        <Skeleton width="100%" height={6} borderRadius={99} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--color-border-light)' }}>
+                        <Skeleton width={75} height={20} borderRadius={20} />
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <Skeleton width={26} height={26} borderRadius="50%" />
+                          {i % 2 === 0 && <Skeleton width={26} height={26} borderRadius="50%" />}
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )

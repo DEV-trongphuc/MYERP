@@ -14,7 +14,10 @@ export const ToggleSwitch = ({ checked, onChange, small = false, disabled = fals
 
   return (
     <motion.div
-      onClick={() => !disabled && onChange(!checked)}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onChange(!checked);
+      }}
       className="flex items-center select-none shrink-0"
       animate={{
         backgroundColor: checked ? 'var(--color-success)' : 'var(--color-border)'

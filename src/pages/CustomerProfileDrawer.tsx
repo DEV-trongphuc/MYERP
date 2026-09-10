@@ -3595,6 +3595,42 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [driveLinkUrl, setDriveLinkUrl] = useState('');
   const [savingDriveLink, setSavingDriveLink] = useState(false);
 
+  const [renameDocModal, setRenameDocModal] = useState<{
+    isOpen: boolean;
+    doc: any | null;
+    name: string;
+    ext: string;
+    saving: boolean;
+  }>({
+    isOpen: false,
+    doc: null,
+    name: '',
+    ext: '',
+    saving: false
+  });
+
+  const handleConfirmRenameDoc = async () => {
+    if (!renameDocModal.doc || !renameDocModal.name.trim()) return;
+    const trimmed = renameDocModal.name.trim();
+    const finalName = renameDocModal.ext && !trimmed.toLowerCase().endsWith(renameDocModal.ext.toLowerCase())
+      ? `${trimmed}${renameDocModal.ext}`
+      : trimmed;
+
+    setRenameDocModal(prev => ({ ...prev, saving: true }));
+    try {
+      await api.put(`/cloud-files/${renameDocModal.doc.id}`, {
+        name: finalName,
+        category: renameDocModal.doc.category || 'general'
+      });
+      fetchContactDocs(effectiveContactId);
+      addToast('Đã đổi tên tài liệu thành công.', 'success');
+      setRenameDocModal({ isOpen: false, doc: null, name: '', ext: '', saving: false });
+    } catch (err) {
+      addToast('Lỗi khi đổi tên tài liệu.', 'error');
+      setRenameDocModal(prev => ({ ...prev, saving: false }));
+    }
+  };
+
   const handleAddDriveLink = async () => {
     if (!driveLinkName.trim()) {
       addToast('Vui lòng nhập tên thư mục/tài liệu liên kết', 'error');
@@ -3626,7 +3662,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         setDriveLinkName('');
         setDriveLinkUrl('');
         setShowDriveLinkModal(false);
-        fetchData();
+        fetchContactDocs(effectiveContactId);
       } else {
         addToast(res.data.message || 'Lỗi khi liên kết thư mục', 'error');
       }
@@ -3677,6 +3713,108 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
 
   const [loadingRelated, setLoadingRelated] = useState(false);
+
+  const fetchContactDocs = useCallback(async (cId?: number | string) => {
+    const targetCId = cId || effectiveContactId;
+    if (!targetCId) return;
+    try {
+      // 1. Fetch cloud-files directly and immediately update state (sub-50ms)
+      const docsRes = await api.get(`/cloud-files?contact_id=${targetCId}&limit=1000`);
+      const docsData = docsRes.data?.data?.items || [];
+      const mappedDocs: any[] = docsData.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        date: new Date(d.created_at).toLocaleDateString('vi-VN'),
+        size: (() => {
+          const bytes = Number(d.file_size || 0);
+          if (!bytes) return '0 B';
+          const k = 1024;
+          const sizes = ['B', 'KB', 'MB', 'GB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        })(),
+        type: d.name.split('.').pop() || 'file',
+        path: d.file_path,
+        category: d.category
+      }));
+
+      // Immediately render documents to UI
+      setDocs(mappedDocs);
+      setLoadingRelated(false);
+
+      // 2. Fetch cooperation slip & deposit attachments asynchronously in background
+      Promise.allSettled([
+        api.get(`/cooperation-slips?contact_id=${targetCId}`).catch(() => null),
+        api.get(`/deposits?contact_id=${targetCId}`).catch(() => null)
+      ]).then(([slipRes, depRes]) => {
+        const extraDocs: any[] = [];
+
+        if (slipRes.status === 'fulfilled' && slipRes.value?.data?.data) {
+          const slips = Array.isArray(slipRes.value.data.data) ? slipRes.value.data.data : [slipRes.value.data.data];
+          const activeSlip = slips.find((s: any) => Number(s.contact_id) === Number(targetCId)) || slips[0];
+          if (activeSlip && activeSlip.attachment_url) {
+            const coopFiles = activeSlip.attachment_url.split(',').map((s: string) => s.trim()).filter(Boolean);
+            coopFiles.forEach((fileUrl: string, idx: number) => {
+              const filename = fileUrl.split('/').pop() || 'coop_file';
+              extraDocs.push({
+                id: `coop_slip_attachment_${idx}`,
+                name: filename,
+                date: activeSlip.created_at ? new Date(activeSlip.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
+                size: '—',
+                type: filename.split('.').pop() || 'file',
+                path: fileUrl,
+                category: 'Tài liệu Hợp tác & Hoa hồng',
+                isCoopAttachment: true
+              });
+            });
+          }
+        }
+
+        if (depRes.status === 'fulfilled' && depRes.value?.data?.data) {
+          const customerDeposits = depRes.value.data.data;
+          (Array.isArray(customerDeposits) ? customerDeposits : []).forEach((dep: any) => {
+            const milestones = dep.milestones || [];
+            milestones.forEach((m: any) => {
+              const fileUrl = m.unc_file_path || m.attachment_url;
+              if (fileUrl) {
+                const filename = (() => {
+                  const base = fileUrl.split('/').pop() || `${m.name || 'Cọc'}_UNC`;
+                  try { return decodeURIComponent(base); } catch (e) { return base; }
+                })();
+                const fileExt = filename.split('.').pop() || 'png';
+                extraDocs.push({
+                  id: `milestone_attachment_${m.id}`,
+                  name: filename,
+                  date: m.updated_at ? new Date(m.updated_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
+                  size: '—',
+                  type: fileExt,
+                  path: fileUrl,
+                  category: 'Đặt cọc',
+                  folder: 'Đặt cọc',
+                  isMilestoneAttachment: true
+                });
+              }
+            });
+          });
+        }
+
+        if (extraDocs.length > 0) {
+          setDocs(prev => {
+            const existingPaths = new Set(prev.map(p => p.path));
+            const uniqueExtra = extraDocs.filter(d => !existingPaths.has(d.path));
+            if (uniqueExtra.length === 0) return prev;
+            return [...prev, ...uniqueExtra];
+          });
+        }
+      }).catch(err => {
+        console.error("Background fetch for extra docs failed:", err);
+      });
+    } catch (err) {
+      console.error("Lỗi khi tải tài liệu:", err);
+      setLoadingRelated(false);
+    }
+  }, [effectiveContactId]);
+
   const [quickUserCard, setQuickUserCard] = useState<{ id: number; name: string; role: string; email?: string; phone?: string; vacationMode?: number; avatarUrl?: string; visible: boolean; x: number; y: number; employeeId?: string } | null>(null);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [tempAvatar, setTempAvatar] = useState('');
@@ -4164,92 +4302,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       }
 
       if (tabToLoad === 'docs') {
-        const docsRes = await api.get(`/cloud-files?contact_id=${currentCId}&limit=1000`);
-        const docsData = docsRes.data.data?.items || [];
-        const mappedDocs = docsData.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          date: new Date(d.created_at).toLocaleDateString('vi-VN'),
-          size: (() => {
-            const bytes = Number(d.file_size || 0);
-            if (!bytes) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-          })(),
-          type: d.name.split('.').pop() || 'file',
-          path: d.file_path,
-          category: d.category
-        }));
-
-        // Fetch and include cooperation slip attachments dynamically
-        let activeCoopSlip = coopSlip;
-        if (!activeCoopSlip) {
-          try {
-            const resSlips = await fetchAPI(`cooperation-slips?contact_id=${currentCId}`);
-            if (resSlips.success) {
-              const slipsList = Array.isArray(resSlips.data) ? resSlips.data : (resSlips.data ? [resSlips.data] : []);
-              activeCoopSlip = slipsList.find((s: any) => Number(s.contact_id) === Number(currentCId)) || slipsList[0] || null;
-            }
-          } catch (coopErr) {
-            console.error("Lỗi khi tải thông tin hợp tác cho tài liệu:", coopErr);
-          }
-        }
-
-        if (activeCoopSlip && activeCoopSlip.attachment_url) {
-          const coopFiles = activeCoopSlip.attachment_url.split(',').map((s: string) => s.trim()).filter(Boolean);
-          coopFiles.forEach((fileUrl: string, idx: number) => {
-            const filename = fileUrl.split('/').pop() || 'coop_file';
-            mappedDocs.push({
-              id: `coop_slip_attachment_${idx}`,
-              name: filename,
-              date: activeCoopSlip.created_at ? new Date(activeCoopSlip.created_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-              size: '—',
-              type: filename.split('.').pop() || 'file',
-              path: fileUrl,
-              category: 'Tài liệu Hợp tác & Hoa hồng',
-              isCoopAttachment: true
-            });
-          });
-        }
-
-        // Fetch and include deposit milestone payment proofs (UNC) dynamically
-        try {
-          const resDep = await api.get(`/deposits?contact_id=${currentCId}`);
-          const customerDeposits = resDep.data?.data || [];
-          (Array.isArray(customerDeposits) ? customerDeposits : []).forEach((dep: any) => {
-            const milestones = dep.milestones || [];
-            milestones.forEach((m: any) => {
-              const fileUrl = m.unc_file_path || m.attachment_url;
-              if (fileUrl) {
-                const filename = (() => {
-                  const base = fileUrl.split('/').pop() || `${m.name || 'Cọc'}_UNC`;
-                  try { return decodeURIComponent(base); } catch (e) { return base; }
-                })();
-                const fileExt = filename.split('.').pop() || 'png';
-                const exists = mappedDocs.some((d: any) => d.path === fileUrl);
-                if (!exists) {
-                  mappedDocs.push({
-                    id: `milestone_attachment_${m.id}`,
-                    name: filename,
-                    date: m.updated_at ? new Date(m.updated_at).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-                    size: '—',
-                    type: fileExt,
-                    path: fileUrl,
-                    category: 'Đặt cọc',
-                    folder: 'Đặt cọc',
-                    isMilestoneAttachment: true
-                  });
-                }
-              }
-            });
-          });
-        } catch (depErr) {
-          console.error("Lỗi khi tải thông tin cọc cho tài liệu:", depErr);
-        }
-
-        setDocs(mappedDocs);
+        await fetchContactDocs(currentCId);
       }
     } catch (e: any) {
       console.error("Error fetching tab data:", e);
@@ -4441,9 +4494,66 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     });
   }, [effectiveContactId, formData.full_name, contact?.full_name, formData.program, contact?.program, linkedProfiles, showConfirm, addToast, onUpdate, onClose, executeSwitchProfile]);
 
+  const saleTeamUsers = useMemo(() => {
+    const saleRoles = ['sale', 'sales', 'sale_admin', 'saleadmin', 'telesale', 'consultant'];
+    const filtered = users.filter((u: any) => {
+      const role = String(u.role || '').toLowerCase().trim();
+      const dept = String(u.department || u.team_name || u.team || '').toLowerCase();
+      const teamId = Number(u.team_id);
+      return (
+        saleRoles.includes(role) ||
+        role.startsWith('sale') ||
+        dept.includes('sale') ||
+        dept.includes('kinh doanh') ||
+        teamId === 4
+      );
+    });
+    return filtered.length > 0 ? filtered : users;
+  }, [users]);
+
+  const cloneOwnerOptions = useMemo(() => {
+    return saleTeamUsers.map((u: any) => ({
+      value: String(u.id),
+      label: u.full_name || u.name || u.username || `User #${u.id}`,
+      avatar: u.avatar_url || u.avatar,
+      sublabel: [u.role ? `(${u.role})` : '', u.department || u.team_name, u.phone || u.email].filter(Boolean).join(' • ')
+    }));
+  }, [saleTeamUsers]);
+
+  const cloneStageOptions = useMemo(() => {
+    const sorted = pipelineStages && pipelineStages.length > 0
+      ? [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0))
+      : [];
+    return sorted.map((st: any) => ({
+      value: String(st.id),
+      label: st.name,
+      sublabel: st.system_slug ? `(${st.system_slug})` : undefined,
+      icon: (
+        <span
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            backgroundColor: st.color || '#3b82f6',
+            flexShrink: 0
+          }}
+        />
+      )
+    }));
+  }, [pipelineStages]);
+
   const handleOpenCloneModal = () => {
     setCloneProgram('');
-    setCloneOwnerId(String(formData.owner_id || contact?.owner_id || currentUser?.id || ''));
+    const initialOwnerId = String(formData.owner_id || contact?.owner_id || currentUser?.id || '');
+    const isOwnerInSale = saleTeamUsers.some(u => String(u.id) === initialOwnerId);
+    if (isOwnerInSale) {
+      setCloneOwnerId(initialOwnerId);
+    } else if (saleTeamUsers.length > 0) {
+      setCloneOwnerId(String(saleTeamUsers[0].id));
+    } else {
+      setCloneOwnerId(initialOwnerId);
+    }
     const sorted = pipelineStages && pipelineStages.length > 0
       ? [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0))
       : [];
@@ -6294,6 +6404,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const isCurrentlyNurture = formData.lead_status === 'nurture';
   const isCurrentlyLost = formData.lead_status === 'lost';
 
+  // Tự động mở "Ghi chú học viên / ban đầu" nếu là pipeline đầu tiên, ngược lại tự động đóng
+  useEffect(() => {
+    if (!isOpen) return;
+    const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
+    const currentIdx = currentStage ? pipelineStages.indexOf(currentStage) : -1;
+    const safeIndex = currentIdx === -1 ? 0 : currentIdx;
+    const isFirstStage = safeIndex === 0 && !isCurrentlyNurture && !isCurrentlyLost;
+    setIsInitialNotesExpanded(isFirstStage);
+  }, [effectiveContactId, formData.pipeline_status, formData.lead_status, isCurrentlyNurture, isCurrentlyLost, pipelineStages, isOpen]);
+
   const pipelineStepperBar = (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0, borderBottom: '1px solid var(--color-border-light)' }}>
       {/* Alert Banner when lead is Nurture or Lost */}
@@ -8114,6 +8234,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           onClick={() => {
                                             /* setTabRenderReady(false); */
                                             setActiveTab(tab.id);
+                                            if (tab.id === 'docs' && effectiveContactId) {
+                                              fetchContactDocs(effectiveContactId);
+                                            }
                                           }}
                                         >
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -8271,7 +8394,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       <button
                                         key={tab.id}
                                         className={`${styles.sidebarTabBtn} ${activeTab === tab.id ? styles.sidebarTabActive : ''}`}
-                                        onClick={() => setActiveTab(tab.id)}
+                                        onClick={() => {
+                                          setActiveTab(tab.id);
+                                          if (tab.id === 'docs' && effectiveContactId) {
+                                            fetchContactDocs(effectiveContactId);
+                                          }
+                                        }}
                                         style={{ padding: '11px 0.875rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -13098,7 +13226,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               </>
                             ) : (
                               <>
-                                <Archive size={16} /> Tải toàn bộ (ZIP)
+                                <Archive size={16} /> download Zip
                               </>
                             )}
                           </button>
@@ -13146,32 +13274,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               }}
                               className="hover-lift"
                             >
-                              <FolderPlus size={16} /> Tạo thư mục
-                            </button>
-                            <button
-                              onClick={() => {
-                                setDriveLinkName('');
-                                setDriveLinkUrl('');
-                                setShowDriveLinkModal(true);
-                              }}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '8px 16px',
-                                borderRadius: '8px',
-                                background: 'rgba(239, 68, 68, 0.08)',
-                                color: '#ef4444',
-                                border: '1px solid rgba(239, 68, 68, 0.15)',
-                                fontSize: '0.825rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                height: '36px'
-                              }}
-                              className="hover-lift"
-                            >
-                              <Link2 size={16} style={{ color: '#ef4444' }} /> Liên kết Drive
+                              <FolderPlus size={16} /> Thư mục
                             </button>
                             <label
                               style={{
@@ -13221,45 +13324,57 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     fData.append('category', currentFolder || 'general');
                                     fData.append('visibility', 'shared');
 
-                                    const isImg = renamedFile.type && renamedFile.type.startsWith('image/');
-                                    const previewUrl = isImg ? URL.createObjectURL(renamedFile) : '';
-                                    setUploadingFileObj({
-                                      name: totalFiles > 1 ? `(${i + 1}/${totalFiles}) ${finalName}` : finalName,
-                                      size: (renamedFile.size / 1024 / 1024).toFixed(1) + ' MB',
-                                      previewUrl,
-                                      isImage: isImg
-                                    });
-                                    setUploadProgress(0);
-
                                     try {
-                                      await api.post('/cloud-files', fData, {
-                                        headers: { 'Content-Type': 'multipart/form-data' },
-                                        onUploadProgress: (progressEvent) => {
-                                          const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-                                          setUploadProgress(percent);
-                                        }
-                                      });
+                                      setUploadingFileObj({ name: finalName, previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(fileToUpload) : '', isImage: file.type.startsWith('image/') });
+                                      setUploadProgress(Math.round(((i + 0.5) / totalFiles) * 100));
+                                      await api.post('/cloud-files', fData);
                                       successCount++;
                                     } catch (err: any) {
-                                      console.error("Upload error for " + finalName, err);
+                                      console.error("Upload error for file", originalName, err);
                                     }
                                   }
 
                                   setUploadProgress(null);
                                   setUploadingFileObj(null);
-                                  fetchData();
                                   if (successCount > 0) {
-                                    addToast(`Đã tải lên thành công ${successCount}/${totalFiles} tài liệu.`, 'success');
+                                    addToast(`Đã tải lên ${successCount}/${totalFiles} tài liệu thành công!`, 'success');
+                                    fetchData();
                                   } else {
                                     addToast('Lỗi khi tải tài liệu lên server', 'error');
                                   }
                                   e.target.value = '';
                                 }
                               }} />
-                              <Plus size={16} /> Upload file
+                              <Plus size={16} /> Upload
                             </label>
-                          </>
-                        )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDriveLinkName('');
+                                setDriveLinkUrl('');
+                                setShowDriveLinkModal(true);
+                              }}
+                              title="Liên kết Google Drive"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '36px',
+                                height: '36px',
+                                borderRadius: '8px',
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                flexShrink: 0
+                              }}
+                              className="hover-lift"
+                            >
+                              <Link2 size={16} style={{ color: '#ef4444' }} />
+                            </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -13300,9 +13415,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               <div style={{ flex: 1, height: '6px', background: 'var(--color-bg)', borderRadius: '3px', overflow: 'hidden' }}>
                                 <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--color-primary)', transition: 'width 0.1s ease-out' }} />
                               </div>
-                              <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                                {uploadingFileObj.size}
-                              </span>
                             </div>
                           </div>
                         </div>
@@ -13537,32 +13649,21 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   fData.append('category', currentFolder || 'general');
                                   fData.append('visibility', 'shared');
 
-                                  setUploadingFileObj({
-                                    name: totalFiles > 1 ? `(${i + 1}/${totalFiles}) ${finalName}` : finalName,
-                                    size: (renamedFile.size / 1024 / 1024).toFixed(1) + ' MB',
-                                    previewUrl: renamedFile.type.startsWith('image/') ? URL.createObjectURL(renamedFile) : '',
-                                    isImage: renamedFile.type.startsWith('image/')
-                                  });
-                                  setUploadProgress(0);
-
                                   try {
-                                    await api.post('/cloud-files', fData, {
-                                      headers: { 'Content-Type': 'multipart/form-data' },
-                                      onUploadProgress: (progressEvent) => {
-                                        setUploadProgress(Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1)));
-                                      }
-                                    });
+                                    setUploadingFileObj({ name: finalName, previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(fileToUpload) : '', isImage: file.type.startsWith('image/') });
+                                    setUploadProgress(Math.round(((i + 0.5) / totalFiles) * 100));
+                                    await api.post('/cloud-files', fData);
                                     successCount++;
                                   } catch (err: any) {
-                                    console.error("Upload error for " + finalName, err);
+                                    console.error("Upload error for file", originalName, err);
                                   }
                                 }
 
                                 setUploadProgress(null);
                                 setUploadingFileObj(null);
-                                fetchData();
                                 if (successCount > 0) {
-                                  addToast(`Đã tải lên thành công ${successCount}/${totalFiles} tài liệu.`, 'success');
+                                  addToast(`Đã tải lên ${successCount}/${totalFiles} tài liệu thành công!`, 'success');
+                                  fetchData();
                                 } else {
                                   addToast('Lỗi khi tải tài liệu lên server', 'error');
                                 }
@@ -16814,6 +16915,168 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         </CustomModal>
       )}
 
+      {/* Modal Đổi tên tài liệu đẹp và gọn */}
+      {renameDocModal.isOpen && (
+        <CustomModal
+          isOpen={renameDocModal.isOpen}
+          onClose={() => !renameDocModal.saving && setRenameDocModal({ isOpen: false, doc: null, name: '', ext: '', saving: false })}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '8px',
+                background: 'rgba(37, 99, 235, 0.1)',
+                color: '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Pencil size={15} />
+              </div>
+              <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>Đổi tên tài liệu</span>
+            </div>
+          }
+          maxWidth="440px"
+          zIndex={zIndex ? zIndex + 60 : 1000250}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
+            {/* File info banner */}
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: '8px',
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border-light)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <div style={{
+                padding: '5px 8px',
+                borderRadius: '6px',
+                background: '#eff6ff',
+                color: '#2563eb',
+                fontSize: '0.725rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                border: '1px solid #bfdbfe'
+              }}>
+                {renameDocModal.ext ? renameDocModal.ext.replace('.', '') : 'FILE'}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'block' }}>Tên tệp hiện tại:</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {renameDocModal.doc?.name}
+                </span>
+              </div>
+            </div>
+
+            {/* Input field */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text)' }}>
+                Tên mới của tài liệu
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={renameDocModal.name}
+                  onChange={(e) => setRenameDocModal(prev => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && renameDocModal.name.trim() && !renameDocModal.saving) {
+                      e.preventDefault();
+                      handleConfirmRenameDoc();
+                    }
+                  }}
+                  autoFocus
+                  onFocus={(e) => e.target.select()}
+                  placeholder="Nhập tên mới cho tài liệu..."
+                  style={{
+                    width: '100%',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    padding: renameDocModal.ext ? '9px 64px 9px 12px' : '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)'
+                  }}
+                />
+                {renameDocModal.ext && (
+                  <span style={{
+                    position: 'absolute',
+                    right: '8px',
+                    fontSize: '0.725rem',
+                    fontWeight: 700,
+                    color: 'var(--color-text-muted)',
+                    background: 'var(--color-surface-hover, #f1f5f9)',
+                    padding: '3px 6px',
+                    borderRadius: '4px',
+                    pointerEvents: 'none',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    {renameDocModal.ext}
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block' }}>
+                💡 Nhấn <strong>Enter</strong> để lưu nhanh, phần mở rộng ({renameDocModal.ext || 'gốc'}) được tự động giữ nguyên.
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              marginTop: '4px',
+              paddingTop: '12px',
+              borderTop: '1px solid var(--color-border-light)'
+            }}>
+              <button
+                type="button"
+                disabled={renameDocModal.saving}
+                onClick={() => setRenameDocModal({ isOpen: false, doc: null, name: '', ext: '', saving: false })}
+                className="btn"
+                style={{ padding: '7px 16px', fontSize: '0.825rem' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={renameDocModal.saving || !renameDocModal.name.trim()}
+                onClick={handleConfirmRenameDoc}
+                className="btn primary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 18px',
+                  fontSize: '0.825rem',
+                  fontWeight: 700,
+                  background: '#2563eb',
+                  borderColor: '#2563eb',
+                  color: '#ffffff',
+                  boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
+                  cursor: (renameDocModal.saving || !renameDocModal.name.trim()) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {renameDocModal.saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={14} />
+                    <span>Lưu</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </CustomModal>
+      )}
+
       {duplicatePhoneModal.isOpen && (
         <CustomModal
           isOpen={duplicatePhoneModal.isOpen}
@@ -17040,7 +17303,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             </div>
 
             {/* Pipeline Stage Selection */}
-            <div>
+            <div style={{ position: 'relative', zIndex: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
                   Giai đoạn Pipeline ban đầu <span style={{ color: '#ef4444' }}>*</span>
@@ -17049,57 +17312,37 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   (Mặc định: Bước 1 Pipeline)
                 </span>
               </div>
-              <select
-                className="form-select"
-                value={cloneStageId}
-                onChange={(e) => setCloneStageId(e.target.value)}
-                style={{
-                  width: '100%',
-                  fontSize: '0.85rem',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)',
-                  fontWeight: 600
-                }}
-              >
-                {(pipelineStages && pipelineStages.length > 0
-                  ? [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0))
-                  : []
-                ).map((st: any) => (
-                  <option key={st.id} value={st.id}>
-                    {st.name} {st.system_slug ? `(${st.system_slug})` : ''}
-                  </option>
-                ))}
-              </select>
+              <CustomSelect
+                options={cloneStageOptions}
+                value={String(cloneStageId)}
+                onChange={(val) => setCloneStageId(String(val))}
+                placeholder="Chọn giai đoạn pipeline..."
+                searchable
+                width="100%"
+                size="md"
+              />
             </div>
 
             {/* Sales Owner Dropdown */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-text)' }}>
-                Chuyên viên tư vấn phụ trách chương trình này
-              </label>
-              <select
-                className="form-select"
-                value={cloneOwnerId}
-                onChange={(e) => setCloneOwnerId(e.target.value)}
-                style={{
-                  width: '100%',
-                  fontSize: '0.85rem',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)'
-                }}
-              >
-                {users.map((u: any) => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name || u.name || u.username} ({u.role || 'user'})
-                  </option>
-                ))}
-              </select>
+            <div style={{ position: 'relative', zIndex: 11 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
+                  Chuyên viên tư vấn phụ trách chương trình này <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                  (Team Sale: {saleTeamUsers.length} nhân sự)
+                </span>
+              </div>
+              <CustomSelect
+                options={cloneOwnerOptions}
+                value={String(cloneOwnerId)}
+                onChange={(val) => setCloneOwnerId(String(val))}
+                placeholder="Tìm & chọn chuyên viên sale bàn giao..."
+                searchable
+                showAvatars
+                width="100%"
+                size="md"
+              />
             </div>
 
             {/* Initial Note */}
@@ -17124,14 +17367,32 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               />
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '6px', paddingTop: '12px', borderTop: '1px solid var(--color-border-light)' }}>
+            {/* Sticky Action Buttons Footer */}
+            <div
+              style={{
+                position: 'sticky',
+                bottom: '-24px',
+                background: 'var(--color-surface)',
+                zIndex: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                marginTop: '12px',
+                padding: '14px 24px',
+                borderTop: '1px solid var(--color-border)',
+                marginLeft: '-24px',
+                marginRight: '-24px',
+                marginBottom: '-24px',
+                boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.05)'
+              }}
+            >
               <button
                 type="button"
                 disabled={cloningProfile}
                 onClick={() => setShowCloneModal(false)}
                 className="btn"
-                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                style={{ padding: '8px 18px', fontSize: '0.875rem' }}
               >
                 Hủy
               </button>
@@ -17144,12 +17405,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '8px 20px',
-                  fontSize: '0.85rem',
+                  padding: '8px 22px',
+                  fontSize: '0.875rem',
                   fontWeight: 700,
                   background: '#2563eb',
                   borderColor: '#2563eb',
                   color: '#ffffff',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
                   cursor: cloningProfile || !cloneProgram.trim() ? 'not-allowed' : 'pointer'
                 }}
               >

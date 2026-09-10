@@ -1074,11 +1074,11 @@ if ($eventName === 'user_send_text' || $eventName === 'message.text.received') {
                     $note = $lead['note'] . $adminNote;
 
                     // Update Lead Table
-                    $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), ai_screener_status = 'passed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
+                    $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), target_round_id = ?, ai_screener_status = 'passed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
                     if (!$updLead) {
                         throw new Exception("Lỗi chuẩn bị cập nhật Lead.");
                     }
-                    $updLead->bind_param("isiiii", $assignedConsultantId, $note, $assignedConsultantId, $assignedConsultantId, $leadId);
+                    $updLead->bind_param("isiiii", $assignedConsultantId, $note, $targetRoundId, $assignedConsultantId, $assignedConsultantId, $leadId);
                     $updLead->execute();
                     $updLead->close();
 

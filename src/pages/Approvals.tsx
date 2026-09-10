@@ -9,7 +9,9 @@ import {
   Search, Trash2, Paperclip, Send, AlertTriangle, Users, CreditCard, ShoppingCart, Award,
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
-  UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon
+  UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon, Building2, Truck,
+  GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark,
+  Landmark, Wallet
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -576,7 +578,6 @@ export default function Approvals() {
       }
     }
   }, [teams, users, user, departmentName, editingItemId, getUserPrimaryDepartment]);
-  const [paymentTarget, setPaymentTarget] = useState('Nội bộ');
   const getTodayDateString = () => {
     const d = new Date();
     const year = d.getFullYear();
@@ -584,6 +585,60 @@ export default function Approvals() {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
+
+
+  const [paymentTarget, setPaymentTarget] = useState('Nội bộ');
+  const [paymentEmployeeId, setPaymentEmployeeId] = useState('');
+  const [paymentSupplierId, setPaymentSupplierId] = useState('');
+  const [paymentLecturerId, setPaymentLecturerId] = useState('');
+  const [paymentContactId, setPaymentContactId] = useState('');
+  const [paymentBeneficiaryName, setPaymentBeneficiaryName] = useState('');
+  const [paymentBankName, setPaymentBankName] = useState('');
+  const [paymentBankAccount, setPaymentBankAccount] = useState('');
+  const [paymentAccountName, setPaymentAccountName] = useState('');
+  const [paymentPhone, setPaymentPhone] = useState('');
+  const [paymentTaxCode, setPaymentTaxCode] = useState('');
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+
+  // Meeting / Tiếp khách states
+  const [meetingTargetType, setMeetingTargetType] = useState<'company' | 'lecturer' | 'contact' | 'gov' | 'other'>('company');
+  const [meetingSelectedEntityId, setMeetingSelectedEntityId] = useState('');
+  const [meetingClientName, setMeetingClientName] = useState('');
+  const [meetingContactPerson, setMeetingContactPerson] = useState('');
+  const [meetingContactPhone, setMeetingContactPhone] = useState('');
+  const [meetingLocation, setMeetingLocation] = useState('');
+  const [meetingDate, setMeetingDate] = useState(getTodayDateString());
+  const [meetingTime, setMeetingTime] = useState('11:30');
+  const [meetingClientCount, setMeetingClientCount] = useState('2');
+  const [meetingInternalCount, setMeetingInternalCount] = useState('2');
+  const [meetingPurpose, setMeetingPurpose] = useState('Gặp gỡ trao đổi & xúc tiến hợp tác kinh doanh');
+  const [meetingInternalAttendees, setMeetingInternalAttendees] = useState<string[]>([]);
+  const [meetingReimbursementMethod, setMeetingReimbursementMethod] = useState<'host_claim' | 'direct_partner' | 'corporate_card' | 'cash_advance'>('host_claim');
+  const [meetingInvoiceType, setMeetingInvoiceType] = useState<'vat' | 'retail' | 'receipt' | 'pending'>('vat');
+
+  // Recurring proposal additional states
+  const [recurringStartDate, setRecurringStartDate] = useState(getTodayDateString());
+  const [recurringPayDay, setRecurringPayDay] = useState('1');
+  const [recurringUnlimited, setRecurringUnlimited] = useState(true);
+  const [recurringContractNumber, setRecurringContractNumber] = useState('');
+
+  // Additional payment & beneficiary states
+  const [paymentGovAgencyType, setPaymentGovAgencyType] = useState<'tax' | 'social_insurance' | 'treasury' | 'other'>('tax');
+  const [paymentGovDecisionNumber, setPaymentGovDecisionNumber] = useState('');
+  const [paymentWalletType, setPaymentWalletType] = useState<'momo' | 'zalopay' | 'viettel_money'>('momo');
+  const [paymentWalletPhone, setPaymentWalletPhone] = useState('');
+  const [paymentCorporateCard, setPaymentCorporateCard] = useState('');
+  const [paymentBankBranch, setPaymentBankBranch] = useState('');
+
+  // Advance / Tạm ứng states
+  const [advanceType, setAdvanceType] = useState('business_trip');
+  const [advanceSettlementDate, setAdvanceSettlementDate] = useState('');
+
+  // Expense claim / Phân loại chi phí states
+  const [expenseCategory, setExpenseCategory] = useState('general');
+  const [invoiceType, setInvoiceType] = useState<'vat_10' | 'vat_8' | 'retail' | 'none'>('vat_10');
 
   const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản');
   const [paymentDetails, setPaymentDetails] = useState('');
@@ -714,6 +769,50 @@ export default function Approvals() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState('monthly');
   const [recurringEndDate, setRecurringEndDate] = useState('');
+
+  const onSelectWorkflowItem = (item: any) => {
+    setSelectedWorkflowDef(item);
+    setExpenseTitle(item.name);
+    handleSelectWorkflow(item.id);
+    if (item.id === 'advance_money') {
+      setFormType('expense');
+      setIsRecurring(false);
+      setIsPhasedPayment(false);
+      setPaymentTarget('Nội bộ');
+      setAdvanceType('business_trip');
+    } else if (item.id === 'recurring_payment') {
+      setFormType('expense');
+      setIsRecurring(true);
+      setIsPhasedPayment(false);
+      setPaymentTarget('Đối tác');
+    } else if (item.id === 'phased_payment') {
+      setFormType('expense');
+      setIsPhasedPayment(true);
+      setIsRecurring(false);
+      setPaymentTarget('Đối tác');
+    } else if (item.id === 'client_meeting') {
+      setFormType('expense');
+      setIsRecurring(false);
+      setIsPhasedPayment(false);
+      setPaymentTarget('Nội bộ');
+      setMeetingReimbursementMethod('host_claim');
+    } else if (item.id === 'expense_claim') {
+      setFormType('expense');
+      setIsRecurring(false);
+      setIsPhasedPayment(false);
+      setPaymentTarget('Nội bộ');
+    } else if (item.id === 'payment') {
+      setFormType('expense');
+      setIsRecurring(false);
+      setIsPhasedPayment(false);
+      setPaymentTarget('Nội bộ');
+    } else {
+      const isGeneral = ['stationery', 'purchase_request', 'it_request', 'print_stamp_send', 'document_approval', 'meeting_room'].includes(item.id);
+      setFormType(isGeneral ? 'general' : item.category === 'hr' ? 'leave' : 'expense');
+      setIsRecurring(false);
+      setIsPhasedPayment(false);
+    }
+  };
 
   // Attendance bulk states & helpers
   // Quy tắc: Trước hoặc ngày 5 tây (<= 5) mặc định quét tháng trước, sau ngày 5 tây (> 5) quét tháng này
@@ -858,26 +957,26 @@ export default function Approvals() {
           await api.delete(`/expenses/${editingItemId}`);
         }
       }
-      // Resolve the last active step in the approval chain as finalApproverId
-      let finalApproverId = 1003;
-      if (showStepDirector) {
-        finalApproverId = customApprover3?.id || defaultDirector?.id || 1003;
-      } else if (showStepAccountant) {
-        finalApproverId = customApprover2?.id || defaultAccountant?.id || 1003;
-      } else if (showStepManager) {
-        finalApproverId = customApprover1?.id || defaultApp1?.id || 1003;
-      } else {
-        finalApproverId = proposerUser?.id || 1003;
-      }
+      // Resolve multi-level approver chain:
+      // - Dưới 5tr: Tạo -> Leader -> Kế toán (appVal1 = Leader, appVal2 = Kế toán, appVal3 = null)
+      // - Trên 5tr: Tạo -> Leader -> Director Phạm Quang Vinh -> Kế toán (appVal1 = Leader, appVal2 = Director, appVal3 = Kế toán)
+      const managerId = showStepManager ? (customApprover1?.id || defaultApp1?.id || null) : null;
+      const accountantId = showStepAccountant ? (customApprover2?.id || defaultAccountant?.id || null) : null;
+      const directorId = showStepDirector ? (customApprover3?.id || defaultDirector?.id || null) : null;
 
+      const activeApproverChain: number[] = [];
+      if (showStepManager && managerId) activeApproverChain.push(Number(managerId));
+      if (showStepDirector && directorId) activeApproverChain.push(Number(directorId));
+      if (showStepAccountant && accountantId) activeApproverChain.push(Number(accountantId));
+
+      const appVal1 = activeApproverChain[0] || (proposerUser?.id || 1003);
+      const appVal2 = activeApproverChain[1] || null;
+      const appVal3 = activeApproverChain[2] || null;
+
+      let finalApproverId = activeApproverChain.length > 0 ? activeApproverChain[activeApproverChain.length - 1] : (proposerUser?.id || 1003);
       if (selectedWorkflowDef?.id === 'print_stamp_send') {
         finalApproverId = Number(pssExecutorId) || finalApproverId;
       }
-
-      // Define 3 level approver IDs for multi-level expense approvals
-      const appVal1 = showStepManager ? (customApprover1?.id || defaultApp1?.id || null) : null;
-      const appVal2 = showStepAccountant ? (customApprover2?.id || defaultAccountant?.id || null) : null;
-      const appVal3 = showStepDirector ? (customApprover3?.id || defaultDirector?.id || null) : null;
 
       // Always ensure HR Leader / Hành chính is included in related users for attendance/HR workflows
       const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
@@ -1237,28 +1336,189 @@ export default function Approvals() {
       } else {
         const totalAmt = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0);
         if (!appVal1 && !finalApproverId) {
-          toast.error(t('Chi phí yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1.'));
+          toast.error(t('Chi phí yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý).'));
           setSubmitting(false);
           return;
         }
-        if (totalAmt >= 5000000 && !appVal2) {
-          toast.error(t('Chi phí từ 5.000.000 đ trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn người duyệt Cấp 2.'));
+        if (!appVal2) {
+          toast.error(t('Chi phí yêu cầu duyệt bắt buộc phải chọn người duyệt Cấp 2 (Kế toán).'));
+          setSubmitting(false);
+          return;
+        }
+        if (totalAmt >= 5000000 && !appVal3) {
+          toast.error(t('Chi phí từ 5.000.000 đ trở lên bắt buộc phê duyệt đủ 3 cấp: Leader -> Ban Giám đốc (Phạm Quang Vinh) -> Kế toán.'));
           setSubmitting(false);
           return;
         }
 
-        let finalDesc = `Vị trí: ${jobPosition}\nPhòng ban: ${departmentName}\nĐối tượng: ${paymentTarget}\nHình thức: ${paymentMethod}\nThông tin: ${paymentDestination}\nChi tiết: ${paymentDetails}`;
-        if (isPhasedPayment) {
-          const instStr = installments.map(i => `${i.title}: ${formatApprovalCurrency(i.amount, currencyType)} (Hạn: ${i.dueDate || 'Chưa chọn'})`).join('; ');
-          finalDesc += `\n[Thanh toán theo đợt]: ${instStr}`;
+        let meetingStr = '';
+        if (selectedWorkflowDef?.id === 'client_meeting') {
+          const attendeesNames = meetingInternalAttendees.map(id => {
+            const u = users.find(x => String(x.id) === String(id));
+            return u ? (u.full_name || u.name) : id;
+          }).filter(Boolean).join(', ');
+          const targetTypeLabels: Record<string, string> = {
+            company: 'Doanh nghiệp / Đối tác B2B',
+            lecturer: 'Giảng viên / Chuyên gia cao cấp',
+            contact: 'Khách hàng VIP / Học viên CRM',
+            gov: 'Cơ quan Nhà nước / Ban ngành',
+            other: 'Cá nhân ngoài / Khách vãng lai'
+          };
+          const reimbLabels: Record<string, string> = {
+            host_claim: 'Hoàn ứng cho Cán bộ tiếp khách (Chi trước nhận lại sau)',
+            direct_partner: 'Thanh toán trực tiếp cho Nhà hàng / Địa điểm tiếp đón',
+            corporate_card: 'Thanh toán bằng Thẻ tín dụng doanh nghiệp',
+            cash_advance: 'Tạm ứng kinh phí tiếp khách (Tiền mặt)'
+          };
+          meetingStr = [
+            `[Thông tin tiếp khách]:`,
+            `• Phân loại đối tượng: ${targetTypeLabels[meetingTargetType] || meetingTargetType}`,
+            `• Đơn vị / Khách mời: ${meetingClientName || 'Chưa rõ'}`,
+            meetingContactPerson ? `• Người đại diện: ${meetingContactPerson}${meetingContactPhone ? ` (SĐT: ${meetingContactPhone})` : ''}` : '',
+            `• Địa điểm: ${meetingLocation || 'Chưa xác định'}`,
+            `• Thời gian: ${meetingDate || getTodayDateString()}${meetingTime ? ` lúc ${meetingTime}` : ''}`,
+            `• Quy mô tham gia: Khách mời (${meetingClientCount || 1} người) - Công ty (${meetingInternalCount || 1} người)`,
+            attendeesNames ? `• Cán bộ tham gia cùng: ${attendeesNames}` : '',
+            meetingPurpose ? `• Kế hoạch / Mục đích tiếp đón: ${meetingPurpose}` : '',
+            `• Phương thức thanh toán: ${reimbLabels[meetingReimbursementMethod] || meetingReimbursementMethod}`
+          ].filter(Boolean).join('\n');
         }
-        if (isRecurring) {
-          finalDesc += `\n[Lặp lại định kỳ]: Tần suất ${recurringFrequency} (Kết thúc: ${recurringEndDate || 'Vô thời hạn'})`;
+
+        let recurringStr = '';
+        if (isRecurring || selectedWorkflowDef?.id === 'recurring_payment') {
+          const freqLabels: Record<string, string> = {
+            weekly: 'Hàng tuần',
+            biweekly: 'Hàng 2 tuần',
+            monthly: 'Hàng tháng',
+            quarterly: 'Hàng quý (3 tháng/lần)',
+            semiannually: 'Hàng nửa năm (6 tháng/lần)',
+            yearly: 'Hàng năm'
+          };
+          const payDayLabels: Record<string, string> = {
+            '1': 'Ngày 01 đầu tháng',
+            '5': 'Ngày 05 hàng tháng',
+            '10': 'Ngày 10 hàng tháng',
+            '15': 'Ngày 15 hàng tháng',
+            '20': 'Ngày 20 hàng tháng',
+            '25': 'Ngày 25 hàng tháng',
+            'last_day': 'Ngày làm việc cuối tháng'
+          };
+          recurringStr = [
+            `[Thiết lập định kỳ]:`,
+            `• Chu kỳ thanh toán: ${freqLabels[recurringFrequency] || recurringFrequency}`,
+            `• Ngày giải ngân cố định: ${payDayLabels[recurringPayDay] || (recurringPayDay ? `Ngày ${recurringPayDay} hàng tháng` : 'Đầu kỳ')}`,
+            `• Thời hạn hiệu lực: ${recurringUnlimited ? 'Vô thời hạn (Hiệu lực cho đến khi có thông báo hủy)' : `Từ ${recurringStartDate || getTodayDateString()} đến ${recurringEndDate || 'Không xác định'}`}`,
+            recurringContractNumber ? `• Căn cứ Hợp đồng / Thỏa thuận: ${recurringContractNumber}` : ''
+          ].filter(Boolean).join('\n');
         }
+
+        let phasedStr = '';
+        if (isPhasedPayment || selectedWorkflowDef?.id === 'phased_payment') {
+          phasedStr = [
+            `[Kế hoạch thanh toán theo đợt (${installments.length} đợt)]:`,
+            ...installments.map((inst, idx) => 
+              `• ${inst.title || `Đợt ${idx + 1}`}: ${formatApprovalCurrency(inst.amount, currencyType)}${inst.dueDate ? ` (Hạn: ${inst.dueDate})` : ''}`
+            )
+          ].join('\n');
+        }
+
+        let advanceStr = '';
+        if (selectedWorkflowDef?.id === 'advance_money' || (formType as string) === 'advance') {
+          const advMap: Record<string, string> = {
+            business_trip: 'Tạm ứng công tác phí (Vé máy bay, khách sạn, di chuyển)',
+            procurement: 'Tạm ứng mua sắm vật tư / trang thiết bị',
+            event: 'Tạm ứng tổ chức sự kiện / hội thảo đào tạo',
+            lecturer: 'Tạm ứng thù lao giảng viên / chuyên gia',
+            salary: 'Ứng trước lương / Chi phí cá nhân',
+            other: 'Tạm ứng nghiệp vụ khác'
+          };
+          advanceStr = [
+            `[Đề nghị tạm ứng]:`,
+            `• Mục đích tạm ứng: ${advMap[advanceType] || advanceType}`,
+            advanceSettlementDate ? `• Hạn hoàn ứng / quyết toán chứng từ: ${advanceSettlementDate}` : ''
+          ].filter(Boolean).join('\n');
+        }
+
+        let invoiceStr = '';
+        if (selectedWorkflowDef?.id === 'expense_claim' || invoiceType) {
+          const invMap: Record<string, string> = {
+            vat_10: 'Hóa đơn điện tử VAT 10%',
+            vat_8: 'Hóa đơn điện tử VAT 8%',
+            retail: 'Hóa đơn bán lẻ / Biên lai thu tiền',
+            none: 'Không có hóa đơn (Giải trình nội bộ)'
+          };
+          const catMap: Record<string, string> = {
+            client_meeting: 'Chi phí tiếp khách / Ngoại giao',
+            travel: 'Công tác phí / Vé xe / Đi lại',
+            stationery: 'Văn phòng phẩm & Mua sắm vặt',
+            marketing: 'Tiếp thị / Sự kiện / Quảng cáo',
+            general: 'Chi phí nghiệp vụ khác'
+          };
+          const parts = [
+            catMap[expenseCategory] ? `Danh mục: ${catMap[expenseCategory]}` : '',
+            invMap[invoiceType] ? `Chứng từ: ${invMap[invoiceType]}` : ''
+          ].filter(Boolean);
+          if (parts.length > 0) {
+            invoiceStr = `[Hồ sơ chi phí]: ${parts.join(' - ')}`;
+          }
+        }
+
+        let beneficiaryStr = '';
+        if (paymentTarget === 'Nội bộ') {
+          const emp = users.find(u => String(u.id) === String(paymentEmployeeId));
+          const empName = emp ? (emp.full_name || emp.name || '') : paymentBeneficiaryName;
+          if (empName) beneficiaryStr = `Thụ hưởng (Nhân viên nội bộ): ${empName}`;
+        } else if (paymentTarget === 'Giảng viên') {
+          beneficiaryStr = `Thụ hưởng (Giảng viên / Chuyên gia): ${paymentBeneficiaryName}`;
+        } else if (paymentTarget === 'Đối tác') {
+          beneficiaryStr = `Thụ hưởng (Đối tác / Vendor): ${paymentBeneficiaryName}${paymentTaxCode ? ` (MST: ${paymentTaxCode})` : ''}`;
+        } else if (paymentTarget === 'Khách hàng') {
+          beneficiaryStr = `Thụ hưởng (Khách hàng / Học viên): ${paymentBeneficiaryName}`;
+        } else if (paymentTarget === 'Cộng tác viên') {
+          beneficiaryStr = `Thụ hưởng (Cộng tác viên / CTV): ${paymentBeneficiaryName}`;
+        } else if (paymentTarget === 'Cơ quan Nhà nước') {
+          beneficiaryStr = `Thụ hưởng (Cơ quan Nhà nước / Ngân sách): ${paymentBeneficiaryName}${paymentGovDecisionNumber ? ` (Số QĐ/Mã: ${paymentGovDecisionNumber})` : ''}`;
+        } else if (paymentBeneficiaryName) {
+          beneficiaryStr = `Thụ hưởng (${paymentTarget}): ${paymentBeneficiaryName}`;
+        }
+        if (paymentPhone) {
+          beneficiaryStr += ` - SĐT: ${paymentPhone}`;
+        }
+
+        let bankInfoStr = '';
+        if (paymentMethod === 'Chuyển khoản') {
+          if (paymentBankName || paymentBankAccount || paymentAccountName) {
+            bankInfoStr = `[Thông tin chuyển khoản]: ${paymentBankName || ''} - STK: ${paymentBankAccount || ''} - Chủ TK: ${paymentAccountName || ''}${paymentBankBranch ? ` - Chi nhánh: ${paymentBankBranch}` : ''}`;
+          } else if (paymentDestination) {
+            bankInfoStr = `[Thông tin chuyển khoản]: ${paymentDestination}`;
+          }
+        } else if (paymentMethod === 'Ví điện tử') {
+          bankInfoStr = `[Hình thức]: Ví điện tử ${paymentWalletType.toUpperCase()} - SĐT ví: ${paymentWalletPhone || paymentPhone} - Chủ ví: ${paymentBeneficiaryName}`;
+        } else if (paymentMethod === 'Thẻ tín dụng') {
+          bankInfoStr = `[Hình thức]: Thẻ tín dụng doanh nghiệp (4 số cuối: ${paymentCorporateCard || 'N/A'})`;
+        } else {
+          bankInfoStr = `[Hình thức]: Tiền mặt${paymentBeneficiaryName ? ` - Người nhận: ${paymentBeneficiaryName}` : ''}${paymentDestination ? ` - Địa điểm bàn giao: ${paymentDestination}` : ''}`;
+        }
+
+        const infoParts = [
+          meetingStr,
+          recurringStr,
+          phasedStr,
+          advanceStr,
+          invoiceStr,
+          `Phòng ban: ${departmentName}`,
+          `Đối tượng: ${paymentTarget}`,
+          beneficiaryStr,
+          `Hình thức: ${paymentMethod}`,
+          bankInfoStr,
+          paymentDetails ? `Chi tiết: ${paymentDetails}` : ''
+        ].filter(Boolean);
+
+        let finalDesc = infoParts.join('\n\n');
         if (attachments.length > 0) {
           const baseUrl = import.meta.env.VITE_API_URL || '/backend';
           const attsStr = attachments.map(a => `• ${a.name} (${baseUrl}/${a.url})`).join('\n');
-          finalDesc += `\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n${attsStr}`;
+          finalDesc += `\n\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n${attsStr}`;
         }
         await api.post('/expenses', {
           title: expenseTitle || selectedWorkflowDef.name,
@@ -1287,6 +1547,32 @@ export default function Approvals() {
       setCustomApprover1(null);
       setCustomApprover2(null);
       setCustomApprover3(null);
+      setPaymentEmployeeId('');
+      setPaymentSupplierId('');
+      setPaymentLecturerId('');
+      setPaymentContactId('');
+      setPaymentBeneficiaryName('');
+      setPaymentBankName('');
+      setPaymentBankAccount('');
+      setPaymentAccountName('');
+      setPaymentPhone('');
+      setPaymentTaxCode('');
+      setPaymentDestination('');
+      setPaymentDetails('');
+      setPaymentTarget('Nội bộ');
+      setPaymentMethod('Chuyển khoản');
+      setMeetingSelectedEntityId('');
+      setMeetingClientName('');
+      setMeetingLocation('');
+      setMeetingDate(getTodayDateString());
+      setMeetingClientCount('2');
+      setMeetingInternalCount('2');
+      setMeetingPurpose('Trao đổi hợp tác kinh doanh');
+      setMeetingInternalAttendees([]);
+      setAdvanceType('business_trip');
+      setAdvanceSettlementDate('');
+      setExpenseCategory('general');
+      setInvoiceType('vat_10');
       setActiveTab('my_requests');
       loadData();
     } catch (err: any) {
@@ -1299,7 +1585,7 @@ export default function Approvals() {
   // Approval step visibility overrides (can be deleted/excluded by user)
   const [showStepManager, setShowStepManager] = useState(true);
   const [showStepAccountant, setShowStepAccountant] = useState(true);
-  const [showStepDirector, setShowStepDirector] = useState(true);
+  const [showStepDirector, setShowStepDirector] = useState(false);
 
   // Timeline custom approver overrides
   const [customApprover1, setCustomApprover1] = useState<any>(null);
@@ -1451,14 +1737,21 @@ export default function Approvals() {
       !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
       u.email !== 'turniodev@gmail.com'
     );
-    return businessUsers.find(u => String(u.role).toLowerCase() === 'director')
-      || businessUsers.find(u => {
-        const fn = String(u.full_name || u.name || '').toLowerCase();
-        return fn.includes('duy phương') || u.username === 'phuongntd';
-      })
-      || businessUsers.find(u => String(u.role).toLowerCase() === 'admin')
-      || businessUsers[0]
-      || null;
+    // Find director Phạm Quang Vinh / Phan Quang Vinh (username: vinhpq, email: vinhpq@ideas.edu.vn)
+    return businessUsers.find(u => {
+      const fn = String(u.full_name || u.name || '').toLowerCase();
+      const un = String(u.username || '').toLowerCase();
+      const em = String(u.email || '').toLowerCase();
+      return fn.includes('quang vinh') || un === 'vinhpq' || em.includes('vinhpq') || fn.includes('phạm quang vinh') || fn.includes('phan quang vinh');
+    })
+    || businessUsers.find(u => String(u.role).toLowerCase() === 'director')
+    || businessUsers.find(u => {
+      const fn = String(u.full_name || u.name || '').toLowerCase();
+      return fn.includes('duy phương') || u.username === 'phuongntd';
+    })
+    || businessUsers.find(u => String(u.role).toLowerCase() === 'admin')
+    || businessUsers[0]
+    || null;
   }, [users]);
 
   const app1User = customApprover1 || defaultApp1;
@@ -1542,13 +1835,32 @@ export default function Approvals() {
       // expense
       setShowStepManager(true);
       setShowStepAccountant(true);
-      setShowStepDirector(true);
+      const totalAmt = expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 0) * (Number(it.price) || 0) * (1 + (Number(it.vat) || 0) / 100), 0);
+      setShowStepDirector(totalAmt >= 5000000);
       const defaultApprover = getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       if (defaultApprover) setCustomApprover1(defaultApprover);
       if (defaultAccountant) setCustomApprover2(defaultAccountant);
       if (defaultDirector) setCustomApprover3(defaultDirector);
     }
   }, [formType, selectedWorkflowDef, users, teams]);
+
+  // Dynamic 5,000,000 VND rule: Dưới 5tr: 2 cấp (Leader -> Kế toán). Từ 5tr trở lên: 3 cấp (Leader -> Director Phạm Quang Vinh -> Kế toán)
+  const currentExpenseTotal = useMemo(() => {
+    return expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 0) * (Number(it.price) || 0) * (1 + (Number(it.vat) || 0) / 100), 0);
+  }, [expenseItems]);
+
+  useEffect(() => {
+    if (formType === 'expense' && selectedWorkflowDef?.id !== 'stationery') {
+      if (currentExpenseTotal >= 5000000) {
+        setShowStepDirector(true);
+        if (!customApprover3 && defaultDirector) {
+          setCustomApprover3(defaultDirector);
+        }
+      } else {
+        setShowStepDirector(false);
+      }
+    }
+  }, [currentExpenseTotal, formType, selectedWorkflowDef, defaultDirector]);
 
   // Tự động điều chỉnh Người duyệt Cấp 2 khi người dùng chuyển đổi loại OT (Lấy bù -> Nhân sự, Lấy lương -> Kế toán)
   useEffect(() => {
@@ -1579,9 +1891,169 @@ export default function Approvals() {
 
   useEffect(() => {
     fetchAPI('users?all=1').then(res => {
-      setUsers(res?.data || []);
-    }).catch(() => {});
+      const d = res?.data ?? res;
+      setUsers(Array.isArray(d) ? d : (d?.items || []));
+    }).catch(() => setUsers([]));
+
+    fetchAPI('suppliers').then(res => {
+      const d = res?.data ?? res;
+      setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
+    }).catch(() => {
+      api.get('/suppliers?limit=1000').then(res => {
+        const d = res.data?.data ?? res.data;
+        setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
+      }).catch(() => setSuppliers([]));
+    });
+
+    api.get('/companies?limit=1000').then(res => {
+      const d = res.data?.data ?? res.data;
+      setCompanies(Array.isArray(d) ? d : (d?.items || []));
+    }).catch(() => setCompanies([]));
+
+    api.get('/contacts?limit=1000').then(res => {
+      const d = res.data?.data ?? res.data;
+      setContacts(Array.isArray(d) ? d : (d?.items || []));
+    }).catch(() => setContacts([]));
   }, []);
+
+  // Lecturers: aggregated from companies (tier f1/f2/lecturer) + users (teacher/giang_vien/tro_giang)
+  const lecturerOptions = useMemo(() => {
+    const list: any[] = [];
+    const seenNames = new Set<string>();
+    const safeCompanies = Array.isArray(companies) ? companies : ((companies as any)?.items || []);
+    const safeUsers = Array.isArray(users) ? users : ((users as any)?.items || []);
+
+    // 1. From companies (partner / external lecturers)
+    safeCompanies.forEach((co: any) => {
+      const tier = String(co.tier || '').toLowerCase();
+      const type = String(co.type || '').toLowerCase();
+      const isLec = ['f1', 'f2', 'giang_vien', 'chuyen_gia'].includes(tier) || type === 'lecturer' || type === 'instructor';
+      if (isLec && co.name) {
+        seenNames.add(co.name.toLowerCase());
+        list.push({
+          value: `company_${co.id}`,
+          label: co.name,
+          source: 'company',
+          raw: co,
+          bank_name: co.bank_name || '',
+          bank_account: co.bank_account_number || co.bank_account || '',
+          bank_account_name: co.bank_account_name || co.name || '',
+          phone: co.phone || '',
+          sublabel: `Giảng viên đối tác • ${co.phone || 'Chưa có SĐT'}${co.bank_name ? ` • ${co.bank_name}` : ''}`
+        });
+      }
+    });
+
+    // 2. From users (internal lecturers / academic staff)
+    safeUsers.forEach((u: any) => {
+      const role = String(u.role || '').toLowerCase();
+      const job = String(u.job_title || '').toLowerCase();
+      const isLec = role.includes('teacher') || role.includes('giang_vien') || role.includes('tro_giang') ||
+                    job.includes('giảng viên') || job.includes('học thuật');
+      const uName = u.full_name || u.name || '';
+      if (isLec && uName && !seenNames.has(uName.toLowerCase())) {
+        list.push({
+          value: `user_${u.id}`,
+          label: uName,
+          source: 'user',
+          raw: u,
+          avatar: u.avatar_url || u.avatar,
+          bank_name: u.bank_name || '',
+          bank_account: u.bank_account || '',
+          bank_account_name: uName,
+          phone: u.phone || '',
+          sublabel: `Giảng viên nội bộ • ${u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'}`
+        });
+      }
+    });
+
+    return list;
+  }, [companies, users]);
+
+  // Partners: unified suppliers + companies
+  const partnerOptions = useMemo(() => {
+    const list: any[] = [];
+    const seenNames = new Set<string>();
+    const safeSuppliers = Array.isArray(suppliers) ? suppliers : ((suppliers as any)?.items || (suppliers as any)?.suppliers || []);
+    const safeCompanies = Array.isArray(companies) ? companies : ((companies as any)?.items || []);
+
+    // 1. Suppliers
+    safeSuppliers.forEach((s: any) => {
+      if (s.name) {
+        seenNames.add(s.name.toLowerCase());
+        list.push({
+          value: `sup_${s.id}`,
+          label: s.name,
+          source: 'supplier',
+          raw: s,
+          bank_name: s.bank_name || '',
+          bank_account: s.bank_account || '',
+          bank_account_name: s.bank_account_name || s.name || '',
+          tax_code: s.tax_code || '',
+          phone: s.phone || '',
+          sublabel: `Nhà cung cấp • MST: ${s.tax_code || 'N/A'}${s.bank_name ? ` • ${s.bank_name}` : ''}`
+        });
+      }
+    });
+
+    // 2. Companies (B2B Partners)
+    safeCompanies.forEach((co: any) => {
+      const name = co.name || '';
+      if (name && !seenNames.has(name.toLowerCase())) {
+        const tier = String(co.tier || '').toUpperCase();
+        list.push({
+          value: `company_${co.id}`,
+          label: name,
+          source: 'company',
+          raw: co,
+          bank_name: co.bank_name || '',
+          bank_account: co.bank_account_number || co.bank_account || '',
+          bank_account_name: co.bank_account_name || name,
+          tax_code: co.tax_id || '',
+          phone: co.phone || '',
+          sublabel: `Đối tác ${tier || 'B2B'}${co.tax_id ? ` • MST: ${co.tax_id}` : ''}${co.bank_name ? ` • ${co.bank_name}` : ''}`
+        });
+      }
+    });
+
+    return list;
+  }, [suppliers, companies]);
+
+  // Contacts (Clients / Students)
+  const contactOptions = useMemo(() => {
+    const safeContacts = Array.isArray(contacts) ? contacts : ((contacts as any)?.items || []);
+    return safeContacts.map((c: any) => {
+      const name = c.full_name || c.name || `Khách hàng #${c.id}`;
+      return {
+        value: String(c.id),
+        label: name,
+        raw: c,
+        avatar: c.avatar_url || c.avatar,
+        phone: c.phone || '',
+        email: c.email || '',
+        bank_name: c.bank_name || '',
+        bank_account: c.bank_account || '',
+        bank_account_name: c.bank_account_name || name,
+        sublabel: [c.phone, c.email].filter(Boolean).join(' • ')
+      };
+    });
+  }, [contacts]);
+
+  // Auto-fill bank information for current user when opening payment request
+  useEffect(() => {
+    if (showCreateModal && (formType === 'expense' || formType === 'advance' || selectedWorkflowDef?.category === 'finance') && user && !paymentEmployeeId && paymentTarget === 'Nội bộ') {
+      const currentEmp = users.find(u => Number(u.id) === Number(user.id)) || user;
+      if (currentEmp) {
+        setPaymentEmployeeId(String(currentEmp.id));
+        setPaymentBeneficiaryName(currentEmp.full_name || currentEmp.name || '');
+        if (currentEmp.bank_name) setPaymentBankName(currentEmp.bank_name);
+        if (currentEmp.bank_account) setPaymentBankAccount(currentEmp.bank_account);
+        const accName = currentEmp.full_name || currentEmp.name || '';
+        if (accName) setPaymentAccountName(accName.toUpperCase());
+        if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
+      }
+    }
+  }, [showCreateModal, formType, selectedWorkflowDef, user, users, paymentEmployeeId, paymentTarget]);
 
   // Event listener for opening approval drawer from global notification clicks
   useEffect(() => {
@@ -2318,6 +2790,37 @@ export default function Approvals() {
           borderRadius: '10px',
           width: 'fit-content'
         }}>
+          {/* Tab 1: All Requests / Processed (Tất cả đề xuất - đem ra bên trái) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '0.5rem 1.125rem',
+              borderRadius: '7px',
+              fontWeight: activeTab === 'all' ? 700 : 600,
+              fontSize: '0.875rem',
+              background: activeTab === 'all' ? 'var(--color-surface)' : 'transparent',
+              color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-light)',
+              boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <FileText size={15} />
+            {t('Tất cả đề xuất')}
+            {allList.length > 0 && (
+              <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
+                {allList.length}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 2: Pending Requests */}
           <button
             type="button"
             onClick={() => setActiveTab('pending')}
@@ -2346,6 +2849,8 @@ export default function Approvals() {
               </span>
             )}
           </button>
+
+          {/* Tab 3: My Requests */}
           <button
             type="button"
             onClick={() => setActiveTab('my_requests')}
@@ -2375,7 +2880,7 @@ export default function Approvals() {
             )}
           </button>
 
-          {/* Tab 3: Following / Watcher Requests */}
+          {/* Tab 4: Following / Watcher Requests */}
           <button
             type="button"
             onClick={() => setActiveTab('following')}
@@ -2401,36 +2906,6 @@ export default function Approvals() {
             {followingList.length > 0 && (
               <span style={{ fontSize: '0.7rem', background: '#3b82f6', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
                 {followingList.length}
-              </span>
-            )}
-          </button>
-
-          {/* Tab 4: All Requests / Processed (Available to all users) */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('all')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '0.5rem 1.125rem',
-              borderRadius: '7px',
-              fontWeight: activeTab === 'all' ? 700 : 600,
-              fontSize: '0.875rem',
-              background: activeTab === 'all' ? 'var(--color-surface)' : 'transparent',
-              color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-light)',
-              boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <FileText size={15} />
-            {t('Tất cả đề xuất')}
-            {allList.length > 0 && (
-              <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                {allList.length}
               </span>
             )}
           </button>
@@ -2554,6 +3029,22 @@ export default function Approvals() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                           <button
                             type="button"
+                            onClick={() => { setActiveTab('all'); setShowMobileFilters(false); }}
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--color-border)',
+                              background: activeTab === 'all' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
+                              color: activeTab === 'all' ? 'white' : 'var(--color-text)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {t('Tất cả')} ({allList.length})
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => { setActiveTab('pending'); setShowMobileFilters(false); }}
                             style={{
                               padding: '6px 8px',
@@ -2599,22 +3090,6 @@ export default function Approvals() {
                             }}
                           >
                             {t('Theo dõi')} ({followingList.length})
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setActiveTab('all'); setShowMobileFilters(false); }}
-                            style={{
-                              padding: '6px 8px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--color-border)',
-                              background: activeTab === 'all' ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
-                              color: activeTab === 'all' ? 'white' : 'var(--color-text)',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {t('Tất cả')} ({allList.length})
                           </button>
                         </div>
                       </div>
@@ -3624,11 +4099,33 @@ export default function Approvals() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: '12px',
                     background: 'var(--color-surface)'
                   }}>
-                    <h3 style={{ margin: 0, fontSize: isMobile ? '0.9375rem' : '1.1rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)' }}>
-                      {t('Quy trình & Đề xuất vận hành')}
+                    <h3 style={{ margin: 0, fontSize: isMobile ? '0.9rem' : '1.1rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+                      {t('Quy trình & Đề xuất')}
                     </h3>
+
+                    {/* Quick search input */}
+                    <div style={{ position: 'relative', flex: 1, maxWidth: isMobile ? '180px' : '300px' }}>
+                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={directorySearch}
+                        onChange={e => setDirectorySearch(e.target.value)}
+                        placeholder={t('Tìm kiếm quy trình...')}
+                        style={{ height: '32px', paddingLeft: '32px', paddingRight: '26px', fontSize: '0.78rem', borderRadius: '8px' }}
+                      />
+                      {directorySearch && (
+                        <X 
+                          size={13} 
+                          style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', cursor: 'pointer' }} 
+                          onClick={() => setDirectorySearch('')} 
+                        />
+                      )}
+                    </div>
+
                     <button className="hover-lift" onClick={() => {
                       setShowCreateModal(false);
                       setSelectedWorkflowDef(null);
@@ -3660,6 +4157,73 @@ export default function Approvals() {
                     background: 'var(--color-surface)'
                   }}>
 
+                    {/* If search query entered, show search results */}
+                    {directorySearch.trim() && (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase' }}>
+                            {t('Kết quả tìm kiếm')} ({filteredWorkflows.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setDirectorySearch('')}
+                            style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '0.72rem', cursor: 'pointer' }}
+                          >
+                            {t('Xóa tìm kiếm')}
+                          </button>
+                        </div>
+                        {filteredWorkflows.length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                            {t('Không tìm thấy quy trình phù hợp với')} "{directorySearch}"
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                            {filteredWorkflows.map(item => {
+                              const IconComp = item.icon;
+                              const colors = getWorkflowColor(item.color);
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() => onSelectWorkflowItem(item)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '10px 14px',
+                                    borderRadius: '12px',
+                                    cursor: 'pointer',
+                                    border: '1px solid var(--color-border-light)',
+                                    background: 'var(--color-bg)',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+                                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border-light)'}
+                                >
+                                  <div style={{
+                                    width: '34px',
+                                    height: '34px',
+                                    borderRadius: '50%',
+                                    background: colors.bg,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    <IconComp size={16} color={colors.color} strokeWidth={2.5} />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>{item.name}</span>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.description}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '1.5rem 0' }} />
+                      </div>
+                    )}
+
                     {/* Category: TÀI CHÍNH & KẾ TOÁN */}
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: isMobile ? '10px' : '1.25rem', paddingLeft: '4px' }}>
@@ -3678,10 +4242,7 @@ export default function Approvals() {
                             <div
                               key={item.id}
                               onClick={() => {
-                                setSelectedWorkflowDef(item);
-                                setFormType(item.id === 'advance_money' ? 'advance' : 'expense');
-                                setExpenseTitle(item.name);
-                                handleSelectWorkflow(item.id);
+                                onSelectWorkflowItem(item);
                               }}
                               style={{
                                 display: 'flex',
@@ -5835,152 +6396,602 @@ export default function Approvals() {
                           )
                         ) : (
                           /* EXPENSE AND PAYMENT FORM FIELDS */
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Tiêu đề đề xuất')}</label>
-                                <input
-                                  type="text"
-                                  className="form-input"
-                                  value={expenseTitle}
-                                  onChange={e => setExpenseTitle(e.target.value)}
-                                  placeholder={t('Ví dụ: Đề nghị thanh toán tiền điện tháng 07')}
-                                  style={{ height: '36px', fontSize: '0.8rem' }}
-                                  required
-                                />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Workflow Banner Highlight */}
+                            {selectedWorkflowDef && (
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '10px 14px',
+                                borderRadius: '12px',
+                                background: selectedWorkflowDef.id === 'client_meeting' 
+                                  ? 'rgba(236, 72, 153, 0.08)' 
+                                  : selectedWorkflowDef.id === 'recurring_payment'
+                                  ? 'rgba(217, 70, 239, 0.08)'
+                                  : selectedWorkflowDef.id === 'phased_payment'
+                                  ? 'rgba(139, 92, 246, 0.08)'
+                                  : selectedWorkflowDef.id === 'advance_money'
+                                  ? 'rgba(59, 130, 246, 0.08)'
+                                  : selectedWorkflowDef.id === 'expense_claim'
+                                  ? 'rgba(6, 182, 212, 0.08)'
+                                  : 'rgba(16, 185, 129, 0.08)',
+                                border: `1px solid ${
+                                  selectedWorkflowDef.id === 'client_meeting' 
+                                    ? 'rgba(236, 72, 153, 0.25)' 
+                                    : selectedWorkflowDef.id === 'recurring_payment'
+                                    ? 'rgba(217, 70, 239, 0.25)'
+                                    : selectedWorkflowDef.id === 'phased_payment'
+                                    ? 'rgba(139, 92, 246, 0.25)'
+                                    : selectedWorkflowDef.id === 'advance_money'
+                                    ? 'rgba(59, 130, 246, 0.25)'
+                                    : selectedWorkflowDef.id === 'expense_claim'
+                                    ? 'rgba(6, 182, 212, 0.25)'
+                                    : 'rgba(16, 185, 129, 0.25)'
+                                }`
+                              }}>
+                                <div style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '8px',
+                                  background: selectedWorkflowDef.bg,
+                                  color: selectedWorkflowDef.color,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  <selectedWorkflowDef.icon size={18} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>{selectedWorkflowDef.name}</span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{selectedWorkflowDef.description}</span>
+                                </div>
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Bộ phận / Phòng ban')}</label>
-                                <CustomSelect
-                                  value={departmentName}
-                                  onChange={val => setDepartmentName(val)}
-                                  options={teams.length > 0 ? teams.map(t => ({
-                                    value: t.name,
-                                    label: t.name
-                                  })) : [
-                                    { value: 'Ban Giám đốc', label: t('Ban Giám đốc') },
-                                    { value: 'Phòng Kinh doanh', label: t('Phòng Kinh doanh (Sales)') },
-                                    { value: 'Phòng Marketing', label: t('Phòng Marketing') },
-                                    { value: 'Phòng Kế toán', label: t('Phòng Kế toán - Tài chính') },
-                                    { value: 'Phòng Nhân sự', label: t('Phòng Nhân sự (HR)') },
-                                    { value: 'Phòng IT', label: t('Phòng IT / Kỹ thuật') },
-                                    { value: 'Bộ phận Vận hành', label: t('Bộ phận Vận hành') }
-                                  ]}
-                                  placeholder={t('Chọn phòng ban / bộ phận...')}
-                                  width="100%"
-                                />
-                              </div>
-                            </div>
-                            
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1rem' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Đối tượng thanh toán')}</label>
-                                <CustomSelect
-                                  value={paymentTarget}
-                                  onChange={val => setPaymentTarget(val)}
-                                  options={[
-                                    { value: 'Nội bộ', label: t('Nội bộ') },
-                                    { value: 'Khách hàng', label: t('Khách hàng') },
-                                    { value: 'Đối tác', label: t('Đối tác / Vendor') }
-                                  ]}
-                                  width="100%"
-                                />
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Hình thức nhận tiền')}</label>
-                                <CustomSelect
-                                  value={paymentMethod}
-                                  onChange={val => setPaymentMethod(val)}
-                                  options={[
-                                    { value: 'Chuyển khoản', label: t('Chuyển khoản') },
-                                    { value: 'Tiền mặt', label: t('Tiền mặt') }
-                                  ]}
-                                  width="100%"
-                                />
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại tiền tệ')}</label>
-                                <CustomSelect
-                                  value={currencyType}
-                                  onChange={val => setCurrencyType(val)}
-                                  options={[
-                                    { value: 'VND', label: 'VND' },
-                                    { value: 'USD', label: 'USD' },
-                                    { value: 'EURO', label: 'EURO' },
-                                    { value: 'CHF', label: 'CHF' }
-                                  ]}
-                                  width="100%"
-                                />
-                              </div>
-                            </div>
+                            )}
 
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Mục đích & Nội dung thanh toán')}</label>
-                                <textarea
-                                  className="form-input"
-                                  value={paymentDetails}
-                                  onChange={e => setPaymentDetails(e.target.value)}
-                                  placeholder={t('Giải trình chi tiết mục đích chi tiêu...')}
-                                  style={{ height: '70px', resize: 'none', fontSize: '0.8rem', padding: '8px' }}
-                                />
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Thông tin người thụ hưởng')}</label>
-                                <textarea
-                                  className="form-input"
-                                  value={paymentDestination}
-                                  onChange={e => setPaymentDestination(e.target.value)}
-                                  placeholder={t('Số tài khoản, Tên chủ tài khoản, Tên ngân hàng...')}
-                                  style={{ height: '70px', resize: 'none', fontSize: '0.8rem', padding: '8px' }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {/* 1. Phased payment settings (only for finance/expense) */}
-                        {formType === 'expense' && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px dashed var(--color-border-light)', paddingTop: '12px', marginTop: '12px' }}>
-                             <GreenToggle
-                               id="isPhasedPayment"
-                               checked={isPhasedPayment}
-                               onChange={setIsPhasedPayment}
-                               label={t('Thanh toán chia nhiều đợt (Installment/Phased Payment)')}
-                             />
-
-                            {isPhasedPayment && (
-                              <div style={{ marginTop: '8px', border: '1px solid var(--color-border-light)', borderRadius: '12px', padding: '1.25rem', background: 'var(--color-bg-secondary)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    {t('Danh sách đợt thanh toán')}
+                            {/* DEDICATED BLOCK 1: ĐỀ XUẤT TIẾP KHÁCH (client_meeting) */}
+                            {selectedWorkflowDef?.id === 'client_meeting' && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.05), rgba(219, 39, 119, 0.02))',
+                                border: '1px solid rgba(236, 72, 153, 0.25)',
+                                borderRadius: '14px',
+                                padding: '1.25rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '14px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#db2777' }}>
+                                    <Utensils size={18} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      {t('Thông tin buổi tiếp đãi khách hàng & đối tác VIP')}
+                                    </span>
+                                  </div>
+                                  <span style={{ fontSize: '0.72rem', color: '#db2777', fontWeight: 650 }}>
+                                    {t('Chuẩn hóa quy trình ngoại giao doanh nghiệp')}
                                   </span>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.1fr 1.4fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Phân loại đối tượng tiếp đón')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <CustomSelect
+                                      value={meetingTargetType}
+                                      onChange={val => {
+                                        setMeetingTargetType(val as any);
+                                        setMeetingSelectedEntityId('');
+                                      }}
+                                      options={[
+                                        { value: 'company', label: t('Doanh nghiệp / Đối tác B2B') },
+                                        { value: 'lecturer', label: t('Giảng viên / Chuyên gia cao cấp') },
+                                        { value: 'contact', label: t('Khách hàng VIP / Học viên CRM') },
+                                        { value: 'gov', label: t('Cơ quan Nhà nước / Ban ngành / Đoàn thể') },
+                                        { value: 'other', label: t('Cá nhân ngoài / Khách mời vãng lai') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Đơn vị / Khách mời tiếp đón')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    {meetingTargetType === 'company' && (
+                                      <CustomSelect
+                                        options={[
+                                          { value: '', label: t('-- Chọn đối tác trong danh bạ (hoặc nhập bên dưới) --') },
+                                          ...partnerOptions
+                                        ]}
+                                        value={meetingSelectedEntityId}
+                                        onChange={val => {
+                                          setMeetingSelectedEntityId(val);
+                                          const found = partnerOptions.find(p => p.value === val);
+                                          if (found) setMeetingClientName(found.label);
+                                        }}
+                                        placeholder={t('-- Tìm đối tác doanh nghiệp --')}
+                                        searchable
+                                        width="100%"
+                                      />
+                                    )}
+                                    {meetingTargetType === 'lecturer' && (
+                                      <CustomSelect
+                                        options={[
+                                          { value: '', label: t('-- Chọn giảng viên trong hệ thống --') },
+                                          ...lecturerOptions
+                                        ]}
+                                        value={meetingSelectedEntityId}
+                                        onChange={val => {
+                                          setMeetingSelectedEntityId(val);
+                                          const found = lecturerOptions.find(l => l.value === val);
+                                          if (found) setMeetingClientName(found.label);
+                                        }}
+                                        placeholder={t('-- Tìm giảng viên / chuyên gia --')}
+                                        searchable
+                                        width="100%"
+                                      />
+                                    )}
+                                    {meetingTargetType === 'contact' && (
+                                      <CustomSelect
+                                        options={[
+                                          { value: '', label: t('-- Chọn khách hàng / học viên CRM --') },
+                                          ...contactOptions
+                                        ]}
+                                        value={meetingSelectedEntityId}
+                                        onChange={val => {
+                                          setMeetingSelectedEntityId(val);
+                                          const found = contactOptions.find(c => c.value === val);
+                                          if (found) setMeetingClientName(found.label);
+                                        }}
+                                        placeholder={t('-- Tìm khách hàng CRM --')}
+                                        searchable
+                                        width="100%"
+                                      />
+                                    )}
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={meetingClientName}
+                                      onChange={e => setMeetingClientName(e.target.value)}
+                                      placeholder={t('Họ và tên khách mời / Tên cơ quan, doanh nghiệp...')}
+                                      style={{ height: '36px', fontSize: '0.8rem', marginTop: meetingTargetType !== 'other' && meetingTargetType !== 'gov' ? '4px' : '0' }}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Người đại diện khách & Chức vụ (nếu có)')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={meetingContactPerson}
+                                      onChange={e => setMeetingContactPerson(e.target.value)}
+                                      placeholder={t('Ví dụ: Ông Nguyễn Văn A - Tổng Giám Đốc...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Số điện thoại liên hệ đại diện khách')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={meetingContactPhone}
+                                      onChange={e => setMeetingContactPhone(e.target.value)}
+                                      placeholder={t('Ví dụ: 0901234567...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 0.9fr 0.7fr 0.7fr 0.7fr', gap: '0.75rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Địa điểm tiếp khách')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      list="datalist-meeting-locations"
+                                      className="form-input"
+                                      value={meetingLocation}
+                                      onChange={e => setMeetingLocation(e.target.value)}
+                                      placeholder={t('Tên nhà hàng, quán cafe, địa chỉ...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      required
+                                    />
+                                    <datalist id="datalist-meeting-locations">
+                                      <option value="Nhà hàng (Ăn trưa trao đổi công việc)" />
+                                      <option value="Nhà hàng (Tiệc tối tiếp đón trang trọng)" />
+                                      <option value="Quán Cafe / Phòng trà (Gặp gỡ thân mật)" />
+                                      <option value="Phòng tiếp khách VIP tại trụ sở công ty" />
+                                      <option value="Khách sạn / Trung tâm hội nghị / Sự kiện" />
+                                      <option value="Sân Golf / Giao lưu thể thao ngoại giao" />
+                                      <option value="Văn phòng / Địa điểm của đối tác" />
+                                    </datalist>
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Ngày tiếp')}
+                                    </label>
+                                    <input
+                                      type="date"
+                                      className="form-input"
+                                      value={meetingDate}
+                                      onChange={e => setMeetingDate(e.target.value)}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Giờ tiếp')}
+                                    </label>
+                                    <input
+                                      type="time"
+                                      className="form-input"
+                                      value={meetingTime}
+                                      onChange={e => setMeetingTime(e.target.value)}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Số khách')}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      className="form-input"
+                                      value={meetingClientCount}
+                                      onChange={e => setMeetingClientCount(e.target.value)}
+                                      style={{ height: '36px', fontSize: '0.8rem', textAlign: 'center' }}
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Số nội bộ')}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      className="form-input"
+                                      value={meetingInternalCount}
+                                      onChange={e => setMeetingInternalCount(e.target.value)}
+                                      style={{ height: '36px', fontSize: '0.8rem', textAlign: 'center' }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Kế hoạch / Mục đích buổi tiếp đón')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      list="datalist-meeting-purposes"
+                                      className="form-input"
+                                      value={meetingPurpose}
+                                      onChange={e => setMeetingPurpose(e.target.value)}
+                                      placeholder={t('Gặp gỡ trao đổi, xúc tiến hợp tác...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      required
+                                    />
+                                    <datalist id="datalist-meeting-purposes">
+                                      <option value="Gặp gỡ trao đổi & xúc tiến cơ hội hợp tác kinh doanh" />
+                                      <option value="Đàm phán & Thương thảo điều khoản hợp đồng đào tạo / dịch vụ" />
+                                      <option value="Ký kết thỏa thuận hợp tác đối tác chiến lược" />
+                                      <option value="Chăm sóc quan hệ khách hàng VIP / Thân thiết" />
+                                      <option value="Tri ân & Chiêu đãi giảng viên sau khóa học / chuyên đề" />
+                                      <option value="Tổng kết dự án & Liên hoan nghiệm thu với đối tác" />
+                                      <option value="Tiếp đón đoàn làm việc / Đại biểu ban ngành cơ quan" />
+                                      <option value="Trao đổi định hướng phát triển sản phẩm / chương trình mới" />
+                                    </datalist>
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Cán bộ nhân sự tham gia cùng (Nội bộ)')}
+                                    </label>
+                                    <CustomSelect
+                                      options={users.map((u: any) => ({
+                                        value: String(u.id),
+                                        label: u.full_name || u.name || `User #${u.id}`,
+                                        avatar: u.avatar_url || u.avatar,
+                                        sublabel: u.role || ''
+                                      }))}
+                                      value={meetingInternalAttendees[0] || ''}
+                                      onChange={val => {
+                                        const uid = String(val);
+                                        if (uid && !meetingInternalAttendees.includes(uid)) {
+                                          setMeetingInternalAttendees([...meetingInternalAttendees, uid]);
+                                        }
+                                      }}
+                                      placeholder={t('+ Thêm cán bộ đi cùng...')}
+                                      searchable
+                                      showAvatars
+                                      width="100%"
+                                    />
+                                    {meetingInternalAttendees.length > 0 && (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                        {meetingInternalAttendees.map(id => {
+                                          const emp = users.find(u => String(u.id) === String(id));
+                                          return (
+                                            <span key={id} style={{
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              padding: '2px 8px',
+                                              borderRadius: '6px',
+                                              background: 'rgba(236, 72, 153, 0.12)',
+                                              color: '#db2777',
+                                              fontSize: '0.72rem',
+                                              fontWeight: 650
+                                            }}>
+                                              {emp ? (emp.full_name || emp.name) : id}
+                                              <X
+                                                size={12}
+                                                style={{ cursor: 'pointer' }}
+                                                onClick={() => setMeetingInternalAttendees(meetingInternalAttendees.filter(x => x !== id))}
+                                              />
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Phương thức thanh toán / Hoàn trả chi phí tiếp khách')}
+                                    </label>
+                                    <CustomSelect
+                                      value={meetingReimbursementMethod}
+                                      onChange={val => {
+                                        const method = val as any;
+                                        setMeetingReimbursementMethod(method);
+                                        if (method === 'host_claim') {
+                                          setPaymentTarget('Nội bộ');
+                                          const currentEmp = users.find(u => Number(u.id) === Number(user?.id)) || user;
+                                          if (currentEmp) {
+                                            setPaymentEmployeeId(String(currentEmp.id));
+                                            setPaymentBeneficiaryName(currentEmp.full_name || currentEmp.name || '');
+                                            if (currentEmp.bank_name) setPaymentBankName(currentEmp.bank_name);
+                                            if (currentEmp.bank_account) setPaymentBankAccount(currentEmp.bank_account);
+                                            const accName = currentEmp.full_name || currentEmp.name || '';
+                                            if (accName) setPaymentAccountName(accName.toUpperCase());
+                                            if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
+                                          }
+                                        } else if (method === 'direct_partner') {
+                                          setPaymentTarget('Đối tác');
+                                        } else if (method === 'corporate_card') {
+                                          setPaymentMethod('Thẻ tín dụng');
+                                        } else if (method === 'cash_advance') {
+                                          setPaymentMethod('Tiền mặt');
+                                        }
+                                      }}
+                                      options={[
+                                        { value: 'host_claim', label: t('Hoàn ứng cho Cán bộ tiếp khách (Chi trước nhận lại sau)') },
+                                        { value: 'direct_partner', label: t('Thanh toán trực tiếp cho Nhà hàng / Địa điểm tiếp đón') },
+                                        { value: 'corporate_card', label: t('Thanh toán bằng Thẻ tín dụng doanh nghiệp (Corporate Card)') },
+                                        { value: 'cash_advance', label: t('Tạm ứng kinh phí tiếp khách (Tiền mặt tại Thủ quỹ)') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Hóa đơn & Chứng từ tiếp đón')}
+                                    </label>
+                                    <CustomSelect
+                                      value={meetingInvoiceType}
+                                      onChange={val => setMeetingInvoiceType(val as any)}
+                                      options={[
+                                        { value: 'vat', label: t('Hóa đơn điện tử VAT (Xuất hóa đơn tên công ty)') },
+                                        { value: 'retail', label: t('Hóa đơn bán lẻ / Bill POS quẹt thẻ') },
+                                        { value: 'receipt', label: t('Giấy biên nhận / Phiếu tạm thu') },
+                                        { value: 'pending', label: t('Chưa có hóa đơn (Bổ sung chứng từ sau khi tiếp đón)') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* DEDICATED BLOCK 2: THANH TOÁN ĐỊNH KỲ (recurring_payment or isRecurring) */}
+                            {(selectedWorkflowDef?.id === 'recurring_payment' || isRecurring) && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(217, 70, 239, 0.05), rgba(192, 38, 211, 0.02))',
+                                border: '1px solid rgba(217, 70, 239, 0.25)',
+                                borderRadius: '14px',
+                                padding: '1.25rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c026d3' }}>
+                                    <Clock3 size={18} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      {t('Thiết lập chu kỳ & lịch giải ngân thanh toán tự động')}
+                                    </span>
+                                  </div>
+                                  <span style={{ fontSize: '0.72rem', color: '#c026d3', fontWeight: 650 }}>
+                                    {t('Tự động sinh đề xuất theo kỳ')}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Chu kỳ / Tần suất lặp lại')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <CustomSelect
+                                      value={recurringFrequency}
+                                      onChange={val => setRecurringFrequency(val)}
+                                      options={[
+                                        { value: 'monthly', label: t('Hàng tháng (Monthly) - Tiền thuê nhà, internet, dịch vụ') },
+                                        { value: 'quarterly', label: t('Hàng quý (Quarterly - 3 tháng/lần) - Mặt bằng, bảo trì') },
+                                        { value: 'semiannually', label: t('Hàng nửa năm (Semi-annually - 6 tháng/lần) - Bảo hiểm, SaaS') },
+                                        { value: 'yearly', label: t('Hàng năm (Yearly) - Tên miền, hosting, bản quyền PM') },
+                                        { value: 'biweekly', label: t('Hàng 2 tuần (Bi-weekly) - Chi phí vật tư định kỳ') },
+                                        { value: 'weekly', label: t('Hàng tuần (Weekly) - Thực phẩm, tạp vụ, vệ sinh') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Ngày giải ngân cố định trong kỳ')}
+                                    </label>
+                                    <CustomSelect
+                                      value={recurringPayDay}
+                                      onChange={val => setRecurringPayDay(val)}
+                                      options={[
+                                        { value: '1', label: t('Ngày 01 đầu tháng') },
+                                        { value: '5', label: t('Ngày 05 hàng tháng') },
+                                        { value: '10', label: t('Ngày 10 hàng tháng') },
+                                        { value: '15', label: t('Ngày 15 giữa tháng') },
+                                        { value: '20', label: t('Ngày 20 hàng tháng') },
+                                        { value: '25', label: t('Ngày 25 hàng tháng') },
+                                        { value: 'last_day', label: t('Ngày làm việc cuối cùng trong tháng') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.1fr 1.4fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Thời hạn hiệu lực của chu kỳ')}
+                                    </label>
+                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', height: '36px' }}>
+                                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', cursor: 'pointer' }}>
+                                        <input
+                                          type="radio"
+                                          name="recurring_duration"
+                                          checked={recurringUnlimited}
+                                          onChange={() => setRecurringUnlimited(true)}
+                                        />
+                                        <span>{t('Vô thời hạn (Đến khi hủy)')}</span>
+                                      </label>
+                                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', cursor: 'pointer' }}>
+                                        <input
+                                          type="radio"
+                                          name="recurring_duration"
+                                          checked={!recurringUnlimited}
+                                          onChange={() => setRecurringUnlimited(false)}
+                                        />
+                                        <span>{t('Có ngày kết thúc')}</span>
+                                      </label>
+                                    </div>
+                                  </div>
+
+                                  <div style={{ display: 'grid', gridTemplateColumns: recurringUnlimited ? '1fr' : '1fr 1fr', gap: '10px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                        {t('Ngày bắt đầu kỳ')}
+                                      </label>
+                                      <input
+                                        type="date"
+                                        className="form-input"
+                                        value={recurringStartDate}
+                                        onChange={e => setRecurringStartDate(e.target.value)}
+                                        style={{ height: '36px', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
+                                    {!recurringUnlimited && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                          {t('Ngày kết thúc chu kỳ')}
+                                        </label>
+                                        <input
+                                          type="date"
+                                          className="form-input"
+                                          value={recurringEndDate}
+                                          onChange={e => setRecurringEndDate(e.target.value)}
+                                          style={{ height: '36px', fontSize: '0.8rem' }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                    {t('Căn cứ Hợp đồng / Thỏa thuận pháp lý (nếu có)')}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={recurringContractNumber}
+                                    onChange={e => setRecurringContractNumber(e.target.value)}
+                                    placeholder={t('Ví dụ: HĐ thuê văn phòng số 12/2026/HĐMB, Thỏa thuận dịch vụ IT...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* DEDICATED BLOCK 3: THANH TOÁN THEO ĐỢT (phased_payment or isPhasedPayment) */}
+                            {(selectedWorkflowDef?.id === 'phased_payment' || isPhasedPayment) && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(124, 58, 237, 0.02))',
+                                border: '1px solid rgba(139, 92, 246, 0.25)',
+                                borderRadius: '14px',
+                                padding: '1.25rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7c3aed' }}>
+                                    <GitBranch size={18} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      {t('Kế hoạch thanh toán theo các đợt (Installments / Milestones)')}
+                                    </span>
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => setInstallments([...installments, { id: Date.now(), title: `Đợt ${installments.length + 1}`, amount: 0, dueDate: '' }])}
                                     className="btn secondary"
-                                    style={{ height: '26px', padding: '0 8px', fontSize: '0.7rem', color: 'var(--color-primary)' }}
+                                    style={{ height: '28px', padding: '0 10px', fontSize: '0.72rem', color: '#7c3aed', borderColor: '#7c3aed' }}
                                   >
-                                    + {t('Thêm đợt')}
+                                    + {t('Thêm đợt thanh toán')}
                                   </button>
                                 </div>
+
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                   {installments.map((inst, index) => (
-                                    <div key={inst.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1.5fr 1.5fr auto', gap: '10px', alignItems: 'center' }}>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <input
-                                          type="text"
-                                          className="form-input"
-                                          value={inst.title}
-                                          onChange={e => {
-                                            const list = [...installments];
-                                            list[index].title = e.target.value;
-                                            setInstallments(list);
-                                          }}
-                                          placeholder={t('Tên đợt (ví dụ: Đợt 1)')}
-                                          style={{ height: '32px', fontSize: '0.75rem' }}
-                                        />
-                                      </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div key={inst.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1.3fr 1.3fr auto', gap: '10px', alignItems: 'center' }}>
+                                      <input
+                                        type="text"
+                                        className="form-input"
+                                        value={inst.title}
+                                        onChange={e => {
+                                          const list = [...installments];
+                                          list[index].title = e.target.value;
+                                          setInstallments(list);
+                                        }}
+                                        placeholder={t('Tên đợt (VD: Đợt 1 - Tạm ứng 30%)')}
+                                        style={{ height: '34px', fontSize: '0.78rem' }}
+                                      />
+                                      <div>
                                         <input
                                           type="text"
                                           className="form-input"
@@ -5992,83 +7003,976 @@ export default function Approvals() {
                                             setInstallments(list);
                                           }}
                                           placeholder={t('Số tiền (VND)')}
-                                          style={{ height: '32px', fontSize: '0.75rem' }}
+                                          style={{ height: '34px', fontSize: '0.78rem', fontWeight: 700 }}
                                         />
                                         {inst.amount > 0 && (
-                                          <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '2px', fontStyle: 'italic' }}>
+                                          <div style={{ fontSize: '0.675rem', color: '#7c3aed', fontWeight: 600, marginTop: '2px', fontStyle: 'italic' }}>
                                             {docSoTiengViet(inst.amount)}
                                           </div>
                                         )}
                                       </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <input
-                                          type="date"
-                                          className="form-input"
-                                          value={inst.dueDate}
-                                          onChange={e => {
-                                            const list = [...installments];
-                                            list[index].dueDate = e.target.value;
-                                            setInstallments(list);
-                                          }}
-                                          style={{ height: '32px', fontSize: '0.75rem' }}
-                                        />
-                                      </div>
+                                      <input
+                                        type="date"
+                                        className="form-input"
+                                        value={inst.dueDate}
+                                        onChange={e => {
+                                          const list = [...installments];
+                                          list[index].dueDate = e.target.value;
+                                          setInstallments(list);
+                                        }}
+                                        style={{ height: '34px', fontSize: '0.78rem' }}
+                                      />
                                       {installments.length > 1 && (
                                         <button
                                           type="button"
                                           onClick={() => setInstallments(installments.filter(x => x.id !== inst.id))}
-                                          style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.8rem', padding: '4px' }}
+                                          style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.78rem', padding: '4px' }}
                                         >
-                                          {t('Xóa')}
+                                          <Trash2 size={15} />
                                         </button>
                                       )}
                                     </div>
                                   ))}
                                 </div>
+
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  background: 'rgba(139, 92, 246, 0.08)',
+                                  fontSize: '0.75rem'
+                                }}>
+                                  <span style={{ color: '#6d28d9', fontWeight: 700 }}>
+                                    {t('Tổng cộng các đợt')}: {formatApprovalCurrency(installments.reduce((sum, i) => sum + (Number(i.amount) || 0), 0), currencyType)}
+                                  </span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                                    {installments.length} {t('đợt giải ngân')}
+                                  </span>
+                                </div>
                               </div>
                             )}
-                          </div>
-                        )}
 
-                        {/* 2. Recurring settings (only for payment and recurring_payment workflows) */}
-                        {(selectedWorkflowDef?.id === 'payment' || selectedWorkflowDef?.id === 'recurring_payment') && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px dashed var(--color-border-light)', paddingTop: '12px', marginTop: '12px' }}>
-                             <GreenToggle
-                               id="isRecurring"
-                               checked={isRecurring}
-                               onChange={setIsRecurring}
-                               label={t('Thiết lập lặp lại tự động (Recurring Proposal)')}
-                             />
+                            {/* DEDICATED BLOCK 4: ĐỀ NGHỊ TẠM ỨNG (advance_money) */}
+                            {selectedWorkflowDef?.id === 'advance_money' && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(37, 99, 235, 0.02))',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                borderRadius: '14px',
+                                padding: '1.25rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2563eb' }}>
+                                  <DollarSign size={18} />
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    {t('Thông tin kế hoạch tạm ứng & thời hạn hoàn ứng')}
+                                  </span>
+                                </div>
 
-                            {isRecurring && (
-                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginTop: '8px', padding: '1rem', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-bg-secondary)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Mục đích tạm ứng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <CustomSelect
+                                      value={advanceType}
+                                      onChange={val => setAdvanceType(val)}
+                                      options={[
+                                        { value: 'business_trip', label: t('Tạm ứng công tác phí (Vé máy bay, khách sạn, di chuyển)') },
+                                        { value: 'procurement', label: t('Tạm ứng mua sắm vật tư / trang thiết bị khẩn cấp') },
+                                        { value: 'event', label: t('Tạm ứng tổ chức sự kiện / hội thảo đào tạo') },
+                                        { value: 'lecturer', label: t('Tạm ứng thù lao giảng viên / chuyên gia') },
+                                        { value: 'salary', label: t('Ứng trước lương / Chi phí cá nhân theo chính sách') },
+                                        { value: 'other', label: t('Tạm ứng nghiệp vụ khác') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Hạn hoàn ứng / quyết toán chứng từ')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="date"
+                                      className="form-input"
+                                      value={advanceSettlementDate}
+                                      onChange={e => setAdvanceSettlementDate(e.target.value)}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div style={{
+                                  background: 'rgba(59, 130, 246, 0.08)',
+                                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                                  padding: '10px 14px',
+                                  borderRadius: '10px',
+                                  fontSize: '0.75rem',
+                                  color: '#1d4ed8',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}>
+                                  <AlertCircle size={15} />
+                                  <span>{t('Lưu ý: Nhân viên cam kết hoàn ứng chứng từ đầy đủ theo đúng thời hạn quy định của công ty.')}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* DEDICATED BLOCK 5: ĐỀ XUẤT CHI PHÍ / HOÀN ỨNG (expense_claim) */}
+                            {selectedWorkflowDef?.id === 'expense_claim' && (
+                              <div style={{
+                                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.05), rgba(8, 145, 178, 0.02))',
+                                border: '1px solid rgba(6, 182, 212, 0.25)',
+                                borderRadius: '14px',
+                                padding: '1.25rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0891b2' }}>
+                                  <Receipt size={18} />
+                                  <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    {t('Hồ sơ chi phí & Chứng từ hóa đơn')}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Phân loại chi phí')}
+                                    </label>
+                                    <CustomSelect
+                                      value={expenseCategory}
+                                      onChange={val => setExpenseCategory(val)}
+                                      options={[
+                                        { value: 'client_meeting', label: t('Chi phí tiếp khách / Ngoại giao đối tác') },
+                                        { value: 'travel', label: t('Công tác phí / Vé xe / Đi lại') },
+                                        { value: 'stationery', label: t('Văn phòng phẩm & Mua sắm vặt') },
+                                        { value: 'marketing', label: t('Tiếp thị / Sự kiện / Quảng cáo') },
+                                        { value: 'general', label: t('Chi phí nghiệp vụ khác') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Loại chứng từ hóa đơn')}
+                                    </label>
+                                    <CustomSelect
+                                      value={invoiceType}
+                                      onChange={val => setInvoiceType(val)}
+                                      options={[
+                                        { value: 'vat_10', label: t('Hóa đơn điện tử VAT 10%') },
+                                        { value: 'vat_8', label: t('Hóa đơn điện tử VAT 8%') },
+                                        { value: 'retail', label: t('Hóa đơn bán lẻ / Biên lai thu tiền') },
+                                        { value: 'none', label: t('Không có hóa đơn (Giải trình nội bộ)') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* PAYMENT METHOD & TARGET ROW */}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 0.8fr', gap: '1rem' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                  {t('Đối tượng thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                </label>
+                                <CustomSelect
+                                  value={paymentTarget}
+                                  onChange={val => {
+                                    setPaymentTarget(val);
+                                    if (val === 'Nội bộ') {
+                                      const currentEmp = users.find(u => Number(u.id) === Number(user?.id)) || user;
+                                      if (currentEmp) {
+                                        setPaymentEmployeeId(String(currentEmp.id));
+                                        setPaymentBeneficiaryName(currentEmp.full_name || currentEmp.name || '');
+                                        if (currentEmp.bank_name) setPaymentBankName(currentEmp.bank_name);
+                                        if (currentEmp.bank_account) setPaymentBankAccount(currentEmp.bank_account);
+                                        const accName = currentEmp.full_name || currentEmp.name || '';
+                                        if (accName) setPaymentAccountName(accName.toUpperCase());
+                                        if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
+                                      }
+                                    } else {
+                                      setPaymentEmployeeId('');
+                                      setPaymentSupplierId('');
+                                      setPaymentLecturerId('');
+                                      setPaymentContactId('');
+                                      setPaymentBeneficiaryName('');
+                                      setPaymentBankName('');
+                                      setPaymentBankAccount('');
+                                      setPaymentAccountName('');
+                                      setPaymentPhone('');
+                                      setPaymentTaxCode('');
+                                    }
+                                  }}
+                                  options={[
+                                    { value: 'Nội bộ', label: t('Nội bộ (Cán bộ nhân viên)') },
+                                    { value: 'Giảng viên', label: t('Giảng viên / Chuyên gia') },
+                                    { value: 'Đối tác', label: t('Đối tác / Vendor / Nhà cung cấp') },
+                                    { value: 'Khách hàng', label: t('Khách hàng / Học viên CRM') },
+                                    { value: 'Cộng tác viên', label: t('Cộng tác viên (CTV Tuyển sinh / Marketing)') },
+                                    { value: 'Cơ quan Nhà nước', label: t('Cơ quan Nhà nước / Thuế / BHXH / Kho bạc') },
+                                    { value: 'Cá nhân khác', label: t('Cá nhân khác / Khách vãng lai') }
+                                  ]}
+                                  width="100%"
+                                />
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Hình thức nhận tiền')}</label>
+                                <CustomSelect
+                                  value={paymentMethod}
+                                  onChange={val => setPaymentMethod(val)}
+                                  options={[
+                                    { value: 'Chuyển khoản', label: t('Chuyển khoản (Ngân hàng)') },
+                                    { value: 'Tiền mặt', label: t('Tiền mặt (Thủ quỹ bàn giao)') },
+                                    { value: 'Ví điện tử', label: t('Ví điện tử (MoMo / ZaloPay / Viettel Money)') },
+                                    { value: 'Thẻ tín dụng', label: t('Thẻ tín dụng doanh nghiệp (Corporate Card)') }
+                                  ]}
+                                  width="100%"
+                                />
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại tiền tệ')}</label>
+                                <CustomSelect
+                                  value={currencyType}
+                                  onChange={val => setCurrencyType(val)}
+                                  options={[
+                                    { value: 'VND', label: 'VND (₫)' },
+                                    { value: 'USD', label: 'USD ($)' },
+                                    { value: 'EURO', label: 'EUR (€)' },
+                                    { value: 'GBP', label: 'GBP (£)' },
+                                    { value: 'JPY', label: 'JPY (¥)' },
+                                    { value: 'SGD', label: 'SGD (S$)' },
+                                    { value: 'AUD', label: 'AUD (A$)' },
+                                    { value: 'CAD', label: 'CAD (C$)' },
+                                    { value: 'CHF', label: 'CHF (Fr)' }
+                                  ]}
+                                  width="100%"
+                                />
+                              </div>
+                            </div>
+
+                            {/* BENEFICIARY DYNAMIC SELECTORS */}
+                            {paymentTarget === 'Nội bộ' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Nhân viên thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                    {t('(Tự động trích xuất STK ngân hàng từ hồ sơ nhân sự)')}
+                                  </span>
+                                </div>
+                                <CustomSelect
+                                  options={users.map((u: any) => ({
+                                    value: String(u.id),
+                                    label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
+                                    avatar: u.avatar_url || u.avatar,
+                                    sublabel: [
+                                      u.role || '',
+                                      u.bank_name ? `${u.bank_name}: ${u.bank_account}` : t('Chưa có STK')
+                                    ].filter(Boolean).join(' • ')
+                                  }))}
+                                  value={paymentEmployeeId}
+                                  onChange={val => {
+                                    const empId = String(val);
+                                    setPaymentEmployeeId(empId);
+                                    const emp = users.find((u: any) => String(u.id) === empId);
+                                    if (emp) {
+                                      const empName = emp.full_name || emp.name || emp.username || '';
+                                      setPaymentBeneficiaryName(empName);
+                                      if (emp.bank_name) setPaymentBankName(emp.bank_name);
+                                      if (emp.bank_account) setPaymentBankAccount(emp.bank_account);
+                                      if (empName) setPaymentAccountName(empName.toUpperCase());
+                                      if (emp.phone) setPaymentPhone(emp.phone);
+                                      if (emp.bank_account) {
+                                        toast.success(t(`Đã trích xuất STK ngân hàng của ${empName}`));
+                                      } else {
+                                        toast(t(`Nhân viên ${empName} chưa lưu STK trong hồ sơ. Vui lòng nhập STK bên dưới.`), { icon: 'ℹ️' });
+                                      }
+                                    }
+                                  }}
+                                  placeholder={t('-- Chọn nhân viên nhận thanh toán --')}
+                                  searchable
+                                  showAvatars
+                                  width="100%"
+                                />
+                                {paymentEmployeeId && (() => {
+                                  const emp = users.find((u: any) => String(u.id) === paymentEmployeeId);
+                                  if (!emp) return null;
+                                  return (
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '8px 12px',
+                                      borderRadius: '10px',
+                                      background: emp.bank_account ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                                      border: `1px solid ${emp.bank_account ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                      fontSize: '0.78rem'
+                                    }}>
+                                      <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
+                                        {emp.bank_account 
+                                          ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
+                                          : t('⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân. Vui lòng nhập STK bên dưới.')}
+                                      </span>
+                                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                                        {emp.role || t('Nhân viên')}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {paymentTarget === 'Giảng viên' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Chọn giảng viên / chuyên gia trong hệ thống')}
+                                    </label>
+                                    <CustomSelect
+                                      options={[
+                                        { value: '', label: t('-- Chọn giảng viên đã có (hoặc nhập mới bên cạnh) --') },
+                                        ...lecturerOptions
+                                      ]}
+                                      value={paymentLecturerId}
+                                      onChange={val => {
+                                        const lecId = String(val);
+                                        setPaymentLecturerId(lecId);
+                                        const lec = lecturerOptions.find(l => l.value === lecId);
+                                        if (lec) {
+                                          setPaymentBeneficiaryName(lec.label);
+                                          if (lec.bank_name) setPaymentBankName(lec.bank_name);
+                                          if (lec.bank_account) setPaymentBankAccount(lec.bank_account);
+                                          if (lec.bank_account_name || lec.label) setPaymentAccountName((lec.bank_account_name || lec.label).toUpperCase());
+                                          if (lec.phone) setPaymentPhone(lec.phone);
+                                          if (lec.bank_account) {
+                                            toast.success(t(`Đã trích xuất STK của giảng viên: ${lec.label}`));
+                                          } else {
+                                            toast(t(`Giảng viên ${lec.label} chưa lưu STK. Vui lòng nhập thông tin bên dưới.`), { icon: 'ℹ️' });
+                                          }
+                                        }
+                                      }}
+                                      placeholder={t('-- Tìm kiếm giảng viên / chuyên gia --')}
+                                      searchable
+                                      width="100%"
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Họ và tên giảng viên')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBeneficiaryName}
+                                      onChange={e => {
+                                        setPaymentBeneficiaryName(e.target.value);
+                                        if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                                      }}
+                                      placeholder={t('Họ và tên giảng viên nhận thù lao...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+                                {paymentBeneficiaryName && (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    background: paymentBankAccount ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                                    border: `1px solid ${paymentBankAccount ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                    fontSize: '0.78rem'
+                                  }}>
+                                    <span style={{ color: paymentBankAccount ? '#059669' : '#d97706', fontWeight: 650 }}>
+                                      {paymentBankAccount 
+                                        ? `✓ STK Giảng viên: ${paymentBankName || 'Ngân hàng'} - ${paymentBankAccount} (Chủ TK: ${paymentAccountName})` 
+                                        : t('ℹ️ Giảng viên chưa có STK trong hệ thống. Vui lòng nhập số tài khoản ở bên dưới.')}
+                                    </span>
+                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                                      {t('Giảng viên / Chuyên gia')}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {paymentTarget === 'Đối tác' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Chọn đối tác / nhà cung cấp đã lưu')}
+                                    </label>
+                                    <CustomSelect
+                                      options={[
+                                        { value: '', label: t('-- Chọn đối tác trong danh bạ (hoặc nhập tay) --') },
+                                        ...partnerOptions
+                                      ]}
+                                      value={paymentSupplierId}
+                                      onChange={val => {
+                                        const sId = String(val);
+                                        setPaymentSupplierId(sId);
+                                        const sup = partnerOptions.find(s => s.value === sId);
+                                        if (sup) {
+                                          setPaymentBeneficiaryName(sup.label);
+                                          if (sup.bank_name) setPaymentBankName(sup.bank_name);
+                                          if (sup.bank_account) setPaymentBankAccount(sup.bank_account);
+                                          if (sup.bank_account_name || sup.label) setPaymentAccountName((sup.bank_account_name || sup.label).toUpperCase());
+                                          if (sup.tax_code) setPaymentTaxCode(sup.tax_code);
+                                          if (sup.phone) setPaymentPhone(sup.phone);
+                                          if (sup.bank_account) {
+                                            toast.success(t(`Đã trích xuất STK của đối tác: ${sup.label}`));
+                                          } else {
+                                            toast(t(`Đối tác ${sup.label} chưa lưu STK. Vui lòng điền thông tin bên dưới.`), { icon: 'ℹ️' });
+                                          }
+                                        }
+                                      }}
+                                      placeholder={t('-- Tìm đối tác / nhà cung cấp --')}
+                                      searchable
+                                      width="100%"
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Tên đơn vị thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBeneficiaryName}
+                                      onChange={e => {
+                                        setPaymentBeneficiaryName(e.target.value);
+                                        if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                                      }}
+                                      placeholder={t('Tên công ty / nhà cung cấp nhận tiền...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Mã số thuế (MST)')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentTaxCode}
+                                      onChange={e => setPaymentTaxCode(e.target.value)}
+                                      placeholder={t('Mã số thuế doanh nghiệp...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+                                {paymentBeneficiaryName && (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    background: paymentBankAccount ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                                    border: `1px solid ${paymentBankAccount ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                    fontSize: '0.78rem'
+                                  }}>
+                                    <span style={{ color: paymentBankAccount ? '#059669' : '#d97706', fontWeight: 650 }}>
+                                      {paymentBankAccount 
+                                        ? `✓ STK Đối tác: ${paymentBankName || 'Ngân hàng'} - ${paymentBankAccount} (Chủ TK: ${paymentAccountName})` 
+                                        : t('ℹ️ Đối tác chưa lưu STK trong danh bạ. Vui lòng nhập số tài khoản ở ô bên dưới.')}
+                                    </span>
+                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                                      {paymentTaxCode ? `MST: ${paymentTaxCode}` : t('Đối tác / Vendor')}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {paymentTarget === 'Khách hàng' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 1fr', gap: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Tần suất lặp lại')}</label>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Chọn khách hàng / học viên (CRM)')}
+                                  </label>
                                   <CustomSelect
-                                    value={recurringFrequency}
-                                    onChange={val => setRecurringFrequency(val)}
                                     options={[
-                                      { value: 'daily', label: t('Hàng ngày') },
-                                      { value: 'weekly', label: t('Hàng tuần') },
-                                      { value: 'monthly', label: t('Hàng tháng') },
-                                      { value: 'quarterly', label: t('Hàng quý') },
-                                      { value: 'yearly', label: t('Hàng năm') }
+                                      { value: '', label: t('-- Chọn khách hàng trong CRM (hoặc nhập bên cạnh) --') },
+                                      ...contactOptions
                                     ]}
+                                    value={paymentContactId}
+                                    onChange={val => {
+                                      const cId = String(val);
+                                      setPaymentContactId(cId);
+                                      const con = contactOptions.find(c => c.value === cId);
+                                      if (con) {
+                                        setPaymentBeneficiaryName(con.label);
+                                        if (con.bank_name) setPaymentBankName(con.bank_name);
+                                        if (con.bank_account) setPaymentBankAccount(con.bank_account);
+                                        if (con.bank_account_name || con.label) setPaymentAccountName((con.bank_account_name || con.label).toUpperCase());
+                                        if (con.phone) setPaymentPhone(con.phone);
+                                        if (con.bank_account) {
+                                          toast.success(t(`Đã trích xuất STK khách hàng: ${con.label}`));
+                                        }
+                                      }
+                                    }}
+                                    placeholder={t('-- Tìm khách hàng / học viên --')}
+                                    searchable
                                     width="100%"
                                   />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày kết thúc lặp lại')}</label>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Tên khách hàng thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
                                   <input
-                                    type="date"
+                                    type="text"
                                     className="form-input"
-                                    value={recurringEndDate}
-                                    onChange={e => setRecurringEndDate(e.target.value)}
-                                    style={{ height: '32px', fontSize: '0.75rem' }}
+                                    value={paymentBeneficiaryName}
+                                    onChange={e => {
+                                      setPaymentBeneficiaryName(e.target.value);
+                                      if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                                    }}
+                                    placeholder={t('Họ và tên khách hàng hoặc mã hồ sơ...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Số điện thoại liên hệ')}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={paymentPhone}
+                                    onChange={e => setPaymentPhone(e.target.value)}
+                                    placeholder={t('Ví dụ: 0912345678...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
                                   />
                                 </div>
                               </div>
                             )}
+
+                            {paymentTarget === 'Cộng tác viên' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Họ và tên Cộng tác viên')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={paymentBeneficiaryName}
+                                    onChange={e => {
+                                      setPaymentBeneficiaryName(e.target.value);
+                                      if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                                    }}
+                                    placeholder={t('Họ và tên CTV tuyển sinh / Marketing...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                    required
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Số điện thoại / CCCD của CTV')}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={paymentPhone}
+                                    onChange={e => setPaymentPhone(e.target.value)}
+                                    placeholder={t('Số điện thoại hoặc số CCCD...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {paymentTarget === 'Cơ quan Nhà nước' && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.4fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Loại cơ quan / Ngân sách')}
+                                    </label>
+                                    <CustomSelect
+                                      value={paymentGovAgencyType}
+                                      onChange={val => setPaymentGovAgencyType(val as any)}
+                                      options={[
+                                        { value: 'tax', label: t('Cơ quan Thuế (GTGT, TNDN, Môn bài)') },
+                                        { value: 'social_insurance', label: t('Cơ quan Bảo hiểm Xã hội (BHXH)') },
+                                        { value: 'treasury', label: t('Kho bạc Nhà nước (Ngân sách / Lệ phí)') },
+                                        { value: 'other', label: t('Sở Ban ngành / Cơ quan hành chính') }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Tên cơ quan thụ hưởng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBeneficiaryName}
+                                      onChange={e => {
+                                        setPaymentBeneficiaryName(e.target.value);
+                                        if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                                      }}
+                                      placeholder={t('VD: Chi cục Thuế Quận 1, Kho bạc Nhà nước...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                      {t('Số QĐ / Mã chương tiểu mục')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentGovDecisionNumber}
+                                      onChange={e => setPaymentGovDecisionNumber(e.target.value)}
+                                      placeholder={t('Số thông báo nộp thuế...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {paymentTarget === 'Cá nhân khác' && (
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Họ và tên người nhận')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={paymentBeneficiaryName}
+                                    onChange={e => {
+                                      setPaymentBeneficiaryName(e.target.value);
+                                      if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                                    }}
+                                    placeholder={t('Họ và tên người nhận thanh toán vãng lai...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Số điện thoại / CCCD')}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    value={paymentPhone}
+                                    onChange={e => setPaymentPhone(e.target.value)}
+                                    placeholder={t('Số điện thoại hoặc CCCD/CMND...')}
+                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* BANK TRANSFER DETAILS */}
+                            {paymentMethod === 'Chuyển khoản' && (
+                              <div style={{
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                padding: '1.25rem',
+                                borderRadius: '14px',
+                                border: '1px solid var(--color-border-light)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <CreditCard size={17} style={{ color: 'var(--color-primary)' }} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)', letterSpacing: '0.03em' }}>
+                                      {t('Thông tin tài khoản ngân hàng nhận chuyển khoản')}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 1.4fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Tên ngân hàng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBankName}
+                                      onChange={e => setPaymentBankName(e.target.value)}
+                                      placeholder={t('Nhập tên ngân hàng...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      required
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Số tài khoản (STK)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBankAccount}
+                                      onChange={e => setPaymentBankAccount(e.target.value.replace(/\s+/g, ''))}
+                                      placeholder={t('Nhập số tài khoản ngân hàng...')}
+                                      style={{ height: '36px', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.5px' }}
+                                      required
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Tên chủ tài khoản')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentAccountName}
+                                      onChange={e => setPaymentAccountName(e.target.value.toUpperCase())}
+                                      placeholder={t('TÊN CHỦ TÀI KHOẢN (IN HOA)...')}
+                                      style={{ height: '36px', fontSize: '0.8rem', fontWeight: 700 }}
+                                      required
+                                    />
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Chi nhánh')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBankBranch}
+                                      onChange={e => setPaymentBankBranch(e.target.value)}
+                                      placeholder={t('VD: CN Hội sở, Ba Đình...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+
+                                {paymentBankAccount && paymentBankName && (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: 'rgba(37, 99, 235, 0.05)',
+                                    border: '1px dashed rgba(37, 99, 235, 0.25)',
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.75rem'
+                                  }}>
+                                    <span style={{ color: '#1d4ed8', fontWeight: 600 }}>
+                                      🏦 {paymentBankName} • STK: <strong>{paymentBankAccount}</strong> • Chủ TK: <strong>{paymentAccountName || 'CHƯA ĐIỀN'}</strong>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(`${paymentBankName} - ${paymentBankAccount} - ${paymentAccountName}`);
+                                        toast.success(t('Đã sao chép thông tin STK'));
+                                      }}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#1d4ed8',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        fontSize: '0.72rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <Copy size={13} /> {t('Sao chép')}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* CASH DETAILS */}
+                            {paymentMethod === 'Tiền mặt' && (
+                              <div style={{
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                padding: '1rem 1.25rem',
+                                borderRadius: '14px',
+                                border: '1px solid var(--color-border-light)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontWeight: 750, fontSize: '0.8rem' }}>
+                                  <DollarSign size={16} />
+                                  <span>{t('Hình thức nhận: Tiền mặt (Bàn giao trực tiếp tại quầy / thủ quỹ)')}</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Người nhận tiền mặt')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBeneficiaryName}
+                                      onChange={e => setPaymentBeneficiaryName(e.target.value)}
+                                      placeholder={t('Họ và tên người nhận tiền...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Địa điểm / Quầy bàn giao tiền')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentDestination}
+                                      onChange={e => setPaymentDestination(e.target.value)}
+                                      placeholder={t('Ví dụ: Quầy Thủ quỹ Hội sở / Phòng Kế toán / Chi nhánh...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* WALLET DETAILS */}
+                            {paymentMethod === 'Ví điện tử' && (
+                              <div style={{
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                padding: '1rem 1.25rem',
+                                borderRadius: '14px',
+                                border: '1px solid var(--color-border-light)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a21caf', fontWeight: 750, fontSize: '0.8rem' }}>
+                                  <Wallet size={16} />
+                                  <span>{t('Hình thức nhận: Ví điện tử di động')}</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Loại ví điện tử')}
+                                    </label>
+                                    <CustomSelect
+                                      value={paymentWalletType}
+                                      onChange={val => setPaymentWalletType(val as any)}
+                                      options={[
+                                        { value: 'momo', label: 'MoMo' },
+                                        { value: 'zalopay', label: 'ZaloPay' },
+                                        { value: 'viettel_money', label: 'Viettel Money' }
+                                      ]}
+                                      width="100%"
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Số điện thoại liên kết ví')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentWalletPhone || paymentPhone}
+                                      onChange={e => setPaymentWalletPhone(e.target.value)}
+                                      placeholder={t('Nhập SĐT đăng ký ví...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Tên chủ ví')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBeneficiaryName}
+                                      onChange={e => setPaymentBeneficiaryName(e.target.value)}
+                                      placeholder={t('Họ và tên chủ ví...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CORPORATE CARD DETAILS */}
+                            {paymentMethod === 'Thẻ tín dụng' && (
+                              <div style={{
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                padding: '1rem 1.25rem',
+                                borderRadius: '14px',
+                                border: '1px solid var(--color-border-light)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d4ed8', fontWeight: 750, fontSize: '0.8rem' }}>
+                                  <CreditCard size={16} />
+                                  <span>{t('Hình thức nhận: Thẻ tín dụng doanh nghiệp (Corporate Card)')}</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('4 số cuối thẻ tín dụng')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentCorporateCard}
+                                      onChange={e => setPaymentCorporateCard(e.target.value)}
+                                      placeholder={t('Ví dụ: 8899')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                      {t('Cán bộ phụ trách giữ thẻ / Quẹt thẻ')}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={paymentBeneficiaryName}
+                                      onChange={e => setPaymentBeneficiaryName(e.target.value)}
+                                      placeholder={t('Họ và tên người quẹt thẻ...')}
+                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* PURPOSE & DETAILS */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                {t('Mục đích & Nội dung thanh toán')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+
+                              <textarea
+                                className="form-input"
+                                value={paymentDetails}
+                                onChange={e => setPaymentDetails(e.target.value)}
+                                placeholder={t('Giải trình chi tiết mục đích chi tiêu và căn cứ đề xuất...')}
+                                style={{ height: '76px', resize: 'vertical', fontSize: '0.8rem', padding: '8px' }}
+                                required
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -6628,8 +8532,8 @@ export default function Approvals() {
                           let currentStepIndex = 1;
                           const stepIndex1 = currentStepIndex++;
                           const stepIndex2 = showStepManager ? currentStepIndex++ : null;
-                          const stepIndex3 = showStepAccountant ? currentStepIndex++ : null;
-                          const stepIndex4 = showStepDirector ? currentStepIndex++ : null;
+                          const stepIndex3 = showStepDirector ? currentStepIndex++ : null;
+                          const stepIndex4 = showStepAccountant ? currentStepIndex++ : null;
 
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '12px', position: 'relative', paddingLeft: '30px' }}>
@@ -6731,7 +8635,59 @@ export default function Approvals() {
                                 </div>
                               )}
 
-                              {/* Step 3: Accountant */}
+                              {/* Step 3: Director (Chỉ hiển thị khi chi phí >= 5tr hoặc được bật) */}
+                              {showStepDirector && (
+                                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    left: '-30px',
+                                    top: '0px',
+                                    width: '22px',
+                                    height: '22px',
+                                    borderRadius: '50%',
+                                    background: directorUser ? 'var(--color-primary)' : 'var(--color-surface)',
+                                    border: `2px solid ${directorUser ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                                    color: directorUser ? '#ffffff' : 'var(--color-text-muted)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 800,
+                                    zIndex: 2
+                                  }}>
+                                    {stepIndex3}
+                                  </div>
+                                  <div style={{ width: '100%' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                      <strong style={{ fontSize: '0.8rem', color: directorUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt (Ban Giám đốc)')}</strong>
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowStepDirector(false)}
+                                        style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 4px', display: 'flex', alignItems: 'center' }}
+                                        title={t('Xóa bước')}
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                    <div style={{ marginTop: '4px' }}>
+                                      <CustomSelect
+                                        options={approverUserOptions}
+                                        value={directorUser ? String(directorUser.id) : ''}
+                                        onChange={val => {
+                                          const u = users.find(x => String(x.id) === String(val));
+                                          if (u) setCustomApprover3(u);
+                                        }}
+                                        placeholder={t('Chọn ban giám đốc (Phạm Quang Vinh)...')}
+                                        searchable
+                                        showAvatars
+                                        width="100%"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Step 4: Accountant (hoặc Step 3 nếu không có Director) */}
                               {showStepAccountant && (
                                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
                                   <div style={{
@@ -6751,7 +8707,7 @@ export default function Approvals() {
                                     fontWeight: 800,
                                     zIndex: 2
                                   }}>
-                                    {stepIndex3}
+                                    {stepIndex4}
                                   </div>
                                   <div style={{ width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -6790,58 +8746,6 @@ export default function Approvals() {
                                   </div>
                                 </div>
                               )}
-
-                              {/* Step 4: Director */}
-                              {showStepDirector && (
-                                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                                  <div style={{
-                                    position: 'absolute',
-                                    left: '-30px',
-                                    top: '0px',
-                                    width: '22px',
-                                    height: '22px',
-                                    borderRadius: '50%',
-                                    background: directorUser ? 'var(--color-primary)' : 'var(--color-surface)',
-                                    border: `2px solid ${directorUser ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                                    color: directorUser ? '#ffffff' : 'var(--color-text-muted)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 800,
-                                    zIndex: 2
-                                  }}>
-                                    {stepIndex4}
-                                  </div>
-                                  <div style={{ width: '100%' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                      <strong style={{ fontSize: '0.8rem', color: directorUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt')}</strong>
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowStepDirector(false)}
-                                        style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 4px', display: 'flex', alignItems: 'center' }}
-                                        title={t('Xóa bước')}
-                                      >
-                                        <X size={14} />
-                                      </button>
-                                    </div>
-                                    <div style={{ marginTop: '4px' }}>
-                                      <CustomSelect
-                                        options={approverUserOptions}
-                                        value={directorUser ? String(directorUser.id) : ''}
-                                        onChange={val => {
-                                          const u = users.find(x => String(x.id) === String(val));
-                                          if (u) setCustomApprover3(u);
-                                        }}
-                                        placeholder={t('Chọn ban giám đốc...')}
-                                        searchable
-                                        showAvatars
-                                        width="100%"
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         })()}
@@ -6868,17 +8772,7 @@ export default function Approvals() {
                                   onClick={() => setShowStepManager(true)}
                                   style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
                                 >
-                                  <Plus size={12} /> {t('Phê duyệt (Bước 1)')}
-                                </button>
-                              )}
-                              {!showStepAccountant && (
-                                <button
-                                  type="button"
-                                  className="btn outline sm"
-                                  onClick={() => setShowStepAccountant(true)}
-                                  style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
-                                >
-                                  <Plus size={12} /> {t('Phê duyệt (Bước 2)')}
+                                  <Plus size={12} /> {t('Phê duyệt (Trưởng nhóm / Quản lý)')}
                                 </button>
                               )}
                               {!showStepDirector && (
@@ -6888,7 +8782,17 @@ export default function Approvals() {
                                   onClick={() => setShowStepDirector(true)}
                                   style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
                                 >
-                                  <Plus size={12} /> {t('Phê duyệt (Bước 3)')}
+                                  <Plus size={12} /> {t('Phê duyệt (Ban Giám đốc)')}
+                                </button>
+                              )}
+                              {!showStepAccountant && (
+                                <button
+                                  type="button"
+                                  className="btn outline sm"
+                                  onClick={() => setShowStepAccountant(true)}
+                                  style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Plus size={12} /> {t('Phê duyệt (Kế toán)')}
                                 </button>
                               )}
                             </div>
@@ -6901,11 +8805,11 @@ export default function Approvals() {
                           background: 'rgba(245, 158, 11, 0.06)',
                           border: '1px solid rgba(245, 158, 11, 0.15)',
                           borderRadius: '8px',
-                          fontSize: '0.7rem',
-                          color: 'var(--color-warning-dark)',
+                          fontSize: '0.72rem',
+                          color: 'var(--color-text-muted)',
                           lineHeight: '1.4'
                         }}>
-                          <strong>Lưu ý:</strong> Quy trình phê duyệt được hệ thống tự động xác định dựa trên tính chất và giá trị đề xuất. Bạn có thể thay đổi người phụ trách ở mỗi bước.
+                          <strong>{t('Lưu ý:')}</strong> {t('Mặc định chi phí dưới 5.000.000 đ áp dụng 2 cấp duyệt (Tạo -> Leader -> Kế toán). Từ 5.000.000 đ trở lên hệ thống tự động bổ sung phê duyệt của Ban Giám đốc (Tạo -> Leader -> Ban Giám đốc Phạm Quang Vinh -> Kế toán). Bạn có thể thay đổi người phụ trách ở mỗi bước.')}
                         </div>
                       </div>
 
@@ -7221,6 +9125,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
   const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    toast.success(`${t('Đã sao chép')} ${label}: ${text}`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 1024);
@@ -8114,15 +10027,182 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       reasonVal = detail.notes;
     }
 
+    const parseMeetingInfo = (text: string) => {
+      if (!text || !text.includes('[Thông tin tiếp khách]')) return null;
+      const blockMatch = text.match(/\[Thông tin tiếp khách\]:([\s\S]*?)(?=\n\n\[|$)/i);
+      const block = blockMatch ? blockMatch[1] : '';
+      
+      const getField = (prefix: string) => {
+        const m = block.match(new RegExp(`[•\\-*]?\\s*${prefix}:\\s*([^\\n]+)`, 'i'));
+        return m ? m[1].trim() : '';
+      };
+
+      const targetType = getField('Phân loại đối tượng');
+      const clientName = getField('Đơn vị / Khách mời');
+      const representative = getField('Người đại diện');
+      const location = getField('Địa điểm');
+      const time = getField('Thời gian');
+      const headcount = getField('Quy mô tham gia');
+      const attendees = getField('Cán bộ tham gia cùng');
+      const purpose = getField('Kế hoạch / Mục đích tiếp đón');
+      const paymentMethod = getField('Phương thức thanh toán');
+
+      if (!clientName && !location && !purpose) return null;
+      return { targetType, clientName, representative, location, time, headcount, attendees, purpose, paymentMethod };
+    };
+
+    const parseRecurringInfo = (text: string) => {
+      if (!text || (!text.includes('[Thiết lập định kỳ]') && !text.includes('[Lặp lại định kỳ]'))) return null;
+      const blockMatch = text.match(/\[(?:Thiết lập|Lặp lại) định kỳ\]:([\s\S]*?)(?=\n\n\[|$)/i);
+      const block = blockMatch ? blockMatch[1] : '';
+      
+      const getField = (prefix: string) => {
+        const m = block.match(new RegExp(`[•\\-*]?\\s*${prefix}:\\s*([^\\n]+)`, 'i'));
+        return m ? m[1].trim() : '';
+      };
+
+      const frequency = getField('Chu kỳ thanh toán');
+      const payDay = getField('Ngày giải ngân cố định') || getField('Ngày thanh toán');
+      const duration = getField('Thời hạn hiệu lực');
+      const contract = getField('Căn cứ Hợp đồng / Thỏa thuận') || getField('Số hợp đồng');
+
+      if (!frequency && !payDay && !duration) return null;
+      return { frequency, payDay, duration, contract };
+    };
+
+    const parsePhasedInfo = (text: string) => {
+      if (!text || (!text.toLowerCase().includes('thanh toán theo đợt') && !text.includes('[Kế hoạch thanh toán theo đợt'))) return null;
+      const blockMatch = text.match(/\[(?:Kế hoạch thanh toán theo đợt|Thanh toán theo đợt)[^\]]*\]:([\s\S]*?)(?=\n\n\[|$)/i);
+      const block = blockMatch ? blockMatch[1] : '';
+      
+      const lines = block.split('\n').map(l => l.trim()).filter(l => l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || /^\d+[\.\)]/.test(l));
+      if (lines.length === 0) return null;
+      return lines.map(line => line.replace(/^[•\-*\d.)]+\s*/, ''));
+    };
+
+    const parseAdvanceInfo = (text: string) => {
+      if (!text || !text.includes('[Đề nghị tạm ứng]')) return null;
+      const blockMatch = text.match(/\[Đề nghị tạm ứng\]:([\s\S]*?)(?=\n\n\[|$)/i);
+      const block = blockMatch ? blockMatch[1] : '';
+      
+      const getField = (prefix: string) => {
+        const m = block.match(new RegExp(`[•\\-*]?\\s*${prefix}:\\s*([^\\n]+)`, 'i'));
+        return m ? m[1].trim() : '';
+      };
+
+      const purpose = getField('Mục đích tạm ứng');
+      const settlementDate = getField('Hạn hoàn ứng / quyết toán chứng từ') || getField('Hạn quyết toán');
+
+      if (!purpose && !settlementDate) return null;
+      return { purpose, settlementDate };
+    };
+
+    const parsePaymentBeneficiaryInfo = (text: string) => {
+      if (!text) return null;
+      const benMatch = text.match(/Thụ hưởng\s*(?:\(([^)]+)\))?:\s*([^\n-]+)(?:\s*-\s*SĐT:\s*([^\n]+))?/i);
+      let beneficiaryTarget = benMatch ? (benMatch[1] || '') : '';
+      let beneficiaryName = benMatch ? benMatch[2].trim() : '';
+      let beneficiaryPhone = benMatch ? (benMatch[3] || '').trim() : '';
+      let taxCode = '';
+      if (beneficiaryName) {
+        const mstMatch = beneficiaryName.match(/\(MST:\s*([^)]+)\)/i);
+        if (mstMatch) {
+          taxCode = mstMatch[1].trim();
+          beneficiaryName = beneficiaryName.replace(/\(MST:\s*[^)]+\)/i, '').trim();
+        }
+      }
+
+      let bankInfo: any = null;
+      const bankMatch = text.match(/\[Thông tin chuyển khoản\]:\s*([^\n]+)/i);
+      if (bankMatch) {
+        const fullBankStr = bankMatch[1].trim();
+        const stkMatch = fullBankStr.match(/STK:\s*([0-9A-Za-z\-_]+)/i);
+        const holderMatch = fullBankStr.match(/Chủ\s*TK:\s*([^-\n]+)/i);
+        const branchMatch = fullBankStr.match(/Chi\s*nhánh:\s*([^-\n]+)/i);
+        const bankNamePart = fullBankStr.split(/-\s*STK:/i)[0].replace(/^Ngân\s*hàng:\s*/i, '').trim();
+
+        bankInfo = {
+          type: 'bank',
+          bankName: bankNamePart || fullBankStr,
+          accountNumber: stkMatch ? stkMatch[1].trim() : '',
+          accountName: holderMatch ? holderMatch[1].trim() : '',
+          branch: branchMatch ? branchMatch[1].trim() : '',
+          raw: fullBankStr
+        };
+      }
+
+      let otherMethodInfo: any = null;
+      const methodMatch = text.match(/\[Hình thức\]:\s*([^\n]+)/i);
+      if (methodMatch) {
+        const methodStr = methodMatch[1].trim();
+        if (methodStr.toLowerCase().includes('ví điện tử')) {
+          const walletMatch = methodStr.match(/Ví điện tử\s*([A-Za-z0-9]+)?/i);
+          const phoneMatch = methodStr.match(/SĐT\s*ví:\s*([0-9]+)/i);
+          const holderMatch = methodStr.match(/Chủ\s*ví:\s*([^-\n]+)/i);
+          otherMethodInfo = {
+            type: 'wallet',
+            walletType: walletMatch ? walletMatch[1] : 'Ví điện tử',
+            phone: phoneMatch ? phoneMatch[1] : '',
+            holder: holderMatch ? holderMatch[1].trim() : '',
+            raw: methodStr
+          };
+        } else if (methodStr.toLowerCase().includes('thẻ tín dụng')) {
+          const cardMatch = methodStr.match(/4 số cuối:\s*([0-9X]+)/i);
+          otherMethodInfo = {
+            type: 'card',
+            last4: cardMatch ? cardMatch[1] : '',
+            raw: methodStr
+          };
+        } else if (methodStr.toLowerCase().includes('tiền mặt')) {
+          const receiverMatch = methodStr.match(/Người nhận:\s*([^-\n]+)/i);
+          const locMatch = methodStr.match(/Địa điểm bàn giao:\s*([^-\n]+)/i);
+          otherMethodInfo = {
+            type: 'cash',
+            receiver: receiverMatch ? receiverMatch[1].trim() : '',
+            location: locMatch ? locMatch[1].trim() : '',
+            raw: methodStr
+          };
+        }
+      }
+
+      if (!beneficiaryName && !bankInfo && !otherMethodInfo) return null;
+      return { beneficiaryTarget, beneficiaryName, beneficiaryPhone, taxCode, bankInfo, otherMethodInfo };
+    };
+
+    const cleanResidualText = (text: string) => {
+      if (!text) return '';
+      return text
+        .replace(/\[Thông tin tiếp khách\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
+        .replace(/\[(?:Thiết lập|Lặp lại) định kỳ\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
+        .replace(/\[(?:Kế hoạch thanh toán theo đợt|Thanh toán theo đợt)[^\]]*\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
+        .replace(/\[Đề nghị tạm ứng\]:[\s\S]*?(?=\n\n\[|$)/gi, '')
+        .replace(/\[Hồ sơ chi phí\]:\s*[^\n]+/gi, '')
+        .replace(/\[Thông tin chuyển khoản\]:\s*[^\n]+/gi, '')
+        .replace(/\[Hình thức\]:\s*[^\n]+/gi, '')
+        .replace(/Thụ hưởng[^:\n]*:\s*[^\n]+/gi, '')
+        .replace(/^Phòng ban:\s*[^\n]+/gim, '')
+        .replace(/^Đối tượng:\s*[^\n]+/gim, '')
+        .replace(/^Hình thức:\s*[^\n]+/gim, '')
+        .replace(/^Chi tiết:\s*/gim, '')
+        .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/gi, '')
+        .trim();
+    };
+
+    const meetingData = parseMeetingInfo(rawDesc);
+    const recurringData = parseRecurringInfo(rawDesc);
+    const phasedData = parsePhasedInfo(rawDesc);
+    const advanceData = parseAdvanceInfo(rawDesc);
+    const paymentData = parsePaymentBeneficiaryInfo(rawDesc);
+
     let installmentText = '';
     if (hasInstallments) {
-      const match = rawDesc.match(/\[Thanh toán theo đợt\]:\s*(.*)/);
+      const match = rawDesc.match(/\[(?:Kế hoạch thanh toán theo đợt|Thanh toán theo đợt)[^\]]*\]:\s*(.*)/);
       if (match) installmentText = match[1];
     }
 
     let recurringText = '';
     if (hasRecurring) {
-      const match = rawDesc.match(/\[Lặp lại định kỳ\]:\s*(.*)/);
+      const match = rawDesc.match(/\[(?:Thiết lập|Lặp lại) định kỳ\]:\s*(.*)/);
       if (match) recurringText = match[1];
     }
 
@@ -8173,6 +10253,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       .replace(/^Ghi chú:\s*"?/i, '')
       .replace(/"$/, '')
       .trim();
+
+    const residualNote = cleanResidualText(contentVal || reasonVal || cleanNoteText || '');
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '1rem' : '1.25rem', textAlign: 'left' }}>
@@ -8714,66 +10796,780 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             )}
           </div>
         ) : (
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {contentVal && !reasonVal ? t('Nội dung đề xuất / Giải trình') : (!contentVal && reasonVal ? t('Lý do đề xuất') : t('Lý do / Mô tả chi tiết'))}
-            </div>
-            {(contentVal && reasonVal) ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Nội dung đề xuất / Giải trình')}
-                  </span>
-                  <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                    {contentVal}
+          <>
+            {/* VIP Card: Kế hoạch tiếp đón đối tác & khách mời */}
+            {meetingData && (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(253, 242, 248, 0.5) 100%)',
+                border: '1px solid rgba(236, 72, 153, 0.25)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(236, 72, 153, 0.04)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'rgba(236, 72, 153, 0.12)',
+                      color: '#ec4899',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Briefcase size={18} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#db2777', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Kế hoạch tiếp đón đối tác & khách mời')}
+                      </span>
+                      {meetingData.targetType && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                          {t('Phân loại')}: {meetingData.targetType}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {meetingData.headcount && (
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(236, 72, 153, 0.1)',
+                      color: '#be185d',
+                      fontWeight: 700
+                    }}>
+                      👥 {meetingData.headcount}
+                    </span>
+                  )}
+                </div>
+
+                {/* Entity & Representative */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Đơn vị / Khách mời tiếp đón')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Building2 size={15} style={{ color: '#ec4899', flexShrink: 0 }} />
+                      <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>
+                        {meetingData.clientName || '—'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Người đại diện & Liên hệ')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <User size={15} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                        {meetingData.representative || 'Chưa cập nhật'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Lý do & Ý kiến đề xuất')}
-                  </span>
-                  <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                    {reasonVal}
+
+                {/* Location & Time */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Địa điểm tiếp đón')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MapPin size={15} style={{ color: '#ef4444', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 650, color: 'var(--color-text)' }}>
+                        {meetingData.location || 'Chưa xác định'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Thời gian tổ chức')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={15} style={{ color: '#0ea5e9', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 650, color: 'var(--color-text)' }}>
+                        {meetingData.time || '—'}
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Purpose */}
+                {meetingData.purpose && (
+                  <div style={{
+                    padding: '12px 14px',
+                    background: 'rgba(236, 72, 153, 0.04)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(236, 72, 153, 0.15)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#be185d', textTransform: 'uppercase' }}>
+                      {t('Mục đích & Nội dung tiếp đón')}
+                    </span>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text)', lineHeight: 1.45, fontWeight: 500 }}>
+                      {meetingData.purpose}
+                    </div>
+                  </div>
+                )}
+
+                {/* Internal Attendees */}
+                {meetingData.attendees && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{t('Nhân sự tham gia cùng')}:</span>
+                    <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{meetingData.attendees}</span>
+                  </div>
+                )}
+
+                {/* Payment Method badge */}
+                {meetingData.paymentMethod && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{t('Phương thức thanh toán')}:</span>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'var(--color-bg-secondary)',
+                      border: '1px solid var(--color-border-light)',
+                      fontWeight: 650,
+                      color: 'var(--color-text)'
+                    }}>
+                      {meetingData.paymentMethod}
+                    </span>
+                  </div>
+                )}
               </div>
-            ) : contentVal ? (
-              <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                {contentVal}
-              </div>
-            ) : reasonVal ? (
-              <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '10px 12px', borderRadius: '8px', lineHeight: 1.45 }}>
-                {reasonVal}
-              </div>
-            ) : (
-              <textarea
-                rows={3}
-                value={
-                  (item.type === 'attendance_bulk' && (detail?.details?.length === 1 || (item as any)?.days_count === 1))
-                    ? (detail?.details?.[0]?.reason && detail.details[0].reason !== 'Bổ sung công'
-                        ? detail.details[0].reason
-                        : (detail?.description && !detail.description.includes('hàng loạt') && !detail.description.includes('công gộp')
-                            ? detail.description
-                            : `Giải trình cập nhật công ngày ${detail?.details?.[0]?.check_in_date ? new Date(detail.details[0].check_in_date).toLocaleDateString('vi-VN') : ((item as any)?.single_date ? new Date((item as any).single_date).toLocaleDateString('vi-VN') : '')}`))
-                    : (cleanNoteText || detail?.reason || detail?.notes || detail?.description || item.description || t('Không có mô tả chi tiết'))
-                }
-                disabled
-                style={{
-                  width: '100%',
-                  background: '#fffbeb',
-                  color: '#713f12',
-                  border: '1px solid #fef08a',
-                  borderLeft: '4px solid #eab308',
-                  borderRadius: 0,
-                  fontStyle: 'italic',
-                  padding: '10px 12px',
-                  fontSize: '0.8rem',
-                  lineHeight: 1.45,
-                  resize: 'none'
-                }}
-              />
             )}
-          </div>
+
+            {/* VIP Card: Thiết lập lịch thanh toán định kỳ */}
+            {recurringData && (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(250, 232, 255, 0.5) 100%)',
+                border: '1px solid rgba(217, 70, 239, 0.25)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(217, 70, 239, 0.04)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'rgba(217, 70, 239, 0.12)',
+                      color: '#d946ef',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Clock3 size={18} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#c026d3', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Thiết lập lịch thanh toán định kỳ')}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                        {t('Tự động hóa chu kỳ giải ngân chi phí')}
+                      </div>
+                    </div>
+                  </div>
+                  {recurringData.frequency && (
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(217, 70, 239, 0.1)',
+                      color: '#a21caf',
+                      fontWeight: 700
+                    }}>
+                      🔄 {recurringData.frequency}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Ngày giải ngân cố định')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calendar size={15} style={{ color: '#d946ef', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                        {recurringData.payDay || '—'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Thời hạn hiệu lực')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={15} style={{ color: '#0ea5e9', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 650, color: 'var(--color-text)' }}>
+                        {recurringData.duration || '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {recurringData.contract && (
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <FileCheck size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>
+                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Căn cứ HĐ / Thỏa thuận')}: </span>
+                      <strong>{recurringData.contract}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* VIP Card: Kế hoạch thanh toán theo các đợt */}
+            {phasedData && phasedData.length > 0 && (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(243, 232, 255, 0.5) 100%)',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(139, 92, 246, 0.04)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'rgba(139, 92, 246, 0.12)',
+                      color: '#8b5cf6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <GitBranch size={18} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Kế hoạch thanh toán theo các đợt')}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                        {t('Tiến độ giải ngân theo từng mốc nghiệm thu')}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '0.75rem',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: 'rgba(139, 92, 246, 0.1)',
+                    color: '#6d28d9',
+                    fontWeight: 700
+                  }}>
+                    {phasedData.length} {t('đợt thanh toán')}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {phasedData.map((itemStr, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'var(--color-bg-secondary)',
+                        border: '1px solid var(--color-border-light)'
+                      }}
+                    >
+                      <div style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: 'rgba(139, 92, 246, 0.15)',
+                        color: '#7c3aed',
+                        fontWeight: 800,
+                        fontSize: '0.75rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        {idx + 1}
+                      </div>
+                      <div style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                        {itemStr}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIP Card: Hồ sơ đề nghị tạm ứng kinh phí */}
+            {advanceData && (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(239, 246, 255, 0.5) 100%)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(59, 130, 246, 0.04)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'rgba(59, 130, 246, 0.12)',
+                      color: '#2563eb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <DollarSign size={18} />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Hồ sơ đề nghị tạm ứng kinh phí')}
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                        {t('Mục đích tạm ứng & Hạn hoàn ứng chứng từ')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Mục đích tạm ứng')}
+                    </span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                      {advanceData.purpose || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      {t('Hạn hoàn ứng / quyết toán')}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calendar size={15} style={{ color: '#ea580c', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ea580c' }}>
+                        {advanceData.settlementDate || '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIP Card: Thông tin thụ hưởng & Thanh toán (Bank Transfer, Cash, Wallet, Card) */}
+            {paymentData && (paymentData.bankInfo || paymentData.beneficiaryName || paymentData.otherMethodInfo) && (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(240, 249, 255, 0.45) 100%)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(37, 99, 235, 0.04)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '10px',
+                      background: 'rgba(37, 99, 235, 0.12)',
+                      color: 'var(--color-primary, #2563eb)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {paymentData.bankInfo ? <Landmark size={18} /> : (paymentData.otherMethodInfo?.type === 'wallet' ? <Wallet size={18} /> : <CreditCard size={18} />)}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Thông tin thụ hưởng & Thanh toán')}
+                      </span>
+                      {paymentData.beneficiaryTarget && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                          {t('Đối tượng')}: {paymentData.beneficiaryTarget}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {paymentData.taxCode && (
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(37, 99, 235, 0.08)',
+                      color: '#1d4ed8',
+                      fontWeight: 700,
+                      fontFamily: 'monospace'
+                    }}>
+                      MST: {paymentData.taxCode}
+                    </span>
+                  )}
+                </div>
+
+                {/* Beneficiary Name & Phone */}
+                {paymentData.beneficiaryName && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    padding: '10px 14px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <User size={15} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                        {paymentData.beneficiaryName}
+                      </span>
+                    </div>
+                    {paymentData.beneficiaryPhone && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                        <Phone size={13} style={{ flexShrink: 0 }} />
+                        <span style={{ fontWeight: 600 }}>{paymentData.beneficiaryPhone}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Modern Bank Transfer Box with 1-Click Copy */}
+                {paymentData.bankInfo && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                    color: '#ffffff',
+                    borderRadius: '14px',
+                    padding: '16px 18px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.25)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '-40px',
+                      right: '-40px',
+                      width: '130px',
+                      height: '130px',
+                      borderRadius: '50%',
+                      background: 'radial-gradient(circle, rgba(59, 130, 246, 0.25) 0%, transparent 70%)',
+                      pointerEvents: 'none'
+                    }} />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Landmark size={18} style={{ color: '#60a5fa', flexShrink: 0 }} />
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '0.02em', color: '#f8fafc' }}>
+                          {paymentData.bankInfo.bankName || t('Chuyển khoản Ngân hàng')}
+                        </span>
+                      </div>
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: '#93c5fd'
+                      }}>
+                        {t('Chuyển khoản 24/7')}
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.12)'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {t('Số tài khoản')}
+                        </span>
+                        <span style={{
+                          fontSize: isMobile ? '1.1rem' : '1.3rem',
+                          fontWeight: 800,
+                          fontFamily: 'monospace',
+                          letterSpacing: '0.08em',
+                          color: '#38bdf8'
+                        }}>
+                          {paymentData.bankInfo.accountNumber || '—'}
+                        </span>
+                      </div>
+                      {paymentData.bankInfo.accountNumber && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(paymentData.bankInfo.accountNumber, t('Số tài khoản'))}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '7px 12px',
+                            borderRadius: '8px',
+                            background: copiedField === t('Số tài khoản') ? '#059669' : 'rgba(255, 255, 255, 0.15)',
+                            color: '#ffffff',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.78rem',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          {copiedField === t('Số tài khoản') ? <Check size={14} /> : <Copy size={14} />}
+                          <span>{copiedField === t('Số tài khoản') ? t('Đã chép') : t('Sao chép')}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '6px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {t('Chủ tài khoản')}
+                        </span>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#f1f5f9', letterSpacing: '0.04em' }}>
+                          {paymentData.bankInfo.accountName || paymentData.beneficiaryName || '—'}
+                        </div>
+                      </div>
+                      {paymentData.bankInfo.branch && (
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {t('Chi nhánh')}
+                          </span>
+                          <div style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600 }}>
+                            {paymentData.bankInfo.branch}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Other Payment Methods (Cash, Wallet, Card) */}
+                {paymentData.otherMethodInfo && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    background: 'var(--color-bg-secondary)',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    {paymentData.otherMethodInfo.type === 'cash' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Wallet size={16} style={{ color: '#059669', flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#059669' }}>
+                            {t('Thanh toán tiền mặt trực tiếp')}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                            {paymentData.otherMethodInfo.receiver && <span>{t('Người nhận')}: <strong>{paymentData.otherMethodInfo.receiver}</strong></span>}
+                            {paymentData.otherMethodInfo.location && <span> • {t('Bàn giao tại')}: <strong>{paymentData.otherMethodInfo.location}</strong></span>}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {paymentData.otherMethodInfo.type === 'wallet' && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Wallet size={16} style={{ color: '#ec4899', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#ec4899' }}>
+                              {t('Ví điện tử')} {paymentData.otherMethodInfo.walletType}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                              {paymentData.otherMethodInfo.holder && <span>{t('Chủ ví')}: <strong>{paymentData.otherMethodInfo.holder}</strong></span>}
+                              {paymentData.otherMethodInfo.phone && <span> • {t('SĐT ví')}: <strong style={{ fontFamily: 'monospace' }}>{paymentData.otherMethodInfo.phone}</strong></span>}
+                            </div>
+                          </div>
+                        </div>
+                        {paymentData.otherMethodInfo.phone && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(paymentData.otherMethodInfo.phone, t('SĐT ví'))}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              background: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              fontWeight: 600
+                            }}
+                          >
+                            <Copy size={12} /> {t('Chép SĐT')}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {paymentData.otherMethodInfo.type === 'card' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <CreditCard size={16} style={{ color: '#8b5cf6', flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#8b5cf6' }}>
+                            {t('Thẻ tín dụng doanh nghiệp')}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                            {t('4 số cuối thẻ')}: <strong style={{ fontFamily: 'monospace' }}>{paymentData.otherMethodInfo.last4 || 'N/A'}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* General Description / Reason / Additional Notes */}
+            {residualNote ? (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
+              }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {contentVal && !reasonVal ? t('Nội dung đề xuất / Giải trình') : (!contentVal && reasonVal ? t('Lý do đề xuất') : t('Lý do & Nội dung chi tiết'))}
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '12px 14px', borderRadius: '10px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                  {renderLinkifiedText(residualNote)}
+                </div>
+              </div>
+            ) : (!meetingData && !recurringData && !phasedData && !advanceData && !paymentData) ? (
+              <div className="card" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border-light)',
+                borderRadius: '16px',
+                padding: isMobile ? '1.1rem' : '1.5rem',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)'
+              }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {t('Nội dung đề xuất')}
+                </div>
+                <div style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '10px 12px', background: 'var(--color-bg-secondary)', borderRadius: '8px' }}>
+                  {t('Không có mô tả chi tiết')}
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
 
         {/* Card: Tài liệu chứng từ đính kèm trong chi tiết */}

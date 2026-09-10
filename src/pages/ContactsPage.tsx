@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -385,6 +385,23 @@ const FMT_VND = (n: any) => {
 };
 const AGO_DAYS = (d: string) => d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 999;
 
+const DEFAULT_PIPELINE_STAGES = [
+  { id: '1', name: '01 – New Lead', system_slug: 'new_lead', color: '#3b82f6', order_index: 1 },
+  { id: '2', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#6366f1', order_index: 2 },
+  { id: '3', name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
+  { id: '4', name: '04 – Needed', system_slug: 'needed', color: '#a855f7', order_index: 4 },
+  { id: '5', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#d946ef', order_index: 5 },
+  { id: '6', name: '06 – Program Matched', system_slug: 'program_matched', color: '#ec4899', order_index: 6 },
+  { id: '7', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#f43f5e', order_index: 7 },
+  { id: '8', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#f97316', order_index: 8 },
+  { id: '9', name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
+  { id: '10', name: '10 – Application Completed', system_slug: 'application_completed', color: '#eab308', order_index: 10 },
+  { id: '11', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#84cc16', order_index: 11 },
+  { id: '12', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#22c55e', order_index: 12 },
+  { id: '13', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#10b981', order_index: 13 },
+  { id: '14', name: '14 – Enrolled', system_slug: 'enrolled', color: '#06b6d4', order_index: 14 }
+];
+
 interface ContactsPageProps {
   defaultSegment?: string;
 }
@@ -540,7 +557,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [filterBeforeDate, setFilterBeforeDate] = useState('');
   const [filterAfterDate, setFilterAfterDate] = useState('');
   const [projects, setProjects] = useState<any[]>([]);
-  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>(DEFAULT_PIPELINE_STAGES);
   const [teams, setTeams] = useState<any[]>([]);
 
   // Quick Pipeline Stage Tabs (1-Click Switching)
@@ -548,24 +565,24 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
 
   const PIPELINE_TABS = useMemo(() => {
-    const tabs: Array<{ id: string; label: string; color: string }> = [
+    const tabs: Array<{ id: string; slug?: string; label: string; color: string }> = [
       { id: 'all', label: 'Tất cả', color: '#64748b' }
     ];
 
-    if (pipelineStages && pipelineStages.length > 0) {
-      const sorted = [...pipelineStages].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0));
-      sorted.forEach(s => {
-        tabs.push({
-          id: String(s.id),
-          label: s.name,
-          color: s.color || '#3b82f6'
-        });
+    const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
+    const sorted = [...stagesToUse].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0));
+    sorted.forEach(s => {
+      tabs.push({
+        id: String(s.id),
+        slug: s.system_slug,
+        label: s.name,
+        color: s.color || '#3b82f6'
       });
-    }
+    });
 
     tabs.push(
-      { id: 'nurture', label: 'Chăm sóc lại (Nurture)', color: '#0284c7' },
-      { id: 'lost', label: 'Không tiềm năng (Lost)', color: '#ef4444' }
+      { id: 'nurture', slug: 'nurture', label: 'Chăm sóc lại (Nurture)', color: '#0284c7' },
+      { id: 'lost', slug: 'lost', label: 'Không tiềm năng (Lost)', color: '#ef4444' }
     );
 
     return tabs;
@@ -580,17 +597,111 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
     if (stageCounts && Object.keys(stageCounts).length > 0) {
       let sum = 0;
-      pipelineStages.forEach(s => {
-        sum += Number(stageCounts[s.id] || 0);
+      const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
+      stagesToUse.forEach(s => {
+        sum += Number(stageCounts[String(s.id)] ?? (s.system_slug ? stageCounts[s.system_slug] : undefined) ?? 0);
       });
       return sum > 0 ? sum : total;
     }
     return total;
   };
 
+  const getTabCount = (tab: { id: string; slug?: string }) => {
+    if (tab.id === 'all') {
+      return getTotalActiveCount();
+    }
+    if (tab.id === 'nurture') {
+      return Number(stageCounts['nurture'] ?? 0);
+    }
+    if (tab.id === 'lost') {
+      return Number(stageCounts['lost'] ?? 0);
+    }
+    if (stageCounts[tab.id] !== undefined) {
+      return Number(stageCounts[tab.id]);
+    }
+    if (tab.slug && stageCounts[tab.slug] !== undefined) {
+      return Number(stageCounts[tab.slug]);
+    }
+    return 0;
+  };
+
   const handleSelectQuickTab = (tabId: string) => {
     setQuickPipelineStage(prev => prev === tabId ? 'all' : tabId);
     setPage(1);
+  };
+
+  const pipelineScrollRef = React.useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const isPipelineDownRef = React.useRef(false);
+  const pipelineStartXRef = React.useRef(0);
+  const pipelineScrollLeftRef = React.useRef(0);
+  const hasPipelineDraggedRef = React.useRef(false);
+
+  const checkPipelineScroll = React.useCallback(() => {
+    if (pipelineScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = pipelineScrollRef.current;
+      setCanScrollLeft(scrollLeft > 6);
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 6);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkPipelineScroll();
+    const handleResize = () => checkPipelineScroll();
+    window.addEventListener('resize', handleResize);
+    const timer = setTimeout(checkPipelineScroll, 200);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timer);
+    };
+  }, [checkPipelineScroll, PIPELINE_TABS, stageCounts]);
+
+  const scrollPipeline = (direction: 'left' | 'right') => {
+    if (pipelineScrollRef.current) {
+      const scrollAmount = Math.max(pipelineScrollRef.current.clientWidth * 0.6, 260);
+      pipelineScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+      setTimeout(checkPipelineScroll, 320);
+    }
+  };
+
+  const handlePipelineMouseDown = (e: React.MouseEvent) => {
+    if (!pipelineScrollRef.current) return;
+    isPipelineDownRef.current = true;
+    hasPipelineDraggedRef.current = false;
+    pipelineStartXRef.current = e.pageX - pipelineScrollRef.current.getBoundingClientRect().left;
+    pipelineScrollLeftRef.current = pipelineScrollRef.current.scrollLeft;
+  };
+
+  const handlePipelineMouseLeave = () => {
+    isPipelineDownRef.current = false;
+  };
+
+  const handlePipelineMouseUp = () => {
+    isPipelineDownRef.current = false;
+  };
+
+  const handlePipelineMouseMove = (e: React.MouseEvent) => {
+    if (!isPipelineDownRef.current || !pipelineScrollRef.current) return;
+    const x = e.pageX - pipelineScrollRef.current.getBoundingClientRect().left;
+    const walk = (x - pipelineStartXRef.current);
+    if (Math.abs(walk) > 4) {
+      hasPipelineDraggedRef.current = true;
+    }
+    pipelineScrollRef.current.scrollLeft = pipelineScrollLeftRef.current - walk;
+    checkPipelineScroll();
+  };
+
+  const handlePipelineWheel = (e: React.WheelEvent) => {
+    if (pipelineScrollRef.current) {
+      if (e.deltaY !== 0 && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+        pipelineScrollRef.current.scrollLeft += e.deltaY;
+        checkPipelineScroll();
+      }
+    }
   };
 
 
@@ -626,7 +737,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     beforeDate: '',
     afterDate: '',
     dateActive: false,
-    dataType: ''
+    dataType: '',
+    multiProgram: searchParams.get('multi_program') === '1' || searchParams.get('multi_program') === 'true' || searchParams.get('multi_program') === '2'
   });
 
   const activeFiltersCount = useMemo(() => {
@@ -640,7 +752,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       activeFilters.campaignId,
       activeFilters.tag,
       activeFilters.dataType,
-      activeFilters.dateActive ? 'date' : ''
+      activeFilters.dateActive ? 'date' : '',
+      activeFilters.multiProgram ? 'multi_program' : ''
     ].filter(val => {
       if (typeof val === 'string') return val.trim() !== '';
       return !!val;
@@ -660,6 +773,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     const mpParam = searchParams.get('multi_program');
     if (mpParam === '1' || mpParam === 'true' || mpParam === '2') {
       setFilterMultiProgram(true);
+      setActiveFilters(prev => ({ ...prev, multiProgram: true }));
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('multi_program');
+      setSearchParams(newParams, { replace: true });
     }
 
     const projectIdParam = searchParams.get('project_id');
@@ -870,6 +987,11 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             params.show_lost = 1;
           } else {
             params.stage_id = quickPipelineStage;
+            const stagesToUse = (pipelineStages && pipelineStages.length > 0) ? pipelineStages : DEFAULT_PIPELINE_STAGES;
+            const stObj = stagesToUse.find(s => String(s.id) === String(quickPipelineStage) || s.system_slug === quickPipelineStage);
+            if (stObj?.system_slug) {
+              params.stage_slug = stObj.system_slug;
+            }
           }
         }
 
@@ -877,7 +999,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
           params.uncontacted = 1;
         }
 
-        if (filterMultiProgram) {
+        if (activeFilters.multiProgram) {
           params.multi_program = 1;
         }
 
@@ -951,7 +1073,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     if (initialMetadataLoaded) {
       fetchData();
     }
-  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted, filterMultiProgram]);
+  }, [page, pageSize, debouncedSearch, sortBy, activeFilters, segment, studentSubTab, initialMetadataLoaded, showLost, quickLeadStatus, quickPipelineStage, filterUncontacted]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -996,7 +1118,10 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
         }
         if (stageResult.status === 'fulfilled' && stageResult.value) {
           const d = stageResult.value.data?.data;
-          setPipelineStages(Array.isArray(d) ? d : (d?.items || []));
+          const list = Array.isArray(d) ? d : (d?.items || []);
+          if (list.length > 0) {
+            setPipelineStages(list);
+          }
         }
         if (campaignResult.status === 'fulfilled' && campaignResult.value) {
           const d = campaignResult.value.data?.data;
@@ -1064,7 +1189,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       beforeDate: filterBeforeDate,
       afterDate: filterAfterDate,
       dateActive: !!dateActive,
-      dataType: filterDataType
+      dataType: filterDataType,
+      multiProgram: filterMultiProgram
     });
     setShowAdvancedFilters(false);
   };
@@ -1109,7 +1235,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       beforeDate: '',
       afterDate: '',
       dateActive: false,
-      dataType: ''
+      dataType: '',
+      multiProgram: false
     });
   };
 
@@ -1203,6 +1330,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       } else if (activeFilters.dateType === 'after') {
         if (activeFilters.afterDate) params.from = activeFilters.afterDate;
       }
+    }
+    if (activeFilters.multiProgram) {
+      params.multi_program = 1;
     }
     const teamId = getEffectiveTeamId();
     if (teamId) {
@@ -1395,80 +1525,157 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
 
 
-      {/* QUICK STATUS TABS (Chuyển nhanh theo từng trạng thái phễu) */}
+      {/* QUICK STATUS TABS (1 hàng ngang kéo chuột / lướt xem đầy đủ dữ liệu) */}
       {segment !== 'customer' && (
-        <div
-          className="custom-scrollbar"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            overflowX: 'auto',
-            paddingBottom: '8px',
-            marginBottom: '0.75rem',
-            scrollbarWidth: 'thin',
-            msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch'
-          }}
-        >
-          {PIPELINE_TABS.map((tab) => {
-            const isActive = quickPipelineStage === tab.id;
-            const count = tab.id === 'all' 
-              ? getTotalActiveCount() 
-              : Number(stageCounts[tab.id] || 0);
+        <div style={{ position: 'relative', marginBottom: '0.85rem' }}>
+          {/* Nút cuộn sang trái */}
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => scrollPipeline('left')}
+              title="Cuộn sang trái"
+              style={{
+                position: 'absolute',
+                left: '4px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 10,
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--color-text)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
 
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleSelectQuickTab(tab.id)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '7px',
-                  padding: isMobile ? '5px 10px' : '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: isMobile ? '0.74rem' : '0.79rem',
-                  fontWeight: isActive ? 700 : 500,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
-                  background: isActive ? `${tab.color}15` : 'var(--color-surface)',
-                  color: isActive ? tab.color : 'var(--color-text)',
-                  boxShadow: isActive ? `0 2px 8px ${tab.color}25` : 'var(--shadow-sm)'
-                }}
-              >
-                <span
-                  style={{
-                    width: '7px',
-                    height: '7px',
-                    borderRadius: '50%',
-                    backgroundColor: tab.color,
-                    flexShrink: 0
+          {/* Vùng tabs 1 hàng ngang kéo chuột mượt mà */}
+          <div
+            ref={pipelineScrollRef}
+            onScroll={checkPipelineScroll}
+            onMouseDown={handlePipelineMouseDown}
+            onMouseLeave={handlePipelineMouseLeave}
+            onMouseUp={handlePipelineMouseUp}
+            onMouseMove={handlePipelineMouseMove}
+            onWheel={handlePipelineWheel}
+            style={{
+              display: 'flex',
+              flexWrap: 'nowrap',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              background: 'var(--color-surface)',
+              borderRadius: '12px',
+              border: '1px solid var(--color-border)',
+              boxShadow: 'var(--shadow-sm)',
+              overflowX: 'auto',
+              scrollbarWidth: 'thin',
+              WebkitOverflowScrolling: 'touch',
+              cursor: isPipelineDownRef.current ? 'grabbing' : 'grab',
+              userSelect: 'none'
+            }}
+          >
+            {PIPELINE_TABS.map((tab) => {
+              const isActive = quickPipelineStage === tab.id;
+              const count = getTabCount(tab);
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    if (!hasPipelineDraggedRef.current) {
+                      handleSelectQuickTab(tab.id);
+                    }
                   }}
-                />
-                <span>{tab.label}</span>
-                <span
+                  title={tab.label}
                   style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? tab.color : 'var(--color-bg-light)',
-                    color: isActive ? '#ffffff' : 'var(--color-text-muted)',
-                    marginLeft: '2px',
-                    minWidth: '18px',
-                    textAlign: 'center',
-                    lineHeight: '1.4'
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: isMobile ? '4px 9px' : '5px 12px',
+                    borderRadius: '20px',
+                    fontSize: isMobile ? '0.73rem' : '0.78rem',
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    transition: 'all 0.15s ease',
+                    border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
+                    background: isActive ? `${tab.color}18` : 'var(--color-bg)',
+                    color: isActive ? tab.color : 'var(--color-text)',
+                    boxShadow: isActive ? `0 2px 6px ${tab.color}20` : 'none'
                   }}
                 >
-                  {loading && !Object.keys(stageCounts).length ? '...' : count}
-                </span>
-              </button>
-            );
-          })}
+                  <span
+                    style={{
+                      width: '7px',
+                      height: '7px',
+                      borderRadius: '50%',
+                      backgroundColor: tab.color,
+                      flexShrink: 0
+                    }}
+                  />
+                  <span>{tab.label}</span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: isActive ? tab.color : 'var(--color-bg-light)',
+                      color: isActive ? '#ffffff' : 'var(--color-text-muted)',
+                      marginLeft: '2px',
+                      minWidth: '18px',
+                      textAlign: 'center',
+                      lineHeight: '1.4'
+                    }}
+                  >
+                    {loading && !Object.keys(stageCounts).length ? '...' : count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Nút cuộn sang phải */}
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() => scrollPipeline('right')}
+              title="Cuộn sang phải"
+              style={{
+                position: 'absolute',
+                right: '4px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 10,
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--color-text)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+          )}
         </div>
       )}
 
@@ -1650,48 +1857,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                         )}
                       </button>
 
-                      {/* Quick Filter: Đa chương trình */}
-                      <button
-                        onClick={() => {
-                          setFilterMultiProgram(!filterMultiProgram);
-                          setPage(1);
-                          setShowMobileActions(false);
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          width: '100%',
-                          padding: '8px 12px',
-                          border: 'none',
-                          background: filterMultiProgram ? 'rgba(139, 92, 246, 0.08)' : 'transparent',
-                          color: filterMultiProgram ? '#7c3aed' : 'var(--color-text)',
-                          borderRadius: '8px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          textAlign: 'left',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Layers size={12} style={{ color: filterMultiProgram ? '#7c3aed' : 'inherit' }} />
-                        <span>Đa chương trình (≥ 2)</span>
-                        {typeof stageCounts['multi_program'] === 'number' && (
-                          <span
-                            style={{
-                              background: filterMultiProgram ? '#7c3aed' : 'var(--color-bg-light)',
-                              color: filterMultiProgram ? '#ffffff' : 'var(--color-text-muted)',
-                              fontSize: '0.65rem',
-                              fontWeight: 700,
-                              borderRadius: '10px',
-                              padding: '1px 6px',
-                              marginLeft: 'auto',
-                              lineHeight: 1.4
-                            }}
-                          >
-                            {stageCounts['multi_program']}
-                          </span>
-                        )}
-                      </button>
+
 
                       <div style={{ height: '1px', background: 'var(--color-border-light)', margin: '4px 0' }} />
  
@@ -2010,57 +2176,6 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 )}
                 {filterUncontacted && <X size={12} style={{ marginLeft: '2px', opacity: 0.8 }} />}
               </button>
-
-              {/* Quick Filter: Đa chương trình */}
-              <button 
-                type="button"
-                onClick={() => {
-                  setFilterMultiProgram(prev => !prev);
-                  setPage(1);
-                }}
-                style={{
-                  height: '38px',
-                  padding: '0 0.875rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  border: filterMultiProgram ? '1.5px solid #7c3aed' : '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                  background: filterMultiProgram ? 'rgba(139, 92, 246, 0.08)' : 'var(--color-surface)',
-                  color: filterMultiProgram ? '#7c3aed' : 'var(--color-text)',
-                  fontWeight: filterMultiProgram ? 700 : 600,
-                  fontSize: '0.85rem',
-                  transition: 'all 0.2s',
-                  boxShadow: filterMultiProgram ? '0 2px 8px rgba(139, 92, 246, 0.2)' : 'var(--shadow-sm)',
-                  outline: 'none',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-                title={filterMultiProgram ? "Bỏ lọc Đa chương trình" : "Lọc nhanh các khách hàng có từ 2 chương trình/hồ sơ trở lên"}
-              >
-                <Layers size={14} style={{ color: filterMultiProgram ? '#7c3aed' : 'var(--color-text-muted)' }} />
-                <span>Đa chương trình (≥ 2)</span>
-                {typeof stageCounts['multi_program'] === 'number' && (
-                  <span
-                    style={{
-                      background: filterMultiProgram ? '#7c3aed' : 'var(--color-bg-light)',
-                      color: filterMultiProgram ? '#ffffff' : 'var(--color-text-muted)',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      borderRadius: '10px',
-                      padding: '1px 6px',
-                      marginLeft: '2px',
-                      lineHeight: 1.4
-                    }}
-                  >
-                    {stageCounts['multi_program']}
-                  </span>
-                )}
-                {filterMultiProgram && <X size={12} style={{ marginLeft: '2px', opacity: 0.8 }} />}
-              </button>
-
             </div>
  
             {/* Row 2: Sort Select & View Mode switchers */}

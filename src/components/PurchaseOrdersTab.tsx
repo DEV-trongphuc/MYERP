@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -53,16 +53,68 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
     approver_id_3: ''
   });
 
+  // Default Director (Phạm Quang Vinh) and default Accountant for PO routing
+  const defaultDirector = useMemo(() => {
+    const businessUsers = users.filter(u => 
+      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
+      u.email !== 'turniodev@gmail.com'
+    );
+    return businessUsers.find(u => {
+      const fn = String(u.full_name || u.name || '').toLowerCase();
+      const un = String(u.username || '').toLowerCase();
+      const em = String(u.email || '').toLowerCase();
+      return fn.includes('quang vinh') || un === 'vinhpq' || em.includes('vinhpq') || fn.includes('phạm quang vinh') || fn.includes('phan quang vinh');
+    })
+    || businessUsers.find(u => String(u.role).toLowerCase() === 'director')
+    || businessUsers.find(u => String(u.role).toLowerCase() === 'admin')
+    || null;
+  }, [users]);
+
+  const defaultAccountant = useMemo(() => {
+    const businessUsers = users.filter(u => 
+      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
+      u.email !== 'turniodev@gmail.com'
+    );
+    return businessUsers.find(u => String(u.role).toLowerCase() === 'accountant')
+      || businessUsers.find(u => {
+        const fn = String(u.full_name || u.name || '').toLowerCase();
+        return fn.includes('thu thảo') || u.username === 'thaont';
+      })
+      || null;
+  }, [users]);
+
   useEffect(() => {
     if (showModal) {
       const leaderId = resolveTeamLeaderId(user, users, teams);
-      setFormData(prev => ({
-        ...prev,
-        supplier_id: defaultSupplierId ? String(defaultSupplierId) : prev.supplier_id,
-        approver_id: prev.approver_id || (leaderId ? String(leaderId) : '')
-      }));
+      const subtotal = formData.items.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+      const taxRate = Number(formData.tax_rate || 0);
+      const tax = Math.round(subtotal * taxRate / 100);
+      const total = subtotal + tax;
+
+      setFormData(prev => {
+        const nextLeader = prev.approver_id || (leaderId ? String(leaderId) : '');
+        if (total >= threshold) {
+          // Rule >= 5M: Cấp 1 (Leader) -> Cấp 2 (Ban Giám đốc Phạm Quang Vinh) -> Cấp 3 (Kế toán)
+          return {
+            ...prev,
+            supplier_id: defaultSupplierId ? String(defaultSupplierId) : prev.supplier_id,
+            approver_id: nextLeader,
+            approver_id_2: defaultDirector?.id ? String(defaultDirector.id) : prev.approver_id_2,
+            approver_id_3: defaultAccountant?.id ? String(defaultAccountant.id) : prev.approver_id_3
+          };
+        } else {
+          // Rule < 5M: Cấp 1 (Leader) -> Cấp 2 (Kế toán) -> Không có Cấp 3
+          return {
+            ...prev,
+            supplier_id: defaultSupplierId ? String(defaultSupplierId) : prev.supplier_id,
+            approver_id: nextLeader,
+            approver_id_2: defaultAccountant?.id ? String(defaultAccountant.id) : prev.approver_id_2,
+            approver_id_3: ''
+          };
+        }
+      });
     }
-  }, [showModal, defaultSupplierId, user, users, teams]);
+  }, [showModal, defaultSupplierId, user, users, teams, formData.items, formData.tax_rate, threshold, defaultDirector, defaultAccountant]);
 
   const fetchOrders = async () => {
     try {
@@ -181,18 +233,23 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
       const tax = Math.round(subtotal * taxRate / 100);
       const total = subtotal + tax;
 
-      // Enforce approval constraint: default 1 level, 2 levels if total >= threshold
+      // Enforce approval constraint:
+      // < 5M: Cấp 1 (Leader) và Cấp 2 (Kế toán)
+      // >= 5M: Cấp 1 (Leader), Cấp 2 (Ban Giám đốc Phạm Quang Vinh), Cấp 3 (Kế toán)
       if (!formData.approver_id) {
-        addToast('Vui lòng chọn người duyệt Cấp 1', 'error');
+        addToast('Vui lòng chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý)', 'error');
         setIsSubmitting(false);
         return;
       }
-      if (total >= threshold) {
-        if (!formData.approver_id_2) {
-          addToast(`Đơn hàng từ ${new Intl.NumberFormat('vi-VN').format(threshold)} đ trở lên bắt buộc phải phê duyệt 2 cấp, vui lòng chọn người duyệt Cấp 2`, 'error');
-          setIsSubmitting(false);
-          return;
-        }
+      if (!formData.approver_id_2) {
+        addToast(total >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
+        setIsSubmitting(false);
+        return;
+      }
+      if (total >= threshold && !formData.approver_id_3) {
+        addToast(`Đơn hàng từ ${new Intl.NumberFormat('vi-VN').format(threshold)} đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc (Phạm Quang Vinh) -> Kế toán`, 'error');
+        setIsSubmitting(false);
+        return;
       }
 
       await api.post('/purchase-orders', {
@@ -366,7 +423,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                                       fontWeight: 650,
                                       color: o.status_level_2 === 'approved' ? 'var(--color-success)' : o.status_level_2 === 'rejected' ? 'var(--color-danger)' : 'var(--color-text)'
                                     }}>
-                                      Cấp 2: {o.approver_name_2 || '...'}
+                                      {o.approver_id_3 ? 'Cấp 2 (BGD):' : 'Cấp 2 (Kế toán):'} {o.approver_name_2 || '...'}
                                     </span>
                                   </div>
                                 )}
@@ -383,7 +440,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                                       fontWeight: 650,
                                       color: o.status_level_3 === 'approved' ? 'var(--color-success)' : o.status_level_3 === 'rejected' ? 'var(--color-danger)' : 'var(--color-text)'
                                     }}>
-                                      Cấp 3: {o.approver_name_3 || '...'}
+                                      Cấp 3 (Kế toán): {o.approver_name_3 || '...'}
                                     </span>
                                   </div>
                                 )}
@@ -477,10 +534,18 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                     {/* Settings Form */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 750, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                           Đối tượng thanh toán PO <span className="text-danger">*</span>
                         </span>
-                        <div style={{ display: 'inline-flex', padding: '3px', background: 'var(--color-bg)', borderRadius: '10px', border: '1px solid var(--color-border)', gap: '4px' }}>
+                        <div style={{
+                          display: 'inline-flex',
+                          padding: '4px',
+                          background: 'var(--color-bg-secondary, #f1f5f9)',
+                          borderRadius: '12px',
+                          border: '1.5px solid var(--color-border)',
+                          gap: '4px',
+                          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)'
+                        }}>
                           <button
                             type="button"
                             onClick={() => setBeneficiaryType('supplier')}
@@ -488,18 +553,19 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                               display: 'flex',
                               alignItems: 'center',
                               gap: '6px',
-                              padding: '4px 12px',
-                              borderRadius: '7px',
-                              fontSize: '0.75rem',
-                              fontWeight: beneficiaryType === 'supplier' ? 750 : 500,
-                              border: 'none',
-                              background: beneficiaryType === 'supplier' ? 'var(--color-surface)' : 'transparent',
+                              padding: '6px 14px',
+                              borderRadius: '8px',
+                              fontSize: '0.8125rem',
+                              fontWeight: beneficiaryType === 'supplier' ? 750 : 600,
+                              border: beneficiaryType === 'supplier' ? '1px solid var(--color-border-light)' : '1px solid transparent',
+                              background: beneficiaryType === 'supplier' ? 'var(--color-surface, #ffffff)' : 'transparent',
                               color: beneficiaryType === 'supplier' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                              boxShadow: beneficiaryType === 'supplier' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-                              cursor: 'pointer'
+                              boxShadow: beneficiaryType === 'supplier' ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' : 'none',
+                              cursor: 'pointer',
+                              transition: 'all 0.18s ease'
                             }}
                           >
-                            <Truck size={13} />
+                            <Truck size={14} style={{ color: beneficiaryType === 'supplier' ? 'var(--color-primary)' : 'inherit' }} />
                             <span>Nhà cung cấp</span>
                           </button>
                           <button
@@ -509,18 +575,19 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                               display: 'flex',
                               alignItems: 'center',
                               gap: '6px',
-                              padding: '4px 12px',
-                              borderRadius: '7px',
-                              fontSize: '0.75rem',
-                              fontWeight: beneficiaryType === 'employee' ? 750 : 500,
-                              border: 'none',
-                              background: beneficiaryType === 'employee' ? 'var(--color-surface)' : 'transparent',
+                              padding: '6px 14px',
+                              borderRadius: '8px',
+                              fontSize: '0.8125rem',
+                              fontWeight: beneficiaryType === 'employee' ? 750 : 600,
+                              border: beneficiaryType === 'employee' ? '1px solid var(--color-border-light)' : '1px solid transparent',
+                              background: beneficiaryType === 'employee' ? 'var(--color-surface, #ffffff)' : 'transparent',
                               color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                              boxShadow: beneficiaryType === 'employee' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-                              cursor: 'pointer'
+                              boxShadow: beneficiaryType === 'employee' ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' : 'none',
+                              cursor: 'pointer',
+                              transition: 'all 0.18s ease'
                             }}
                           >
-                            <Users size={13} />
+                            <Users size={14} style={{ color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'inherit' }} />
                             <span>Nhân viên</span>
                           </button>
                         </div>
@@ -548,7 +615,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                             <CustomSelect 
                               options={users.map((u: any) => ({
                                 value: String(u.id),
-                                label: u.full_name,
+                                label: u.full_name || u.name || `Nhân viên #${u.id}`,
                                 avatar: u.avatar_url || u.avatar,
                                 sublabel: [
                                   u.role || '',
@@ -560,8 +627,9 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                                 const empId = String(val);
                                 setSelectedEmployeeId(empId);
                                 const emp = users.find((u: any) => String(u.id) === empId);
+                                const empName = emp ? (emp.full_name || emp.name || '') : '';
                                 if (emp && (emp.bank_name || emp.bank_account)) {
-                                  const bankInfo = `[Thông tin chuyển khoản]: ${emp.bank_name || ''} - STK: ${emp.bank_account || ''} - Chủ TK: ${(emp.full_name || '').toUpperCase()}`;
+                                  const bankInfo = `[Thông tin chuyển khoản]: ${emp.bank_name || ''} - STK: ${emp.bank_account || ''} - Chủ TK: ${empName.toUpperCase()}`;
                                   setFormData(prev => {
                                     const clean = prev.notes ? prev.notes.replace(/\[Thông tin chuyển khoản\]:[^\n]*/g, '').trim() : '';
                                     return {
@@ -569,7 +637,9 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                                       notes: clean ? `${bankInfo}\n${clean}` : bankInfo
                                     };
                                   });
-                                  addToast(`Đã tự động điền STK của ${emp.full_name}`, 'success');
+                                  addToast(`Đã tự động điền STK của ${empName}`, 'success');
+                                } else if (emp) {
+                                  addToast(`Đã chọn nhân viên: ${empName}`, 'info');
                                 }
                               }}
                               placeholder="-- Chọn nhân viên --"
@@ -673,7 +743,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                         {/* Summary / Warning info */}
                         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: 'var(--color-surface)', border: '1px dashed var(--color-border)', borderRadius: '12px', padding: '8px 12px' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: 650, color: 'var(--color-text-muted)' }}>
-                            Hạn mức 2 cấp duyệt:
+                            Hạn mức duyệt:
                           </span>
                           <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-primary)', marginTop: '2px' }}>
                             {new Intl.NumberFormat('vi-VN').format(threshold)} đ
@@ -686,11 +756,15 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                             if (total >= threshold) {
                               return (
                                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-danger)', marginTop: '2px' }}>
-                                  Tiền trên {new Intl.NumberFormat('vi-VN').format(threshold)}đ phê duyệt 2 cấp
+                                  Từ {new Intl.NumberFormat('vi-VN').format(threshold)} đ: Duyệt 3 cấp (Leader → Ban Giám đốc → Kế toán)
                                 </span>
                               );
                             }
-                            return null;
+                            return (
+                              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-primary)', marginTop: '2px' }}>
+                                Dưới {new Intl.NumberFormat('vi-VN').format(threshold)} đ: Duyệt 2 cấp (Leader → Kế toán)
+                              </span>
+                            );
                           })()}
                         </div>
                       </div>
@@ -699,60 +773,74 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                            Người duyệt Cấp 1 <span className="text-danger">*</span>
+                            Cấp 1: Trưởng nhóm / Quản lý <span className="text-danger">*</span>
                           </label>
                           <CustomSelect 
                             options={users.map((u: any) => ({
                               value: String(u.id),
-                              label: u.full_name,
+                              label: `${u.full_name || u.name} (${u.job_title || u.role || 'Quản lý'})`,
                               avatar: u.avatar_url || u.avatar,
-                              sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                              sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
                             }))}
                             value={formData.approver_id} 
                             onChange={val => setFormData({...formData, approver_id: String(val)})}
-                            placeholder="Chọn người duyệt..."
+                            placeholder="Chọn người duyệt Cấp 1..."
                             searchable
                             showAvatars
                           />
                         </div>
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                            Người duyệt Cấp 2 {(() => {
+                            {(() => {
                               const subtotal = calculateTotal();
                               const taxRate = Number(formData.tax_rate || 0);
                               const tax = Math.round(subtotal * taxRate / 100);
                               const total = subtotal + tax;
-                              return total >= threshold ? <span className="text-danger">*</span> : <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>(Tùy chọn)</span>;
+                              return total >= threshold ? (
+                                <>Cấp 2: Ban Giám đốc <span className="text-danger">*</span></>
+                              ) : (
+                                <>Cấp 2: Kế toán <span className="text-danger">*</span></>
+                              );
                             })()}
                           </label>
                           <CustomSelect 
                             options={users.map((u: any) => ({
                               value: String(u.id),
-                              label: u.full_name,
+                              label: `${u.full_name || u.name} (${u.job_title || u.role || 'Ban Giám đốc / Kế toán'})`,
                               avatar: u.avatar_url || u.avatar,
-                              sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                              sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
                             }))}
                             value={formData.approver_id_2} 
                             onChange={val => setFormData({...formData, approver_id_2: String(val)})}
-                            placeholder="Chọn người duyệt..."
+                            placeholder="Chọn người duyệt Cấp 2..."
                             searchable
                             showAvatars
                           />
                         </div>
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
-                            Người duyệt Cấp 3 <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>(Tùy chọn)</span>
+                            {(() => {
+                              const subtotal = calculateTotal();
+                              const taxRate = Number(formData.tax_rate || 0);
+                              const tax = Math.round(subtotal * taxRate / 100);
+                              const total = subtotal + tax;
+                              return total >= threshold ? (
+                                <>Cấp 3: Kế toán <span className="text-danger">*</span></>
+                              ) : (
+                                <>Cấp 3 <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>(Chỉ trên 5tr)</span></>
+                              );
+                            })()}
                           </label>
                           <CustomSelect 
                             options={users.map((u: any) => ({
                               value: String(u.id),
-                              label: u.full_name,
+                              label: `${u.full_name || u.name} (${u.job_title || u.role || 'Kế toán'})`,
                               avatar: u.avatar_url || u.avatar,
-                              sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                              sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
                             }))}
                             value={formData.approver_id_3} 
                             onChange={val => setFormData({...formData, approver_id_3: String(val)})}
-                            placeholder="-- Không có --"
+                            placeholder="-- Không áp dụng --"
                             searchable
                             showAvatars
                           />

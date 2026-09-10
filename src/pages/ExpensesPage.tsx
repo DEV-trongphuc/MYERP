@@ -1546,6 +1546,7 @@ export const ExpensesPage: React.FC = () => {
           editItem={editItem}
           onSaveSuccess={fetchExpenses}
           user={user}
+          users={users}
         />
       , document.body)}
 

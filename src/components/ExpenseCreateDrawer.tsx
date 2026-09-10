@@ -51,6 +51,7 @@ interface ExpenseCreateDrawerProps {
   initialDate?: string; // YYYY-MM-DD
   onSaveSuccess: () => void;
   user: any;
+  users?: any[];
 }
 
 export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
@@ -59,7 +60,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   editItem,
   initialDate,
   onSaveSuccess,
-  user
+  user,
+  users: propUsers
 }) => {
   const { addToast } = useUIStore();
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
@@ -69,7 +71,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [images, setImages] = useState<string[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const fileInputMultiRef = useRef<HTMLInputElement>(null);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>(propUsers && propUsers.length > 0 ? propUsers : []);
   const [contacts, setContacts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [vendorSearch, setVendorSearch] = useState('');
@@ -78,6 +80,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [vatPercent, setVatPercent] = useState('10');
   const isInitializedRef = useRef(false);
+  const prevOpenRef = useRef(false);
+  const prevEditItemRef = useRef<any>(null);
   const [companies, setCompanies] = useState<any[]>([]);
   const [allocationType, setAllocationType] = useState<'contact' | 'company'>('contact');
   const [showParticipantDropdown, setShowParticipantDropdown] = useState(false);
@@ -216,6 +220,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   // Fetch initial data
   useEffect(() => {
     if (isOpen) {
+      if (propUsers && propUsers.length > 0) {
+        setUsers(propUsers);
+      }
+
       api.get('/api.php?action=get_settings').then(r => {
         if (r.data?.data) {
           const matching = r.data.data.find((s: any) => s.setting_key === 'po_three_level_threshold');
@@ -226,8 +234,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       }).catch(() => {});
 
       api.get('/users').then(r => {
-        const d = r.data.data;
-        setUsers(Array.isArray(d) ? d : (d?.items || []));
+        const d = r.data?.data || r.data;
+        const list = Array.isArray(d) ? d : (d?.items || []);
+        if (list.length > 0) {
+          setUsers(list);
+        }
       }).catch(() => {});
 
       api.get('/teams').then(r => {
@@ -250,114 +261,186 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         setCompanies(Array.isArray(d) ? d : (d?.items || []));
       }).catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, propUsers]);
 
-  // Initialize form state
+  // Initialize form state - ONLY when drawer freshly opens or editItem changes
   useEffect(() => {
     if (isOpen) {
-      if (editItem) {
-        setVendorSearch(editItem.vendor_name || '');
-        // Extract all existing images
-        const existingImages: string[] = [];
-        if (editItem.image_url) {
-          existingImages.push(editItem.image_url);
-        }
-        if (editItem.notes) {
-          const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
-          for (const m of matches) {
-            const url = m[2].trim();
-            if (url && !existingImages.includes(url)) {
-              existingImages.push(url);
+      const isNewlyOpened = !prevOpenRef.current;
+      const isItemChanged = editItem !== prevEditItemRef.current;
+
+      if (isNewlyOpened || isItemChanged) {
+        prevOpenRef.current = true;
+        prevEditItemRef.current = editItem;
+
+        if (editItem) {
+          setVendorSearch(editItem.vendor_name || '');
+          // Extract all existing images
+          const existingImages: string[] = [];
+          if (editItem.image_url) {
+            existingImages.push(editItem.image_url);
+          }
+          if (editItem.notes) {
+            const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+            for (const m of matches) {
+              const url = m[2].trim();
+              if (url && !existingImages.includes(url)) {
+                existingImages.push(url);
+              }
             }
           }
+          setImages(existingImages);
+
+          const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n]+)/;
+          const match = editItem.notes?.match(bankRegex);
+          let request_bank_transfer = false;
+          let bank_name = '';
+          let bank_account_number = '';
+          let bank_account_name = '';
+          let cleanNotes = editItem.notes || '';
+          if (match) {
+            request_bank_transfer = true;
+            bank_name = match[1].trim();
+            bank_account_number = match[2].trim();
+            bank_account_name = match[3].trim();
+            cleanNotes = editItem.notes.replace(bankRegex, '').trim();
+          }
+
+          let initialEntities: any[] = [];
+          if (Array.isArray(editItem.entities) && editItem.entities.length > 0) {
+            initialEntities = editItem.entities;
+          } else if (editItem.contact_id || (editItem.entity_type === 'contact' && editItem.entity_id)) {
+            const cId = Number(editItem.contact_id || editItem.entity_id);
+            const matchedContact = contacts.find((c: any) => Number(c.id) === cId);
+            initialEntities = [{
+              entity_type: 'contact',
+              entity_id: cId,
+              name: editItem.contact_name || (matchedContact ? (matchedContact.full_name || '').trim() : `Khách hàng #${cId}`),
+              avatar_url: matchedContact?.avatar_url || matchedContact?.avatar
+            }];
+          } else if (editItem.company_id || (editItem.entity_type === 'company' && editItem.entity_id)) {
+            const compId = Number(editItem.company_id || editItem.entity_id);
+            const matchedComp = companies.find((c: any) => Number(c.id) === compId);
+            initialEntities = [{
+              entity_type: 'company',
+              entity_id: compId,
+              name: editItem.company_name || matchedComp?.name || `Đối tác #${compId}`
+            }];
+          }
+
+          // Check if vendor matches an employee name
+          const matchedUser = users.find((u: any) => (u.full_name && u.full_name.trim().toLowerCase() === (editItem.vendor_name || '').trim().toLowerCase()));
+          if (matchedUser) {
+            setBeneficiaryType('employee');
+            setSelectedEmployeeId(String(matchedUser.id));
+          } else {
+            setBeneficiaryType('vendor');
+            setSelectedEmployeeId('');
+          }
+
+          setForm({
+            title: editItem.title || '',
+            category: editItem.category || 'Khác',
+            amount: String(editItem.amount || 0),
+            currency: editItem.currency || 'VND',
+            vat_amount: editItem.vat_amount ? String(editItem.vat_amount) : '',
+            date: editItem.date || new Date().toISOString().split('T')[0],
+            notes: cleanNotes,
+            approver_id: editItem.approver_id ? Number(editItem.approver_id) : null,
+            approver_id_2: editItem.approver_id_2 ? Number(editItem.approver_id_2) : null,
+            approver_id_3: editItem.approver_id_3 ? Number(editItem.approver_id_3) : null,
+            related_user_ids: Array.isArray(editItem.related_user_ids)
+              ? editItem.related_user_ids.map(Number)
+              : (editItem.related_user_ids ? String(editItem.related_user_ids).split(',').map(Number) : []),
+            vendor_name: editItem.vendor_name || '',
+            has_vat_invoice: !!editItem.has_vat_invoice,
+            is_vat_inclusive: !!editItem.is_vat_inclusive,
+            entities: initialEntities,
+            image_url: editItem.image_url || '',
+            request_bank_transfer,
+            bank_name,
+            bank_account_number,
+            bank_account_name
+          });
+        } else {
+          // Find default manager approver based on team leader
+          const defaultApproverId = resolveTeamLeaderId(user, users, teams) || (users[0]?.id || null);
+
+          setImages([]);
+          setBeneficiaryType('vendor');
+          setSelectedEmployeeId('');
+          setForm({
+            ...EMPTY_FORM,
+            date: initialDate || new Date().toISOString().split('T')[0],
+            approver_id: defaultApproverId
+          });
+          setVendorSearch('');
         }
-        setImages(existingImages);
-
-        const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n]+)/;
-        const match = editItem.notes?.match(bankRegex);
-        let request_bank_transfer = false;
-        let bank_name = '';
-        let bank_account_number = '';
-        let bank_account_name = '';
-        let cleanNotes = editItem.notes || '';
-        if (match) {
-          request_bank_transfer = true;
-          bank_name = match[1].trim();
-          bank_account_number = match[2].trim();
-          bank_account_name = match[3].trim();
-          cleanNotes = editItem.notes.replace(bankRegex, '').trim();
-        }
-
-        let initialEntities: any[] = [];
-        if (Array.isArray(editItem.entities) && editItem.entities.length > 0) {
-          initialEntities = editItem.entities;
-        } else if (editItem.contact_id || (editItem.entity_type === 'contact' && editItem.entity_id)) {
-          const cId = Number(editItem.contact_id || editItem.entity_id);
-          const matchedContact = contacts.find((c: any) => Number(c.id) === cId);
-          initialEntities = [{
-            entity_type: 'contact',
-            entity_id: cId,
-            name: editItem.contact_name || (matchedContact ? (matchedContact.full_name || '').trim() : `Khách hàng #${cId}`),
-            avatar_url: matchedContact?.avatar_url || matchedContact?.avatar
-          }];
-        } else if (editItem.company_id || (editItem.entity_type === 'company' && editItem.entity_id)) {
-          const compId = Number(editItem.company_id || editItem.entity_id);
-          const matchedComp = companies.find((c: any) => Number(c.id) === compId);
-          initialEntities = [{
-            entity_type: 'company',
-            entity_id: compId,
-            name: editItem.company_name || matchedComp?.name || `Đối tác #${compId}`
-          }];
-        }
-
-        setForm({
-          title: editItem.title || '',
-          category: editItem.category || 'Khác',
-          amount: String(editItem.amount || 0),
-          currency: editItem.currency || 'VND',
-          vat_amount: editItem.vat_amount ? String(editItem.vat_amount) : '',
-          date: editItem.date || new Date().toISOString().split('T')[0],
-          notes: cleanNotes,
-          approver_id: editItem.approver_id ? Number(editItem.approver_id) : null,
-          approver_id_2: editItem.approver_id_2 ? Number(editItem.approver_id_2) : null,
-          approver_id_3: editItem.approver_id_3 ? Number(editItem.approver_id_3) : null,
-          related_user_ids: Array.isArray(editItem.related_user_ids)
-            ? editItem.related_user_ids.map(Number)
-            : (editItem.related_user_ids ? String(editItem.related_user_ids).split(',').map(Number) : []),
-          vendor_name: editItem.vendor_name || '',
-          has_vat_invoice: !!editItem.has_vat_invoice,
-          is_vat_inclusive: !!editItem.is_vat_inclusive,
-          entities: initialEntities,
-          image_url: editItem.image_url || '',
-          request_bank_transfer,
-          bank_name,
-          bank_account_number,
-          bank_account_name
-        });
-      } else {
-        // Find default manager approver based on team leader
-        const defaultApproverId = resolveTeamLeaderId(user, users, teams) || (users[0]?.id || null);
-
-        setImages([]);
-        setBeneficiaryType('vendor');
-        setSelectedEmployeeId('');
-        setForm({
-          ...EMPTY_FORM,
-          date: initialDate || new Date().toISOString().split('T')[0],
-          approver_id: defaultApproverId
-        });
-        setVendorSearch('');
+        setTimeout(() => {
+          isInitializedRef.current = true;
+        }, 50);
       }
-      setTimeout(() => {
-        isInitializedRef.current = true;
-      }, 50);
+    } else {
+      prevOpenRef.current = false;
+      prevEditItemRef.current = null;
+      isInitializedRef.current = false;
     }
-  }, [isOpen, editItem, initialDate, users, teams, contacts, companies, user]);
+  }, [isOpen, editItem, initialDate]);
+
+  // Default Director (Phạm Quang Vinh) and default Accountant
+  const defaultDirector = useMemo(() => {
+    const businessUsers = users.filter((u: any) => 
+      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
+      u.email !== 'turniodev@gmail.com'
+    );
+    return businessUsers.find((u: any) => {
+      const fn = String(u.full_name || u.name || '').toLowerCase();
+      const un = String(u.username || '').toLowerCase();
+      const em = String(u.email || '').toLowerCase();
+      return fn.includes('quang vinh') || un === 'vinhpq' || em.includes('vinhpq') || fn.includes('phạm quang vinh') || fn.includes('phan quang vinh');
+    })
+    || businessUsers.find((u: any) => String(u.role).toLowerCase() === 'director')
+    || businessUsers.find((u: any) => String(u.role).toLowerCase() === 'admin')
+    || null;
+  }, [users]);
+
+  const defaultAccountant = useMemo(() => {
+    const businessUsers = users.filter((u: any) => 
+      !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
+      u.email !== 'turniodev@gmail.com'
+    );
+    return businessUsers.find((u: any) => String(u.role).toLowerCase() === 'accountant')
+      || businessUsers.find((u: any) => {
+        const fn = String(u.full_name || u.name || '').toLowerCase();
+        return fn.includes('thu thảo') || u.username === 'thaont';
+      })
+      || null;
+  }, [users]);
+
+  // Dynamic 5M routing effect
+  useEffect(() => {
+    if (isOpen && !editItem && users.length > 0) {
+      const amt = Number(form.amount || 0);
+      if (amt >= threshold) {
+        setForm((prev: any) => ({
+          ...prev,
+          approver_id_2: defaultDirector?.id ? Number(defaultDirector.id) : prev.approver_id_2,
+          approver_id_3: defaultAccountant?.id ? Number(defaultAccountant.id) : prev.approver_id_3
+        }));
+      } else {
+        setForm((prev: any) => ({
+          ...prev,
+          approver_id_2: defaultAccountant?.id ? Number(defaultAccountant.id) : prev.approver_id_2,
+          approver_id_3: null
+        }));
+      }
+    }
+  }, [form.amount, threshold, isOpen, editItem, defaultDirector, defaultAccountant, users]);
 
   // Keep approver_id updated with team leader once users and teams finish loading
   useEffect(() => {
     if (isOpen && !editItem && !form.approver_id && (users.length > 0 || teams.length > 0)) {
-      const leaderId = resolveTeamLeaderId(user, users, teams);
+      const leaderId = resolveTeamLeaderId(user, users, teams) || users[0]?.id || null;
       if (leaderId) {
         setForm((prev: any) => ({ ...prev, approver_id: leaderId }));
       }
@@ -383,14 +466,16 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       return;
     }
     if (form.approver_id === null) {
-      addToast('Vui lòng chọn người duyệt Cấp 1', 'error');
+      addToast('Vui lòng chọn người duyệt Cấp 1 (Trưởng nhóm / Quản lý)', 'error');
       return;
     }
-    if (Number(form.amount || 0) >= threshold) {
-      if (form.approver_id_2 === null) {
-        addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 2 cấp. Vui lòng chọn người duyệt Cấp 2!`, 'error');
-        return;
-      }
+    if (form.approver_id_2 === null) {
+      addToast(Number(form.amount || 0) >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
+      return;
+    }
+    if (Number(form.amount || 0) >= threshold && form.approver_id_3 === null) {
+      addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc (Phạm Quang Vinh) -> Kế toán!`, 'error');
+      return;
     }
     setSaving(true);
     try {
@@ -599,53 +684,57 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     </label>
 
                     {/* Toggle: Nhà cung cấp vs Nhân viên */}
-                    <div style={{ display: 'inline-flex', padding: '3px', background: 'var(--color-bg-light)', borderRadius: '10px', border: '1px solid var(--color-border-light)', gap: '4px' }}>
+                    <div style={{
+                      display: 'inline-flex',
+                      padding: '4px',
+                      background: 'var(--color-bg-secondary, #f1f5f9)',
+                      borderRadius: '12px',
+                      border: '1.5px solid var(--color-border)',
+                      gap: '4px',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)'
+                    }}>
                       <button
                         type="button"
-                        onClick={() => {
-                          setBeneficiaryType('vendor');
-                        }}
+                        onClick={() => setBeneficiaryType('vendor')}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '4px 12px',
-                          borderRadius: '7px',
-                          fontSize: '0.78rem',
-                          fontWeight: beneficiaryType === 'vendor' ? 750 : 500,
-                          border: 'none',
-                          background: beneficiaryType === 'vendor' ? 'var(--color-surface)' : 'transparent',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          fontSize: '0.8125rem',
+                          fontWeight: beneficiaryType === 'vendor' ? 750 : 600,
+                          border: beneficiaryType === 'vendor' ? '1px solid var(--color-border-light)' : '1px solid transparent',
+                          background: beneficiaryType === 'vendor' ? 'var(--color-surface, #ffffff)' : 'transparent',
                           color: beneficiaryType === 'vendor' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                          boxShadow: beneficiaryType === 'vendor' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                          boxShadow: beneficiaryType === 'vendor' ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' : 'none',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.18s ease'
                         }}
                       >
-                        <Building2 size={13} />
+                        <Building2 size={14} style={{ color: beneficiaryType === 'vendor' ? 'var(--color-primary)' : 'inherit' }} />
                         <span>Nhà cung cấp / Đối tác</span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setBeneficiaryType('employee');
-                        }}
+                        onClick={() => setBeneficiaryType('employee')}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '4px 12px',
-                          borderRadius: '7px',
-                          fontSize: '0.78rem',
-                          fontWeight: beneficiaryType === 'employee' ? 750 : 500,
-                          border: 'none',
-                          background: beneficiaryType === 'employee' ? 'var(--color-surface)' : 'transparent',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          fontSize: '0.8125rem',
+                          fontWeight: beneficiaryType === 'employee' ? 750 : 600,
+                          border: beneficiaryType === 'employee' ? '1px solid var(--color-border-light)' : '1px solid transparent',
+                          background: beneficiaryType === 'employee' ? 'var(--color-surface, #ffffff)' : 'transparent',
                           color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                          boxShadow: beneficiaryType === 'employee' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                          boxShadow: beneficiaryType === 'employee' ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' : 'none',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.18s ease'
                         }}
                       >
-                        <Users size={13} />
+                        <Users size={14} style={{ color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'inherit' }} />
                         <span>Nhân viên</span>
                       </button>
                     </div>
@@ -715,7 +804,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       <CustomSelect
                         options={users.map((u: any) => ({
                           value: String(u.id),
-                          label: u.full_name,
+                          label: u.full_name || u.name || u.username || `Nhân viên #${u.id}`,
                           avatar: u.avatar_url || u.avatar,
                           sublabel: [
                             u.role || '',
@@ -728,19 +817,20 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           setSelectedEmployeeId(empId);
                           const emp = users.find((u: any) => String(u.id) === empId);
                           if (emp) {
+                            const empName = emp.full_name || emp.name || emp.username || '';
                             const hasBank = !!(emp.bank_name || emp.bank_account);
                             setForm((prev: any) => ({
                               ...prev,
-                              vendor_name: emp.full_name || '',
+                              vendor_name: empName,
                               request_bank_transfer: true,
                               bank_name: emp.bank_name || prev.bank_name || '',
                               bank_account_number: emp.bank_account || prev.bank_account_number || '',
-                              bank_account_name: (emp.full_name || '').toUpperCase()
+                              bank_account_name: empName.toUpperCase()
                             }));
                             if (hasBank) {
-                              addToast(`Đã tự động điền STK ngân hàng của ${emp.full_name}`, 'success');
+                              addToast(`Đã tự động điền STK ngân hàng của ${empName}`, 'success');
                             } else {
-                              addToast(`Nhân viên ${emp.full_name} chưa lưu STK trong hồ sơ. Vui lòng nhập STK ở bên dưới.`, 'info');
+                              addToast(`Nhân viên ${empName} chưa lưu STK trong hồ sơ. Vui lòng nhập STK ở bên dưới.`, 'info');
                             }
                           }
                         }}
@@ -1223,8 +1313,22 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
               </div>
 
-              {/* Right Column: Sidebar (Phê duyệt & Vận hành) */}
-              <div style={{ flex: isMobile ? 'none' : 3, display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '80px' }}>
+              {/* Right Column: Sidebar (Phê duyệt & Vận hành) - Sticky on Desktop */}
+              <div 
+                className="custom-scrollbar"
+                style={{ 
+                  flex: isMobile ? 'none' : 3, 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '1.25rem', 
+                  paddingBottom: isMobile ? '80px' : '20px',
+                  position: isMobile ? 'static' : 'sticky',
+                  top: 0,
+                  alignSelf: 'flex-start',
+                  maxHeight: isMobile ? 'none' : 'calc(100vh - 95px)',
+                  overflowY: isMobile ? 'visible' : 'auto'
+                }}
+              >
                 
                 {/* Áp dụng cho (Chia bill) */}
                 <div style={{ 
@@ -1496,8 +1600,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         3
                       </div>
                       <div>
-                        <strong style={{ fontSize: '0.8rem', color: Number(form.amount || 0) >= threshold ? 'var(--color-danger)' : 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
-                          Người duyệt Cấp 2 {Number(form.amount || 0) >= threshold ? '*' : '(Tùy chọn)'}
+                        <strong style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
+                          {Number(form.amount || 0) >= threshold ? (
+                            <>Người duyệt Cấp 2: Ban Giám đốc <span style={{ color: 'var(--color-danger)' }}>*</span></>
+                          ) : (
+                            <>Người duyệt Cấp 2: Kế toán <span style={{ color: 'var(--color-danger)' }}>*</span></>
+                          )}
                         </strong>
                         <CustomSelect
                           options={users.map((u: any) => ({
@@ -1544,8 +1652,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         4
                       </div>
                       <div>
-                        <strong style={{ fontSize: '0.8rem', color: form.approver_id_3 ? 'var(--color-text)' : 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
-                          Người duyệt Cấp 3 {Number(form.amount || 0) >= threshold ? '*' : '(Tùy chọn)'}
+                        <strong style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
+                          {Number(form.amount || 0) >= threshold ? (
+                            <>Người duyệt Cấp 3: Kế toán <span style={{ color: 'var(--color-danger)' }}>*</span></>
+                          ) : (
+                            <>Người duyệt Cấp 3 <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>(Chỉ trên 5tr)</span></>
+                          )}
                         </strong>
                         <CustomSelect
                           options={users.map((u: any) => ({

@@ -11396,7 +11396,7 @@ switch ($action) {
 
             // 2. Update Lead Table
             $updLead = $conn->prepare("UPDATE leads SET status = 'active', assigned_to = ?, note = ?, last_interaction_date = NOW(), target_round_id = ?, ai_screener_status = 'passed', is_accepted = IF(? > 0, 1, is_accepted), accepted_at = IF(? > 0, IFNULL(accepted_at, NOW()), accepted_at) WHERE id = ?");
-            $updLead->bind_param("isiiiii", $assignedConsultantId, $note, $targetRoundId, $assignedConsultantId, $assignedConsultantId, $lead_id);
+            $updLead->bind_param("isiiii", $assignedConsultantId, $note, $targetRoundId, $assignedConsultantId, $assignedConsultantId, $lead_id);
             $updLead->execute();
             $updLead->close();
 

@@ -228,7 +228,11 @@ class ContactController {
 
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
-                case 'tiem_nang':  $where[] = "c.status != 'customer'"; break;
+                case 'tiem_nang':
+                    if (empty($stage) && empty($leadStatus)) {
+                        $where[] = "c.status != 'customer'";
+                    }
+                    break;
                 case 'hot':        $where[] = 'c.lead_score >= 80'; break;
                 case 'customer':
                     if ($studentSubTab === 'le_phi' || $studentSubTab === 'nop_ho_so') {
@@ -274,7 +278,11 @@ class ContactController {
         $stageCounts = [];
         if (!$skipCounts) {
             try {
-                $baseWhereStr = implode(' AND ', $baseWhere);
+                // Ensure stageCounts query ignores c.status != 'customer' so all 14 stages (including enrolled) are accurately counted
+                $stageCountsWhere = array_filter($baseWhere, function($w) {
+                    return strpos($w, "c.status != 'customer'") === false;
+                });
+                $stageCountsWhereStr = !empty($stageCountsWhere) ? implode(' AND ', $stageCountsWhere) : '1=1';
 
                 // Single unified aggregate query for active stage counts, nurture count, and lost count
                 $aggStmt = $this->db->prepare("
@@ -284,11 +292,13 @@ class ContactController {
                             WHEN c.lead_status = 'nurture' THEN 'nurture'
                             ELSE 'active'
                         END as status_group,
-                        c.stage_id,
+                        COALESCE(c.stage_id, ps.id) as resolved_stage_id,
+                        ps.system_slug as stage_slug,
                         COUNT(*) as cnt
                     FROM contacts c
-                    WHERE $baseWhereStr
-                    GROUP BY status_group, c.stage_id
+                    LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND (c.pipeline_status = ps.system_slug OR c.pipeline_status = ps.id)))
+                    WHERE $stageCountsWhereStr
+                    GROUP BY status_group, resolved_stage_id, stage_slug
                 ");
                 $aggStmt->execute($baseParams);
                 $aggRows = $aggStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -299,7 +309,8 @@ class ContactController {
 
                 foreach ($aggRows as $row) {
                     $grp = $row['status_group'];
-                    $sId = $row['stage_id'];
+                    $sId = $row['resolved_stage_id'];
+                    $slug = $row['stage_slug'];
                     $cnt = (int)$row['cnt'];
 
                     if ($grp === 'nurture') {
@@ -310,6 +321,9 @@ class ContactController {
                         // Active pipeline leads
                         if (!empty($sId)) {
                             $stageCounts[(string)$sId] = ($stageCounts[(string)$sId] ?? 0) + $cnt;
+                        }
+                        if (!empty($slug)) {
+                            $stageCounts[(string)$slug] = ($stageCounts[(string)$slug] ?? 0) + $cnt;
                         }
                         $activeTotal += $cnt;
                     }
@@ -410,13 +424,35 @@ class ContactController {
             $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
         }
 
+        $stageSlug = !empty($_GET['stage_slug']) ? trim($_GET['stage_slug']) : '';
         if ($stage && !$isGlobalPipelineSearch) {
+            $isNum = is_numeric($stage);
             if ($stageOp === 'not_in') {
-                $where[] = 'c.stage_id != ?';
+                if ($isNum) {
+                    $where[] = "(c.stage_id != ? AND (c.pipeline_status IS NULL OR c.pipeline_status != ?))";
+                    $params[] = (int)$stage;
+                    $params[] = $stageSlug ?: (string)$stage;
+                } else {
+                    $where[] = "(c.pipeline_status != ? AND (c.stage_id IS NULL OR c.stage_id != (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1)))";
+                    $params[] = $stage;
+                    $params[] = $stage;
+                }
             } else {
-                $where[] = 'c.stage_id = ?';
+                if ($isNum) {
+                    $where[] = "(
+                        c.stage_id = ? 
+                        OR (c.stage_id IS NULL AND c.pipeline_status = ?)
+                        OR (c.stage_id IS NULL AND c.pipeline_status = (SELECT ps.system_slug FROM pipeline_stages ps WHERE ps.id = ? LIMIT 1))
+                    )";
+                    $params[] = (int)$stage;
+                    $params[] = $stageSlug ?: (string)$stage;
+                    $params[] = (int)$stage;
+                } else {
+                    $where[] = "(c.pipeline_status = ? OR c.stage_id = (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1))";
+                    $params[] = $stage;
+                    $params[] = $stage;
+                }
             }
-            $params[] = (int)$stage;
         }
 
         if (($uncontacted || $segment === 'not_contacted') && !$isGlobalPipelineSearch) {
