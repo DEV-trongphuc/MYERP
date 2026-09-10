@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check, Users, User } from 'lucide-react';
+import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check, Users, User, Landmark, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
@@ -371,9 +371,18 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             approver_id: editItem.approver_id ? Number(editItem.approver_id) : null,
             approver_id_2: editItem.approver_id_2 ? Number(editItem.approver_id_2) : null,
             approver_id_3: editItem.approver_id_3 ? Number(editItem.approver_id_3) : null,
-            related_user_ids: Array.isArray(editItem.related_user_ids)
-              ? editItem.related_user_ids.map(Number)
-              : (editItem.related_user_ids ? String(editItem.related_user_ids).split(',').map(Number) : []),
+            related_user_ids: (() => {
+              const raw = editItem.related_user_ids;
+              if (Array.isArray(raw)) return raw.map(Number).filter(Boolean);
+              if (typeof raw === 'string' && raw.trim()) {
+                try {
+                  const p = JSON.parse(raw);
+                  if (Array.isArray(p)) return p.map(Number).filter(Boolean);
+                } catch {}
+                return raw.split(',').map(s => Number(s.trim())).filter(Boolean);
+              }
+              return [];
+            })(),
             vendor_name: editItem.vendor_name || '',
             has_vat_invoice: !!editItem.has_vat_invoice,
             is_vat_inclusive: !!editItem.is_vat_inclusive,
@@ -1081,6 +1090,45 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       animate={{ opacity: 1, height: 'auto' }}
                       style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '12px' }}
                     >
+                      {/* Quick Auto-Fill Helpers */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {user && (user.bank_name || user.bank_account) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const myName = (user.full_name || user.name || '').toUpperCase();
+                              setForm({
+                                ...form,
+                                bank_name: user.bank_name || form.bank_name,
+                                bank_account_number: user.bank_account || form.bank_account_number,
+                                bank_account_name: myName || form.bank_account_name
+                              });
+                              addToast(`Đã điền thông tin tài khoản của ${user.full_name || user.name}`, 'success');
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              background: 'rgba(59, 130, 246, 0.08)',
+                              border: '1px solid rgba(59, 130, 246, 0.2)',
+                              color: '#2563eb',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Zap size={13} />
+                            Dùng STK của tôi ({user.bank_name || 'Ngân hàng'})
+                          </button>
+                        )}
+                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Landmark size={13} />
+                          <span>Hoặc nhập thông tin thụ hưởng bên dưới:</span>
+                        </div>
+                      </div>
+
                       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1rem' }}>
                         <div className="form-group" style={{ margin: 0 }}>
                           <label className="form-label" style={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--color-text-light)' }}>Tên ngân hàng *</label>

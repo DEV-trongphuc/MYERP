@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell, FileText } from 'lucide-react';
+import { X, XCircle, CheckCircle2, Pencil, Wallet, Clock, Package, MessageSquare, Loader2, Coffee, Trash2, Upload, Send, Info, Copy, Activity, Bell, FileText, Landmark } from 'lucide-react';
 import api from '../api/axios';
 import { Avatar } from './ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -1259,49 +1259,178 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       )}
                     </div>
                   </div>
+
+                  {/* Người liên quan (Theo dõi) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Người liên quan (Theo dõi)</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                      {(() => {
+                        const relIdsRaw = viewItem.related_user_ids;
+                        let relIds: number[] = [];
+                        if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
+                        else if (typeof relIdsRaw === 'string' && relIdsRaw.trim()) {
+                          try {
+                            const parsed = JSON.parse(relIdsRaw);
+                            if (Array.isArray(parsed)) relIds = parsed.map(Number);
+                            else relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                          } catch {
+                            relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                          }
+                        }
+                        const relUsers = users.filter((u: any) => relIds.includes(Number(u.id)));
+                        if (relUsers.length === 0) {
+                          return <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Không có</span>;
+                        }
+                        return relUsers.map((u: any) => (
+                          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.775rem' }}>
+                            <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={16} />
+                            <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
+                            {u.role && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>({u.role})</span>}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Bank Transfer Info parsed from notes */}
+              {/* Bank Transfer Info parsed from notes or description */}
               {(() => {
-                const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n]+)/;
-                const match = viewItem.notes?.match(bankRegex);
-                if (match) {
-                  const bankName = match[1].trim();
-                  const bankNum = match[2].trim();
-                  const bankOwner = match[3].trim();
-                  return (
-                    <div className="card" style={{ 
-                      background: 'var(--color-surface)',
-                      border: '1px solid rgba(16, 185, 129, 0.15)',
-                      borderRadius: '16px',
-                      padding: '1.5rem',
-                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '1rem'
-                    }}>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-success)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Wallet size={14} style={{ color: 'var(--color-success)' }} /> Thông tin chuyển khoản thụ hưởng
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Ngân hàng</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>{bankName}</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Số tài khoản (STK)</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', letterSpacing: '0.5px' }}>{bankNum}</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', gridColumn: 'span 2' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Tên người thụ hưởng</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>{bankOwner}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
+                const rawText = viewItem.notes || viewItem.description || '';
+                const bankMatch = rawText.match(/\[Thông tin chuyển khoản\]:\s*([^\n]+)/i);
+                let bankName = viewItem.bank_name || '';
+                let bankNum = viewItem.bank_account_number || viewItem.bank_account || '';
+                let bankOwner = viewItem.bank_account_name || viewItem.vendor_name || '';
+                let bankBranch = '';
+
+                if (bankMatch) {
+                  const fullBankStr = bankMatch[1].trim();
+                  const stkMatch = fullBankStr.match(/STK:\s*([0-9A-Za-z\-_]+)/i);
+                  const holderMatch = fullBankStr.match(/Chủ\s*TK:\s*([^-\n]+)/i);
+                  const branchMatch = fullBankStr.match(/Chi\s*nhánh:\s*([^-\n]+)/i);
+                  const bankNamePart = fullBankStr.split(/-\s*STK:/i)[0].replace(/^Ngân\s*hàng:\s*/i, '').trim();
+
+                  if (bankNamePart) bankName = bankNamePart;
+                  if (stkMatch) bankNum = stkMatch[1].trim();
+                  if (holderMatch) bankOwner = holderMatch[1].trim();
+                  if (branchMatch) bankBranch = branchMatch[1].trim();
                 }
-                return null;
+
+                if (!bankNum && !bankName) return null;
+
+                return (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                    color: '#ffffff',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.2)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '-40px',
+                      right: '-40px',
+                      width: '130px',
+                      height: '130px',
+                      borderRadius: '50%',
+                      background: 'radial-gradient(circle, rgba(59, 130, 246, 0.25) 0%, transparent 70%)',
+                      pointerEvents: 'none'
+                    }} />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Landmark size={18} style={{ color: '#60a5fa', flexShrink: 0 }} />
+                        <span style={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '0.02em', color: '#f8fafc' }}>
+                          {bankName || 'Chuyển khoản Ngân hàng'}
+                        </span>
+                      </div>
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: '#93c5fd'
+                      }}>
+                        Chuyển khoản 24/7
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.12)'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Số tài khoản (STK)
+                        </span>
+                        <span style={{
+                          fontSize: '1.25rem',
+                          fontWeight: 800,
+                          fontFamily: 'monospace',
+                          letterSpacing: '0.08em',
+                          color: '#38bdf8'
+                        }}>
+                          {bankNum || '—'}
+                        </span>
+                      </div>
+                      {bankNum && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(bankNum);
+                            addToast('Đã sao chép số tài khoản!', 'success');
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '7px 12px',
+                            borderRadius: '8px',
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            color: '#ffffff',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.78rem',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <Copy size={14} />
+                          <span>Sao chép</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '6px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Tên người thụ hưởng
+                        </span>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.04em', color: '#f1f5f9', marginTop: '2px', textTransform: 'uppercase' }}>
+                          {bankOwner || '—'}
+                        </div>
+                      </div>
+                      {bankBranch && (
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                          Chi nhánh: <span style={{ color: '#f1f5f9', fontWeight: 600 }}>{bankBranch}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
               })()}
 
               {/* Stationery Items Table & Structured Content Card */}
@@ -2013,6 +2142,43 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     Các bước thực hiện
                   </h3>
                   {renderTimeline()}
+
+                  {/* Related Persons in View Drawer */}
+                  {(() => {
+                    const relIdsRaw = viewItem?.related_user_ids;
+                    if (!relIdsRaw) return null;
+                    let relIds: number[] = [];
+                    if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
+                    else if (typeof relIdsRaw === 'string' && relIdsRaw.trim()) {
+                      try {
+                        const parsed = JSON.parse(relIdsRaw);
+                        if (Array.isArray(parsed)) relIds = parsed.map(Number);
+                        else relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                      } catch {
+                        relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                      }
+                    }
+                    const relUsers = users.filter((u: any) => relIds.includes(Number(u.id)));
+                    if (relUsers.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                          NGƯỜI LIÊN QUAN (THEO DÕI) ({relUsers.length})
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {relUsers.map((u: any) => (
+                            <div key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 10px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '10px' }}>
+                              <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={20} />
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
+                                {u.role && <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>{u.role}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

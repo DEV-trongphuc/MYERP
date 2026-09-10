@@ -121,15 +121,6 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
               position: 'relative'
             }}
           >
-            {/* Top decorative gradient bar */}
-            <div
-              style={{
-                height: '6px',
-                width: '100%',
-                background: 'linear-gradient(90deg, #f59e0b 0%, #ef4444 50%, #BD1D2D 100%)'
-              }}
-            />
-
             {/* Close button */}
             <button
               onClick={submitting ? undefined : onClose}
@@ -423,14 +414,7 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: isEarly ? '#b45309' : '#047857', fontWeight: 600 }}>
                     <Clock size={14} />
-                    <span>
-                      {t('Thời gian làm việc ca này:')}
-                      {lunchBreakDeductedMin > 0 && (
-                        <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--color-text-muted)', marginLeft: '6px' }}>
-                          ({t('đã trừ')} {lunchBreakDeductedMin >= 60 ? `${Math.round((lunchBreakDeductedMin / 60) * 10) / 10}h` : `${lunchBreakDeductedMin}p`} {t('nghỉ trưa')})
-                        </span>
-                      )}
-                    </span>
+                    <span>{t('Thời gian làm việc ca này:')}</span>
                   </span>
                   <span style={{ fontWeight: 800, color: isEarly ? '#b45309' : '#047857' }}>
                     {durationStr}
@@ -486,27 +470,6 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                   </span>
                 </div>
               )}
-
-              {/* Warm farewell & reminder note */}
-              <div
-                style={{
-                  background: 'var(--color-surface-hover, #f8fafc)',
-                  border: '1px dashed var(--color-border, #cbd5e1)',
-                  borderRadius: '12px',
-                  padding: '10px 12px',
-                  fontSize: '0.78125rem',
-                  color: 'var(--color-text-muted, #64748b)',
-                  lineHeight: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}
-              >
-                <span>💡</span>
-                <span>
-                  {t('Vui lòng kiểm tra lại đồ dùng cá nhân, máy tính và các thiết bị điện trước khi rời văn phòng.')}
-                </span>
-              </div>
             </div>
 
             {/* Action Buttons Footer */}

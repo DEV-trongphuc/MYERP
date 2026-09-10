@@ -641,14 +641,22 @@ class FinanceController
         if (!$isAdminOrDirectorOrAccountant) {
             if ($isManager) {
                 $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-                $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.refunder_id = ?)";
+                $where[] = "(e.created_by IN ($placeholders) OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)";
                 $params = array_merge($params, $userIds);
                 $params[] = $uid;
                 $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = '%"' . $uid . '"%';
+                $params[] = '%' . $uid . '%';
             } else if ($isSaleAdmin) {
                 $where[] = "(
                     e.created_by = ? 
                     OR e.approver_id = ?
+                    OR e.approver_id_2 = ?
+                    OR e.approver_id_3 = ?
+                    OR e.related_user_ids LIKE ?
+                    OR e.related_user_ids LIKE ?
                     OR EXISTS (
                         SELECT 1 FROM expense_entities ee 
                         JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
@@ -657,11 +665,19 @@ class FinanceController
                 )";
                 $params[] = $uid;
                 $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = '%"' . $uid . '"%';
+                $params[] = '%' . $uid . '%';
             } else {
-                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.refunder_id = ?)";
+                $where[] = "(e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.refunder_id = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)";
                 $params[] = $uid;
                 $params[] = $uid;
                 $params[] = $uid;
+                $params[] = $uid;
+                $params[] = $uid;
+                $params[] = '%"' . $uid . '"%';
+                $params[] = '%' . $uid . '%';
             }
         }
         if ($status) {
@@ -846,12 +862,21 @@ class FinanceController
         $sql = "SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, u2.full_name as approver_name, u2.avatar_url as approver_avatar, u3.full_name as refunder_name, u3.avatar_url as refunder_avatar, u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2, u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3 FROM expenses e LEFT JOIN users u ON e.created_by=u.id LEFT JOIN users u2 ON e.approver_id=u2.id LEFT JOIN users u3 ON e.refunder_id=u3.id LEFT JOIN users u4 ON e.approver_id_2=u4.id LEFT JOIN users u5 ON e.approver_id_3=u5.id WHERE e.id=? AND e.tenant_id=? AND e.deleted_at IS NULL";
         $p = [$id, $auth['tenant_id']];
         if ($auth['role'] === 'sales' || $auth['role'] === 'sale') {
-            $sql .= " AND e.created_by=?";
+            $sql .= " AND (e.created_by=? OR e.approver_id=? OR e.approver_id_2=? OR e.approver_id_3=? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ?)";
             $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = '%"' . $auth['user_id'] . '"%';
+            $p[] = '%' . $auth['user_id'] . '%';
         } else if ($auth['role'] === 'sale_admin' || $auth['role'] === 'saleadmin') {
             $sql .= " AND (
                 e.created_by = ? 
                 OR e.approver_id = ?
+                OR e.approver_id_2 = ?
+                OR e.approver_id_3 = ?
+                OR e.related_user_ids LIKE ?
+                OR e.related_user_ids LIKE ?
                 OR EXISTS (
                     SELECT 1 FROM expense_entities ee 
                     JOIN contacts c ON ee.entity_type = 'contact' AND ee.entity_id = c.id
@@ -860,9 +885,18 @@ class FinanceController
             )";
             $p[] = $auth['user_id'];
             $p[] = $auth['user_id'];
-        } else if ($auth['role'] === 'manager') {
-            $sql .= " AND (e.created_by = ? OR e.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
             $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = '%"' . $auth['user_id'] . '"%';
+            $p[] = '%' . $auth['user_id'] . '%';
+        } else if ($auth['role'] === 'manager') {
+            $sql .= " AND (e.created_by = ? OR e.approver_id = ? OR e.approver_id_2 = ? OR e.approver_id_3 = ? OR e.related_user_ids LIKE ? OR e.related_user_ids LIKE ? OR e.created_by IN (SELECT id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)))";
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = $auth['user_id'];
+            $p[] = '%"' . $auth['user_id'] . '"%';
+            $p[] = '%' . $auth['user_id'] . '%';
             $p[] = $auth['user_id'];
         }
         $stmt = $this->db->prepare($sql);
@@ -1055,16 +1089,20 @@ class FinanceController
                 // Notify related persons
                 if (!empty($data['related_user_ids'])) {
                     $relList = is_array($data['related_user_ids']) ? $data['related_user_ids'] : json_decode($data['related_user_ids'], true);
+                    if (!is_array($relList)) {
+                        $relList = explode(',', (string)$data['related_user_ids']);
+                    }
                     if (is_array($relList)) {
                         foreach ($relList as $relUid) {
                             $relUid = (int)$relUid;
                             if ($relUid > 0 && $relUid !== (int)$auth['user_id'] && $relUid !== (int)$approver_id) {
-                                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_RELATED', [
+                                    'target_user_id' => $relUid,
                                     'user_id' => $relUid,
                                     'user_name' => $auth['full_name'],
                                     'title' => $data['title'],
                                     'amount' => $totalAmount,
-                                    'reason' => ($data['notes'] ?? 'Không có') . ' (Bạn được gắn là Người liên quan)',
+                                    'reason' => $data['notes'] ?? 'Không có',
                                     'ref_id' => $expId
                                 ]);
                             }
@@ -1102,8 +1140,14 @@ class FinanceController
             'status_level_1',
             'status_level_2',
             'status_level_3',
-            'approval_status'
+            'approval_status',
+            'related_user_ids'
         ];
+        if (array_key_exists('related_user_ids', $data)) {
+            if (is_array($data['related_user_ids'])) {
+                $data['related_user_ids'] = json_encode($data['related_user_ids']);
+            }
+        }
         $canUpdateRefund = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'accountant', 'hr'], true);
         if ($canUpdateRefund) {
             $fields[] = 'refund_image_url';
@@ -1462,6 +1506,29 @@ class FinanceController
                     'reject_reason' => $data['reject_reason'] ?? '',
                     'ref_id' => $id
                 ]);
+
+                // Notify related persons of outcome
+                if (!empty($expenseRow['related_user_ids'])) {
+                    $relList = is_array($expenseRow['related_user_ids']) ? $expenseRow['related_user_ids'] : json_decode($expenseRow['related_user_ids'], true);
+                    if (!is_array($relList)) {
+                        $relList = explode(',', (string)$expenseRow['related_user_ids']);
+                    }
+                    if (is_array($relList)) {
+                        foreach ($relList as $relUid) {
+                            $relUid = (int)$relUid;
+                            if ($relUid > 0 && $relUid !== (int)$expenseRow['created_by'] && $relUid !== (int)$auth['user_id']) {
+                                NotificationService::send($this->db, $auth['tenant_id'], $nextStatus === 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_REJECTED', [
+                                    'target_user_id' => $relUid,
+                                    'title' => $expenseRow['title'],
+                                    'amount' => (float)$expenseRow['amount'],
+                                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
+                                    'reject_reason' => $data['reject_reason'] ?? '',
+                                    'ref_id' => $id
+                                ]);
+                            }
+                        }
+                    }
+                }
             } else if ($nextStatus === 'pending') {
                 // If transitioning to next approval level (Level 2 or Level 3), notify the next approver
                 $nextApproverId = 0;

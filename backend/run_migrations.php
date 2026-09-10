@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 253;
+$targetVersion = 254;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2822,8 +2822,24 @@ try {
         $logMsg("Nâng cấp lên phiên bản 253 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 254) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 254: Đảm bảo cột related_user_ids cho bảng expenses...", "info");
+        try {
+            $chkColExp = $conn->query("SHOW COLUMNS FROM `expenses` LIKE 'related_user_ids'");
+            if ($chkColExp && $chkColExp->num_rows == 0) {
+                $conn->query("ALTER TABLE `expenses` ADD COLUMN `related_user_ids` TEXT NULL AFTER `approval_status`");
+                $logMsg("Đã thêm cột related_user_ids vào bảng expenses.", "success");
+            } else {
+                $logMsg("Cột related_user_ids đã tồn tại trong bảng expenses.", "info");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 254: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 254 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '253') ON DUPLICATE KEY UPDATE setting_value = '253'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '254') ON DUPLICATE KEY UPDATE setting_value = '254'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

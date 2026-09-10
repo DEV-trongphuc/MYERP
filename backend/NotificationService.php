@@ -858,6 +858,54 @@ class NotificationService {
                                     "Vui lòng truy cập hệ thống CRM để phê duyệt."
                 ];
 
+            case 'EXPENSE_RELATED':
+                $targetUserId = (int)($payload['target_user_id'] ?? $payload['user_id'] ?? 0);
+                $recipients = [];
+                if ($targetUserId > 0) {
+                    $stmtUser = $db->prepare("SELECT id, email, zalo_chat_id, telegram_chat_id, full_name, role FROM users WHERE id = ? LIMIT 1");
+                    $stmtUser->execute([$targetUserId]);
+                    $userRow = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                    if ($userRow) $recipients[] = $userRow;
+                }
+                $titleText = $payload['title'] ?? 'Đề xuất';
+                $amt = (float)($payload['amount'] ?? 0);
+                $hasCost = $amt > 0;
+                $amountText = $hasCost ? number_format($amt, 0, ',', '.') . 'đ' : '';
+                $costSuffix = $hasCost ? " (" . $amountText . ")" : "";
+                $refId = $payload['ref_id'] ?? $payload['id'] ?? '';
+                $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#EXP-" . $refId : '');
+                $codePrefix = !empty($procCode) ? "[$procCode] " : "";
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "{$codePrefix}Bạn được thêm vào người liên quan đề xuất" . $costSuffix,
+                    'body' => "{$codePrefix}Nhân viên " . $userName . " đã thêm bạn là người liên quan trong đề xuất: " . $titleText . $costSuffix,
+                    'type' => "expense",
+                    'link' => "/approvals?open_id=" . $refId . "&open_type=expense",
+                    'zalo_msg' => "📋 [ NGƯỜI LIÊN QUAN ĐỀ XUẤT ]\n\n"
+                        . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
+                        . "Nhân viên $userName đã thêm bạn là người liên quan trong đề xuất:\n"
+                        . "  • Tiêu đề: $titleText\n"
+                        . ($hasCost ? "  • Kinh phí: $amountText\n" : "")
+                        . "  • Ghi chú: \"$reason\"\n\n"
+                        . "Vui lòng truy cập hệ thống để theo dõi.",
+                    'tg_msg' => "📋 <b>[ NGƯỜI LIÊN QUAN ĐỀ XUẤT ]</b>\n\n"
+                        . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
+                        . "Nhân viên <b>$userName</b> đã thêm bạn là người liên quan trong đề xuất:\n"
+                        . "  • Tiêu đề: <b>" . htmlspecialchars($titleText) . "</b>\n"
+                        . ($hasCost ? "  • Kinh phí: <b>$amountText</b>\n" : "")
+                        . "  • Ghi chú: <i>\"" . htmlspecialchars($reason) . "\"</i>\n\n"
+                        . "Vui lòng truy cập hệ thống để theo dõi.",
+                    'email_subject' => "[IDEAS] {$codePrefix}Bạn được thêm vào người liên quan Đề xuất - NV $userName" . $costSuffix,
+                    'email_title' => "NGƯỜI LIÊN QUAN ĐỀ XUẤT" . (!empty($procCode) ? " ($procCode)" : ""),
+                    'email_content' => "Chào bạn,<br/><br/>" .
+                                    (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
+                                    "Nhân viên <strong>$userName</strong> vừa thêm bạn là người liên quan trong đề xuất: <strong>" . htmlspecialchars($titleText) . "</strong>.<br/>" .
+                                    ($hasCost ? "Kinh phí dự kiến: <strong>$amountText</strong>.<br/>" : "") .
+                                    "Ghi chú: <em>\"" . htmlspecialchars($reason) . "\"</em>.<br/>" .
+                                    "Vui lòng truy cập hệ thống CRM để theo dõi."
+                ];
+
             case 'EXPENSE_APPROVED':
             case 'EXPENSE_REJECTED':
                 $isApproved = ($eventType === 'EXPENSE_APPROVED');

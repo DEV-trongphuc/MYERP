@@ -2348,8 +2348,10 @@ class HRMController {
         $leaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
         foreach ($leaves as $l) {
             $relArr = !empty($l['related_user_ids']) ? (is_array($l['related_user_ids']) ? $l['related_user_ids'] : json_decode($l['related_user_ids'], true)) : [];
-            if (!is_array($relArr)) $relArr = [];
-            $relArr = array_map('intval', $relArr);
+            if (!is_array($relArr)) {
+                $relArr = explode(',', (string)$l['related_user_ids']);
+            }
+            $relArr = array_filter(array_map('intval', $relArr));
 
             $isWatcher = in_array($userId, $relArr, true) || ($role === 'hr' && (int)$l['user_id'] !== $userId);
             if ($isWatcher && (int)$l['user_id'] !== $userId) {
@@ -2388,8 +2390,10 @@ class HRMController {
         $advances = $stmtAdvances->fetchAll(PDO::FETCH_ASSOC);
         foreach ($advances as $a) {
             $relArr = !empty($a['related_user_ids']) ? (is_array($a['related_user_ids']) ? $a['related_user_ids'] : json_decode($a['related_user_ids'], true)) : [];
-            if (!is_array($relArr)) $relArr = [];
-            $relArr = array_map('intval', $relArr);
+            if (!is_array($relArr)) {
+                $relArr = explode(',', (string)$a['related_user_ids']);
+            }
+            $relArr = array_filter(array_map('intval', $relArr));
 
             $isWatcher = in_array($userId, $relArr, true);
             if ($isWatcher && (int)$a['user_id'] !== $userId) {
@@ -2427,8 +2431,10 @@ class HRMController {
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
         foreach ($expenses as $e) {
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
-            if (!is_array($relArr)) $relArr = [];
-            $relArr = array_map('intval', $relArr);
+            if (!is_array($relArr)) {
+                $relArr = explode(',', (string)$e['related_user_ids']);
+            }
+            $relArr = array_filter(array_map('intval', $relArr));
 
             $isWatcher = in_array($userId, $relArr, true);
             if ($isWatcher && (int)$e['user_id'] !== $userId) {
@@ -2481,8 +2487,10 @@ class HRMController {
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
         foreach ($bulks as $b) {
             $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true)) : [];
-            if (!is_array($relArr)) $relArr = [];
-            $relArr = array_map('intval', $relArr);
+            if (!is_array($relArr)) {
+                $relArr = explode(',', (string)$b['related_user_ids']);
+            }
+            $relArr = array_filter(array_map('intval', $relArr));
 
             if (in_array($userId, $relArr, true)) {
                 list($bTitle, $bDesc) = self::formatBulkTitleAndDesc($b);
@@ -2663,8 +2671,10 @@ class HRMController {
         $expenses = $stmtExpenses->fetchAll(PDO::FETCH_ASSOC);
         foreach ($expenses as $e) {
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
-            if (!is_array($relArr)) $relArr = [];
-            $relArr = array_map('intval', $relArr);
+            if (!is_array($relArr)) {
+                $relArr = explode(',', (string)$e['related_user_ids']);
+            }
+            $relArr = array_filter(array_map('intval', $relArr));
 
             $isZeroAmt = (float)($e['amount'] ?? 0) == 0;
             $displayTitle = $e['title'];
