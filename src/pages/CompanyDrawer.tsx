@@ -655,6 +655,13 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         <Mail size={12} /> {formData?.email || 'Chưa có Email'}
                         {formData?.email && <CopyButton text={formData.email} />}
                       </span>
+                      {formData?.address && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', maxWidth: 260 }} title={formData.address}>
+                          <MapPin size={12} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formData.address}</span>
+                          <CopyButton text={formData.address} />
+                        </span>
+                      )}
                       <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Globe size={12} />
                         {formData?.website ? (

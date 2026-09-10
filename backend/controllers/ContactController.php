@@ -1324,6 +1324,22 @@ class ContactController {
             $params[] = $b['company_id'] ? (int)$b['company_id'] : null;
         }
 
+        // Auto-synchronize stage_id and pipeline_status to prevent desync
+        if (!empty($b['pipeline_status'])) {
+            $psLookup = $this->db->prepare("SELECT id, name FROM pipeline_stages WHERE (system_slug = ? OR CAST(id AS CHAR) = ?) AND tenant_id = ? LIMIT 1");
+            $psLookup->execute([$b['pipeline_status'], $b['pipeline_status'], $auth['tenant_id']]);
+            $psRow = $psLookup->fetch();
+            if ($psRow) {
+                $b['stage_id'] = (int)$psRow['id'];
+            }
+        } elseif (!empty($b['stage_id'])) {
+            $psLookup = $this->db->prepare("SELECT system_slug FROM pipeline_stages WHERE id = ? AND tenant_id = ? LIMIT 1");
+            $psLookup->execute([(int)$b['stage_id'], $auth['tenant_id']]);
+            $foundSlug = $psLookup->fetchColumn();
+            if ($foundSlug) {
+                $b['pipeline_status'] = $foundSlug;
+            }
+        }
 
         foreach ($fields as $f) {
             if ($f === 'company_id') continue;
@@ -1869,6 +1885,12 @@ class ContactController {
             }
         }
 
+        // Auto include the contact's assigned owner if someone else moved the pipeline
+        $ownerId = (int)($currentContact['owner_id'] ?? 0);
+        if ($ownerId > 0 && $ownerId !== (int)$auth['user_id'] && !in_array($ownerId, $notifyUserIds, true)) {
+            $notifyUserIds[] = $ownerId;
+        }
+
         if (!empty($notifyUserIds)) {
             try {
                 $senderName = $auth['full_name'] ?? 'Hệ thống';
@@ -1877,7 +1899,7 @@ class ContactController {
                 $phoneStr = !empty($custPhone) ? " ($custPhone)" : "";
                 
                 $notifTitle = "📢 Chuyển Pipeline: {$contactName} ➔ {$newStageName}";
-                $notifBody = "{$senderName} vừa chuyển khách hàng \"{$contactName}\"{$phoneStr} sang giai đoạn \"{$newStageName}\".";
+                $notifBody = "{$senderName} vừa chuyển khách hàng \"{$contactName}\"{$phoneStr} (ID: #{$id}) sang giai đoạn \"{$newStageName}\".";
                 if (!empty($userNote)) {
                     $notifBody .= "\n📝 Ghi chú: {$userNote}";
                 }

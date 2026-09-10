@@ -500,8 +500,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   // Global event listener for instant drawer opening when notification is clicked
   useEffect(() => {
     const handleOpenContactDrawer = (e: any) => {
-      const cid = Number(e.detail?.id);
-      if (cid) {
+      const cid = Number(e.detail?.id || e.detail?.contactId);
+      if (cid && !isNaN(cid) && cid > 0) {
         api.get(`/contacts/${cid}`).then(res => {
           if (res.data.success && res.data.data) {
             setProfileContact(res.data.data);

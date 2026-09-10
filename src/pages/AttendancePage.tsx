@@ -529,7 +529,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [selectedDateForDetail, setSelectedDateForDetail] = useState<string | null>(null);
   const hasCheckIn = selectedDateForDetail ? calendarCheckIns.some(c => c.check_in_date === selectedDateForDetail) : false;
   const [modalTab, setModalTab] = useState<'checkin' | 'fingerprint' | 'night_duty' | 'requests' | 'activities'>('checkin');
-  const [exceptionFilter, setExceptionFilter] = useState<'all' | 'leave' | 'late' | 'early' | 'supplementary' | 'overtime'>('all');
+  const [exceptionFilter, setExceptionFilter] = useState<'all' | 'leave' | 'supplementary' | 'overtime'>('all');
 
   // Aggregated exceptions & requests for the selected day in detail modal
   const dayExceptions = useMemo(() => {
@@ -598,11 +598,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       });
     });
 
-    // 2. Check-ins with Late Check-in or Reason or Supplementary or Early Checkout
+    // 2. Check-ins with Supplementary / Work Update requests
     const dayCIns = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail);
     dayCIns.forEach(c => {
-      const isLate = c.check_in_time > (c.work_start_time || '08:00');
-      const isSupplementary = !c.selfie_url;
+      // Chỉ nhận diện các bản ghi Bổ sung công / Cập nhật công thực tế (không có ảnh selfie và có lý do hoặc đang chờ duyệt)
+      const isSupplementary = !c.selfie_url && (Boolean(c.reason) || c.status === 'pending_approval');
 
       if (isSupplementary) {
         items.push({
@@ -614,84 +614,16 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           user_name: c.user_name,
           user_avatar: c.user_avatar,
           user_email: c.user_email,
-          typeName: t('Bổ sung công / Quên chấm'),
+          typeName: t('Bổ sung công / Cập nhật công'),
           typeColor: '#8b5cf6',
           typeBg: 'rgba(139, 92, 246, 0.1)',
           typeBorder: 'rgba(139, 92, 246, 0.25)',
           detailTime: `${t('Giờ đề xuất')}: ${c.check_in_time || '08:00'}${c.check_out_time ? ` → ${c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)}` : ''}`,
-          reason: c.reason || t('Quên check-in, yêu cầu cập nhật bổ sung công'),
+          reason: c.reason || t('Yêu cầu cập nhật bổ sung công'),
           status: c.status,
           created_at: c.created_at,
           raw: c
         });
-      } else if (isLate) {
-        let lateDesc = '';
-        try {
-          const [inH, inM] = c.check_in_time.split(':').map(Number);
-          const [stdH, stdM] = (c.work_start_time || '08:00').split(':').map(Number);
-          const diffM = (inH * 60 + inM) - (stdH * 60 + stdM);
-          if (diffM > 0) {
-            const h = Math.floor(diffM / 60);
-            const m = diffM % 60;
-            lateDesc = h > 0 ? `${t('Trễ')} ${h}h ${m}p` : `${t('Trễ')} ${m} ${t('phút')}`;
-          }
-        } catch (e) {}
-
-        items.push({
-          id: `late-${c.id}`,
-          originalId: c.id,
-          category: 'late',
-          subType: 'late',
-          user_id: c.user_id,
-          user_name: c.user_name,
-          user_avatar: c.user_avatar,
-          user_email: c.user_email,
-          typeName: t('Đi muộn (Check-in trễ)'),
-          typeColor: '#ea580c',
-          typeBg: 'rgba(234, 88, 12, 0.1)',
-          typeBorder: 'rgba(234, 88, 12, 0.25)',
-          detailTime: `${t('Vào ca')}: ${c.check_in_time} (Quy định: ${c.work_start_time || '08:00'})${lateDesc ? ` • ${lateDesc}` : ''}`,
-          reason: c.reason ? c.reason : t('Chưa có giải trình lý do'),
-          status: c.status,
-          created_at: c.created_at,
-          raw: c
-        });
-      }
-
-      // Check early checkout if exists
-      const outTime = c.check_out_time ? (c.check_out_time.length > 8 ? c.check_out_time.substring(11, 16) : c.check_out_time.substring(0, 5)) : '';
-      const stdEndTime = c.work_end_time || '17:30';
-      if (outTime && outTime < stdEndTime && !isSupplementary) {
-        let earlyDesc = '';
-        try {
-          const [outH, outM] = outTime.split(':').map(Number);
-          const [endH, endM] = stdEndTime.split(':').map(Number);
-          const diffM = (endH * 60 + endM) - (outH * 60 + outM);
-          if (diffM >= 10) {
-            const h = Math.floor(diffM / 60);
-            const m = diffM % 60;
-            earlyDesc = h > 0 ? `${t('Sớm')} ${h}h ${m}p` : `${t('Sớm')} ${m} ${t('phút')}`;
-            items.push({
-              id: `early-${c.id}`,
-              originalId: c.id,
-              category: 'early',
-              subType: 'early',
-              user_id: c.user_id,
-              user_name: c.user_name,
-              user_avatar: c.user_avatar,
-              user_email: c.user_email,
-              typeName: t('Về sớm (Check-out sớm)'),
-              typeColor: '#d946ef',
-              typeBg: 'rgba(217, 70, 239, 0.1)',
-              typeBorder: 'rgba(217, 70, 239, 0.25)',
-              detailTime: `${t('Ra ca')}: ${outTime} (Quy định: ${stdEndTime}) • ${earlyDesc}`,
-              reason: c.reason_checkout || c.reason || t('Check-out trước giờ tan ca'),
-              status: c.status,
-              created_at: c.created_at,
-              raw: c
-            });
-          }
-        } catch (e) {}
       }
     });
 
@@ -731,8 +663,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const filteredDayExceptions = useMemo(() => {
     if (exceptionFilter === 'all') return dayExceptions;
     if (exceptionFilter === 'leave') return dayExceptions.filter(e => e.category === 'leave');
-    if (exceptionFilter === 'late') return dayExceptions.filter(e => e.category === 'late');
-    if (exceptionFilter === 'early') return dayExceptions.filter(e => e.category === 'early');
     if (exceptionFilter === 'supplementary') return dayExceptions.filter(e => e.category === 'supplementary');
     if (exceptionFilter === 'overtime') return dayExceptions.filter(e => e.category === 'overtime');
     return dayExceptions;
@@ -1696,7 +1626,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             const pending = dayCheckIns ? dayCheckIns.filter(c => c.status === 'pending_approval') : [];
             const rejected = dayCheckIns ? dayCheckIns.filter(c => c.status === 'rejected') : [];
             const isToday = cell.dateStr && new Date().toDateString() === new Date(cell.dateStr).toDateString();
-            const hasPending = cell.dateStr && (pending.length > 0 || dayShifts.some(s => Number(s.approved) === 0));
+            const hasPending = cell.dateStr && (
+              pending.length > 0 || 
+              dayShifts.some(s => Number(s.approved) === 0) ||
+              dayLeaves.some(l => Number(l.approved) === 0 && l.status !== 'rejected' && l.status !== 'approved')
+            );
 
             return (
               <div
@@ -1940,167 +1874,262 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                         )
                       )}
 
-                      {/* 2. Render Shift Registrations & Overtime */}
-                      {dayShifts.length > 0 && (
-                        filterUser === 'all' ? (
-                          <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '4px', paddingLeft: '4px' }}>
-                            {(() => {
-                              const nights = dayShifts.filter(s => s.shift_type === 'night');
-                              const weekends = dayShifts.filter(s => s.shift_type === 'weekend');
-                              const holidays = dayShifts.filter(s => s.shift_type === 'holiday');
-                              const overtimes = dayShifts.filter(s => s.shift_type === 'overtime');
-                              return (
-                                <>
-                                  {nights.length > 0 && (
-                                    <span 
-                                      style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                      title={t('Trực đêm: ') + nights.map(n => n.user_name).join(', ')}
-                                    >
-                                      <Moon size={11} /> {nights.length}
-                                    </span>
-                                  )}
-                                  {weekends.length > 0 && (
-                                    <span 
-                                      style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                      title={t('Cuối tuần: ') + weekends.map(w => w.user_name).join(', ')}
-                                    >
-                                      <Calendar size={11} /> {weekends.length}
-                                    </span>
-                                  )}
-                                  {holidays.length > 0 && (
-                                    <span 
-                                      style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                      title={t('Ngày lễ: ') + holidays.map(h => h.user_name).join(', ')}
-                                    >
-                                      <Zap size={11} /> {holidays.length}
-                                    </span>
-                                  )}
-                                  {overtimes.length > 0 && (
-                                    <span 
-                                      style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '6px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                                      title={t('Tăng ca (OT): ') + overtimes.map(o => `${o.user_name} (${o.start_time || ''}-${o.end_time || ''})`).join(', ')}
-                                    >
-                                      <Zap size={11} /> {overtimes.length}
-                                    </span>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
-                            {dayShifts.map(s => {
-                              let label = isMobile ? t('Đêm') : t('Trực đêm');
-                              let bg = 'rgba(245, 158, 11, 0.05)';
-                              let border = 'rgba(245, 158, 11, 0.2)';
-                              let text = '#d97706';
-                              let ShiftIcon = Moon;
-                              if (s.shift_type === 'weekend') {
-                                label = isMobile ? t('C.tuần') : t('Cuối tuần');
-                                bg = 'rgba(239, 68, 68, 0.05)';
-                                border = 'rgba(239, 68, 68, 0.2)';
-                                text = '#ef4444';
-                                ShiftIcon = Calendar;
-                              } else if (s.shift_type === 'holiday') {
-                                label = s.holiday_name ? (isMobile ? t('Lễ') : `${t('Lễ')} (${s.holiday_name})`) : t('Ngày lễ');
-                                bg = 'rgba(239, 68, 68, 0.05)';
-                                border = 'rgba(239, 68, 68, 0.2)';
-                                text = '#ef4444';
-                                ShiftIcon = Zap;
-                              } else if (s.shift_type === 'overtime') {
-                                const timeRange = s.start_time && s.end_time ? `${s.start_time}-${s.end_time}` : '';
-                                label = isMobile ? (timeRange ? `OT ${timeRange}` : t('Tăng ca')) : `${t('Tăng ca')} ${timeRange ? `(${timeRange})` : ''}`;
-                                bg = 'rgba(139, 92, 246, 0.08)';
-                                border = 'rgba(139, 92, 246, 0.28)';
-                                text = '#8b5cf6';
-                                ShiftIcon = Zap;
-                              }
+                      {/* 2 & 3. Render Shift Registrations, Overtime, WFH & Leaves */}
+                      {filterUser === 'all' ? (
+                        /* Gôm gọn toàn bộ Sự kiện (Ca trực, Tăng ca, WFH, Nghỉ phép) vào hàng badge siêu gọn gàng */
+                        (() => {
+                          const nights = dayShifts.filter(s => s.shift_type === 'night');
+                          const weekends = dayShifts.filter(s => s.shift_type === 'weekend');
+                          const holidays = dayShifts.filter(s => s.shift_type === 'holiday');
+                          const overtimes = dayShifts.filter(s => s.shift_type === 'overtime');
+                          const wfhList = dayLeaves.filter(lv => lv.leave_type === 'remote_work');
+                          const leaveList = dayLeaves.filter(lv => lv.leave_type !== 'remote_work');
 
-                              const isAppr = Number(s.approved) === 1 || s.status === 'approved';
+                          const hasAnyBadges = nights.length > 0 || weekends.length > 0 || holidays.length > 0 || overtimes.length > 0 || wfhList.length > 0 || leaveList.length > 0;
+                          if (!hasAnyBadges) return null;
 
-                              return (
-                                <div key={`${s.shift_type}-${s.id}`} style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  fontSize: isMobile ? '0.625rem' : '0.68rem',
-                                  padding: isMobile ? '2px 4px' : '3px 6px',
-                                  borderRadius: '6px',
-                                  border: '1px solid ' + border,
-                                  backgroundColor: bg,
-                                  color: text,
-                                  fontWeight: 600
-                                }} title={`${label} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '70px' : '110px' }}>
-                                    <ShiftIcon size={isMobile ? 8 : 10} />
-                                    {label}
-                                  </span>
-                                  <span style={{
-                                    fontSize: isMobile ? '0.5rem' : '0.58rem',
-                                    padding: '1px 4px',
-                                    borderRadius: '3px',
-                                    fontWeight: 700,
-                                    backgroundColor: isAppr ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.18)',
-                                    color: isAppr ? '#10b981' : '#d97706',
-                                    whiteSpace: 'nowrap'
-                                  }}>
-                                    {isAppr ? (isMobile ? '✓' : t('Duyệt')) : (isMobile ? '⏳' : t('Chờ'))}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )
-                      )}
-
-                      {/* 3. Render Leaves (Nghỉ phép, WFH) */}
-                      {dayLeaves.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
-                          {dayLeaves.map(lv => {
-                            const isAppr = Number(lv.approved) === 1 || lv.status === 'approved';
-                            const isWFH = lv.leave_type === 'remote_work';
-                            const isHalfDay = Number(lv.total_days) === 0.5;
-                            const lvLabel = isWFH 
-                              ? (isMobile ? t('WFH') : t('Làm từ xa (WFH)'))
-                              : isHalfDay
-                              ? (isMobile ? t('Nửa buổi') : (lv.start_time && lv.start_time < '12:00' ? t('Nghỉ sáng') : t('Nghỉ chiều')))
-                              : (isMobile ? t('Nghỉ phép') : t('Nghỉ phép'));
-                            const lvColor = isWFH ? '#10b981' : (isHalfDay ? '#ea580c' : '#f43f5e');
-                            const lvBg = isWFH ? 'rgba(16, 185, 129, 0.08)' : (isHalfDay ? 'rgba(234, 88, 12, 0.08)' : 'rgba(244, 63, 94, 0.08)');
-                            const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : (isHalfDay ? 'rgba(234, 88, 12, 0.25)' : 'rgba(244, 63, 94, 0.25)');
-
-                            return (
-                              <div key={`lv-${lv.id}`} style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                fontSize: isMobile ? '0.625rem' : '0.68rem',
-                                padding: isMobile ? '2px 4px' : '3px 6px',
-                                borderRadius: '6px',
-                                border: '1px solid ' + lvBorder,
-                                backgroundColor: lvBg,
-                                color: lvColor,
-                                fontWeight: 600
-                              }} title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '65px' : '95px' }}>
-                                  {isWFH ? <MapPin size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
-                                  {lvLabel}
+                          return (
+                            <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '3px', paddingLeft: '2px' }}>
+                              {/* Trực đêm */}
+                              {nights.length > 0 && (
+                                <span 
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  title={t('Trực đêm: ') + nights.map(n => n.user_name).join(', ')}
+                                >
+                                  <Moon size={10} /> {nights.length} {t('Đêm')}
                                 </span>
-                                <span style={{
-                                  fontSize: isMobile ? '0.5rem' : '0.58rem',
-                                  padding: '1px 4px',
-                                  borderRadius: '3px',
-                                  fontWeight: 700,
-                                  backgroundColor: isAppr ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.18)',
-                                  color: isAppr ? '#10b981' : '#d97706',
-                                  whiteSpace: 'nowrap'
-                                }}>
-                                  {isAppr ? (isMobile ? '✓' : t('Duyệt')) : (isMobile ? '⏳' : t('Chờ'))}
+                              )}
+
+                              {/* Cuối tuần */}
+                              {weekends.length > 0 && (
+                                <span 
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  title={t('Cuối tuần: ') + weekends.map(w => w.user_name).join(', ')}
+                                >
+                                  <Calendar size={10} /> {weekends.length} {t('C.tuần')}
                                 </span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              )}
+
+                              {/* Ngày lễ */}
+                              {holidays.length > 0 && (
+                                <span 
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  title={t('Ngày lễ: ') + holidays.map(h => h.user_name).join(', ')}
+                                >
+                                  <Zap size={10} /> {holidays.length} {t('Lễ')}
+                                </span>
+                              )}
+
+                              {/* Tăng ca (OT) */}
+                              {overtimes.length > 0 && (
+                                <span 
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  title={t('Tăng ca (OT): ') + overtimes.map(o => `${o.user_name} (${o.start_time || ''}-${o.end_time || ''})`).join(', ')}
+                                >
+                                  <Zap size={10} /> {overtimes.length} OT
+                                </span>
+                              )}
+
+                              {/* Làm từ xa (WFH) */}
+                              {wfhList.length > 0 && (() => {
+                                const appr = wfhList.filter(l => Number(l.approved) === 1 || l.status === 'approved').length;
+                                const pend = wfhList.length - appr;
+                                const tooltip = `🏠 ${t('Làm từ xa (WFH)')} (${wfhList.length} ${t('người')}):\n` +
+                                  wfhList.map(l => `• ${l.user_name || l.full_name || t('Nhân viên')} (${(Number(l.approved) === 1 || l.status === 'approved') ? t('Đã duyệt') : t('Chờ duyệt')})`).join('\n');
+                                return (
+                                  <span
+                                    style={{
+                                      fontSize: '0.62rem',
+                                      padding: '1.5px 5px',
+                                      borderRadius: '5px',
+                                      background: 'rgba(16, 185, 129, 0.12)',
+                                      color: '#059669',
+                                      border: '1px solid rgba(16, 185, 129, 0.25)',
+                                      fontWeight: 700,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title={tooltip}
+                                  >
+                                    <Home size={10} />
+                                    <span>{wfhList.length} WFH</span>
+                                    {pend > 0 && (
+                                      <span style={{ fontSize: '0.55rem', padding: '0 2px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.2)', color: '#d97706', fontWeight: 800 }}>
+                                        ⏳{pend}
+                                      </span>
+                                    )}
+                                    {appr > 0 && pend === 0 && (
+                                      <span style={{ fontSize: '0.55rem', color: '#10b981', fontWeight: 800 }}>✓</span>
+                                    )}
+                                  </span>
+                                );
+                              })()}
+
+                              {/* Nghỉ phép */}
+                              {leaveList.length > 0 && (() => {
+                                const appr = leaveList.filter(l => Number(l.approved) === 1 || l.status === 'approved').length;
+                                const pend = leaveList.length - appr;
+                                const tooltip = `🏖️ ${t('Nghỉ phép')} (${leaveList.length} ${t('người')}):\n` +
+                                  leaveList.map(l => {
+                                    const name = l.user_name || l.full_name || t('Nhân viên');
+                                    const isA = Number(l.approved) === 1 || l.status === 'approved';
+                                    const typeStr = Number(l.total_days) === 0.5 ? t('Nửa buổi') : t('Nghỉ phép');
+                                    return `• ${name}: ${typeStr} (${isA ? t('Đã duyệt') : t('Chờ duyệt')})`;
+                                  }).join('\n');
+                                return (
+                                  <span
+                                    style={{
+                                      fontSize: '0.62rem',
+                                      padding: '1.5px 5px',
+                                      borderRadius: '5px',
+                                      background: 'rgba(244, 63, 94, 0.1)',
+                                      color: '#e11d48',
+                                      border: '1px solid rgba(244, 63, 94, 0.25)',
+                                      fontWeight: 700,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title={tooltip}
+                                  >
+                                    <Calendar size={10} />
+                                    <span>{leaveList.length} {t('Nghỉ')}</span>
+                                    {pend > 0 && (
+                                      <span style={{ fontSize: '0.55rem', padding: '0 2px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.2)', color: '#d97706', fontWeight: 800 }}>
+                                        ⏳{pend}
+                                      </span>
+                                    )}
+                                    {appr > 0 && pend === 0 && (
+                                      <span style={{ fontSize: '0.55rem', color: '#10b981', fontWeight: 800 }}>✓</span>
+                                    )}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        /* Chế độ xem theo 1 nhân sự cụ thể / "Của tôi" */
+                        <>
+                          {/* Ca trực & OT */}
+                          {dayShifts.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
+                              {dayShifts.map(s => {
+                                let label = isMobile ? t('Đêm') : t('Trực đêm');
+                                let bg = 'rgba(245, 158, 11, 0.05)';
+                                let border = 'rgba(245, 158, 11, 0.2)';
+                                let text = '#d97706';
+                                let ShiftIcon = Moon;
+                                if (s.shift_type === 'weekend') {
+                                  label = isMobile ? t('C.tuần') : t('Cuối tuần');
+                                  bg = 'rgba(239, 68, 68, 0.05)';
+                                  border = 'rgba(239, 68, 68, 0.2)';
+                                  text = '#ef4444';
+                                  ShiftIcon = Calendar;
+                                } else if (s.shift_type === 'holiday') {
+                                  label = s.holiday_name ? (isMobile ? t('Lễ') : `${t('Lễ')} (${s.holiday_name})`) : t('Ngày lễ');
+                                  bg = 'rgba(239, 68, 68, 0.05)';
+                                  border = 'rgba(239, 68, 68, 0.2)';
+                                  text = '#ef4444';
+                                  ShiftIcon = Zap;
+                                } else if (s.shift_type === 'overtime') {
+                                  const timeRange = s.start_time && s.end_time ? `${s.start_time}-${s.end_time}` : '';
+                                  label = isMobile ? (timeRange ? `OT ${timeRange}` : t('Tăng ca')) : `${t('Tăng ca')} ${timeRange ? `(${timeRange})` : ''}`;
+                                  bg = 'rgba(139, 92, 246, 0.08)';
+                                  border = 'rgba(139, 92, 246, 0.28)';
+                                  text = '#8b5cf6';
+                                  ShiftIcon = Zap;
+                                }
+
+                                const isAppr = Number(s.approved) === 1 || s.status === 'approved';
+
+                                return (
+                                  <div key={`${s.shift_type}-${s.id}`} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: isMobile ? '0.625rem' : '0.68rem',
+                                    padding: isMobile ? '2px 4px' : '3px 6px',
+                                    borderRadius: '6px',
+                                    border: '1px solid ' + border,
+                                    backgroundColor: bg,
+                                    color: text,
+                                    fontWeight: 600
+                                  }} title={`${label} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '70px' : '110px' }}>
+                                      <ShiftIcon size={isMobile ? 8 : 10} />
+                                      {label}
+                                    </span>
+                                    <span style={{
+                                      fontSize: isMobile ? '0.5rem' : '0.58rem',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      fontWeight: 700,
+                                      backgroundColor: isAppr ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.18)',
+                                      color: isAppr ? '#10b981' : '#d97706',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {isAppr ? (isMobile ? '✓' : t('Duyệt')) : (isMobile ? '⏳' : t('Chờ'))}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Nghỉ phép / WFH của cá nhân */}
+                          {dayLeaves.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
+                              {dayLeaves.map(lv => {
+                                const isAppr = Number(lv.approved) === 1 || lv.status === 'approved';
+                                const isWFH = lv.leave_type === 'remote_work';
+                                const isHalfDay = Number(lv.total_days) === 0.5;
+                                const lvLabel = isWFH 
+                                  ? (isMobile ? t('WFH') : t('Làm từ xa (WFH)'))
+                                  : isHalfDay
+                                  ? (isMobile ? t('Nửa buổi') : (lv.start_time && lv.start_time < '12:00' ? t('Nghỉ sáng') : t('Nghỉ chiều')))
+                                  : (isMobile ? t('Nghỉ phép') : t('Nghỉ phép'));
+                                const lvColor = isWFH ? '#10b981' : (isHalfDay ? '#ea580c' : '#f43f5e');
+                                const lvBg = isWFH ? 'rgba(16, 185, 129, 0.08)' : (isHalfDay ? 'rgba(234, 88, 12, 0.08)' : 'rgba(244, 63, 94, 0.08)');
+                                const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : (isHalfDay ? 'rgba(234, 88, 12, 0.25)' : 'rgba(244, 63, 94, 0.25)');
+
+                                return (
+                                  <div key={lv.id} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: isMobile ? '0.625rem' : '0.68rem',
+                                    padding: isMobile ? '2px 4px' : '3px 6px',
+                                    borderRadius: '6px',
+                                    border: '1px solid ' + lvBorder,
+                                    backgroundColor: lvBg,
+                                    color: lvColor,
+                                    fontWeight: 600
+                                  }} title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '65px' : '95px' }}>
+                                      {isWFH ? <Home size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
+                                      {lvLabel}
+                                    </span>
+                                    <span style={{
+                                      fontSize: isMobile ? '0.5rem' : '0.58rem',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      fontWeight: 700,
+                                      backgroundColor: isAppr ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.18)',
+                                      color: isAppr ? '#10b981' : '#d97706',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {isAppr ? (isMobile ? '✓' : t('Duyệt')) : (isMobile ? '⏳' : t('Chờ'))}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                       )}
 
 
@@ -5880,9 +5909,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     {[
                       { id: 'all', label: t('Tất cả'), count: dayExceptions.length },
                       { id: 'leave', label: t('Nghỉ phép & WFH'), count: dayExceptions.filter(e => e.category === 'leave').length },
-                      { id: 'late', label: t('Đi muộn'), count: dayExceptions.filter(e => e.category === 'late').length },
-                      { id: 'early', label: t('Về sớm'), count: dayExceptions.filter(e => e.category === 'early').length },
-                      { id: 'supplementary', label: t('Bổ sung công'), count: dayExceptions.filter(e => e.category === 'supplementary').length },
+                      { id: 'supplementary', label: t('Bổ sung / Cập nhật công'), count: dayExceptions.filter(e => e.category === 'supplementary').length },
                       { id: 'overtime', label: t('Tăng ca (OT)'), count: dayExceptions.filter(e => e.category === 'overtime').length },
                     ].map(tab => {
                       const isActive = exceptionFilter === tab.id;

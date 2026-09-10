@@ -1415,16 +1415,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       try {
         const parsed = JSON.parse(trimmed);
         if (parsed.erp_task?.description) {
-          return decodeHtmlEntities(parsed.erp_task.description);
+          return stripHtml(parsed.erp_task.description);
         }
         if (parsed.description) {
-          return decodeHtmlEntities(parsed.description);
+          return stripHtml(parsed.description);
         }
       } catch {
         // fallback
       }
     }
-    return decodeHtmlEntities(body);
+    return stripHtml(body);
   };
 
   // Task details modal states inside SalePortal

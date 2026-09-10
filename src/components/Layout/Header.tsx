@@ -65,6 +65,19 @@ const getNotifMeta = (notif: any) => {
     };
   }
 
+  // 2.5 Pipeline Transition
+  if (type === 'pipeline_transition' || type === 'pipeline' || title.includes('chuyển pipeline') || title.includes('pipeline') || body.includes('chuyển khách hàng') || body.includes('chuyển pipeline')) {
+    return {
+      icon: '📊',
+      badge: 'CHUYỂN PIPELINE',
+      badgeBg: '#eff6ff',
+      badgeColor: '#1d4ed8',
+      borderColor: '#bfdbfe',
+      leftPill: '#2563eb',
+      ctaText: 'Mở chi tiết Khách hàng →'
+    };
+  }
+
   // 3. New Lead Assignment / Contact
   if (type === 'lead_assignment' || type === 'contact' || type === 'lead' || title.includes('lead') || title.includes('khách hàng') || body.includes('lead:')) {
     return {
@@ -700,33 +713,57 @@ export const Header = ({
 
       const urlObj = new URL(targetLink, window.location.origin);
 
-      // Contact matching
-      const contactMatch = targetLink.match(/^\/contacts\/(\d+)$/) || targetLink.match(/\/contacts\?(?:open_contact_id|id)=(\d+)/);
-      if (contactMatch) {
-        const contactId = Number(contactMatch[1]);
-        urlObj.searchParams.set('open_contact_id', String(contactId));
-        targetLink = `/contacts?${urlObj.searchParams.toString()}`;
-        window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-          detail: { id: contactId }
-        }));
+      // Robust Contact / Lead / Pipeline matching
+      let contactId: number | null = null;
+      if (urlObj.pathname.startsWith('/contacts')) {
+        const idFromParam = urlObj.searchParams.get('open_contact_id') || 
+                            urlObj.searchParams.get('id') || 
+                            urlObj.searchParams.get('contact_id');
+        if (idFromParam && !isNaN(Number(idFromParam)) && Number(idFromParam) > 0) {
+          contactId = Number(idFromParam);
+        } else {
+          const pathMatch = urlObj.pathname.match(/^\/contacts\/(\d+)/);
+          if (pathMatch) contactId = Number(pathMatch[1]);
+        }
       }
 
-      // Fallback for lead/contact notifications that didn't have ID in the URL
-      const isLeadNotif = notif.type === 'contact' || notif.type === 'lead' || notif.type === 'lead_assignment' ||
-        (notif.title && (notif.title.toLowerCase().includes('lead') || notif.title.toLowerCase().includes('khách hàng'))) ||
-        (notif.body && (notif.body.toLowerCase().includes('lead') || notif.body.toLowerCase().includes('khách hàng')));
-
-      if (!contactMatch && isLeadNotif && notif.body) {
-        const bodyIdMatch = notif.body.match(/Contact ID:\s*(\d+)/i) || 
-                            notif.body.match(/Lead ID:\s*(\d+)/i) || 
-                            notif.body.match(/ID:\s*(\d+)/i);
-        if (bodyIdMatch) {
-          const cid = Number(bodyIdMatch[1]);
-          targetLink = `/contacts?open_contact_id=${cid}`;
-          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-            detail: { id: cid }
-          }));
+      // Check direct notification properties
+      if (!contactId) {
+        const directId = (notif as any).contact_id || (notif as any).entity_id || (notif as any).lead_id;
+        if (directId && !isNaN(Number(directId)) && Number(directId) > 0) {
+          contactId = Number(directId);
         }
+      }
+
+      // Check notification body for Contact ID / Lead ID / #ID
+      const isLeadOrPipeline = 
+        notif.type === 'contact' || 
+        notif.type === 'lead' || 
+        notif.type === 'pipeline_transition' || 
+        notif.type === 'pipeline' ||
+        notif.type === 'customer' ||
+        notif.type === 'lead_assignment' ||
+        notif.type === 'lead_reassignment' ||
+        (notif.title && (notif.title.toLowerCase().includes('lead') || notif.title.toLowerCase().includes('khách hàng') || notif.title.toLowerCase().includes('pipeline'))) ||
+        (notif.body && (notif.body.toLowerCase().includes('lead') || notif.body.toLowerCase().includes('khách hàng') || notif.body.toLowerCase().includes('pipeline')));
+
+      if (!contactId && isLeadOrPipeline && notif.body) {
+        const bodyMatch = notif.body.match(/(?:Contact|Lead)?\s*ID:\s*#?(\d+)/i) || 
+                          notif.body.match(/#(\d+)/);
+        if (bodyMatch && !isNaN(Number(bodyMatch[1])) && Number(bodyMatch[1]) > 0) {
+          contactId = Number(bodyMatch[1]);
+        }
+      }
+
+      if (contactId) {
+        urlObj.pathname = '/contacts';
+        urlObj.searchParams.set('open_contact_id', String(contactId));
+        targetLink = `/contacts?${urlObj.searchParams.toString()}`;
+
+        // Instant dispatch event for already-mounted ContactsPage or drawers
+        window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+          detail: { id: contactId, contactId: contactId }
+        }));
       }
 
       // Workspace Task matching
@@ -787,8 +824,8 @@ export const Header = ({
     // 3. Contact ID from Reference fallback
     let contactIdFromRef: string | null = null;
     if (notif.body) {
-      const refMatch = notif.body.match(/Contact ID:\s*(\d+)/i) || notif.body.match(/Lead ID:\s*(\d+)/i) || notif.body.match(/ID:\s*(\d+)/i);
-      if (refMatch) {
+      const refMatch = notif.body.match(/(?:Contact|Lead)?\s*ID:\s*#?(\d+)/i) || notif.body.match(/#(\d+)/);
+      if (refMatch && !isNaN(Number(refMatch[1])) && Number(refMatch[1]) > 0) {
         contactIdFromRef = refMatch[1];
       }
     }
@@ -796,9 +833,9 @@ export const Header = ({
     if (contactIdFromRef) {
       const cid = Number(contactIdFromRef);
       window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-        detail: { id: cid }
+        detail: { id: cid, contactId: cid }
       }));
-      navigate(`/contacts?open_contact_id=${contactIdFromRef}`, { state: { timestamp: Date.now() } });
+      navigate(`/contacts?open_contact_id=${contactIdFromRef}`, { state: { timestamp: Date.now(), openContactId: cid } });
       return;
     }
 
@@ -3545,16 +3582,19 @@ export const Header = ({
                       {filtered.map(notif => {
                         const isWarning = notif.type === 'warning' || (notif.title && (notif.title.toLowerCase().includes('trùng số') || notif.title.toLowerCase().includes('rửa nguồn') || notif.title.toLowerCase().includes('cảnh báo')));
                         const isAttendanceUpdate = notif.type === 'attendance_update' || (notif.title && notif.title.toLowerCase().includes('cập nhật công'));
+                        const isPipeline = notif.type === 'pipeline_transition' || notif.type === 'pipeline' || (notif.title && notif.title.toLowerCase().includes('pipeline'));
                         
                         const bgBase = notif.is_read 
                           ? 'var(--color-surface)' 
                           : (isWarning ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.02) 0%, rgba(239, 68, 68, 0.06) 100%)' 
+                             : isPipeline ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(37, 99, 235, 0.08) 100%)'
                              : isAttendanceUpdate ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.02) 0%, rgba(139, 92, 246, 0.06) 100%)'
                              : 'linear-gradient(135deg, rgba(59, 130, 246, 0.02) 0%, rgba(59, 130, 246, 0.06) 100%)');
                         
                         const borderColor = notif.is_read
                           ? 'var(--color-border-light)'
                           : (isWarning ? 'rgba(239, 68, 68, 0.2)' 
+                             : isPipeline ? 'rgba(37, 99, 235, 0.3)'
                              : isAttendanceUpdate ? 'rgba(139, 92, 246, 0.25)' 
                              : 'rgba(59, 130, 246, 0.2)');
 
@@ -3577,7 +3617,7 @@ export const Header = ({
                               opacity: notif.is_read ? 0.75 : 1
                             }}
                             onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = isWarning ? '#ef4444' : isAttendanceUpdate ? '#8b5cf6' : '#3b82f6';
+                              e.currentTarget.style.borderColor = isWarning ? '#ef4444' : isPipeline ? '#2563eb' : isAttendanceUpdate ? '#8b5cf6' : '#3b82f6';
                               e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.08)';
                               e.currentTarget.style.transform = 'translateY(-1px)';
                               if (notif.is_read) {
@@ -3594,20 +3634,76 @@ export const Header = ({
                             }}
                           >
                             <div style={{ position: 'relative', display: 'flex', flexShrink: 0, marginTop: 2 }}>
-                              {notif.actor_name ? (
-                                /* Sale / Admin gửi → avatar đúng người */
-                                <div style={{ position: 'relative', display: 'inline-flex' }}>
-                                  <Avatar src={notif.actor_avatar || undefined} name={notif.actor_name} size={38} />
-                                  <span style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: '50%', background: (() => { switch (notif.type) { case 'warning': return '#ef4444'; case 'mention': case 'task_assignment': case 'task_participant': case 'approval_request': return '#3b82f6'; case 'project_roster': return '#10b981'; case 'project_document': case 'contact_document': return '#f59e0b'; case 'project_comment': case 'attendance_update': return '#8b5cf6'; case 'attendance': return '#eab308'; default: return '#6b7280'; } })(), border: '1.5px solid var(--color-surface, #ffffff)', boxShadow: '0 1px 3px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {(() => { switch (notif.type) { case 'mention': case 'task_assignment': case 'task_participant': case 'approval_request': return <CheckSquare size={11} style={{ color: 'white' }} />; case 'project_roster': return <Users size={11} style={{ color: 'white' }} />; case 'project_document': case 'contact_document': return <FileText size={11} style={{ color: 'white' }} />; case 'project_comment': return <MessageSquare size={11} style={{ color: 'white' }} />; case 'warning': return <AlertTriangle size={11} style={{ color: 'white' }} />; case 'attendance_update': return <Clock size={11} style={{ color: 'white' }} />; default: return <Info size={11} style={{ color: 'white' }} />; } })()}
-                                  </span>
-                                </div>
-                              ) : (
-                                /* Cảnh báo hệ thống / hoặc không có user → logo IDEAS */
-                                <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white', flexShrink: 0 }}>
-                                  <img src="/LOGO.jpg" alt="IDEAS" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                </div>
-                              )}
+                              {(() => {
+                                let actorName = notif.actor_name;
+                                let actorAvatar = notif.actor_avatar;
+                                if (!actorName && notif.body) {
+                                  const clean = notif.body
+                                    .replace(/^(?:\[[^\]]+\]\s*)+/g, '')
+                                    .replace(/^(?:Nhân viên|Nhân sự|Đồng nghiệp|Quản lý|Trưởng nhóm|Admin|Kế toán|Giám đốc)\s+/gi, '')
+                                    .trim();
+                                  const m = clean.match(/^(.+?)(?:\s*\([^)]*\))?\s+(?:đã|vừa|gửi|báo|có|check-in|nhắc|tạo|yêu cầu)\s+/i);
+                                  if (m && m[1] && m[1].trim().length >= 2) {
+                                    actorName = m[1].trim();
+                                  }
+                                }
+
+                                if (actorName) {
+                                  return (
+                                    /* Sale / Admin / Nhân sự gửi → avatar đúng người */
+                                    <div style={{ position: 'relative', display: 'inline-flex' }}>
+                                      <Avatar src={actorAvatar || undefined} name={actorName} size={38} />
+                                      <span style={{ 
+                                        position: 'absolute', 
+                                        bottom: -2, 
+                                        right: -2, 
+                                        width: 18, 
+                                        height: 18, 
+                                        borderRadius: '50%', 
+                                        background: (() => { 
+                                          switch (notif.type) { 
+                                            case 'warning': return '#ef4444'; 
+                                            case 'pipeline_transition': case 'pipeline': return '#2563eb'; 
+                                            case 'mention': case 'task_assignment': case 'task_participant': return '#3b82f6'; 
+                                            case 'expense': case 'approval': case 'approval_request': return '#BD1D2D'; 
+                                            case 'project_roster': return '#10b981'; 
+                                            case 'project_document': case 'contact_document': return '#f59e0b'; 
+                                            case 'project_comment': case 'attendance_update': return '#8b5cf6'; 
+                                            case 'attendance': return '#eab308'; 
+                                            default: return '#6b7280'; 
+                                          } 
+                                        })(), 
+                                        border: '1.5px solid var(--color-surface, #ffffff)', 
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.15)', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center' 
+                                      }}>
+                                        {(() => { 
+                                          switch (notif.type) { 
+                                            case 'pipeline_transition': case 'pipeline': return <Activity size={11} style={{ color: 'white' }} />; 
+                                            case 'mention': case 'task_assignment': case 'task_participant': return <CheckSquare size={11} style={{ color: 'white' }} />; 
+                                            case 'expense': case 'approval': case 'approval_request': return <CheckSquare size={11} style={{ color: 'white' }} />; 
+                                            case 'project_roster': return <Users size={11} style={{ color: 'white' }} />; 
+                                            case 'project_document': case 'contact_document': return <FileText size={11} style={{ color: 'white' }} />; 
+                                            case 'project_comment': return <MessageSquare size={11} style={{ color: 'white' }} />; 
+                                            case 'warning': return <AlertTriangle size={11} style={{ color: 'white' }} />; 
+                                            case 'attendance_update': return <Clock size={11} style={{ color: 'white' }} />; 
+                                            default: return <Info size={11} style={{ color: 'white' }} />; 
+                                          } 
+                                        })()}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  /* Cảnh báo hệ thống / hoặc không có user → logo IDEAS */
+                                  <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white', flexShrink: 0 }}>
+                                    <img src="/LOGO.jpg" alt="IDEAS" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px', position: 'relative' }}>

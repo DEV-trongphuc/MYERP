@@ -13639,8 +13639,9 @@ switch ($action) {
                 // Sync manager teams if provided
                 if (isset($input['manager_teams']) && is_array($input['manager_teams'])) {
                     // Clear old leadership
-                    $stmtClear = $conn->prepare("UPDATE teams SET leader_id = 0 WHERE leader_id = ?");
-                    $stmtClear->execute([$newId]);
+                    $stmtClear = $conn->prepare("UPDATE teams SET leader_id = NULL WHERE leader_id = ?");
+                    $stmtClear->bind_param("i", $newId);
+                    $stmtClear->execute();
                     $stmtClear->close();
 
                     if (!empty($input['manager_teams'])) {
@@ -13830,8 +13831,9 @@ switch ($action) {
                 // Sync manager teams if provided
                 if (isset($input['manager_teams']) && is_array($input['manager_teams'])) {
                     // Clear old leadership
-                    $stmtClear = $conn->prepare("UPDATE teams SET leader_id = 0 WHERE leader_id = ?");
-                    $stmtClear->execute([$id]);
+                    $stmtClear = $conn->prepare("UPDATE teams SET leader_id = NULL WHERE leader_id = ?");
+                    $stmtClear->bind_param("i", $id);
+                    $stmtClear->execute();
                     $stmtClear->close();
 
                     if (!empty($input['manager_teams'])) {

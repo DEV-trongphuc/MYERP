@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { MapPin, ChevronRight, Check, Search, Globe, ArrowLeft, X } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { CopyButton } from './CopyButton';
 import cityData from '../../assets/ctiy.json';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -118,6 +119,22 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: value ? 600 : 400 }}>
           {value || placeholder}
         </span>
+        {value && (
+          <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <CopyButton
+              text={value}
+              size={13}
+              style={{
+                padding: '4px 6px',
+                borderRadius: '6px',
+                backgroundColor: 'var(--color-bg-light, #f1f5f9)',
+                border: '1px solid var(--color-border-light, #e2e8f0)',
+                color: 'var(--color-text-muted, #64748b)',
+                margin: 0,
+              }}
+            />
+          </div>
+        )}
         <ChevronRight size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
       </div>
 
@@ -181,6 +198,30 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
                   <X size={16} />
                 </button>
               </div>
+
+              {value && (
+                <div style={{
+                  marginTop: '10px',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  background: 'var(--color-bg)',
+                  border: '1px solid var(--color-border-light)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  fontSize: '0.78rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                    <MapPin size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                    <span style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>Hiện tại:</span>
+                    <span style={{ color: 'var(--color-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={value}>
+                      {value}
+                    </span>
+                  </div>
+                  <CopyButton text={value} size={13} style={{ padding: '2px 4px', margin: 0, flexShrink: 0 }} />
+                </div>
+              )}
 
               {/* Foreign toggle */}
               <button

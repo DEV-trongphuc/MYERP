@@ -5,7 +5,7 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet
 } from 'lucide-react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
@@ -3579,19 +3579,70 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     ? rawUrl
                     : `${window.location.origin}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
 
+                  // Determine file extension and format info
+                  const urlWithoutQuery = rawUrl.split('?')[0].split('#')[0];
+                  const labelWithoutQuery = (link.label || '').split('?')[0].split('#')[0];
+                  const urlExt = urlWithoutQuery.includes('.') ? urlWithoutQuery.split('.').pop()?.toLowerCase() : '';
+                  const labelExt = labelWithoutQuery.includes('.') ? labelWithoutQuery.split('.').pop()?.toLowerCase() : '';
+                  const ext = (labelExt && labelExt.length <= 5) ? labelExt : ((urlExt && urlExt.length <= 5) ? urlExt : '');
+
                   const combinedStr = `${rawUrl} ${link.label || ''}`.toLowerCase();
+
                   const isImage = Boolean(
                     link.is_image ||
-                    combinedStr.includes('.jpg') ||
-                    combinedStr.includes('.jpeg') ||
-                    combinedStr.includes('.png') ||
-                    combinedStr.includes('.gif') ||
-                    combinedStr.includes('.webp') ||
-                    combinedStr.includes('.svg') ||
-                    combinedStr.includes('image/') ||
-                    combinedStr.includes('/img_') ||
-                    combinedStr.includes('uploads/')
+                    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ||
+                    (combinedStr.includes('image/') && !combinedStr.includes('pdf'))
                   );
+
+                  const isWord = ['doc', 'docx'].includes(ext) || (!isImage && (combinedStr.includes('.docx') || combinedStr.includes('.doc') || combinedStr.includes('hop_dong') || combinedStr.includes('hopdong')));
+                  const isExcel = ['xls', 'xlsx', 'csv'].includes(ext) || (!isImage && (combinedStr.includes('.xlsx') || combinedStr.includes('.xls') || combinedStr.includes('.csv') || combinedStr.includes('lich_thanh_toan')));
+                  const isPdf = ext === 'pdf' || (!isImage && combinedStr.includes('.pdf'));
+                  const isZip = ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext);
+
+                  // Formatting details
+                  let formatBadge = ext ? ext.toUpperCase() : 'FILE';
+                  let formatColor = '#475569';
+                  let formatBg = 'rgba(71, 85, 105, 0.08)';
+                  let formatBorder = 'rgba(71, 85, 105, 0.2)';
+                  let subLabel = t('Tệp đính kèm • Nhấn để tải về / mở');
+
+                  if (isImage) {
+                    formatBadge = (ext || 'IMG').toUpperCase();
+                    formatColor = '#0284c7';
+                    formatBg = 'rgba(2, 132, 199, 0.08)';
+                    formatBorder = 'rgba(2, 132, 199, 0.25)';
+                    subLabel = t('Hình ảnh • Nhấn để xem / phóng to');
+                  } else if (isWord) {
+                    formatBadge = (ext || 'DOCX').toUpperCase();
+                    formatColor = '#2563eb';
+                    formatBg = 'rgba(37, 99, 235, 0.08)';
+                    formatBorder = 'rgba(37, 99, 235, 0.25)';
+                    subLabel = t('Tài liệu Word • Nhấn để tải về / mở');
+                  } else if (isExcel) {
+                    formatBadge = (ext || 'XLSX').toUpperCase();
+                    formatColor = '#16a34a';
+                    formatBg = 'rgba(22, 163, 74, 0.08)';
+                    formatBorder = 'rgba(22, 163, 74, 0.25)';
+                    subLabel = t('Bảng tính Excel • Nhấn để tải về / mở');
+                  } else if (isPdf) {
+                    formatBadge = 'PDF';
+                    formatColor = '#dc2626';
+                    formatBg = 'rgba(220, 38, 38, 0.08)';
+                    formatBorder = 'rgba(220, 38, 38, 0.25)';
+                    subLabel = t('Tài liệu PDF • Nhấn để xem / tải về');
+                  } else if (isZip) {
+                    formatBadge = (ext || 'ZIP').toUpperCase();
+                    formatColor = '#d97706';
+                    formatBg = 'rgba(217, 119, 6, 0.08)';
+                    formatBorder = 'rgba(217, 119, 6, 0.25)';
+                    subLabel = t('Tệp nén • Nhấn để tải về');
+                  } else if (!link.is_file && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) && !rawUrl.includes('/uploads/')) {
+                    formatBadge = 'LINK';
+                    formatColor = '#7c3aed';
+                    formatBg = 'rgba(124, 58, 237, 0.08)';
+                    formatBorder = 'rgba(124, 58, 237, 0.25)';
+                    subLabel = t('Liên kết web • Nhấn để mở');
+                  }
 
                   return (
                     <div
@@ -3620,16 +3671,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         {/* Left Thumbnail Preview or Icon */}
                         {isImage ? (
                           <div style={{
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: '8px',
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '10px',
                             overflow: 'hidden',
                             flexShrink: 0,
-                            border: '1px solid var(--color-border-light)',
+                            border: `1.5px solid ${formatBorder}`,
                             background: 'var(--color-bg-alt)',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            position: 'relative'
                           }}>
                             <img
                               src={fullUrl}
@@ -3637,48 +3689,88 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={(e) => {
                                 (e.currentTarget as HTMLElement).style.display = 'none';
+                                const fb = e.currentTarget.parentElement?.querySelector('.img-fallback') as HTMLElement;
+                                if (fb) fb.style.display = 'flex';
                               }}
                             />
+                            <div className="img-fallback" style={{ display: 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', background: formatBg, color: formatColor }}>
+                              <ImageIcon size={22} />
+                            </div>
                           </div>
                         ) : (
                           <div style={{
-                            width: '42px',
-                            height: '42px',
-                            borderRadius: '8px',
-                            background: link.is_file ? 'rgba(16, 185, 129, 0.1)' : 'var(--color-primary-light)',
-                            color: link.is_file ? 'var(--color-success)' : 'var(--color-primary)',
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '10px',
+                            background: formatBg,
+                            border: `1.5px solid ${formatBorder}`,
+                            color: formatColor,
                             display: 'flex',
+                            flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            flexShrink: 0
+                            flexShrink: 0,
+                            gap: '2px',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
                           }}>
-                            {link.is_file ? <FileText size={20} /> : <Link2 size={20} />}
+                            {isExcel ? (
+                              <FileSpreadsheet size={20} />
+                            ) : isWord ? (
+                              <FileText size={20} />
+                            ) : isPdf ? (
+                              <FileText size={20} />
+                            ) : isZip ? (
+                              <Layers size={20} />
+                            ) : link.is_file ? (
+                              <FileText size={20} />
+                            ) : (
+                              <Link2 size={20} />
+                            )}
+                            <span style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1 }}>
+                              {formatBadge}
+                            </span>
                           </div>
                         )}
 
                         {/* Name & Subtext */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
-                          <a
-                            href={fullUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              fontSize: '0.85rem',
-                              fontWeight: 700,
-                              color: 'var(--color-text)',
-                              textDecoration: 'none',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              display: 'block'
-                            }}
-                            className="hover-color-primary"
-                          >
-                            {link.label || link.url}
-                          </a>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                            <a
+                              href={fullUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                fontSize: '0.85rem',
+                                fontWeight: 700,
+                                color: 'var(--color-text)',
+                                textDecoration: 'none',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block'
+                              }}
+                              className="hover-color-primary"
+                            >
+                              {link.label || link.url}
+                            </a>
+                            <span style={{
+                              fontSize: '0.625rem',
+                              fontWeight: 800,
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: formatBg,
+                              color: formatColor,
+                              border: `1px solid ${formatBorder}`,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.02em',
+                              flexShrink: 0
+                            }}>
+                              {formatBadge}
+                            </span>
+                          </div>
                           <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Eye size={12} /> {isImage ? t('Nhấn để xem / phóng to ảnh') : t('Nhấn để mở tệp / link')}
+                            <Eye size={12} /> {subLabel}
                           </span>
                         </div>
                       </div>

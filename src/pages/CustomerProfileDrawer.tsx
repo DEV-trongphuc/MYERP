@@ -38,7 +38,7 @@ import styles from './EntityDrawer.module.css';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getModulePermissionScope } from '../store/authStore';
-import { decodeHtmlEntities } from '../utils/textUtils';
+import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const EditHistoryIndicator = ({ history }: { history: any }) => {
@@ -7323,6 +7323,24 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </button>
                           )}
                         </div>
+                        {formData.address && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: 280 }} title={formData.address}>
+                            <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <MapPin size={12} className="text-muted" />
+                            </div>
+                            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {formData.address}
+                            </span>
+                            <button
+                              className="btn-icon xs"
+                              style={{ color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '-2px', flexShrink: 0 }}
+                              onClick={() => copyToClipboard(formData.address, 'address')}
+                              title="Sao chép địa chỉ"
+                            >
+                              {copiedField === 'address' ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        )}
                         {coopSlip ? (
                           <div
                             style={{ 
@@ -12924,7 +12942,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       )}
 
                                       {/* Task Description */}
-                                      {t.description && (
+                                      {stripHtml(t.description) && (
                                         <p style={{ 
                                           fontSize: '0.75rem', 
                                           color: 'var(--color-text-muted)', 
@@ -12935,7 +12953,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           overflow: 'hidden',
                                           lineHeight: '1.3'
                                         }}>
-                                          {t.description}
+                                          {stripHtml(t.description)}
                                         </p>
                                       )}
 
@@ -13091,9 +13109,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             <MeetingCountdown dueDate={t.due_date} />
                                           </div>
                                         )}
-                                        {t.description && (
+                                        {stripHtml(t.description) && (
                                           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '2px' }}>
-                                            {t.description}
+                                            {stripHtml(t.description)}
                                           </span>
                                         )}
                                         {t.tags && (
@@ -13191,7 +13209,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                                 <MeetingCountdown dueDate={t.due_date} />
                                               </div>
                                             )}
-                                            {t.description && <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.description}</span>}
+                                            {stripHtml(t.description) && <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripHtml(t.description)}</span>}
                                             {t.tags && (
                                               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
                                                 {t.tags.split(',').filter(Boolean).map((tag: string) => (
@@ -15276,7 +15294,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 boxShadow: 'var(--shadow-xs)'
                               }}
                             >
-                              <Avatar name={uName} size={20} />
+                              <Avatar src={u?.avatar_url || u?.avatar} name={uName} size={20} />
                               <span>{uName}</span>
                               <button
                                 type="button"
@@ -15605,9 +15623,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           calculatedStatus = 'qualified';
                         }
 
+                        const resolvedStageId = targetStage?.id ? (isNaN(Number(targetStage.id)) ? targetStage.id : Number(targetStage.id)) : targetId;
+                        const resolvedStageName = targetStage?.name || targetLabel;
+                        const resolvedStageColor = targetStage?.color;
+
                         // Optimistically update UI
                         const updatedFields: any = {
                           pipeline_status: targetId,
+                          stage_id: resolvedStageId,
+                          stage_name: resolvedStageName,
+                          stage_color: resolvedStageColor,
                           status: calculatedStatus,
                           lead_status: pipelineModal.leadStatus,
                           lead_temperature: pipelineModal.leadTemperature,
@@ -15622,6 +15647,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         };
 
                         setFormData((prev: any) => ({ ...prev, ...updatedFields }));
+                        setBaseData((prev: any) => ({ ...prev, ...updatedFields }));
+                        setLinkedProfiles((prev: any[]) => prev.map(p => 
+                          Number(p.id) === Number(effectiveContactId)
+                            ? { ...p, stage_id: resolvedStageId, stage_name: resolvedStageName, pipeline_status: targetId, stage_color: resolvedStageColor }
+                            : p
+                        ));
 
                         // Persist to backend via move-stage on the currently viewed/active contact
                         await api.put(`/contacts/${effectiveContactId}/move-stage`, {
@@ -15813,7 +15844,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     <h3 style={{ fontWeight: 800 }}>Tạo yêu cầu Helpdesk</h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: 2 }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Khách hàng:</span>
-                      <Avatar name={fullName} size={22} />
+                      <Avatar src={formData?.avatar_url || contact?.avatar_url} name={fullName} size={22} />
                       <strong style={{ fontSize: '0.8125rem', color: 'var(--color-text)' }}>{fullName}</strong>
                     </div>
                   </div>

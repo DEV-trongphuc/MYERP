@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 251;
+$targetVersion = 252;
 $currentVersion = 186;
 
 // Query current DB version
@@ -221,7 +221,7 @@ try {
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('auto_approve_checkin', '1')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('golden_hours_max_leads_per_consultant', '0')");
     $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_lead_claim', '0')");
-    $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_checkin_lead', '1')");
+    $conn->query("INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES ('require_checkin_lead', '0')");
     $conn->query("REPLACE INTO system_settings (setting_key, setting_value) VALUES ('frontend_url', 'https://myerp.ideas.edu.vn')");
     $conn->query("UPDATE users SET is_active = 1, status = 'active' WHERE email IS NOT NULL AND email != '' AND (is_active = 0 OR status IS NULL OR status != 'active')");
 
@@ -2788,8 +2788,24 @@ try {
         $logMsg("Nâng cấp lên phiên bản 251 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 252) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 252: Thêm cột allowance_meal_type vào bảng hrm_profiles...", "info");
+        try {
+            $colCheck = $conn->query("SHOW COLUMNS FROM `hrm_profiles` LIKE 'allowance_meal_type'");
+            if ($colCheck && $colCheck->num_rows == 0) {
+                $conn->query("ALTER TABLE `hrm_profiles` ADD COLUMN `allowance_meal_type` VARCHAR(20) NOT NULL DEFAULT 'per_day' AFTER `allowance_meal`");
+                $logMsg("Đã thêm cột allowance_meal_type vào bảng hrm_profiles.", "success");
+            } else {
+                $logMsg("Cột allowance_meal_type đã tồn tại trong bảng hrm_profiles.", "info");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 252: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 252 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '251') ON DUPLICATE KEY UPDATE setting_value = '251'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '252') ON DUPLICATE KEY UPDATE setting_value = '252'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

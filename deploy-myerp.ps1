@@ -67,9 +67,9 @@ if (-not $FrontendOnly) {
     # Run migrations / database setup
     Write-Host "  -> Running database migrations on vhvxoigh_myerp..." -ForegroundColor Gray
     if ($CloneDatabase) {
-        cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""php ${RemoteDir}/backend/clone_db_to_myerp.php; php ${RemoteDir}/backend/run_migrations.php --apply"""
+        cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""/usr/local/bin/ea-php81 ${RemoteDir}/backend/clone_db_to_myerp.php; /usr/local/bin/ea-php81 ${RemoteDir}/backend/run_migrations.php --apply"""
     } else {
-        cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""php ${RemoteDir}/backend/run_migrations.php --apply"""
+        cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""/usr/local/bin/ea-php81 ${RemoteDir}/backend/run_migrations.php --apply"""
     }
 }
 

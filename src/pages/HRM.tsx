@@ -373,6 +373,7 @@ export default function HRM() {
   const [dealSalary, setDealSalary] = useState(0);
   const [hasInsurance, setHasInsurance] = useState(true);
   const [allowanceMeal, setAllowanceMeal] = useState(0);
+  const [allowanceMealType, setAllowanceMealType] = useState<'per_day' | 'fixed'>('per_day');
   const [allowanceTravel, setAllowanceTravel] = useState(0);
   const [allowancePhone, setAllowancePhone] = useState(0);
   const [kpiTarget, setKpiTarget] = useState(0);
@@ -502,6 +503,7 @@ export default function HRM() {
     setDealSalary(Number(user.deal_salary || 0));
     setHasInsurance(user.has_insurance !== 0 && user.has_insurance !== '0');
     setAllowanceMeal(Number(user.allowance_meal || 0));
+    setAllowanceMealType((user.allowance_meal_type as 'per_day' | 'fixed') || 'per_day');
     setAllowanceTravel(Number(user.allowance_travel || 0));
     setAllowancePhone(Number(user.allowance_phone || 0));
     setKpiTarget(Number(user.kpi_target || 0));
@@ -524,6 +526,7 @@ export default function HRM() {
           deal_salary: dealSalary,
           has_insurance: hasInsurance ? 1 : 0,
           allowance_meal: allowanceMeal,
+          allowance_meal_type: allowanceMealType,
           allowance_travel: allowanceTravel,
           allowance_phone: allowancePhone,
           kpi_target: kpiTarget,
@@ -1707,15 +1710,67 @@ export default function HRM() {
                 </div>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.5rem', alignItems: 'start' }}>
                 <div>
-                  <label className="form-label">{t('Phụ cấp ăn trưa')}</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={allowanceMeal}
-                    onChange={e => setAllowanceMeal(Number(e.target.value))}
-                  />
+                  <label className="form-label" style={{ marginBottom: '4px' }}>{t('Phụ cấp ăn trưa')}</label>
+                  <div style={{
+                    display: 'flex',
+                    background: 'var(--color-bg-secondary, #f1f5f9)',
+                    padding: '2px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-border-light)',
+                    marginBottom: '4px',
+                    gap: '2px'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setAllowanceMealType('per_day')}
+                      style={{
+                        flex: 1,
+                        padding: '2px 4px',
+                        fontSize: '0.68rem',
+                        fontWeight: allowanceMealType === 'per_day' ? 700 : 500,
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: allowanceMealType === 'per_day' ? 'var(--color-bg-primary, #ffffff)' : 'transparent',
+                        color: allowanceMealType === 'per_day' ? 'var(--color-primary, #0284c7)' : 'var(--color-text-muted, #64748b)',
+                        boxShadow: allowanceMealType === 'per_day' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t('Theo công')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAllowanceMealType('fixed')}
+                      style={{
+                        flex: 1,
+                        padding: '2px 4px',
+                        fontSize: '0.68rem',
+                        fontWeight: allowanceMealType === 'fixed' ? 700 : 500,
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: allowanceMealType === 'fixed' ? 'var(--color-bg-primary, #ffffff)' : 'transparent',
+                        color: allowanceMealType === 'fixed' ? 'var(--color-primary, #0284c7)' : 'var(--color-text-muted, #64748b)',
+                        boxShadow: allowanceMealType === 'fixed' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t('Cố định')}
+                    </button>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={allowanceMeal}
+                      onChange={e => setAllowanceMeal(Number(e.target.value))}
+                      placeholder={allowanceMealType === 'per_day' ? 'VD: 35000' : 'VD: 730000'}
+                    />
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                    {allowanceMealType === 'per_day' ? t('đ/ngày công') : t('đ/tháng')}
+                  </div>
                 </div>
                 <div>
                   <label className="form-label">{t('Phụ cấp xăng xe')}</label>

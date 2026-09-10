@@ -55,11 +55,26 @@ class HRMController {
     // --- PROFILES & CONTRACTS ---
 
     public function indexProfiles(array $auth): void {
-        if (!$this->isAdmin($auth)) respond(403, null, 'Quyền admin là bắt buộc', false);
+        if (!$this->isAdmin($auth)) {
+            // Allow individual employee to fetch their own profile
+            $stmt = $this->db->prepare("
+                SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
+                       p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
+                       p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
+                       p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
+                FROM users u
+                LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                WHERE u.tenant_id = ? AND u.id = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
+            respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+            return;
+        }
 
         $stmt = $this->db->prepare("
             SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
-                   p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
+                   p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
                    p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
                    p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
             FROM users u
@@ -79,16 +94,17 @@ class HRMController {
         }
 
         $stmt = $this->db->prepare("
-            INSERT INTO hrm_profiles (user_id, joined_date, base_salary, deal_salary, has_insurance, allowance_meal, allowance_travel, allowance_phone, kpi_target, kpi_multiplier_rules, custom_fields_json,
+            INSERT INTO hrm_profiles (user_id, joined_date, base_salary, deal_salary, has_insurance, allowance_meal, allowance_meal_type, allowance_travel, allowance_phone, kpi_target, kpi_multiplier_rules, custom_fields_json,
                                       annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used,
                                       insurance_rate_bhxh, insurance_rate_bhyt, insurance_rate_bhtn)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 joined_date = VALUES(joined_date),
                 base_salary = VALUES(base_salary),
                 deal_salary = VALUES(deal_salary),
                 has_insurance = VALUES(has_insurance),
                 allowance_meal = VALUES(allowance_meal),
+                allowance_meal_type = VALUES(allowance_meal_type),
                 allowance_travel = VALUES(allowance_travel),
                 allowance_phone = VALUES(allowance_phone),
                 kpi_target = VALUES(kpi_target),
@@ -110,6 +126,7 @@ class HRMController {
             (float)($b['deal_salary'] ?? 0),
             (int)($b['has_insurance'] ?? 1),
             (float)($b['allowance_meal'] ?? 0),
+            $b['allowance_meal_type'] ?? 'per_day',
             (float)($b['allowance_travel'] ?? 0),
             (float)($b['allowance_phone'] ?? 0),
             (float)($b['kpi_target'] ?? 0),
@@ -1042,7 +1059,7 @@ class HRMController {
         // Fetch all employees in tenant (excluding admin and director roles)
         $empStmt = $this->db->prepare("
             SELECT u.id, u.full_name, u.gender, u.role, p.base_salary, p.deal_salary, p.has_insurance,
-                   p.allowance_meal, p.allowance_travel, p.allowance_phone, p.kpi_target, p.joined_date, p.custom_fields_json,
+                   p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.joined_date, p.custom_fields_json,
                    p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn,
                    p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used
             FROM users u
@@ -1267,7 +1284,11 @@ class HRMController {
             // 5. Allowances
             $allowanceTotal = 0.0;
             if (!$isSpecialPeriod) {
-                $allowanceTotal = (float)($emp['allowance_meal'] ?? 0.0) + (float)($emp['allowance_travel'] ?? 0.0) + (float)($emp['allowance_phone'] ?? 0.0);
+                $mealType = $emp['allowance_meal_type'] ?? 'per_day';
+                $mealRate = (float)($emp['allowance_meal'] ?? 0.0);
+                $calculatedMeal = ($mealType === 'fixed') ? $mealRate : ($mealRate * (float)$totalWorkDays);
+
+                $allowanceTotal = $calculatedMeal + (float)($emp['allowance_travel'] ?? 0.0) + (float)($emp['allowance_phone'] ?? 0.0);
                 if (!empty($emp['custom_fields_json'])) {
                     $customFields = json_decode($emp['custom_fields_json'], true);
                     if (is_array($customFields)) {
@@ -1341,7 +1362,10 @@ class HRMController {
             // 8. Tax PIT (Thuế TNCN lũy tiến)
             $pit = 0;
             if (!$isSpecialPeriod || $isThang13) {
-                $taxableMeal = max(0, (float)($emp['allowance_meal'] ?? 0.0) - 730000);
+                $mealType = $emp['allowance_meal_type'] ?? 'per_day';
+                $mealRate = (float)($emp['allowance_meal'] ?? 0.0);
+                $calculatedMeal = ($mealType === 'fixed') ? $mealRate : ($mealRate * (float)$totalWorkDays);
+                $taxableMeal = max(0, $calculatedMeal - 730000);
                 $grossIncomeForTax = $basicSalaryCalculated + $kpiBonus + (float)($emp['allowance_travel'] ?? 0.0) + (float)($emp['allowance_phone'] ?? 0.0) + $taxableMeal;
                 
                 $insuranceDeductions = $bhxh + $bhyt + $bhtn;
@@ -1976,25 +2000,29 @@ class HRMController {
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
         foreach ($bulks as $b) {
             $shouldShow = false;
-            $isAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
-            $isAssignedApprover = ((int)($b['manager_id'] ?? 0) === $userId) || ((int)($b['approved_by'] ?? 0) === $userId);
+            $isAssignedApprover = ((int)($b['manager_id'] ?? 0) === $userId);
+            $isCreator = ((int)($b['user_id'] ?? 0) === $userId);
 
-            if ((int)$b['user_id'] === $userId && !$isAdmin) {
-                // Người tạo không tự duyệt đề xuất của chính mình trừ khi là Admin
+            if ($isCreator && !in_array($role, ['admin', 'superadmin', 'super_admin'], true)) {
+                // Người tạo không tự duyệt đề xuất của chính mình
                 $shouldShow = false;
-            } else if ($isAdmin) {
-                $shouldShow = true;
-            } else if ($isAssignedApprover) {
-                // Người được chỉ định làm người duyệt có quyền duyệt bất kể chức vụ hệ thống
-                $shouldShow = true;
-            } else if ($role === 'hr') {
-                // HR chỉ duyệt nếu đơn không chỉ định người duyệt riêng (empty manager_id) hoặc đang chờ HR duyệt (pending_hr)
-                if (empty($b['manager_id']) || $b['status'] === 'pending_hr') {
+            } else if ($b['status'] === 'pending_manager') {
+                if (!empty($b['manager_id'])) {
+                    // Đã chỉ định người duyệt đích danh (ví dụ: Lê Thị Huyền Trâm) -> CHỈ người đó thấy trong tab Chờ duyệt
+                    if ($isAssignedApprover) {
+                        $shouldShow = true;
+                    }
+                } else {
+                    // Không chỉ định người duyệt đích danh -> Trưởng nhóm, Quản lý trực tiếp, hoặc Admin/Giám đốc
+                    if (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || in_array((int)($b['user_id'] ?? 0), $managedUserIds, true) || $isGlobalAdmin) {
+                        $shouldShow = true;
+                    }
+                }
+            } else if ($b['status'] === 'pending_hr') {
+                // Cấp 2 chờ Nhân sự duyệt
+                if ($role === 'hr' || $isGlobalAdmin) {
                     $shouldShow = true;
                 }
-            } else if ($b['status'] === 'pending_manager' && empty($b['manager_id']) && (in_array((int)($b['team_id'] ?? 0), $ledTeamIds, true) || in_array((int)($b['user_id'] ?? 0), $managedUserIds, true))) {
-                // Trưởng nhóm/quản lý quản lý nhân sự thuộc nhóm của mình nếu không chỉ định người duyệt cụ thể
-                $shouldShow = true;
             }
 
             if ($shouldShow) {

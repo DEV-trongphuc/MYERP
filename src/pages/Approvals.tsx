@@ -3266,13 +3266,15 @@ export default function Approvals() {
 
                 let canApproveThisItem = false;
                 if (!isCreator) {
-                  if (isSuperAdmin) {
-                    canApproveThisItem = true;
-                  } else {
-                    const targetApproverId = (item as any)?.approver_id || (item as any)?.manager_id;
-                    if (targetApproverId && Number(targetApproverId) === userId) {
+                  const targetApproverId = Number((item as any)?.approver_id || (item as any)?.manager_id || 0);
+                  if (targetApproverId > 0) {
+                    if (targetApproverId === userId) {
                       canApproveThisItem = true;
-                    } else if (!targetApproverId && role === 'hr') {
+                    } else if (['superadmin', 'super_admin'].includes(role)) {
+                      canApproveThisItem = true;
+                    }
+                  } else {
+                    if (isSuperAdmin || role === 'hr') {
                       canApproveThisItem = true;
                     }
                   }
@@ -3461,13 +3463,15 @@ export default function Approvals() {
 
                     let canApproveThisItem = false;
                     if (!isCreator) {
-                      if (isSuperAdmin) {
-                        canApproveThisItem = true;
-                      } else {
-                        const targetApproverId = (item as any)?.approver_id || (item as any)?.manager_id;
-                        if (targetApproverId && Number(targetApproverId) === userId) {
+                      const targetApproverId = Number((item as any)?.approver_id || (item as any)?.manager_id || 0);
+                      if (targetApproverId > 0) {
+                        if (targetApproverId === userId) {
                           canApproveThisItem = true;
-                        } else if (!targetApproverId && role === 'hr') {
+                        } else if (['superadmin', 'super_admin'].includes(role)) {
+                          canApproveThisItem = true;
+                        }
+                      } else {
+                        if (isSuperAdmin || role === 'hr') {
                           canApproveThisItem = true;
                         }
                       }
@@ -8002,25 +8006,25 @@ export default function Approvals() {
                           </div>
 
                           <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                            <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
                               <thead>
                                 <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)' }}>
-                                  <th style={{ padding: '8px', width: '40px', fontWeight: 700 }}>STT</th>
-                                  <th style={{ padding: '8px', fontWeight: 700 }}>{t('Nội dung chi')}</th>
-                                  <th style={{ padding: '8px', width: '70px', fontWeight: 700 }}>{t('SL')}</th>
-                                  <th style={{ padding: '8px', width: '100px', fontWeight: 700 }}>{t('Đơn giá')}</th>
-                                  <th style={{ padding: '8px', width: '110px', fontWeight: 700 }}>{t('Thành tiền')}</th>
-                                  <th style={{ padding: '8px', width: '90px', fontWeight: 700 }}>VAT (%)</th>
-                                  <th style={{ padding: '8px', width: '40px' }} />
+                                  <th style={{ padding: '8px', width: '45px', minWidth: '45px', textAlign: 'center', fontWeight: 700 }}>STT</th>
+                                  <th style={{ padding: '8px', minWidth: '200px', fontWeight: 700 }}>{t('Nội dung chi')}</th>
+                                  <th style={{ padding: '8px', width: '95px', minWidth: '95px', textAlign: 'center', fontWeight: 700 }}>{t('SL')}</th>
+                                  <th style={{ padding: '8px', width: '130px', minWidth: '130px', fontWeight: 700 }}>{t('Đơn giá')}</th>
+                                  <th style={{ padding: '8px', width: '120px', minWidth: '120px', fontWeight: 700 }}>{t('Thành tiền')}</th>
+                                  <th style={{ padding: '8px', width: '95px', minWidth: '95px', fontWeight: 700 }}>VAT (%)</th>
+                                  <th style={{ padding: '8px', width: '36px', minWidth: '36px' }} />
                                 </tr>
                               </thead>
                               <tbody>
                                 {expenseItems.map((item, idx) => {
-                                  const lineTotal = item.quantity * item.price;
+                                  const lineTotal = (Number(item.quantity) || 0) * (Number(item.price) || 0);
                                   return (
                                     <tr key={item.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                      <td style={{ padding: '8px', textAlign: 'center' }}>{idx + 1}</td>
-                                      <td style={{ padding: '8px' }}>
+                                      <td style={{ padding: '8px', textAlign: 'center', width: '45px', minWidth: '45px' }}>{idx + 1}</td>
+                                      <td style={{ padding: '8px', minWidth: '200px' }}>
                                         <input
                                           type="text"
                                           className="form-input"
@@ -8031,26 +8035,26 @@ export default function Approvals() {
                                             setExpenseItems(updated);
                                           }}
                                           placeholder={t('Nội dung chi tiêu')}
-                                          style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem' }}
+                                          style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem', width: '100%' }}
                                           required
                                         />
                                       </td>
-                                      <td style={{ padding: '8px' }}>
+                                      <td style={{ padding: '8px', width: '95px', minWidth: '95px' }}>
                                         <input
                                           type="number"
                                           className="form-input"
                                           value={item.quantity}
                                           onChange={e => {
                                             const updated = [...expenseItems];
-                                            updated[idx].quantity = Number(e.target.value);
+                                            updated[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
                                             setExpenseItems(updated);
                                           }}
-                                          style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem' }}
+                                          style={{ padding: '4px 6px', height: '28px', fontSize: '0.825rem', width: '100%', minWidth: '70px', textAlign: 'center', fontWeight: 600 }}
                                           min="1"
                                           required
                                         />
                                       </td>
-                                      <td style={{ padding: '8px' }}>
+                                      <td style={{ padding: '8px', width: '130px', minWidth: '130px' }}>
                                         <input
                                           type="text"
                                           className="form-input"
@@ -8061,7 +8065,7 @@ export default function Approvals() {
                                             updated[idx].price = Number(rawVal);
                                             setExpenseItems(updated);
                                           }}
-                                          style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem' }}
+                                          style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem', width: '100%' }}
                                           placeholder="0"
                                           required
                                         />
@@ -8071,8 +8075,8 @@ export default function Approvals() {
                                           </div>
                                         )}
                                       </td>
-                                      <td style={{ padding: '8px', fontWeight: 600 }}>{formatApprovalCurrency(lineTotal, currencyType)}</td>
-                                      <td style={{ padding: '8px' }}>
+                                      <td style={{ padding: '8px', fontWeight: 600, width: '120px', minWidth: '120px' }}>{formatApprovalCurrency(lineTotal, currencyType)}</td>
+                                      <td style={{ padding: '8px', width: '95px', minWidth: '95px' }}>
                                         <CustomSelect
                                           value={item.vat}
                                           onChange={val => {
@@ -8089,7 +8093,7 @@ export default function Approvals() {
                                           width={85}
                                         />
                                       </td>
-                                      <td style={{ padding: '8px', textAlign: 'center' }}>
+                                      <td style={{ padding: '8px', textAlign: 'center', width: '36px', minWidth: '36px' }}>
                                         {expenseItems.length > 1 && (
                                           <button
                                             type="button"
@@ -9183,15 +9187,27 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
 
       if (currentLevel === 1) {
-        if (app1 > 0) return app1 === userId || isSuperAdmin;
+        if (app1 > 0) {
+          if (app1 === userId) return true;
+          if (['superadmin', 'super_admin'].includes(role)) return true;
+          return false;
+        }
         return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
-        if (app2 > 0) return app2 === userId || isSuperAdmin;
+        if (app2 > 0) {
+          if (app2 === userId) return true;
+          if (['superadmin', 'super_admin'].includes(role)) return true;
+          return false;
+        }
         return isSuperAdmin;
       }
       if (currentLevel === 3) {
-        if (app3 > 0) return app3 === userId || isSuperAdmin;
+        if (app3 > 0) {
+          if (app3 === userId) return true;
+          if (['superadmin', 'super_admin'].includes(role)) return true;
+          return false;
+        }
         return isSuperAdmin;
       }
       return false;
@@ -9212,11 +9228,19 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
 
       if (currentLevel === 1) {
-        if (app1 > 0) return app1 === userId || isSuperAdmin;
+        if (app1 > 0) {
+          if (app1 === userId) return true;
+          if (['superadmin', 'super_admin'].includes(role)) return true;
+          return false;
+        }
         return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
-        if (app2 > 0) return app2 === userId || isSuperAdmin;
+        if (app2 > 0) {
+          if (app2 === userId) return true;
+          if (['superadmin', 'super_admin'].includes(role)) return true;
+          return false;
+        }
         return isSuperAdmin;
       }
       return false;
@@ -9225,7 +9249,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     if (item.type === 'attendance_bulk' || item.type === 'checkin') {
       const targetApproverId = Number(detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id || 0);
       if (targetApproverId > 0) {
-        return targetApproverId === userId || isSuperAdmin;
+        if (targetApproverId === userId) return true;
+        if (['superadmin', 'super_admin'].includes(role)) return true;
+        return false;
       }
       return isHrAdmin;
     }

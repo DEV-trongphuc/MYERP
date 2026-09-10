@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, Building2, X, Loader2, Pencil, Trash2, Globe, Phone, Mail, MapPin, Users, LayoutGrid, List, Filter, RefreshCw, Download, DollarSign, Briefcase, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
+import { CopyButton } from '../components/ui/CopyButton';
 import { useUIStore } from '../store/uiStore';
 import { CompanyDrawer } from './CompanyDrawer';
 import { useAuth } from '../contexts/AuthContext';
@@ -480,6 +481,7 @@ export const CompaniesPage: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
                         <MapPin size={12} style={{ opacity: 0.6, flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={co.address || co.city}>{co.address || co.city || 'Chưa có địa chỉ'}</span>
+                        {(co.address || co.city) && <CopyButton text={co.address || co.city} size={11} style={{ padding: '1px 4px', margin: 0, flexShrink: 0 }} />}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
                         <Users size={12} style={{ opacity: 0.6, flexShrink: 0 }} />

@@ -15,6 +15,7 @@ class NotificationController {
         $unread->execute([$auth['user_id']]);
         
         $avatars = [];
+        $userList = [];
         try {
             // Lấy avatar từ bảng users (chứa đầy đủ full_name và avatar_url của tất cả nhân sự)
             $avatarsStmt = $this->db->query("
@@ -22,10 +23,21 @@ class NotificationController {
             ");
             if ($avatarsStmt) {
                 foreach ($avatarsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                    if (!empty($row['name'])) {
-                        $avatars[$row['name']] = $row['avatar'] ?? '';
+                    $uName = trim((string)($row['name'] ?? ''));
+                    $uAvt = trim((string)($row['avatar'] ?? ''));
+                    if (!empty($uName)) {
+                        $avatars[$uName] = $uAvt;
+                        $userList[] = [
+                            'name' => $uName,
+                            'avatar' => $uAvt,
+                            'len' => mb_strlen($uName)
+                        ];
                     }
                 }
+                // Sắp xếp danh sách tên nhân viên từ dài nhất đến ngắn nhất để match chính xác
+                usort($userList, function($a, $b) {
+                    return $b['len'] - $a['len'];
+                });
             }
         } catch (\Throwable $e) {}
 
@@ -35,8 +47,14 @@ class NotificationController {
             
             $actorName = null;
             if (!$isWarning && !empty($item['body'])) {
-                $cleanBody = preg_replace('/^(?:Nhân viên|Nhân sự|Đồng nghiệp)\s+/u', '', $item['body']);
-                if (preg_match('/^(.+?)(?:\s*\([^)]*\))?\s+(?:đã|vừa|gửi|báo|có|check-in|nhắc)\s+/u', $cleanBody, $matches)) {
+                // 1. Loại bỏ các tiền tố mã quy trình hoặc tag trong ngoặc vuông ở đầu: [#EXP-15], [SLA], [#PR-01]...
+                $cleanBody = preg_replace('/^(?:\[[^\]]+\]\s*)+/u', '', trim($item['body']));
+
+                // 2. Loại bỏ các danh xưng chức danh ở đầu như "Nhân viên", "Nhân sự", "Đồng nghiệp", "Quản lý", "Trưởng nhóm", "Admin"...
+                $cleanBody = preg_replace('/^(?:Nhân viên|Nhân sự|Đồng nghiệp|Quản lý|Trưởng nhóm|Ban giám đốc|Admin|Kế toán|Giám đốc)\s+/ui', '', $cleanBody);
+
+                // 3. Regex trích xuất tên trước các động từ hành động phổ biến
+                if (preg_match('/^(.+?)(?:\s*\([^)]*\))?\s+(?:đã|vừa|gửi|báo|có|check-in|nhắc|tạo|yêu cầu)\s+/ui', $cleanBody, $matches)) {
                     $possibleName = trim($matches[1]);
                     if (isset($avatars[$possibleName])) {
                         $actorName = $possibleName;
@@ -46,6 +64,27 @@ class NotificationController {
                                 $actorName = $uName;
                                 break;
                             }
+                        }
+                    }
+                }
+
+                // 4. Nếu chưa tìm thấy, thử kiểm tra pattern "từ <Tên>:" hoặc "từ <Tên> "
+                if (!$actorName && preg_match('/(?:từ|bởi)\s+(?:Nhân viên|Nhân sự|Đồng nghiệp\s+)?([^\s:,]+(?:\s+[^\s:,]+){1,4})/ui', $cleanBody, $matchesFrom)) {
+                    $possibleName = trim($matchesFrom[1]);
+                    foreach ($avatars as $uName => $uAvt) {
+                        if (mb_strtolower($possibleName) === mb_strtolower($uName)) {
+                            $actorName = $uName;
+                            break;
+                        }
+                    }
+                }
+
+                // 5. Nếu regex chưa match, quét đối soát trực tiếp với danh sách tên nhân viên (từ tên dài nhất)
+                if (!$actorName && !empty($userList)) {
+                    foreach ($userList as $u) {
+                        if ($u['len'] >= 4 && mb_strpos($item['body'], $u['name']) !== false) {
+                            $actorName = $u['name'];
+                            break;
                         }
                     }
                 }

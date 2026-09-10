@@ -203,6 +203,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
   const [dealSalary, setDealSalary] = useState(0);
   const [hasInsurance, setHasInsurance] = useState(false);
   const [allowanceMeal, setAllowanceMeal] = useState(0);
+  const [allowanceMealType, setAllowanceMealType] = useState<'per_day' | 'fixed'>('per_day');
   const [allowanceTravel, setAllowanceTravel] = useState(0);
   const [allowancePhone, setAllowancePhone] = useState(0);
   const [kpiTarget, setKpiTarget] = useState(0);
@@ -573,19 +574,24 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
           const isOwn = account && currentUser && String(account.id) === String(currentUser.id);
           if (isMgmt || isOwn) {
             const res = await fetchAPI('hrm/profiles');
-            if (res && Array.isArray(res)) {
-              const found = res.find((p: any) => String(p.id) === String(account.id));
+            const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+            if (list && list.length > 0) {
+              const found = list.find((p: any) => String(p.id || p.user_id) === String(account.id));
               if (found) {
                 setBaseSalary(Number(found.base_salary || 0));
                 setDealSalary(Number(found.deal_salary || 0));
                 setHasInsurance(found.has_insurance !== 0 && found.has_insurance !== '0' && found.has_insurance !== false);
                 setAllowanceMeal(Number(found.allowance_meal || 0));
+                setAllowanceMealType((found.allowance_meal_type as 'per_day' | 'fixed') || 'per_day');
                 setAllowanceTravel(Number(found.allowance_travel || 0));
                 setAllowancePhone(Number(found.allowance_phone || 0));
                 setKpiTarget(Number(found.kpi_target || 0));
                 setInsuranceRateBhxh(Number(found.insurance_rate_bhxh ?? 8.00));
                 setInsuranceRateBhyt(Number(found.insurance_rate_bhyt ?? 1.50));
                 setInsuranceRateBhtn(Number(found.insurance_rate_bhtn ?? 1.00));
+                if (found.joined_date) {
+                  setDateJoined(found.joined_date);
+                }
                 try {
                   const customList = found.custom_fields_json 
                     ? (typeof found.custom_fields_json === 'string' ? JSON.parse(found.custom_fields_json) : found.custom_fields_json) 
@@ -670,6 +676,18 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
       setManagerBehaviorMode('combined');
 
       setDocuments([]);
+      setBaseSalary(0);
+      setDealSalary(0);
+      setHasInsurance(false);
+      setAllowanceMeal(0);
+      setAllowanceMealType('per_day');
+      setAllowanceTravel(0);
+      setAllowancePhone(0);
+      setKpiTarget(0);
+      setCustomAllowances([]);
+      setInsuranceRateBhxh(8.00);
+      setInsuranceRateBhyt(1.50);
+      setInsuranceRateBhtn(1.00);
       setLoading(false);
     }
   }, [isOpen, account]);
@@ -1101,11 +1119,12 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_id: savedUserId,
-            joined_date: dateJoined || new Date().toISOString().substring(0, 10),
+            joined_date: dateJoined || (account?.created_at ? String(account.created_at).substring(0, 10) : new Date().toISOString().substring(0, 10)),
             base_salary: baseSalary,
             deal_salary: dealSalary,
             has_insurance: hasInsurance ? 1 : 0,
             allowance_meal: allowanceMeal,
+            allowance_meal_type: allowanceMealType,
             allowance_travel: allowanceTravel,
             allowance_phone: allowancePhone,
             kpi_target: kpiTarget,
@@ -4313,7 +4332,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                       </div>
                     </div>
 
-                    {/* Section 2: PHỤ CẤP CỐ ĐỊNH */}
+                    {/* Section 2: PHỤ CẤP CƠ BẢN */}
                     <div style={{
                       border: '1px solid var(--color-border-light)',
                       borderRadius: '12px',
@@ -4321,48 +4340,171 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                       background: 'rgba(0, 0, 0, 0.01)'
                     }}>
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '0.05em' }}>
-                        {t('Phụ Cấp Cố Định')}
+                        {t('Phụ Cấp Tiêu Chuẩn')}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontWeight: 600 }}>{t('Phụ cấp ăn trưa')}</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={formatMoneyInput(allowanceMeal)}
-                            onChange={e => handleMoneyChange(e.target.value, setAllowanceMeal)}
-                            disabled={!canEditSalary}
-                          />
-                          {Number(allowanceMeal) > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.85rem', alignItems: 'start' }}>
+                        {/* Phụ cấp ăn trưa */}
+                        <div className="form-group" style={{ display: 'flex', flexDirection: 'column' }}>
+                          <label className="form-label" style={{ fontWeight: 600, marginBottom: '4px' }}>{t('Phụ cấp ăn trưa')}</label>
+                          
+                          {/* Segmented Button / Pill Toggle for Allowance Meal Type */}
+                          <div style={{
+                            display: 'flex',
+                            background: 'var(--color-bg-secondary, #f1f5f9)',
+                            padding: '2px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--color-border-light)',
+                            marginBottom: '6px',
+                            height: '28px',
+                            boxSizing: 'border-box'
+                          }}>
+                            <button
+                              type="button"
+                              onClick={() => setAllowanceMealType('per_day')}
+                              disabled={!canEditSalary}
+                              style={{
+                                flex: 1,
+                                padding: '2px 6px',
+                                fontSize: '0.7rem',
+                                fontWeight: allowanceMealType === 'per_day' ? 700 : 500,
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: allowanceMealType === 'per_day' ? 'var(--color-bg-primary, #ffffff)' : 'transparent',
+                                color: allowanceMealType === 'per_day' ? 'var(--color-primary, #0284c7)' : 'var(--color-text-muted, #64748b)',
+                                boxShadow: allowanceMealType === 'per_day' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                                cursor: canEditSalary ? 'pointer' : 'not-allowed',
+                                transition: 'all 0.15s ease',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {t('Theo ngày công (Mặc định)')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAllowanceMealType('fixed')}
+                              disabled={!canEditSalary}
+                              style={{
+                                flex: 1,
+                                padding: '2px 6px',
+                                fontSize: '0.7rem',
+                                fontWeight: allowanceMealType === 'fixed' ? 700 : 500,
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: allowanceMealType === 'fixed' ? 'var(--color-bg-primary, #ffffff)' : 'transparent',
+                                color: allowanceMealType === 'fixed' ? 'var(--color-primary, #0284c7)' : 'var(--color-text-muted, #64748b)',
+                                boxShadow: allowanceMealType === 'fixed' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                                cursor: canEditSalary ? 'pointer' : 'not-allowed',
+                                transition: 'all 0.15s ease',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {t('Cố định tháng')}
+                            </button>
+                          </div>
+
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={formatMoneyInput(allowanceMeal)}
+                              onChange={e => handleMoneyChange(e.target.value, setAllowanceMeal)}
+                              disabled={!canEditSalary}
+                              placeholder={allowanceMealType === 'per_day' ? 'VD: 35,000' : 'VD: 730,000'}
+                              style={{ paddingRight: '52px' }}
+                            />
+                            <span style={{
+                              position: 'absolute',
+                              right: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: 'var(--color-text-muted)',
+                              pointerEvents: 'none'
+                            }}>
+                              {allowanceMealType === 'per_day' ? 'đ/ngày' : 'đ/tháng'}
+                            </span>
+                          </div>
+                          {Number(allowanceMeal) > 0 ? (
                             <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '4px', fontStyle: 'italic' }}>
-                              {numberToVietnameseText(allowanceMeal, 'VND', false)}
+                              {numberToVietnameseText(allowanceMeal, 'VND', false)} {allowanceMealType === 'per_day' ? '/ ngày công' : '/ tháng'}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                              {allowanceMealType === 'per_day' ? t('Tự động nhân ngày công thực tế khi tính lương') : t('Mức phụ cấp cố định mỗi tháng')}
                             </div>
                           )}
                         </div>
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontWeight: 600 }}>{t('Phụ cấp xăng xe')}</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={formatMoneyInput(allowanceTravel)}
-                            onChange={e => handleMoneyChange(e.target.value, setAllowanceTravel)}
-                            disabled={!canEditSalary}
-                          />
+
+                        {/* Phụ cấp xăng xe */}
+                        <div className="form-group" style={{ display: 'flex', flexDirection: 'column' }}>
+                          <label className="form-label" style={{ fontWeight: 600, marginBottom: '4px' }}>{t('Phụ cấp xăng xe')}</label>
+                          <div style={{ height: '28px', marginBottom: '6px', display: 'flex', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              {t('Cố định hàng tháng')}
+                            </span>
+                          </div>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={formatMoneyInput(allowanceTravel)}
+                              onChange={e => handleMoneyChange(e.target.value, setAllowanceTravel)}
+                              disabled={!canEditSalary}
+                              placeholder="VD: 500,000"
+                              style={{ paddingRight: '52px' }}
+                            />
+                            <span style={{
+                              position: 'absolute',
+                              right: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: 'var(--color-text-muted)',
+                              pointerEvents: 'none'
+                            }}>
+                              đ/tháng
+                            </span>
+                          </div>
                           {Number(allowanceTravel) > 0 && (
                             <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '4px', fontStyle: 'italic' }}>
                               {numberToVietnameseText(allowanceTravel, 'VND', false)}
                             </div>
                           )}
                         </div>
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontWeight: 600 }}>{t('Phụ cấp điện thoại')}</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={formatMoneyInput(allowancePhone)}
-                            onChange={e => handleMoneyChange(e.target.value, setAllowancePhone)}
-                            disabled={!canEditSalary}
-                          />
+
+                        {/* Phụ cấp điện thoại */}
+                        <div className="form-group" style={{ display: 'flex', flexDirection: 'column' }}>
+                          <label className="form-label" style={{ fontWeight: 600, marginBottom: '4px' }}>{t('Phụ cấp điện thoại')}</label>
+                          <div style={{ height: '28px', marginBottom: '6px', display: 'flex', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                              {t('Cố định hàng tháng')}
+                            </span>
+                          </div>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={formatMoneyInput(allowancePhone)}
+                              onChange={e => handleMoneyChange(e.target.value, setAllowancePhone)}
+                              disabled={!canEditSalary}
+                              placeholder="VD: 300,000"
+                              style={{ paddingRight: '52px' }}
+                            />
+                            <span style={{
+                              position: 'absolute',
+                              right: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: 'var(--color-text-muted)',
+                              pointerEvents: 'none'
+                            }}>
+                              đ/tháng
+                            </span>
+                          </div>
                           {Number(allowancePhone) > 0 && (
                             <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '4px', fontStyle: 'italic' }}>
                               {numberToVietnameseText(allowancePhone, 'VND', false)}

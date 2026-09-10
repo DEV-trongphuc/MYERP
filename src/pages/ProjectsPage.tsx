@@ -16,6 +16,7 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { Pagination } from '../components/ui/Pagination';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
+import { CopyButton } from '../components/ui/CopyButton';
 import { Mail, Phone, Copy, ChevronLeft, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionInput } from '../components/ui/MentionInput';

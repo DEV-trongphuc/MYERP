@@ -2502,7 +2502,7 @@ function checkConsultantGates($conn, $consultantId, $lead = null)
     }
 
     $requireCheckinLead = get_system_setting($conn, 'require_checkin_lead');
-    $requireCheckinLead = ($requireCheckinLead === null) ? 1 : (int)$requireCheckinLead;
+    $requireCheckinLead = ($requireCheckinLead === null) ? 0 : (int)$requireCheckinLead;
 
     if ($requireCheckinLead === 1 && !$bypassCheckIn) {
         $allowPendingCheckin = (int) get_system_setting($conn, 'allow_lead_distribution_on_pending_checkin');

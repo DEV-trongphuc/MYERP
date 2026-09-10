@@ -14,6 +14,7 @@ import { AddressSelect } from '../components/ui/AddressSelect';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { Pagination } from '../components/ui/Pagination';
 import { Avatar } from '../components/ui/Avatar';
+import { CopyButton } from '../components/ui/CopyButton';
 import styles from './EntityDrawer.module.css';
 import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 
@@ -451,6 +452,7 @@ export const SuppliersPage: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 0 }}>
                         <MapPin size={11} style={{ opacity: 0.5 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.address}>{s.address}</span>
+                        <CopyButton text={s.address} size={11} style={{ padding: '1px 4px', margin: 0, flexShrink: 0 }} />
                       </div>
                     )}
                     {cardProjList.length > 0 && (
@@ -736,22 +738,34 @@ export const SuppliersPage: React.FC = () => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                               <div>
                                 <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Số điện thoại</span>
-                                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600 }}>{formData.phone || '—'}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600 }}>{formData.phone || '—'}</span>
+                                  {formData.phone && <CopyButton text={formData.phone} size={12} />}
+                                </div>
                               </div>
                               <div>
                                 <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Email</span>
-                                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.email || '—'}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.email || '—'}</span>
+                                  {formData.email && <CopyButton text={formData.email} size={12} />}
+                                </div>
                               </div>
                             </div>
 
                             <div>
                               <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Tài khoản ngân hàng giao dịch</span>
-                              <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.bank_account || '—'}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.bank_account || '—'}</span>
+                                {formData.bank_account && <CopyButton text={formData.bank_account} size={12} />}
+                              </div>
                             </div>
 
                             <div>
                               <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Địa chỉ văn phòng</span>
-                              <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.address || '—'}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.address || '—'}</span>
+                                {formData.address && <CopyButton text={formData.address} size={12} />}
+                              </div>
                             </div>
                           </div>
                         ) : (
