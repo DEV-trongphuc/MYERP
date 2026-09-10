@@ -3117,7 +3117,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       .filter(u => ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'assistant'].includes(String(u.role).toLowerCase()))
       .map(u => ({ 
         value: String(u.id), 
-        label: `${u.full_name} (${u.role === 'admin' ? 'Admin' : u.role === 'hr' ? 'HR' : u.role === 'director' ? 'Giám đốc' : 'Quản lý'})`,
+        label: u.full_name || u.name,
         avatar: resolveAttachmentUrl(u.avatar_url || u.avatar)
       }));
 

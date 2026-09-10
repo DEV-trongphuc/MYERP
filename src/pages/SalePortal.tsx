@@ -11984,8 +11984,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             options={allUsersList.map(u => ({
                               value: String(u.id),
                               label: u.name || u.full_name || u.username,
-                              avatar: u.avatar || u.avatar_url,
-                              sublabel: (u.job_title || getRoleDisplayName(u)) ? `(${u.job_title || getRoleDisplayName(u)})` : undefined
+                              avatar: u.avatar || u.avatar_url
                             }))}
                             placeholder={t('Chọn người quản lý trực tiếp...')}
                             searchable

@@ -2155,8 +2155,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                           options={allUsers.map(u => ({
                             value: String(u.id),
                             label: u.name || u.full_name || u.username,
-                            avatar: u.avatar || u.avatar_url,
-                            sublabel: u.role ? `(${u.role})` : undefined
+                            avatar: u.avatar || u.avatar_url
                           }))}
                           placeholder={t('Chọn người quản lý trực tiếp...')}
                           searchable

@@ -341,9 +341,22 @@ class ActivityController {
             }
         }
 
-        if (in_array($auth['role'], ['super_admin', 'superadmin', 'admin', 'accountant'], true)) {
-            // Super Admin / Admin / Accountant: full oversight, can filter by team_id or user_id
-        } else if (in_array($auth['role'], ['director'], true)) {
+        $userRole = strtolower($auth['role'] ?? '');
+        $isMarketing = ($userRole === 'marketing');
+        if (!$isMarketing && !empty($auth['user_id'])) {
+            $stmtM = $this->db->prepare("SELECT u.team_id, t.name as team_name, u.job_title FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
+            $stmtM->execute([$auth['user_id']]);
+            $uInfo = $stmtM->fetch(PDO::FETCH_ASSOC);
+            if ($uInfo && ((int)$uInfo['team_id'] === 3 || stripos($uInfo['team_name'] ?? '', 'marketing') !== false || stripos($uInfo['job_title'] ?? '', 'marketing') !== false)) {
+                $isMarketing = true;
+            }
+        }
+
+        $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin', 'accountant', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'assistant'], true) || $isMarketing;
+
+        if ($hasBroadOversight) {
+            // Super Admin / Admin / Accountant / Marketing / Academic / Assistant: broad oversight, can filter by team_id or user_id
+        } else if (in_array($userRole, ['director'], true)) {
             // Director: oversight of company-wide tasks except private personal tasks
             $where[] = '(
                 NOT (
@@ -373,8 +386,8 @@ class ActivityController {
                         OR (COALESCE(a.tags, '') LIKE '%ca_nhan%' OR COALESCE(a.tags, '') LIKE '%personal%')
                     )
                 )
-                OR (a.related_type = 'contact' AND EXISTS (
-                    SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (ct.owner_id = ? $teamCtClause)
+                OR (((a.related_type IN ('contact', 'lead') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
+                    SELECT 1 FROM contacts ct WHERE (ct.id = a.related_id OR ct.id = a.contact_id) AND (ct.owner_id = ? $teamCtClause)
                 )) 
                 OR (a.related_type = 'deal' AND EXISTS (
                     SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
@@ -416,8 +429,8 @@ class ActivityController {
                 OR a.created_by = ?
                 OR a.approver_id = ?
                 OR FIND_IN_SET(?, a.participant_ids)
-                OR (a.related_type = \'contact\' AND EXISTS (
-                    SELECT 1 FROM contacts ct WHERE ct.id = a.related_id AND (
+                OR (((a.related_type IN (\'contact\', \'lead\') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
+                    SELECT 1 FROM contacts ct WHERE (ct.id = a.related_id OR ct.id = a.contact_id) AND (
                         ct.owner_id = ? 
                         OR FIND_IN_SET(?, ct.collaborator_ids) 
                         OR ct.id IN (

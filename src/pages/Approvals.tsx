@@ -1765,7 +1765,7 @@ export default function Approvals() {
       .filter(u => !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && u.email !== 'turniodev@gmail.com')
       .map(u => ({
         value: String(u.id),
-        label: `${u.full_name || u.name} (${u.job_title || u.role || 'Nhân sự'})`,
+        label: u.full_name || u.name,
         avatar: u.avatar || u.avatar_url
       }));
   }, [users]);
@@ -9793,7 +9793,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <CustomSelect
                   options={users.map(u => ({
                     value: String(u.id),
-                    label: `${u.full_name || u.name} (${u.role || st.roleTitle})`,
+                    label: u.full_name || u.name,
                     avatar: u.avatar || u.avatar_url
                   }))}
                   value={st.user ? String(st.user.id) : ''}
@@ -11869,7 +11869,6 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               <Avatar src={reminderTargetUser.avatar || reminderTargetUser.avatar_url} name={reminderTargetUser.full_name || reminderTargetUser.name} size={28} />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{reminderTargetUser.full_name || reminderTargetUser.name}</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{reminderTargetUser.role || t('Người duyệt')}</span>
               </div>
             </div>
 

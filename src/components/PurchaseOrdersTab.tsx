@@ -778,7 +778,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           <CustomSelect 
                             options={users.map((u: any) => ({
                               value: String(u.id),
-                              label: `${u.full_name || u.name} (${u.job_title || u.role || 'Quản lý'})`,
+                              label: u.full_name || u.name,
                               avatar: u.avatar_url || u.avatar,
                               sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
                             }))}
@@ -806,7 +806,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           <CustomSelect 
                             options={users.map((u: any) => ({
                               value: String(u.id),
-                              label: `${u.full_name || u.name} (${u.job_title || u.role || 'Ban Giám đốc / Kế toán'})`,
+                              label: u.full_name || u.name,
                               avatar: u.avatar_url || u.avatar,
                               sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
                             }))}
@@ -834,7 +834,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           <CustomSelect 
                             options={users.map((u: any) => ({
                               value: String(u.id),
-                              label: `${u.full_name || u.name} (${u.job_title || u.role || 'Kế toán'})`,
+                              label: u.full_name || u.name,
                               avatar: u.avatar_url || u.avatar,
                               sublabel: [u.phone, u.email].filter(Boolean).join(' - ')
                             }))}

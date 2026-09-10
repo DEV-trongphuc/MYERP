@@ -8766,7 +8766,7 @@ export default function ProjectsPage() {
                           showAvatars={true}
                           options={users
                             .filter(u => ['manager', 'director', 'admin', 'superadmin', 'super_admin'].includes(u.role))
-                            .map(u => ({ value: String(u.id), label: `${u.full_name || u.fullname || u.username} (${u.role})`, avatar: u.avatar_url || u.avatar }))
+                            .map(u => ({ value: String(u.id), label: u.full_name || u.fullname || u.username, avatar: u.avatar_url || u.avatar }))
                           }
                           value={parseIds(editingCampaign?.manager_ids)}
                           onChange={val => setEditingCampaign({ ...editingCampaign, manager_ids: Array.isArray(val) ? val.join(',') : String(val) })}

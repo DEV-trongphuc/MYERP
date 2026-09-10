@@ -4115,7 +4115,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         needCompanies ? api.get('/companies?limit=2000') : Promise.resolve(null),
         needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
         needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`) : Promise.resolve(null),
-        (shouldFetchContact || isTaskOrTimelineTab) ? api.get(`/activities?related_type=contact&related_id=${currentCId}`) : Promise.resolve(null)
+        (shouldFetchContact || isTaskOrTimelineTab) ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=500`) : Promise.resolve(null)
       ]);
 
       // 2. Xử lý Fresh Contact Details
@@ -4582,7 +4582,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       value: String(u.id),
       label: u.full_name || u.name || u.username || `User #${u.id}`,
       avatar: u.avatar_url || u.avatar,
-      sublabel: [u.role ? `(${u.role})` : '', u.department || u.team_name, u.phone || u.email].filter(Boolean).join(' • ')
+      sublabel: [u.department || u.team_name, u.phone || u.email].filter(Boolean).join(' • ')
     }));
   }, [saleTeamUsers]);
 
@@ -15278,11 +15278,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             >
                               <Avatar name={uName} size={20} />
                               <span>{uName}</span>
-                              {uRole && (
-                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>
-                                  ({uRole})
-                                </span>
-                              )}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -15440,11 +15435,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
                                         {uName}
                                       </span>
-                                      {uRole && (
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          {uRole} {u.email ? `• ${u.email}` : ''}
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
                                   {isSelected && (

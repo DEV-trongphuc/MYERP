@@ -947,7 +947,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                             .filter(u => ['admin', 'superadmin', 'super_admin', 'accountant'].includes(u.role))
                             .map(u => ({
                               value: String(u.id),
-                              label: `${u.full_name || u.name} (${u.role})`,
+                              label: u.full_name || u.name,
                               avatar: u.avatar_url || u.avatar
                             }))}
                           value={depositAccountantId}
