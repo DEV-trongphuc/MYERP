@@ -11,7 +11,7 @@ import {
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon, Building2, Truck,
   GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark,
-  Landmark, Wallet
+  Landmark, Wallet, BarChart2, Palmtree
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -9130,6 +9130,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   onDelete?: (item: ApprovalItem) => void;
 }) {
   const [detail, setDetail] = useState<any>(null);
+  const [senderLeaveBalance, setSenderLeaveBalance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
   const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
@@ -9453,18 +9454,42 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       setLoading(true);
       try {
         if (item.type === 'leave') {
+          let foundObj: any = null;
           try {
-            const res = await api.get(`/hrm/leaves?id=${item.id}`);
+            const res = await api.get(`/hrm/leaves/${item.id}`);
             const found = res?.data?.data || res?.data;
-            if (active && found && found.id) {
-              setDetail(found);
-              return;
+            if (found && found.id) {
+              foundObj = found;
             }
           } catch (err) {}
-          const listRes = await fetchAPI('hrm/leaves');
-          const list = Array.isArray(listRes?.data) ? listRes.data : (listRes?.data?.items || []);
-          const foundInList = list.find((l: any) => l.id === item.id);
-          if (active && foundInList) setDetail(foundInList);
+          if (!foundObj) {
+            try {
+              const res = await api.get(`/hrm/leaves?id=${item.id}`);
+              const found = res?.data?.data || res?.data;
+              if (found && found.id) {
+                foundObj = found;
+              }
+            } catch (err) {}
+          }
+          if (!foundObj) {
+            const listRes = await fetchAPI('hrm/leaves');
+            const list = Array.isArray(listRes?.data) ? listRes.data : (listRes?.data?.items || []);
+            const foundInList = list.find((l: any) => l.id === item.id);
+            if (foundInList) foundObj = foundInList;
+          }
+          if (active && foundObj) setDetail(foundObj);
+
+          // Fetch sender leave balance
+          const targetUid = foundObj?.user_id || item?.user_id;
+          if (targetUid) {
+            try {
+              const balRes = await api.get(`/hrm/user-balance?user_id=${targetUid}`);
+              const b = balRes?.data?.data || balRes?.data;
+              if (active && b) {
+                setSenderLeaveBalance(b);
+              }
+            } catch (err) {}
+          }
         } else if (item.type === 'advance') {
           try {
             const res = await api.get(`/hrm/advances?id=${item.id}`);
@@ -10330,6 +10355,138 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               return `${hh}:${mm} (${day}/${month}/${year})`;
             };
 
+            const senderUser = users.find(u => Number(u.id) === Number(detail?.user_id || item.user_id));
+            const senderName = detail?.employee_name || item.employee_name || senderUser?.full_name || t('Nhân sự');
+
+            const annTotal = Number(senderLeaveBalance?.annual_leave_total ?? detail?.annual_leave_total ?? 12);
+            const annUsed = Number(senderLeaveBalance?.annual_leave_used ?? detail?.annual_leave_used ?? 0);
+            const annRemaining = Number(
+              senderLeaveBalance?.remaining_annual_leave ?? 
+              detail?.remaining_annual_leave ?? 
+              Math.max(0, annTotal - annUsed)
+            );
+
+            const compTotal = Number(senderLeaveBalance?.compensatory_leave_total ?? detail?.compensatory_leave_total ?? 0);
+            const compUsed = Number(senderLeaveBalance?.compensatory_leave_used ?? detail?.compensatory_leave_used ?? 0);
+            const compRemaining = Number(
+              senderLeaveBalance?.remaining_compensatory_leave ?? 
+              detail?.remaining_compensatory_leave ?? 
+              Math.max(0, compTotal - compUsed)
+            );
+
+            const renderLeaveBalanceCard = () => (
+              <div style={{
+                gridColumn: isMobile ? 'span 1' : 'span 2',
+                marginTop: '4px',
+                padding: isMobile ? '12px' : '12px 14px',
+                borderRadius: '12px',
+                background: 'var(--color-bg-secondary, rgba(248, 250, 252, 0.85))',
+                border: '1px solid var(--color-border-light)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <BarChart2 size={15} style={{ color: 'var(--color-primary, #2563eb)' }} /> {t('Quỹ phép của người gửi')}: <span style={{ color: 'var(--color-primary, #2563eb)' }}>{senderName}</span>
+                  </span>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                    {t('Thông tin số ngày phép khả dụng để duyệt đơn')}
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+                  gap: isMobile ? '8px' : '12px'
+                }}>
+                  {/* Phép công / Phép năm */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: annRemaining > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      color: annRemaining > 0 ? '#10b981' : '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <Calendar size={18} strokeWidth={2.2} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                        {t('Phép công (Phép năm) còn lại')}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 800,
+                          color: annRemaining > 0 ? '#10b981' : '#ef4444'
+                        }}>
+                          {annRemaining} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{t('ngày')}</span>
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                          ({t('Đã dùng')}: {annUsed} / {annTotal} {t('ngày')})
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phép bù / Nghỉ bù */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border-light)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: compRemaining > 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                      color: compRemaining > 0 ? '#2563eb' : '#f59e0b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <Palmtree size={18} strokeWidth={2.2} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                        {t('Phép bù (Nghỉ bù) còn lại')}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 800,
+                          color: compRemaining > 0 ? '#2563eb' : '#f59e0b'
+                        }}>
+                          {compRemaining} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{t('ngày')}</span>
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                          ({t('Đã dùng')}: {compUsed} / {compTotal} {t('ngày')})
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+
             if (isLateEarly) {
               const reasonStr = detail?.reason || item.description || '';
               const isEarly = reasonStr.includes('Về sớm');
@@ -10400,6 +10557,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       />
                     </div>
                   </div>
+                  {renderLeaveBalanceCard()}
                 </div>
               );
             }
@@ -10483,6 +10641,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     />
                   </div>
                 </div>
+                {renderLeaveBalanceCard()}
               </div>
             );
           })()}

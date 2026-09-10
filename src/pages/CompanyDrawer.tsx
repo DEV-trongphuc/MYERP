@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, Camera, Save, TrendingUp, DollarSign, BookOpen, List } from 'lucide-react';
+import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { AddressSelect } from '../components/ui/AddressSelect';
@@ -87,13 +87,35 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     }
   }, [isLecturer, activeTab]);
 
+  const [pipelineStats, setPipelineStats] = useState<any>(null);
+  const [pipelineStatsLoading, setPipelineStatsLoading] = useState(false);
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string>('all');
+
   const visibleTabs = useMemo(() => {
     let list = disableEdit ? TABS.filter(t => t.id !== 'settings') : TABS;
     if (!isLecturer) {
       list = list.filter(t => t.id !== 'teaching');
     }
+    if (isPartner) {
+      list = list.map(t => t.id === 'contacts' ? { ...t, label: 'Khách hàng giới thiệu' } : t);
+    }
     return list;
-  }, [disableEdit, isLecturer]);
+  }, [disableEdit, isLecturer, isPartner]);
+
+  const fetchPipelineStats = useCallback(async (companyId: number) => {
+    if (!companyId) return;
+    setPipelineStatsLoading(true);
+    try {
+      const res = await api.get(`/companies/${companyId}/pipeline-stats`);
+      if (res.data?.data) {
+        setPipelineStats(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch pipeline stats for partner', err);
+    } finally {
+      setPipelineStatsLoading(false);
+    }
+  }, []);
 
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -276,6 +298,20 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   
   // B2B Sub-contacts State — loaded from API
   const [subContacts, setSubContacts] = useState<any[]>([]);
+
+  const filteredSubContacts = useMemo(() => {
+    if (selectedStageFilter === 'all') return subContacts;
+    if (selectedStageFilter === 'won') {
+      return subContacts.filter(c => c.lead_status === 'won' || ['enrolled', 'hoc_vien', 'won'].includes(c.pipeline_status));
+    }
+    if (selectedStageFilter === 'nurture') {
+      return subContacts.filter(c => c.lead_status === 'nurture');
+    }
+    if (selectedStageFilter === 'lost') {
+      return subContacts.filter(c => c.lead_status === 'lost');
+    }
+    return subContacts.filter(c => String(c.stage_id) === String(selectedStageFilter) || c.pipeline_status === selectedStageFilter);
+  }, [subContacts, selectedStageFilter]);
   const [showDealModal, setShowDealModal] = useState(false);
   const [dealForm, setDealForm] = useState({ title: '', value: '', stage: 'lead', probability: 50, expected_close: '' });
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -421,17 +457,26 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       setBaseTags(entity.tags || []);
       setPrevEntityId(entity.id);
       setSubLoading(true);
-        api.get('/contacts', { params: { company_id: entity.id, limit: 50 } })
-          .then(r => setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
-            id: c.id,
-            name: (c.full_name || '').trim() || 'Chưa có tên',
-            role: c.job_title || '',
-            phone: c.phone || '',
-            email: c.email || '',
-            isPrimary: c.is_primary || false,
-          }))))
-          .catch(() => setSubContacts([]))
-          .finally(() => setSubLoading(false));
+      fetchPipelineStats(entity.id);
+      api.get('/contacts', { params: { company_id: entity.id, limit: 500 } })
+        .then(r => setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
+          id: c.id,
+          name: (c.full_name || '').trim() || 'Chưa có tên',
+          role: c.job_title || '',
+          phone: c.phone || '',
+          email: c.email || '',
+          isPrimary: c.is_primary || false,
+          stage_id: c.stage_id,
+          stage_name: c.stage_name,
+          stage_color: c.stage_color,
+          pipeline_status: c.pipeline_status,
+          lead_status: c.lead_status,
+          created_at: c.created_at,
+          owner_name: c.owner_name,
+          owner_avatar: c.owner_avatar
+        }))))
+        .catch(() => setSubContacts([]))
+        .finally(() => setSubLoading(false));
         
         setDealsLoading(true);
         api.get('/deals', { params: { company_id: entity.id } })
@@ -449,13 +494,15 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       setBaseData({});
       setBaseTags([]);
       setSubContacts([]);
+      setPipelineStats(null);
+      setSelectedStageFilter('all');
       setDeals([]);
       setInvoices([]);
       setExpenses([]);
       setSalesOrders([]);
       setPurchaseOrders([]);
     }
-  }, [entity]);
+  }, [entity, fetchPipelineStats]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -1034,8 +1081,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
                 {activeTab === 'info' && (
                   <fieldset disabled={disableEdit} style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }} className="animate-fade">
-                    {/* Partner Statistics Cards (For CTV / Đại lý) */}
-                    {['f1', 'f2', 'f3', 'ctv', 'ca_nhan', 'doanh_nghiep'].includes(String(formData?.tier || entity?.tier || '').toLowerCase()) && (
+                    {/* Partner Statistics Cards (For CTV / Đại lý / Referrer) */}
+                    {(isPartner || ['f1', 'f2', 'f3', 'ctv', 'referrer', 'ca_nhan', 'doanh_nghiep'].includes(String(formData?.tier || entity?.tier || '').toLowerCase())) && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                         {/* Card 1: Khách hàng giới thiệu */}
                         <div className="stat-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', minHeight: '120px', position: 'relative', overflow: 'hidden' }}>
@@ -1067,7 +1114,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           </div>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
                             <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.75rem', lineHeight: 1.1 }}>
-                              {subContacts.length}
+                              {pipelineStats?.summary?.total ?? subContacts.length}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
@@ -1159,6 +1206,209 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               <span>{purchaseOrders.length > 0 ? 'Tổng đơn mua PO' : 'Lịch sử chi trả'}</span>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Referral Pipeline Statistics Panel */}
+                    {isPartner && (
+                      <div className="card-panel" style={{
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border-light)',
+                        borderRadius: '16px',
+                        padding: '1.25rem 1.5rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1.25rem',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.02)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'rgba(59, 130, 246, 0.1)',
+                              color: '#3b82f6',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              <GitBranch size={20} strokeWidth={2.2} />
+                            </div>
+                            <div>
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 750, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                Thống kê Data theo Trạng thái Pipeline
+                              </h4>
+                              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                Tiến trình chuyển đổi và trạng thái các data do người này giới thiệu
+                              </p>
+                            </div>
+                          </div>
+                          <button 
+                            type="button"
+                            className="btn secondary sm"
+                            onClick={() => {
+                              setSelectedStageFilter('all');
+                              setActiveTab('contacts');
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', padding: '6px 12px' }}
+                          >
+                            <Users size={14} />
+                            <span>Xem danh sách ({pipelineStats?.summary?.total ?? subContacts.length})</span>
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+
+                        {/* Mini KPI Chips Row */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
+                          gap: '8px'
+                        }}>
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'var(--color-bg-secondary, rgba(0,0,0,0.02))', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              <Users size={13} color="#3b82f6" /> Tổng nhận
+                            </div>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#3b82f6' }}>
+                              {pipelineStats?.summary?.total ?? subContacts.length}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'var(--color-bg-secondary, rgba(0,0,0,0.02))', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              <Clock size={13} color="#0ea5e9" /> Đang tư vấn
+                            </div>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0ea5e9' }}>
+                              {pipelineStats?.summary?.active ?? 0}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#10b981', fontWeight: 700 }}>
+                              <CheckCircle2 size={13} color="#10b981" /> Nhập học / Đậu
+                            </div>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981' }}>
+                              {pipelineStats?.summary?.won ?? 0}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.06)', border: '1px solid rgba(139, 92, 246, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#8b5cf6', fontWeight: 700 }}>
+                              <TrendingUp size={13} color="#8b5cf6" /> Tỷ lệ chốt
+                            </div>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#8b5cf6' }}>
+                              {pipelineStats?.summary?.conversion_rate ?? 0}%
+                            </span>
+                          </div>
+
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#d97706', fontWeight: 600 }}>
+                              <RefreshCw size={13} color="#f59e0b" /> Nuôi dưỡng
+                            </div>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#d97706' }}>
+                              {pipelineStats?.summary?.nurture ?? 0}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>
+                              <XCircle size={13} color="#ef4444" /> Thất bại / Hủy
+                            </div>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ef4444' }}>
+                              {pipelineStats?.summary?.lost ?? 0}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Stage Breakdown Funnel Bars */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 750, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              Chi tiết số lượng theo từng giai đoạn Pipeline:
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                              Click vào giai đoạn để lọc danh sách data
+                            </span>
+                          </div>
+
+                          {pipelineStatsLoading ? (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                              <Loader2 className="animate-spin" size={24} style={{ margin: '0 auto 8px', color: 'var(--color-primary)' }} />
+                              <span style={{ fontSize: '0.8rem' }}>Đang tải số liệu thống kê pipeline...</span>
+                            </div>
+                          ) : !pipelineStats?.stages || pipelineStats.stages.length === 0 ? (
+                            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderRadius: '10px' }}>
+                              <p style={{ margin: 0, fontSize: '0.85rem' }}>Chưa có dữ liệu giai đoạn pipeline nào.</p>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {pipelineStats.stages.map((st: any) => {
+                                const hasCount = st.count > 0;
+                                return (
+                                  <div 
+                                    key={st.id}
+                                    onClick={() => {
+                                      setSelectedStageFilter(String(st.id));
+                                      setActiveTab('contacts');
+                                    }}
+                                    style={{
+                                      padding: '9px 14px',
+                                      borderRadius: '10px',
+                                      background: hasCount ? 'var(--color-surface)' : 'var(--color-bg)',
+                                      border: `1px solid ${hasCount ? (st.color ? st.color + '40' : 'var(--color-border)') : 'var(--color-border-light)'}`,
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '6px'
+                                    }}
+                                    title={`Xem danh sách data ở giai đoạn ${st.name}`}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: st.color || '#3b82f6', flexShrink: 0 }} />
+                                        <span style={{ fontSize: '0.82rem', fontWeight: hasCount ? 700 : 500, color: hasCount ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                          {st.name}
+                                        </span>
+                                        {st.is_won && (
+                                          <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700 }}>
+                                            WON
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{
+                                          fontSize: '0.82rem',
+                                          fontWeight: 800,
+                                          color: hasCount ? (st.color || 'var(--color-text)') : 'var(--color-text-muted)',
+                                          background: hasCount ? (st.color ? st.color + '18' : 'rgba(59,130,246,0.1)') : 'transparent',
+                                          padding: hasCount ? '2px 8px' : '0',
+                                          borderRadius: '10px'
+                                        }}>
+                                          {st.count} data
+                                        </span>
+                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, minWidth: '40px', textAlign: 'right' }}>
+                                          {st.percentage}%
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {/* Progress bar */}
+                                    <div style={{ height: '5px', width: '100%', background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', borderRadius: '3px', overflow: 'hidden' }}>
+                                      <div style={{
+                                        height: '100%',
+                                        width: `${Math.max(hasCount ? 2 : 0, st.percentage)}%`,
+                                        background: st.color || '#3b82f6',
+                                        borderRadius: '3px',
+                                        transition: 'width 0.4s ease'
+                                      }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1744,14 +1994,162 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         )}
                       </div>
                       
+                      {/* Filter Bar for Partner's Referred Contacts */}
+                      {isPartner && (
+                        <div style={{
+                          display: 'flex',
+                          gap: '6px',
+                          overflowX: 'auto',
+                          paddingBottom: '8px',
+                          marginBottom: '1rem',
+                          borderBottom: '1px solid var(--color-border-light)'
+                        }}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStageFilter('all')}
+                            style={{
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              padding: '5px 12px',
+                              whiteSpace: 'nowrap',
+                              background: selectedStageFilter === 'all' ? 'var(--color-primary)' : 'var(--color-surface)',
+                              color: selectedStageFilter === 'all' ? '#ffffff' : 'var(--color-text)',
+                              border: `1px solid ${selectedStageFilter === 'all' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span>Tất cả</span>
+                            <span style={{
+                              background: selectedStageFilter === 'all' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
+                              borderRadius: '10px',
+                              padding: '1px 6px',
+                              fontSize: '0.68rem',
+                              fontWeight: 800
+                            }}>
+                              {pipelineStats?.summary?.total ?? subContacts.length}
+                            </span>
+                          </button>
+
+                          {pipelineStats?.stages?.map((st: any) => {
+                            const isSelected = selectedStageFilter === String(st.id);
+                            return (
+                              <button
+                                type="button"
+                                key={st.id}
+                                onClick={() => setSelectedStageFilter(isSelected ? 'all' : String(st.id))}
+                                style={{
+                                  borderRadius: '20px',
+                                  fontSize: '0.75rem',
+                                  padding: '5px 12px',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: isSelected ? (st.color || 'var(--color-primary)') : (st.count > 0 ? `${st.color || '#3b82f6'}12` : 'var(--color-surface)'),
+                                  color: isSelected ? '#ffffff' : (st.count > 0 ? (st.color || 'var(--color-text)') : 'var(--color-text-muted)'),
+                                  border: `1px solid ${isSelected ? (st.color || 'var(--color-primary)') : (st.count > 0 ? `${st.color || '#3b82f6'}40` : 'var(--color-border-light)')}`,
+                                  fontWeight: isSelected || st.count > 0 ? 700 : 500,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isSelected ? '#ffffff' : (st.color || '#3b82f6') }} />
+                                <span>{st.name}</span>
+                                <span style={{
+                                  background: isSelected ? 'rgba(255,255,255,0.25)' : (st.count > 0 ? `${st.color || '#3b82f6'}25` : 'rgba(0,0,0,0.05)'),
+                                  borderRadius: '10px',
+                                  padding: '1px 6px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800
+                                }}>
+                                  {st.count}
+                                </span>
+                              </button>
+                            );
+                          })}
+
+                          {(pipelineStats?.summary?.nurture ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStageFilter(selectedStageFilter === 'nurture' ? 'all' : 'nurture')}
+                              style={{
+                                borderRadius: '20px',
+                                fontSize: '0.75rem',
+                                padding: '5px 12px',
+                                whiteSpace: 'nowrap',
+                                background: selectedStageFilter === 'nurture' ? '#f59e0b' : 'rgba(245, 158, 11, 0.1)',
+                                color: selectedStageFilter === 'nurture' ? '#ffffff' : '#d97706',
+                                border: '1px solid #f59e0b',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <span>Nuôi dưỡng</span>
+                              <span style={{
+                                background: selectedStageFilter === 'nurture' ? 'rgba(255,255,255,0.25)' : 'rgba(245, 158, 11, 0.2)',
+                                borderRadius: '10px',
+                                padding: '1px 6px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800
+                              }}>
+                                {pipelineStats.summary.nurture}
+                              </span>
+                            </button>
+                          )}
+
+                          {(pipelineStats?.summary?.lost ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStageFilter(selectedStageFilter === 'lost' ? 'all' : 'lost')}
+                              style={{
+                                borderRadius: '20px',
+                                fontSize: '0.75rem',
+                                padding: '5px 12px',
+                                whiteSpace: 'nowrap',
+                                background: selectedStageFilter === 'lost' ? '#ef4444' : 'rgba(239, 68, 68, 0.1)',
+                                color: selectedStageFilter === 'lost' ? '#ffffff' : '#ef4444',
+                                border: '1px solid #ef4444',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <span>Thất bại</span>
+                              <span style={{
+                                background: selectedStageFilter === 'lost' ? 'rgba(255,255,255,0.25)' : 'rgba(239, 68, 68, 0.2)',
+                                borderRadius: '10px',
+                                padding: '1px 6px',
+                                fontSize: '0.68rem',
+                                fontWeight: 800
+                              }}>
+                                {pipelineStats.summary.lost}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {subContacts.length === 0 ? (
+                        {(isPartner ? filteredSubContacts : subContacts).length === 0 ? (
                           <div className="card-panel" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                             <Users size={32} style={{ margin: '0 auto 1rem', opacity: 0.4 }} />
-                            <p style={{ fontWeight: 600 }}>{isPartner ? 'Chưa có khách hàng giới thiệu nào' : 'Chưa có liên hệ nào'}</p>
+                            <p style={{ fontWeight: 600 }}>
+                              {isPartner 
+                                ? (selectedStageFilter !== 'all' ? 'Không có khách hàng nào ở giai đoạn này' : 'Chưa có khách hàng giới thiệu nào')
+                                : 'Chưa có liên hệ nào'}
+                            </p>
                           </div>
                         ) : isPartner ? (
-                          subContacts.map(sc => (
+                          filteredSubContacts.map(sc => (
                             <div key={sc.id} className="card-panel" style={{ 
                               padding: '1rem 1.25rem',
                               background: 'var(--color-surface)',
@@ -1761,42 +2159,88 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               alignItems: 'center',
                               justifyContent: 'space-between',
                               gap: '1rem',
+                              flexWrap: isMobileOrTablet ? 'wrap' : 'nowrap',
                               transition: 'all 0.2s ease'
                             }}>
-                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', minWidth: 0, flex: 1 }}>
                                 <div style={{ 
                                   background: 'rgba(59, 130, 246, 0.08)', 
                                   color: '#3b82f6', 
                                   fontWeight: 700, 
-                                  width: 40, 
-                                  height: 40, 
+                                  width: 42, 
+                                  height: 42, 
                                   fontSize: '1rem', 
                                   borderRadius: '50%',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'center'
+                                  justifyContent: 'center',
+                                  flexShrink: 0
                                 }}>
                                   {sc.name[0]?.toUpperCase() || '?'}
                                 </div>
-                                <div>
-                                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 650, color: 'var(--color-text)' }}>
-                                    {sc.name}
-                                  </h4>
-                                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px', fontSize: '0.72rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                      {sc.name}
+                                    </h4>
+                                    {sc.stage_name && (
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        padding: '2px 9px',
+                                        borderRadius: '14px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700,
+                                        background: (sc.stage_color || '#3b82f6') + '15',
+                                        color: sc.stage_color || '#3b82f6',
+                                        border: `1px solid ${(sc.stage_color || '#3b82f6')}35`
+                                      }}>
+                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.stage_color || '#3b82f6' }} />
+                                        {sc.stage_name}
+                                      </span>
+                                    )}
+                                    {sc.lead_status === 'won' && <span className="badge success sm">Thành công</span>}
+                                    {sc.lead_status === 'nurture' && <span className="badge warning sm">Nuôi dưỡng</span>}
+                                    {sc.lead_status === 'lost' && <span className="badge danger sm">Thất bại</span>}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '12px', marginTop: '6px', fontSize: '0.75rem', color: 'var(--color-text-muted)', flexWrap: 'wrap', alignItems: 'center' }}>
                                     {sc.role && <span>{sc.role}</span>}
-                                    {sc.phone && <span>• 📞 {sc.phone}</span>}
-                                    {sc.email && <span>• ✉️ {sc.email}</span>}
+                                    {sc.phone && (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <Phone size={12} style={{ opacity: 0.6 }} /> {sc.phone}
+                                      </span>
+                                    )}
+                                    {sc.email && (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <Mail size={12} style={{ opacity: 0.6 }} /> {sc.email}
+                                      </span>
+                                    )}
+                                    {sc.owner_name && (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <User size={12} style={{ opacity: 0.6 }} /> Sale: {sc.owner_name}
+                                      </span>
+                                    )}
+                                    {sc.created_at && (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <Calendar size={12} style={{ opacity: 0.6 }} /> Ngày nhận: {new Date(sc.created_at).toLocaleDateString('vi-VN')}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
-                              <button 
-                                className="btn secondary sm"
-                                onClick={() => {
-                                  navigate(`/contacts?open_contact_id=${sc.id}`);
-                                }}
-                              >
-                                Chi tiết
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                <button 
+                                  className="btn secondary sm"
+                                  onClick={() => {
+                                    navigate(`/contacts?open_contact_id=${sc.id}`);
+                                  }}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <span>Chi tiết</span>
+                                  <ChevronRight size={14} />
+                                </button>
+                              </div>
                             </div>
                           ))
                         ) : (

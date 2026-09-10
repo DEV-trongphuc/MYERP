@@ -6,6 +6,11 @@ class CompanyController {
     public function __construct(PDO $db) { $this->db = $db; }
 
     private function getScope(array $auth, string $action): string {
+        // Tất cả mọi role đều fetch và thấy được đối tác
+        if ($action === 'read') {
+            return 'all';
+        }
+
         $permissionsJson = null;
         $stmtQ = $this->db->prepare("SELECT permissions_json FROM users WHERE id = ? LIMIT 1");
         $stmtQ->execute([$auth['user_id']]);
@@ -14,8 +19,8 @@ class CompanyController {
             $permissionsJson = json_decode($resQ['permissions_json'], true);
         }
 
-        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan'], true)) {
-            if (in_array(strtolower($auth['role'] ?? ''), ['marketing', 'accountant', 'ke_toan'], true) && $action === 'delete') {
+        if (in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'sale_admin', 'saleadmin', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true)) {
+            if (in_array(strtolower($auth['role'] ?? ''), ['marketing', 'accountant', 'ke_toan', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true) && $action === 'delete') {
                 return 'none';
             }
             return 'all';
@@ -33,7 +38,7 @@ class CompanyController {
         if ($role === 'sale_admin' || $role === 'saleadmin') {
             return 'all';
         }
-        if ($role === 'director' || $role === 'assistant') {
+        if ($role === 'director' || $role === 'assistant' || $role === 'leader' || $role === 'team_lead') {
             return $action === 'delete' ? 'none' : 'all';
         }
         if ($role === 'sale' || $role === 'sales') {
@@ -492,5 +497,123 @@ class CompanyController {
         $stmt->execute($p);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'BULK_DELETE', 'company', null, json_encode(['ids' => $ids]));
         respond(200, null, "Đã xóa " . $stmt->rowCount() . " đại lý/đối tác");
+    }
+
+    public function pipelineStats(array $auth, int $id): void {
+        $scope = $this->getScope($auth, 'read');
+        if ($scope === 'none') {
+            respond(403, null, 'Bạn không có quyền xem thông tin đối tác này', false);
+        }
+        $tid = (int)$auth['tenant_id'];
+
+        // Verify company exists
+        $stmtComp = $this->db->prepare("SELECT id, name, tier FROM companies WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1");
+        $stmtComp->execute([$id, $tid]);
+        $company = $stmtComp->fetch(PDO::FETCH_ASSOC);
+        if (!$company) {
+            respond(404, null, 'Không tìm thấy đối tác', false);
+        }
+
+        // 1. Fetch all pipeline stages for this tenant ordered by order_index
+        $stmtStages = $this->db->prepare("
+            SELECT id, name, system_slug, color, order_index, is_won, is_lost
+            FROM pipeline_stages
+            WHERE tenant_id = ?
+            ORDER BY order_index ASC
+        ");
+        $stmtStages->execute([$tid]);
+        $stages = $stmtStages->fetchAll(PDO::FETCH_ASSOC);
+
+        // 2. Query contact distribution for this company
+        $stmtCounts = $this->db->prepare("
+            SELECT 
+                c.stage_id,
+                c.pipeline_status,
+                c.lead_status,
+                c.status as contact_status,
+                COUNT(*) as cnt
+            FROM contacts c
+            WHERE c.company_id = ? AND c.tenant_id = ? AND c.deleted_at IS NULL
+            GROUP BY c.stage_id, c.pipeline_status, c.lead_status, c.status
+        ");
+        $stmtCounts->execute([$id, $tid]);
+        $rows = $stmtCounts->fetchAll(PDO::FETCH_ASSOC);
+
+        $stageCountMap = [];
+        $totalContacts = 0;
+        $wonCount = 0;
+        $lostCount = 0;
+        $nurtureCount = 0;
+        $activeCount = 0;
+
+        foreach ($rows as $r) {
+            $cnt = (int)$r['cnt'];
+            $totalContacts += $cnt;
+
+            $sId = $r['stage_id'] ? (int)$r['stage_id'] : null;
+            $slug = $r['pipeline_status'] ?? '';
+            $leadStatus = strtolower(trim($r['lead_status'] ?? ''));
+            $contactStatus = strtolower(trim($r['contact_status'] ?? ''));
+
+            if ($leadStatus === 'lost') {
+                $lostCount += $cnt;
+            } elseif ($leadStatus === 'nurture') {
+                $nurtureCount += $cnt;
+            } elseif ($contactStatus === 'customer' || in_array($slug, ['enrolled', 'hoc_vien', 'won'], true)) {
+                $wonCount += $cnt;
+            } else {
+                $activeCount += $cnt;
+            }
+
+            if ($sId) {
+                $stageCountMap[(string)$sId] = ($stageCountMap[(string)$sId] ?? 0) + $cnt;
+            } elseif ($slug) {
+                $stageCountMap[(string)$slug] = ($stageCountMap[(string)$slug] ?? 0) + $cnt;
+            }
+        }
+
+        // Enrich stages with contact_count & percentage
+        $stagesData = [];
+        $mappedSum = 0;
+        foreach ($stages as $st) {
+            $sid = (int)$st['id'];
+            $sslug = $st['system_slug'] ?? '';
+            $isWon = (bool)($st['is_won'] ?? false) || in_array($sslug, ['enrolled', 'hoc_vien', 'won'], true);
+            $isLost = (bool)($st['is_lost'] ?? false) || in_array($sslug, ['lost', 'that_bai'], true);
+
+            $cCount = $stageCountMap[(string)$sid] ?? ($sslug && isset($stageCountMap[(string)$sslug]) ? $stageCountMap[(string)$sslug] : 0);
+            $mappedSum += $cCount;
+            $pct = $totalContacts > 0 ? round(($cCount / $totalContacts) * 100, 1) : 0;
+
+            $stagesData[] = [
+                'id' => $sid,
+                'name' => $st['name'],
+                'system_slug' => $sslug,
+                'color' => $st['color'] ?: '#3b82f6',
+                'order_index' => (int)$st['order_index'],
+                'is_won' => $isWon,
+                'is_lost' => $isLost,
+                'count' => $cCount,
+                'percentage' => $pct
+            ];
+        }
+
+        $conversionRate = $totalContacts > 0 ? round(($wonCount / $totalContacts) * 100, 1) : 0;
+
+        respond(200, [
+            'company_id' => $id,
+            'company_name' => $company['name'],
+            'tier' => $company['tier'],
+            'stages' => $stagesData,
+            'summary' => [
+                'total' => $totalContacts,
+                'active' => $activeCount,
+                'won' => $wonCount,
+                'nurture' => $nurtureCount,
+                'lost' => $lostCount,
+                'unclassified' => max(0, $totalContacts - $mappedSum),
+                'conversion_rate' => $conversionRate
+            ]
+        ]);
     }
 }

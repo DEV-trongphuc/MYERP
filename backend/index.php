@@ -780,6 +780,7 @@ switch ($resource) {
         if ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
+        elseif ($resourceId  && $subResource === 'pipeline-stats' && $method === 'GET') $ctrl->pipelineStats($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'stage' && $method === 'PATCH') $ctrl->moveStage($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
@@ -927,6 +928,7 @@ switch ($resource) {
         $auth = requireAuth();
         $ctrl = new HRMController($db);
         if     ($resourceId === 'my-balance' && $method === 'GET') $ctrl->getMyBalance($auth);
+        elseif ($resourceId === 'user-balance' && $method === 'GET') $ctrl->getUserBalance($auth);
         elseif ($resourceId === 'profiles' && $method === 'GET') $ctrl->indexProfiles($auth);
         elseif ($resourceId === 'profiles' && $method === 'POST') $ctrl->saveProfile($auth);
         elseif ($resourceId === 'leaves' && $subResource && ($segments[3] ?? '') === 'comments' && $method === 'GET') $ctrl->getLeaveComments($auth, (int)$subResource);

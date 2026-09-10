@@ -167,6 +167,38 @@ class HRMController {
             $row['compensatory_leave_total'] = (float)$row['compensatory_leave_total'];
             $row['compensatory_leave_used'] = (float)$row['compensatory_leave_used'];
         }
+        $row['remaining_annual_leave'] = max(0.0, $row['annual_leave_total'] - $row['annual_leave_used']);
+        $row['remaining_compensatory_leave'] = max(0.0, $row['compensatory_leave_total'] - $row['compensatory_leave_used']);
+        
+        respond(200, $row);
+    }
+
+    public function getUserBalance(array $auth): void {
+        $targetUserId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : (int)$auth['user_id'];
+        $stmt = $this->db->prepare("
+            SELECT annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used 
+            FROM hrm_profiles 
+            WHERE user_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$targetUserId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$row) {
+            $row = [
+                'annual_leave_total' => 12.0,
+                'annual_leave_used' => 0.0,
+                'compensatory_leave_total' => 0.0,
+                'compensatory_leave_used' => 0.0
+            ];
+        } else {
+            $row['annual_leave_total'] = (float)$row['annual_leave_total'];
+            $row['annual_leave_used'] = (float)$row['annual_leave_used'];
+            $row['compensatory_leave_total'] = (float)$row['compensatory_leave_total'];
+            $row['compensatory_leave_used'] = (float)$row['compensatory_leave_used'];
+        }
+        $row['remaining_annual_leave'] = max(0.0, $row['annual_leave_total'] - $row['annual_leave_used']);
+        $row['remaining_compensatory_leave'] = max(0.0, $row['compensatory_leave_total'] - $row['compensatory_leave_used']);
         
         respond(200, $row);
     }
@@ -175,33 +207,65 @@ class HRMController {
 
     public function indexLeaves(array $auth): void {
         $userId = (int)$auth['user_id'];
-        if ($this->isAdmin($auth)) {
-            $stmt = $this->db->prepare("
-                SELECT l.*, u.full_name as employee_name
-                FROM hrm_leave_requests l
-                JOIN users u ON l.user_id = u.id
-                WHERE u.tenant_id = ?
-                ORDER BY l.created_at DESC
-            ");
-            $stmt->execute([$auth['tenant_id']]);
-        } else {
-            $stmt = $this->db->prepare("
-                SELECT l.*, u.full_name as employee_name
-                FROM hrm_leave_requests l
-                JOIN users u ON l.user_id = u.id
-                WHERE l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?
-                ORDER BY l.created_at DESC
-            ");
-            $stmt->execute([$userId, $userId, $userId, '%"' . $userId . '"%', '%' . $userId . '%']);
+        $leaveId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+        $where = "u.tenant_id = ?";
+        $params = [$auth['tenant_id']];
+
+        if ($leaveId > 0) {
+            $where .= " AND l.id = ?";
+            $params[] = $leaveId;
+        } elseif (!$this->isAdmin($auth)) {
+            $where .= " AND (l.user_id = ? OR l.approver_id = ? OR l.approver_id_2 = ? OR l.related_user_ids LIKE ? OR l.related_user_ids LIKE ?)";
+            $params[] = $userId;
+            $params[] = $userId;
+            $params[] = $userId;
+            $params[] = '%"' . $userId . '"%';
+            $params[] = '%' . $userId . '%';
         }
-        respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+        $stmt = $this->db->prepare("
+            SELECT l.*, u.full_name as employee_name, u.email as employee_email,
+                   COALESCE(p.annual_leave_total, 12.0) as annual_leave_total,
+                   COALESCE(p.annual_leave_used, 0.0) as annual_leave_used,
+                   COALESCE(p.compensatory_leave_total, 0.0) as compensatory_leave_total,
+                   COALESCE(p.compensatory_leave_used, 0.0) as compensatory_leave_used
+            FROM hrm_leave_requests l
+            JOIN users u ON l.user_id = u.id
+            LEFT JOIN hrm_profiles p ON l.user_id = p.user_id
+            WHERE $where
+            ORDER BY l.created_at DESC
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['annual_leave_total'] = (float)$r['annual_leave_total'];
+            $r['annual_leave_used'] = (float)$r['annual_leave_used'];
+            $r['compensatory_leave_total'] = (float)$r['compensatory_leave_total'];
+            $r['compensatory_leave_used'] = (float)$r['compensatory_leave_used'];
+            $r['remaining_annual_leave'] = max(0.0, $r['annual_leave_total'] - $r['annual_leave_used']);
+            $r['remaining_compensatory_leave'] = max(0.0, $r['compensatory_leave_total'] - $r['compensatory_leave_used']);
+        }
+        unset($r);
+
+        if ($leaveId > 0 && !empty($rows)) {
+            respond(200, $rows[0]);
+            return;
+        }
+
+        respond(200, $rows);
     }
 
     public function showLeave(array $auth, int $id): void {
         $stmt = $this->db->prepare("
-            SELECT l.*, u.full_name as employee_name, u.email as employee_email
+            SELECT l.*, u.full_name as employee_name, u.email as employee_email,
+                   COALESCE(p.annual_leave_total, 12.0) as annual_leave_total,
+                   COALESCE(p.annual_leave_used, 0.0) as annual_leave_used,
+                   COALESCE(p.compensatory_leave_total, 0.0) as compensatory_leave_total,
+                   COALESCE(p.compensatory_leave_used, 0.0) as compensatory_leave_used
             FROM hrm_leave_requests l
             JOIN users u ON l.user_id = u.id
+            LEFT JOIN hrm_profiles p ON l.user_id = p.user_id
             WHERE l.id = ? AND u.tenant_id = ?
             LIMIT 1
         ");
@@ -227,6 +291,13 @@ class HRMController {
             respond(403, null, 'Bạn không có quyền xem đơn này', false);
             return;
         }
+
+        $row['annual_leave_total'] = (float)$row['annual_leave_total'];
+        $row['annual_leave_used'] = (float)$row['annual_leave_used'];
+        $row['compensatory_leave_total'] = (float)$row['compensatory_leave_total'];
+        $row['compensatory_leave_used'] = (float)$row['compensatory_leave_used'];
+        $row['remaining_annual_leave'] = max(0.0, $row['annual_leave_total'] - $row['annual_leave_used']);
+        $row['remaining_compensatory_leave'] = max(0.0, $row['compensatory_leave_total'] - $row['compensatory_leave_used']);
 
         respond(200, $row);
     }
