@@ -152,6 +152,7 @@ export const ExpensesPage: React.FC = () => {
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [drawerRightTab, setDrawerRightTab] = useState<'discussion' | 'timeline'>('discussion');
+  const [mobileDrawerTab, setMobileDrawerTab] = useState<'info' | 'discussion'>('info');
 
   const fetchComments = useCallback(async (expenseId: number) => {
     setLoadingComments(true);
@@ -239,6 +240,7 @@ export const ExpensesPage: React.FC = () => {
     setSubmittingRefund(false);
     if (viewItem) {
       setActiveTab('comments');
+      setMobileDrawerTab('info');
       fetchComments(viewItem.id);
       fetchHistory(viewItem.id);
     }
@@ -969,28 +971,43 @@ export const ExpensesPage: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header" style={{ marginBottom: '1.25rem' }}>
         <div>
           <h1 className="page-title">Chi phí Vận hành</h1>
           <p className="page-subtitle">Quản lý và theo dõi các khoản chi phí doanh nghiệp</p>
         </div>
-        <div className="flex gap-2" style={{ alignItems: 'center' }}>
-          <button 
-            className="btn secondary" 
-            onClick={() => addToast('Đang xuất bảng kê...', 'info')} 
-            title="Xuất dữ liệu"
-            style={{ padding: 0, width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Download size={16} />
-          </button>
-          <PeriodFilter
-            value={period}
-            onChange={(p, r) => { setPeriod(p); setDateRange(r); setPage(1); }}
-          />
-          <button className="btn primary" onClick={openCreate} title="Nhập chi phí">
-            <Plus size={16} />
-            <span className="hide-on-mobile"> Nhập chi phí</span>
-          </button>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          width: isMobile ? '100%' : 'auto',
+          flexWrap: isMobile ? 'wrap' : 'nowrap'
+        }}>
+          <div style={{ flex: isMobile ? '1 1 100%' : 'none', width: isMobile ? '100%' : 'auto' }}>
+            <PeriodFilter
+              value={period}
+              onChange={(p, r) => { setPeriod(p); setDateRange(r); setPage(1); }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto', alignItems: 'center' }}>
+            <button 
+              className="btn secondary" 
+              onClick={() => addToast('Đang xuất bảng kê...', 'info')} 
+              title="Xuất dữ liệu"
+              style={{ padding: 0, width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', flexShrink: 0 }}
+            >
+              <Download size={16} />
+            </button>
+            <button 
+              className="btn primary" 
+              onClick={openCreate} 
+              title="Nhập chi phí"
+              style={{ flex: isMobile ? 1 : 'none', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 700, padding: '0 16px' }}
+            >
+              <Plus size={16} />
+              <span>Nhập chi phí</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1751,20 +1768,83 @@ export const ExpensesPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Two-pane layout body */}
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                  
-                  {/* Left Pane: Info & Action panel (60%) */}
+                {/* Mobile Drawer Top Tabs */}
+                {isMobile && (
                   <div style={{
-                    flex: 3,
-                    overflowY: 'auto',
-                    padding: '1.5rem 2rem',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1.5rem',
-                    borderRight: '1px solid var(--color-border)',
-                    background: 'var(--color-bg-secondary)'
+                    background: 'var(--color-bg)',
+                    padding: '6px 10px',
+                    borderBottom: '1px solid var(--color-border-light)',
+                    gap: '6px',
+                    flexShrink: 0
                   }}>
+                    <button
+                      type="button"
+                      onClick={() => setMobileDrawerTab('info')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: mobileDrawerTab === 'info' ? 'var(--color-surface)' : 'transparent',
+                        color: mobileDrawerTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        fontWeight: mobileDrawerTab === 'info' ? 750 : 600,
+                        fontSize: '0.8125rem',
+                        boxShadow: mobileDrawerTab === 'info' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <FileText size={14} />
+                      <span>Thông tin chi tiết</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMobileDrawerTab('discussion')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: mobileDrawerTab === 'discussion' ? 'var(--color-surface)' : 'transparent',
+                        color: mobileDrawerTab === 'discussion' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        fontWeight: mobileDrawerTab === 'discussion' ? 750 : 600,
+                        fontSize: '0.8125rem',
+                        boxShadow: mobileDrawerTab === 'discussion' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <MessageSquare size={14} />
+                      <span>Thảo luận {comments.length > 0 ? `(${comments.length})` : ''}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Two-pane layout body */}
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isMobile ? 'column' : 'row' }}>
+                  
+                  {/* Left Pane: Info & Action panel */}
+                  {(!isMobile || mobileDrawerTab === 'info') && (
+                    <div style={{
+                      flex: 3,
+                      overflowY: 'auto',
+                      padding: isMobile ? '1rem 1rem 3rem' : '1.5rem 2rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '1.5rem',
+                      borderRight: isMobile ? 'none' : '1px solid var(--color-border)',
+                      background: 'var(--color-bg-secondary)',
+                      width: isMobile ? '100%' : 'auto',
+                      minWidth: 0,
+                      boxSizing: 'border-box'
+                    }}>
                     
                     {/* Amount Banner Card or Administrative Proposal Banner */}
                     {(() => {
@@ -2372,7 +2452,29 @@ export const ExpensesPage: React.FC = () => {
                         return `${baseUrl}/${cleanPath}`;
                       };
 
+                      const getCleanFileName = (raw: string) => {
+                        if (!raw) return '';
+                        return raw.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+                      };
+                      const normalizeImgPath = (raw: string) => {
+                        if (!raw) return '';
+                        return raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+                      };
+
                       const extractedImgs: string[] = [];
+                      const isImgDuplicate = (candidate: string) => {
+                        const candFile = getCleanFileName(candidate);
+                        const candNorm = normalizeImgPath(candidate);
+                        return extractedImgs.some(existing => {
+                          if (existing === candidate) return true;
+                          const exFile = getCleanFileName(existing);
+                          const exNorm = normalizeImgPath(existing);
+                          if (candFile && exFile && candFile === exFile) return true;
+                          if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
+                          return false;
+                        });
+                      };
+
                       if (viewItem.image_url) {
                         extractedImgs.push(viewItem.image_url);
                       }
@@ -2380,7 +2482,7 @@ export const ExpensesPage: React.FC = () => {
                         const matches = viewItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
                         for (const m of matches) {
                           const url = m[2].trim();
-                          if (url && !extractedImgs.some(img => img === url || img.endsWith(url))) {
+                          if (url && !isImgDuplicate(url)) {
                             extractedImgs.push(url);
                           }
                         }
@@ -2626,16 +2728,20 @@ export const ExpensesPage: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  )}
 
-                    {/* Right Pane: Discussion & Activity */}
+                  {/* Right Pane: Discussion & Activity */}
+                  {(!isMobile || mobileDrawerTab === 'discussion') && (
                     <div style={{
-                      flex: isMobile ? '1' : 2,
+                      flex: isMobile ? 1 : 2,
                       display: 'flex',
                       flexDirection: 'column',
                       overflow: 'hidden',
                       background: 'var(--color-surface)',
-                      borderLeft: '1px solid var(--color-border-light)',
-                      boxSizing: 'border-box'
+                      borderLeft: isMobile ? 'none' : '1px solid var(--color-border-light)',
+                      boxSizing: 'border-box',
+                      width: isMobile ? '100%' : 'auto',
+                      minWidth: 0
                     }}>
                       {/* Right Pane Navigation Tabs */}
                       <div style={{
@@ -2762,7 +2868,8 @@ export const ExpensesPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                  </div>
+                  )}
+                </div>
                   {reminderTargetUser && (
                     <div style={{
                       position: 'fixed',

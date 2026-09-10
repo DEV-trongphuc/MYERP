@@ -59,8 +59,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const [reminderTargetUser, setReminderTargetUser] = useState<any>(null);
   const [reminderMessage, setReminderMessage] = useState('');
   const [sendingReminder, setSendingReminder] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  const [mobileDrawerTab, setMobileDrawerTab] = useState<'info' | 'discussion'>('info');
 
-  const isMobile = window.innerWidth <= 768;
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchExpenseDetails = useCallback(async (id: number) => {
     setLoading(true);
@@ -107,6 +113,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     if (expenseId) {
       fetchExpenseDetails(expenseId);
       setActiveTab('comments');
+      setMobileDrawerTab('info');
       fetchComments(expenseId);
       fetchHistory(expenseId);
       api.get('/users').then(res => {
@@ -903,20 +910,83 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
             </div>
           </div>
 
+          {/* Mobile Drawer Top Tabs */}
+          {isMobile && (
+            <div style={{
+              display: 'flex',
+              background: 'var(--color-bg)',
+              padding: '6px 10px',
+              borderBottom: '1px solid var(--color-border-light)',
+              gap: '6px',
+              flexShrink: 0
+            }}>
+              <button
+                type="button"
+                onClick={() => setMobileDrawerTab('info')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: mobileDrawerTab === 'info' ? 'var(--color-surface)' : 'transparent',
+                  color: mobileDrawerTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  fontWeight: mobileDrawerTab === 'info' ? 750 : 600,
+                  fontSize: '0.8125rem',
+                  boxShadow: mobileDrawerTab === 'info' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <FileText size={14} />
+                <span>Thông tin chi tiết</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileDrawerTab('discussion')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: mobileDrawerTab === 'discussion' ? 'var(--color-surface)' : 'transparent',
+                  color: mobileDrawerTab === 'discussion' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  fontWeight: mobileDrawerTab === 'discussion' ? 750 : 600,
+                  fontSize: '0.8125rem',
+                  boxShadow: mobileDrawerTab === 'discussion' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <MessageSquare size={14} />
+                <span>Thảo luận {comments.length > 0 ? `(${comments.length})` : ''}</span>
+              </button>
+            </div>
+          )}
+
           {/* Two-pane layout body */}
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: isMobile ? 'column' : 'row' }}>
             
             {/* Left Pane: Info & Action panel */}
-            <div style={{
-              flex: 3,
-              overflowY: 'auto',
-              padding: '1.5rem 2rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.5rem',
-              borderRight: isMobile ? 'none' : '1px solid var(--color-border)',
-              background: 'var(--color-bg-secondary)'
-            }}>
+            {(!isMobile || mobileDrawerTab === 'info') && (
+              <div style={{
+                flex: 3,
+                overflowY: 'auto',
+                padding: isMobile ? '1rem 1rem 3rem' : '1.5rem 2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem',
+                borderRight: isMobile ? 'none' : '1px solid var(--color-border)',
+                background: 'var(--color-bg-secondary)',
+                width: isMobile ? '100%' : 'auto',
+                minWidth: 0,
+                boxSizing: 'border-box'
+              }}>
               
               {/* Amount Banner Card or Administrative Proposal Banner */}
               {(() => {
@@ -1513,7 +1583,29 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   return `${baseUrl}/${cleanPath}`;
                 };
 
+                const getCleanFileName = (raw: string) => {
+                  if (!raw) return '';
+                  return raw.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+                };
+                const normalizeImgPath = (raw: string) => {
+                  if (!raw) return '';
+                  return raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+                };
+
                 const extractedImgs: string[] = [];
+                const isImgDuplicate = (candidate: string) => {
+                  const candFile = getCleanFileName(candidate);
+                  const candNorm = normalizeImgPath(candidate);
+                  return extractedImgs.some(existing => {
+                    if (existing === candidate) return true;
+                    const exFile = getCleanFileName(existing);
+                    const exNorm = normalizeImgPath(existing);
+                    if (candFile && exFile && candFile === exFile) return true;
+                    if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
+                    return false;
+                  });
+                };
+
                 if (viewItem.image_url) {
                   extractedImgs.push(viewItem.image_url);
                 }
@@ -1521,7 +1613,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   const matches = viewItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
                   for (const m of matches) {
                     const url = m[2].trim();
-                    if (url && !extractedImgs.some(img => img === url || img.endsWith(url))) {
+                    if (url && !isImgDuplicate(url)) {
                       extractedImgs.push(url);
                     }
                   }
@@ -1784,17 +1876,21 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* Right Pane: Discussion & Activity */}
-            <div style={{
-              flex: isMobile ? '1' : '0 0 460px',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              background: 'var(--color-surface)',
-              borderLeft: '1px solid var(--color-border-light)',
-              boxSizing: 'border-box'
-            }}>
+            {(!isMobile || mobileDrawerTab === 'discussion') && (
+              <div style={{
+                flex: isMobile ? 1 : '0 0 460px',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                background: 'var(--color-surface)',
+                borderLeft: isMobile ? 'none' : '1px solid var(--color-border-light)',
+                boxSizing: 'border-box',
+                width: isMobile ? '100%' : 'auto',
+                minWidth: 0
+              }}>
               {/* Right Pane Navigation Tabs */}
               <div style={{
                 display: 'flex',
@@ -1920,6 +2016,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 </div>
               )}
             </div>
+            )}
           </div>
         </motion.div>
       </div>

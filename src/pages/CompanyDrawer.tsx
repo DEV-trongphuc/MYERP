@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User } from 'lucide-react';
+import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User } from 'lucide-react';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { AddressSelect } from '../components/ui/AddressSelect';
@@ -90,6 +90,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   const [pipelineStats, setPipelineStats] = useState<any>(null);
   const [pipelineStatsLoading, setPipelineStatsLoading] = useState(false);
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('all');
+  const [showZeroStages, setShowZeroStages] = useState(false);
 
   const visibleTabs = useMemo(() => {
     let list = disableEdit ? TABS.filter(t => t.id !== 'settings') : TABS;
@@ -1265,71 +1266,71 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         <div style={{
                           display: 'grid',
                           gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
-                          gap: '8px'
+                          gap: '10px'
                         }}>
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'var(--color-bg-secondary, rgba(0,0,0,0.02))', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                              <Users size={13} color="#3b82f6" /> Tổng nhận
+                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 650 }}>
+                              <Users size={14} color="#3b82f6" /> Tổng nhận
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#3b82f6' }}>
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#3b82f6' }}>
                               {pipelineStats?.summary?.total ?? subContacts.length}
                             </span>
                           </div>
 
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'var(--color-bg-secondary, rgba(0,0,0,0.02))', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                              <Clock size={13} color="#0ea5e9" /> Đang tư vấn
+                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 650 }}>
+                              <Clock size={14} color="#0ea5e9" /> Đang tư vấn
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0ea5e9' }}>
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0ea5e9' }}>
                               {pipelineStats?.summary?.active ?? 0}
                             </span>
                           </div>
 
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#10b981', fontWeight: 700 }}>
-                              <CheckCircle2 size={13} color="#10b981" /> Nhập học / Đậu
+                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.25)', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#10b981', fontWeight: 750 }}>
+                              <CheckCircle2 size={14} color="#10b981" /> Nhập học / Đậu
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981' }}>
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#10b981' }}>
                               {pipelineStats?.summary?.won ?? 0}
                             </span>
                           </div>
 
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.06)', border: '1px solid rgba(139, 92, 246, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#8b5cf6', fontWeight: 700 }}>
-                              <TrendingUp size={13} color="#8b5cf6" /> Tỷ lệ chốt
+                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.05)', border: '1px solid rgba(139, 92, 246, 0.25)', boxShadow: '0 2px 8px rgba(139, 92, 246, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#8b5cf6', fontWeight: 750 }}>
+                              <TrendingUp size={14} color="#8b5cf6" /> Tỷ lệ chốt
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#8b5cf6' }}>
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#8b5cf6' }}>
                               {pipelineStats?.summary?.conversion_rate ?? 0}%
                             </span>
                           </div>
 
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#d97706', fontWeight: 600 }}>
-                              <RefreshCw size={13} color="#f59e0b" /> Nuôi dưỡng
+                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.25)', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#d97706', fontWeight: 650 }}>
+                              <RefreshCw size={14} color="#f59e0b" /> Nuôi dưỡng
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#d97706' }}>
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#d97706' }}>
                               {pipelineStats?.summary?.nurture ?? 0}
                             </span>
                           </div>
 
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', color: '#ef4444', fontWeight: 600 }}>
-                              <XCircle size={13} color="#ef4444" /> Thất bại / Hủy
+                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.25)', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#ef4444', fontWeight: 650 }}>
+                              <XCircle size={14} color="#ef4444" /> Thất bại / Hủy
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ef4444' }}>
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#ef4444' }}>
                               {pipelineStats?.summary?.lost ?? 0}
                             </span>
                           </div>
                         </div>
 
                         {/* Stage Breakdown Funnel Bars */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.78rem', fontWeight: 750, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              Chi tiết số lượng theo từng giai đoạn Pipeline:
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              Phân bổ theo giai đoạn Pipeline:
                             </span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                              Click vào giai đoạn để lọc danh sách data
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                              Bấm vào giai đoạn để lọc nhanh danh sách data
                             </span>
                           </div>
 
@@ -1339,76 +1340,228 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                               <span style={{ fontSize: '0.8rem' }}>Đang tải số liệu thống kê pipeline...</span>
                             </div>
                           ) : !pipelineStats?.stages || pipelineStats.stages.length === 0 ? (
-                            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderRadius: '10px' }}>
+                            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderRadius: '12px' }}>
                               <p style={{ margin: 0, fontSize: '0.85rem' }}>Chưa có dữ liệu giai đoạn pipeline nào.</p>
                             </div>
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {pipelineStats.stages.map((st: any) => {
-                                const hasCount = st.count > 0;
-                                return (
-                                  <div 
-                                    key={st.id}
-                                    onClick={() => {
-                                      setSelectedStageFilter(String(st.id));
-                                      setActiveTab('contacts');
-                                    }}
-                                    style={{
-                                      padding: '9px 14px',
-                                      borderRadius: '10px',
-                                      background: hasCount ? 'var(--color-surface)' : 'var(--color-bg)',
-                                      border: `1px solid ${hasCount ? (st.color ? st.color + '40' : 'var(--color-border)') : 'var(--color-border-light)'}`,
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s ease',
+                          ) : (() => {
+                            const activeStages = pipelineStats.stages.filter((st: any) => st.count > 0);
+                            const zeroStages = pipelineStats.stages.filter((st: any) => st.count === 0);
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {/* Horizontal Visual Segmented Distribution Bar */}
+                                {activeStages.length > 0 && (
+                                  <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px',
+                                    background: 'var(--color-surface)',
+                                    padding: '12px 14px',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--color-border-light)',
+                                    boxShadow: 'var(--shadow-sm)'
+                                  }}>
+                                    <div style={{
+                                      height: '10px',
+                                      width: '100%',
+                                      borderRadius: '6px',
+                                      background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))',
                                       display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: '6px'
-                                    }}
-                                    title={`Xem danh sách data ở giai đoạn ${st.name}`}
-                                  >
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: st.color || '#3b82f6', flexShrink: 0 }} />
-                                        <span style={{ fontSize: '0.82rem', fontWeight: hasCount ? 700 : 500, color: hasCount ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                                          {st.name}
-                                        </span>
-                                        {st.is_won && (
-                                          <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700 }}>
-                                            WON
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{
-                                          fontSize: '0.82rem',
-                                          fontWeight: 800,
-                                          color: hasCount ? (st.color || 'var(--color-text)') : 'var(--color-text-muted)',
-                                          background: hasCount ? (st.color ? st.color + '18' : 'rgba(59,130,246,0.1)') : 'transparent',
-                                          padding: hasCount ? '2px 8px' : '0',
-                                          borderRadius: '10px'
-                                        }}>
-                                          {st.count} data
-                                        </span>
-                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, minWidth: '40px', textAlign: 'right' }}>
-                                          {st.percentage}%
-                                        </span>
-                                      </div>
+                                      overflow: 'hidden',
+                                      gap: '2px'
+                                    }}>
+                                      {activeStages.map((st: any) => (
+                                        <div
+                                          key={st.id}
+                                          title={`${st.name}: ${st.count} data (${st.percentage}%)`}
+                                          onClick={() => {
+                                            setSelectedStageFilter(String(st.id));
+                                            setActiveTab('contacts');
+                                          }}
+                                          style={{
+                                            width: `${Math.max(2, st.percentage)}%`,
+                                            background: st.color || '#3b82f6',
+                                            height: '100%',
+                                            borderRadius: '3px',
+                                            cursor: 'pointer',
+                                            transition: 'transform 0.15s, opacity 0.15s'
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
+                                          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                                        />
+                                      ))}
                                     </div>
-                                    {/* Progress bar */}
-                                    <div style={{ height: '5px', width: '100%', background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', borderRadius: '3px', overflow: 'hidden' }}>
-                                      <div style={{
-                                        height: '100%',
-                                        width: `${Math.max(hasCount ? 2 : 0, st.percentage)}%`,
-                                        background: st.color || '#3b82f6',
-                                        borderRadius: '3px',
-                                        transition: 'width 0.4s ease'
-                                      }} />
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: '2px' }}>
+                                      {activeStages.map((st: any) => (
+                                        <div
+                                          key={st.id}
+                                          onClick={() => {
+                                            setSelectedStageFilter(String(st.id));
+                                            setActiveTab('contacts');
+                                          }}
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.72rem' }}
+                                        >
+                                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color || '#3b82f6' }} />
+                                          <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{st.name}:</span>
+                                          <span style={{ fontWeight: 800, color: st.color || 'var(--color-primary)' }}>{st.count}</span>
+                                        </div>
+                                      ))}
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                                )}
+
+                                {/* Active Stages Grid (2 Columns) */}
+                                {activeStages.length === 0 ? (
+                                  <div style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderRadius: '12px' }}>
+                                    <p style={{ margin: 0, fontSize: '0.825rem' }}>Hiện chưa có data nào trong các giai đoạn đang hoạt động.</p>
+                                  </div>
+                                ) : (
+                                  <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(2, 1fr)',
+                                    gap: '10px'
+                                  }}>
+                                    {activeStages.map((st: any) => (
+                                      <div
+                                        key={st.id}
+                                        onClick={() => {
+                                          setSelectedStageFilter(String(st.id));
+                                          setActiveTab('contacts');
+                                        }}
+                                        style={{
+                                          padding: '12px 14px',
+                                          borderRadius: '12px',
+                                          background: 'var(--color-surface)',
+                                          border: `1.5px solid ${st.color ? st.color + '40' : 'var(--color-border)'}`,
+                                          boxShadow: 'var(--shadow-sm)',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.2s ease',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '8px'
+                                        }}
+                                        onMouseEnter={e => {
+                                          e.currentTarget.style.transform = 'translateY(-2px)';
+                                          e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                                        }}
+                                        onMouseLeave={e => {
+                                          e.currentTarget.style.transform = 'translateY(0)';
+                                          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+                                        }}
+                                        title={`Bấm xem ${st.count} data ở giai đoạn ${st.name}`}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: st.color || '#3b82f6', flexShrink: 0 }} />
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                              {st.name}
+                                            </span>
+                                            {st.is_won && (
+                                              <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 800 }}>
+                                                WON
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                            <span style={{
+                                              fontSize: '0.85rem',
+                                              fontWeight: 900,
+                                              color: st.color || 'var(--color-primary)',
+                                              background: st.color ? st.color + '15' : 'rgba(59,130,246,0.1)',
+                                              padding: '2px 10px',
+                                              borderRadius: '12px'
+                                            }}>
+                                              {st.count} data
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                                              {st.percentage}%
+                                            </span>
+                                          </div>
+                                        </div>
+                                        {/* Micro progress bar */}
+                                        <div style={{ height: '4px', width: '100%', background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', borderRadius: '2px', overflow: 'hidden' }}>
+                                          <div style={{
+                                            height: '100%',
+                                            width: `${Math.max(2, st.percentage)}%`,
+                                            background: st.color || '#3b82f6',
+                                            borderRadius: '2px',
+                                            transition: 'width 0.4s ease'
+                                          }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Collapsible Zero Stages section */}
+                                {zeroStages.length > 0 && (
+                                  <div style={{ marginTop: '4px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowZeroStages(prev => !prev)}
+                                      style={{
+                                        background: 'none',
+                                        border: '1px dashed var(--color-border)',
+                                        borderRadius: '8px',
+                                        padding: '8px 12px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 650,
+                                        color: 'var(--color-text-muted)',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        transition: 'all 0.15s'
+                                      }}
+                                    >
+                                      <ChevronDown size={14} style={{ transform: showZeroStages ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                      <span>{showZeroStages ? 'Thu gọn các giai đoạn 0 data' : `Xem thêm ${zeroStages.length} giai đoạn chưa có data (0)`}</span>
+                                    </button>
+
+                                    {showZeroStages && (
+                                      <div style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '6px',
+                                        marginTop: '10px',
+                                        padding: '12px',
+                                        background: 'var(--color-bg)',
+                                        borderRadius: '12px',
+                                        border: '1px solid var(--color-border-light)'
+                                      }}>
+                                        {zeroStages.map((st: any) => (
+                                          <div
+                                            key={st.id}
+                                            onClick={() => {
+                                              setSelectedStageFilter(String(st.id));
+                                              setActiveTab('contacts');
+                                            }}
+                                            style={{
+                                              padding: '5px 10px',
+                                              borderRadius: '8px',
+                                              background: 'var(--color-surface)',
+                                              border: '1px solid var(--color-border-light)',
+                                              fontSize: '0.72rem',
+                                              color: 'var(--color-text-muted)',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '6px',
+                                              cursor: 'pointer'
+                                            }}
+                                            title={`Xem data giai đoạn ${st.name}`}
+                                          >
+                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.color || '#94a3b8' }} />
+                                            <span>{st.name}</span>
+                                            <span style={{ opacity: 0.6, fontSize: '0.68rem' }}>(0)</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}

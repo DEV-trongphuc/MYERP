@@ -276,7 +276,29 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         if (editItem) {
           setVendorSearch(editItem.vendor_name || '');
           // Extract all existing images
+          const getCleanFileName = (raw: string) => {
+            if (!raw) return '';
+            return raw.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+          };
+          const normalizeImgPath = (raw: string) => {
+            if (!raw) return '';
+            return raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+          };
+
           const existingImages: string[] = [];
+          const isImgDuplicate = (candidate: string) => {
+            const candFile = getCleanFileName(candidate);
+            const candNorm = normalizeImgPath(candidate);
+            return existingImages.some(existing => {
+              if (existing === candidate) return true;
+              const exFile = getCleanFileName(existing);
+              const exNorm = normalizeImgPath(existing);
+              if (candFile && exFile && candFile === exFile) return true;
+              if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
+              return false;
+            });
+          };
+
           if (editItem.image_url) {
             existingImages.push(editItem.image_url);
           }
@@ -284,7 +306,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
             for (const m of matches) {
               const url = m[2].trim();
-              if (url && !existingImages.includes(url)) {
+              if (url && !isImgDuplicate(url)) {
                 existingImages.push(url);
               }
             }
@@ -297,7 +319,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           let bank_name = '';
           let bank_account_number = '';
           let bank_account_name = '';
-          let cleanNotes = editItem.notes || '';
+          let cleanNotes = editItem.notes ? editItem.notes.replace(bankRegex, '').replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '').trim() : '';
           if (match) {
             request_bank_transfer = true;
             bank_name = match[1].trim();
@@ -486,13 +508,35 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       }
 
       let finalNotes = form.notes || '';
+      // Strip any previous [Tài liệu đính kèm...] or duplicate bank info to prevent duplication
+      finalNotes = finalNotes.replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '').trim();
+
       if (form.request_bank_transfer && form.bank_name && form.bank_account_number && form.bank_account_name) {
-        finalNotes = `${form.notes || ''}\n[Thông tin chuyển khoản]: ${form.bank_name} - STK: ${form.bank_account_number} - Chủ TK: ${form.bank_account_name}`.trim();
+        finalNotes = finalNotes.replace(/\[Thông tin chuyển khoản\]:[^\n]*/g, '').trim();
+        finalNotes = `${finalNotes}\n[Thông tin chuyển khoản]: ${form.bank_name} - STK: ${form.bank_account_number} - Chủ TK: ${form.bank_account_name}`.trim();
       }
-      if (images.length > 0) {
+
+      // Deduplicate images before saving
+      const uniqueImages: string[] = [];
+      for (const img of images) {
+        if (!img) continue;
+        const candFile = img.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+        const candNorm = img.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+        const isDup = uniqueImages.some(ex => {
+          if (ex === img) return true;
+          const exFile = ex.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+          const exNorm = ex.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+          if (candFile && exFile && candFile === exFile) return true;
+          if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
+          return false;
+        });
+        if (!isDup) uniqueImages.push(img);
+      }
+
+      if (uniqueImages.length > 0) {
         const baseUrl = import.meta.env.VITE_API_URL || '/backend';
-        const attsStr = images.map(url => `• ${url.split('/').pop()} (${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')})`).join('\n');
-        finalNotes = `${finalNotes}\n[Tài liệu đính kèm (${images.length} tệp)]:\n${attsStr}`.trim();
+        const attsStr = uniqueImages.map(url => `• ${url.split('/').pop()} (${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')})`).join('\n');
+        finalNotes = `${finalNotes}\n[Tài liệu đính kèm (${uniqueImages.length} tệp)]:\n${attsStr}`.trim();
       }
 
       const statusVal = isAutoApprove ? 'approved' : 'pending';
@@ -500,7 +544,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       if (editItem && editItem.id && !editItem.isClone) {
         await api.put(`/expenses/${editItem.id}`, {
           ...form,
-          image_url: images[0] || null,
+          image_url: uniqueImages[0] || null,
           notes: finalNotes,
           amount: Number(form.amount),
           entities: payloadEntities
@@ -509,7 +553,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       } else {
         await api.post('/expenses', {
           ...form,
-          image_url: images[0] || null,
+          image_url: uniqueImages[0] || null,
           notes: finalNotes,
           amount: Number(form.amount),
           status: statusVal,
@@ -1195,7 +1239,14 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           });
                           if (res.data && res.data.success && res.data.data?.url) {
                             const newUrl = res.data.data.url;
-                            setImages(prev => [...prev, newUrl]);
+                            setImages(prev => {
+                              const isAlreadyIn = prev.some(existing => {
+                                const exName = existing.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+                                const newName = newUrl.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+                                return existing === newUrl || (exName && newName && exName === newName);
+                              });
+                              return isAlreadyIn ? prev : [...prev, newUrl];
+                            });
                             setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
                             addToast('Tải lên tệp đính kèm thành công!', 'success');
                           } else {

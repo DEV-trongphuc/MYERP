@@ -863,23 +863,13 @@ export const Header = ({
           background: '#ffffff',
           borderRadius: '16px',
           border: '1px solid #e2e8f0',
+          borderLeft: `6px solid ${meta.leftPill || meta.badgeColor}`,
           boxShadow: '0 14px 34px -6px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05)',
           padding: '14px 16px 12px 18px',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Left accent color strip extending to rounded corners */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: '5px',
-            background: meta.leftPill || meta.badgeColor
-          }}
-        />
 
         {/* Top Header Row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>

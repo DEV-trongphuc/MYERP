@@ -70,6 +70,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   }, []);
 
   const [activeDrawerTab, setActiveDrawerTab] = useState<'comments' | 'history'>('comments');
+  const [mobileDrawerTab, setMobileDrawerTab] = useState<'info' | 'discussion'>('info');
   
   // States copied from DepositsPage.tsx
   const [selectedDepForManage, setSelectedDepForManage] = useState<any>(deposit);
@@ -659,7 +660,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                   >
                     <ChevronLeft size={22} />
                   </button>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--color-text)' }}>
+                  <h2 style={{ fontSize: isMobile ? '1rem' : '1.25rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', whiteSpace: isMobile ? 'nowrap' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     Chi tiết & Lịch trình thanh toán
                   </h2>
                 </div>
@@ -742,10 +743,70 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                 </div>
               </div>
 
+              {/* Mobile Navigation Tabs */}
+              {isMobile && (
+                <div style={{
+                  display: 'flex',
+                  background: 'var(--color-bg)',
+                  padding: '6px',
+                  borderBottom: '1px solid var(--color-border-light)',
+                  gap: '4px',
+                  flexShrink: 0
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setMobileDrawerTab('info')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: mobileDrawerTab === 'info' ? 'var(--color-surface)' : 'transparent',
+                      color: mobileDrawerTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      fontWeight: mobileDrawerTab === 'info' ? 750 : 600,
+                      fontSize: '0.8125rem',
+                      boxShadow: mobileDrawerTab === 'info' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <FileText size={14} />
+                    <span>Thông tin chi tiết</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileDrawerTab('discussion')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: mobileDrawerTab === 'discussion' ? 'var(--color-surface)' : 'transparent',
+                      color: mobileDrawerTab === 'discussion' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      fontWeight: mobileDrawerTab === 'discussion' ? 750 : 600,
+                      fontSize: '0.8125rem',
+                      boxShadow: mobileDrawerTab === 'discussion' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <MessageSquare size={14} />
+                    <span>Thảo luận {comments.length > 0 ? `(${comments.length})` : ''}</span>
+                  </button>
+                </div>
+              )}
+
               {/* Drawer Body (Dual Pane) */}
               <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', overflow: 'hidden' }}>
                 {/* Left Pane (Details & Milestones) */}
-                <div className="custom-scrollbar" style={{ flex: isMobile ? 'none' : 1.3, padding: isMobile ? '1rem 1rem 40px 1rem' : '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {(!isMobile || mobileDrawerTab === 'info') && (
+                <div className="custom-scrollbar" style={{ flex: isMobile ? 1 : 1.3, width: isMobile ? '100%' : 'auto', minWidth: 0, padding: isMobile ? '1rem 1rem 40px 1rem' : '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -795,7 +856,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                     <div style={{ height: '1px', background: 'var(--color-border-light)' }} />
 
                     {/* Bottom Row: Caretaker & Financials */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '20px', alignItems: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 2fr', gap: isMobile ? '14px' : '20px', alignItems: 'center' }}>
                       {/* Left: Caretaker info */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1509,9 +1570,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* Right Pane (Thảo luận & Lịch sử) */}
-                <div style={{ flex: '0 0 420px', display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--color-border)', background: '#f8f9fa' }}>
+                {(!isMobile || mobileDrawerTab === 'discussion') && (
+                <div style={{ flex: isMobile ? 1 : '0 0 420px', width: isMobile ? '100%' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', borderLeft: isMobile ? 'none' : '1px solid var(--color-border)', background: '#f8f9fa' }}>
                   {/* Tabs */}
                   <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', background: '#f8f9fa', padding: '0 8px' }}>
                     <button
@@ -1817,6 +1880,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                     </div>
                   )}
                 </div>
+                )}
               </div>
             </motion.div>
           </div>

@@ -3724,7 +3724,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     </div>
                   </div>
                 </div>
-                <strong style={{ color: otTypeField === 'compensatory' ? '#2563eb' : '#10b981', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                <strong style={{ color: otTypeField === 'compensatory' ? '#2563eb' : '#10b981', fontSize: '0.875rem', wordBreak: 'break-word', lineHeight: 1.4 }}>
                   {diffHours(otStartField, otEndField)} {t('giờ')} ({Number((diffHours(otStartField, otEndField) / 8).toFixed(2))} {t('công gốc')}) × {otRateField}x = {(Number((diffHours(otStartField, otEndField) / 8).toFixed(2)) * otRateField).toFixed(2)} {otTypeField === 'compensatory' ? t('ngày nghỉ bù') : t('ngày công tính lương')}
                 </strong>
               </div>

@@ -5414,11 +5414,11 @@ export default function Approvals() {
                             {/* Hình thức nhận OT & Hệ số tính OT (Loại 1 hoặc x1.5) */}
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 0.8fr', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
                                   <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                                     {t('Hình thức nhận OT')} <span style={{ color: '#ef4444' }}>*</span>
                                   </label>
-                                  <span style={{ fontSize: '0.72rem', color: otType === 'compensatory' ? 'var(--color-primary)' : '#10b981', fontWeight: 700 }}>
+                                  <span style={{ fontSize: '0.72rem', color: otType === 'compensatory' ? 'var(--color-primary)' : '#10b981', fontWeight: 700, whiteSpace: 'normal' }}>
                                     {otType === 'compensatory' ? t('Cộng quỹ nghỉ bù') : t('Chi trả vào bảng lương')}
                                   </span>
                                 </div>
@@ -5533,7 +5533,7 @@ export default function Approvals() {
                                   </div>
                                 </div>
                               </div>
-                              <strong style={{ color: otType === 'compensatory' ? '#2563eb' : '#10b981', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                              <strong style={{ color: otType === 'compensatory' ? '#2563eb' : '#10b981', fontSize: '0.875rem', wordBreak: 'break-word', lineHeight: 1.4 }}>
                                 {diffHours(otStart, otEnd)} {t('giờ')} ({Number((diffHours(otStart, otEnd) / 8).toFixed(2))} công gốc) × {otRate}x = {(Number((diffHours(otStart, otEnd) / 8).toFixed(2)) * otRate).toFixed(2)} {otType === 'compensatory' ? t('ngày nghỉ bù') : t('ngày công tính lương')}
                               </strong>
                             </div>
@@ -11762,6 +11762,26 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           const rawText = detail?.notes || detail?.description || item.description || '';
           const baseUrl = import.meta.env.VITE_API_URL || '/backend';
           const extractedFiles: { name: string; url: string }[] = [];
+          const getCleanFileName = (raw: string) => {
+            if (!raw) return '';
+            return raw.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+          };
+          const normalizeUrl = (raw: string) => {
+            if (!raw) return '';
+            return raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+          };
+          const isFileDuplicate = (candidateUrl: string, candidateName?: string) => {
+            const candFile = getCleanFileName(candidateUrl) || (candidateName ? candidateName.toLowerCase().trim() : '');
+            const candNorm = normalizeUrl(candidateUrl);
+            return extractedFiles.some(existing => {
+              if (existing.url === candidateUrl) return true;
+              const exFile = getCleanFileName(existing.url) || existing.name.toLowerCase().trim();
+              const exNorm = normalizeUrl(existing.url);
+              if (candFile && exFile && candFile === exFile) return true;
+              if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
+              return false;
+            });
+          };
           
           if (detail?.image_url) {
             extractedFiles.push({
@@ -11772,7 +11792,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           
           if (Array.isArray(detail?.attachments)) {
             detail.attachments.forEach((a: any) => {
-              if (a.url && !extractedFiles.some(f => f.url === a.url)) {
+              if (a.url && !isFileDuplicate(a.url, a.name)) {
                 extractedFiles.push({
                   name: a.name || a.url.split('/').pop() || 'Tài liệu',
                   url: a.url.startsWith('http') ? a.url : `${baseUrl}/${a.url}`
@@ -11785,7 +11805,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           for (const m of matches) {
             const name = m[1].replace(/^[•\-\s]+/, '').trim();
             const url = m[2].trim();
-            if (url && !extractedFiles.some(f => f.url === url || f.url.endsWith(url))) {
+            if (url && !isFileDuplicate(url, name)) {
               extractedFiles.push({
                 name: name || url.split('/').pop() || 'Tệp đính kèm',
                 url: url.startsWith('http') ? url : `${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')}`

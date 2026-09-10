@@ -6703,6 +6703,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     </div>
   );
 
+  const effectiveZIndex = zIndex || 2147483620;
+
   return createPortal(
     <>
       <AnimatePresence>
@@ -6718,7 +6720,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: zIndex ? zIndex - 5 : 1000005,
+                zIndex: effectiveZIndex - 5,
                 background: 'rgba(0, 0, 0, 0.45)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)'
@@ -6740,16 +6742,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 borderRadius: 0,
                 overflow: 'hidden',
                 boxShadow: isMobileOrTablet ? 'none' : '-10px 0 30px rgba(0,0,0,0.15)',
-                zIndex: zIndex || 1000010,
+                zIndex: effectiveZIndex,
                 display: 'flex',
                 flexDirection: 'column',
                 position: 'fixed',
-                background: 'var(--color-surface)'
+                background: 'var(--color-bg)'
               }}
             >
               <AnimatePresence>
                 {showAvatarModal && (
-                  <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000020 }}>
+                  <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: effectiveZIndex + 10 }}>
                     <motion.div
                       initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
                       style={{ background: 'var(--color-surface)', width: '400px', borderRadius: '24px', padding: '2rem', boxShadow: 'var(--shadow-2xl)' }}
@@ -6873,7 +6875,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 {quickUserCard && quickUserCard.visible && (
                   <>
                     <div
-                      style={{ position: 'fixed', inset: 0, zIndex: 1000050, background: isMobileOrTablet ? 'rgba(0,0,0,0.5)' : 'transparent' }}
+                      style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, background: isMobileOrTablet ? 'rgba(0,0,0,0.5)' : 'transparent' }}
                       onClick={() => setQuickUserCard(null)}
                     />
                     <motion.div
@@ -6885,7 +6887,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         top: '50%',
                         left: '50%',
                         transform: 'translate(-50%, -50%)',
-                        zIndex: 1000060,
+                        zIndex: effectiveZIndex + 20,
                         width: 'calc(100vw - 40px)',
                         maxWidth: '290px',
                         background: 'var(--color-surface)',
@@ -6897,7 +6899,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                         position: 'fixed',
                         top: quickUserCard.y + 15,
                         left: quickUserCard.x - 130,
-                        zIndex: 1000060,
+                        zIndex: effectiveZIndex + 20,
                         width: 270,
                         background: 'var(--color-surface)',
                         borderRadius: '20px',
