@@ -74,10 +74,33 @@ if ($isLocalhost || $isVercel || in_array($origin, $allowed, true)) {
 }
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override');
+header('Access-Control-Expose-Headers: Content-Type, Authorization, X-App-Version');
 header('Vary: Origin');
 header('Content-Type: application/json; charset=UTF-8');
 
+// Read app version and expose in response header
+$versionFile = __DIR__ . '/version.json';
+if (!file_exists($versionFile)) {
+    $versionFile = __DIR__ . '/../version.json';
+}
+$appVersion = '1.0.0';
+if (file_exists($versionFile)) {
+    $vJson = json_decode(@file_get_contents($versionFile), true);
+    if (!empty($vJson['version'])) {
+        $appVersion = (string)$vJson['version'];
+    }
+}
+header('X-App-Version: ' . $appVersion);
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+
+if (isset($_GET['action']) && $_GET['action'] === 'version') {
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    $vData = file_exists($versionFile) ? json_decode(@file_get_contents($versionFile), true) : ['version' => $appVersion];
+    if (!is_array($vData)) $vData = ['version' => $appVersion];
+    echo json_encode(['success' => true, 'data' => $vData], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 
 // ── Helper functions ──────────────────────────────────────────

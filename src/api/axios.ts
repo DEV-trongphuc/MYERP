@@ -168,10 +168,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto-refresh on 401
+// Auto-refresh on 401 & Version Header Detection
 api.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    const backendVer = r.headers?.['x-app-version'];
+    if (backendVer && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app-backend-version', { detail: { version: String(backendVer) } }));
+    }
+    return r;
+  },
   async (error) => {
+    if (error.response?.headers?.['x-app-version'] && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app-backend-version', { detail: { version: String(error.response.headers['x-app-version']) } }));
+    }
     const original = error.config;
     const url = String(original?.url || '');
     const action = String(original?.params?.action || '');

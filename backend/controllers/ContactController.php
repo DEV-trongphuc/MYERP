@@ -91,6 +91,30 @@ class ContactController {
             $orderByClause = "c.$sortBy $order, c.id $order";
         }
 
+        // When searching, prioritize exact matches and tail digit matches to the top
+        if ($search !== '') {
+            $cleanD = preg_replace('/[^0-9]/', '', $search);
+            $cleanPhoneSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(c.phone, ''), ' ', ''), '.', ''), '-', ''), '+', ''), '(', ''), ')', '')";
+            $cleanMobileSql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(c.mobile, ''), ' ', ''), '.', ''), '-', ''), '+', ''), '(', ''), ')', '')";
+            $cleanPhone2Sql = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(c.phone2, ''), ' ', ''), '.', ''), '-', ''), '+', ''), '(', ''), ')', '')";
+
+            $relCases = [];
+            if (strlen($cleanD) >= 2) {
+                // Suffix / tail match on phone gets top rank
+                $relCases[] = "WHEN $cleanPhoneSql LIKE " . $this->db->quote('%' . $cleanD) . " OR $cleanMobileSql LIKE " . $this->db->quote('%' . $cleanD) . " OR $cleanPhone2Sql LIKE " . $this->db->quote('%' . $cleanD) . " THEN 1";
+                // Infix / contains match on phone gets rank 2
+                $relCases[] = "WHEN $cleanPhoneSql LIKE " . $this->db->quote('%' . $cleanD . '%') . " OR $cleanMobileSql LIKE " . $this->db->quote('%' . $cleanD . '%') . " OR $cleanPhone2Sql LIKE " . $this->db->quote('%' . $cleanD . '%') . " THEN 2";
+            }
+            $relCases[] = "WHEN LOWER(IFNULL(c.email, '')) = " . $this->db->quote(strtolower($search)) . " THEN 3";
+            $relCases[] = "WHEN LOWER(IFNULL(c.email, '')) LIKE " . $this->db->quote(strtolower($search) . '%') . " THEN 4";
+            $relCases[] = "WHEN LOWER(IFNULL(c.email, '')) LIKE " . $this->db->quote('%' . strtolower($search) . '%') . " THEN 5";
+            $relCases[] = "WHEN LOWER(IFNULL(c.full_name, '')) LIKE " . $this->db->quote(strtolower($search) . '%') . " THEN 6";
+
+            if (!empty($relCases)) {
+                $orderByClause = "CASE " . implode(' ', $relCases) . " ELSE 99 END ASC, " . $orderByClause;
+            }
+        }
+
         $scope = $this->getScope($auth, 'leads', 'read');
         if ($scope === 'all') {
             // No filters
@@ -229,9 +253,7 @@ class ContactController {
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
                 case 'tiem_nang':
-                    if (empty($stage) && empty($leadStatus)) {
-                        $where[] = "c.status != 'customer'";
-                    }
+                    // Keep all pipeline leads (including stage 14 enrolled) so total count and stage counts match exactly
                     break;
                 case 'hot':        $where[] = 'c.lead_score >= 80'; break;
                 case 'customer':
@@ -439,14 +461,20 @@ class ContactController {
                 }
             } else {
                 if ($isNum) {
-                    $where[] = "(
+                    $clause = "(
                         c.stage_id = ? 
                         OR (c.stage_id IS NULL AND c.pipeline_status = ?)
-                        OR (c.stage_id IS NULL AND c.pipeline_status = (SELECT ps.system_slug FROM pipeline_stages ps WHERE ps.id = ? LIMIT 1))
-                    )";
+                        OR (c.stage_id IS NULL AND c.pipeline_status = (SELECT ps.system_slug FROM pipeline_stages ps WHERE ps.id = ? LIMIT 1))";
                     $params[] = (int)$stage;
                     $params[] = $stageSlug ?: (string)$stage;
                     $params[] = (int)$stage;
+                    if (!empty($stageSlug)) {
+                        $clause .= " OR c.pipeline_status = ? OR c.stage_id = (SELECT ps2.id FROM pipeline_stages ps2 WHERE ps2.system_slug = ? LIMIT 1)";
+                        $params[] = $stageSlug;
+                        $params[] = $stageSlug;
+                    }
+                    $clause .= ")";
+                    $where[] = $clause;
                 } else {
                     $where[] = "(c.pipeline_status = ? OR c.stage_id = (SELECT ps.id FROM pipeline_stages ps WHERE ps.system_slug = ? LIMIT 1))";
                     $params[] = $stage;
@@ -1830,6 +1858,50 @@ class ContactController {
 
         $fullNote = $userNote;
 
+        // Send in-app notification to the requested users (notify_user_ids)
+        $notifyUserIds = [];
+        if (!empty($b['notify_user_ids']) && is_array($b['notify_user_ids'])) {
+            foreach ($b['notify_user_ids'] as $uid) {
+                $uidInt = (int)$uid;
+                if ($uidInt > 0 && !in_array($uidInt, $notifyUserIds, true)) {
+                    $notifyUserIds[] = $uidInt;
+                }
+            }
+        }
+
+        if (!empty($notifyUserIds)) {
+            try {
+                $senderName = $auth['full_name'] ?? 'Hệ thống';
+                $contactName = trim($currentContact['full_name'] ?? '') ?: 'Khách hàng';
+                $custPhone = trim($currentContact['phone'] ?? $currentContact['mobile'] ?? '');
+                $phoneStr = !empty($custPhone) ? " ($custPhone)" : "";
+                
+                $notifTitle = "📢 Chuyển Pipeline: {$contactName} ➔ {$newStageName}";
+                $notifBody = "{$senderName} vừa chuyển khách hàng \"{$contactName}\"{$phoneStr} sang giai đoạn \"{$newStageName}\".";
+                if (!empty($userNote)) {
+                    $notifBody .= "\n📝 Ghi chú: {$userNote}";
+                }
+                $notifLink = "/contacts?open_contact_id={$id}";
+
+                $stmtInsertNotif = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
+                    VALUES (?, ?, ?, ?, 'pipeline_transition', ?, 0, NOW())
+                ");
+
+                foreach ($notifyUserIds as $targetUid) {
+                    $stmtInsertNotif->execute([
+                        $targetUid,
+                        $auth['tenant_id'],
+                        $notifTitle,
+                        $notifBody,
+                        $notifLink
+                    ]);
+                }
+            } catch (\Throwable $notifEx) {
+                error_log("Notification error in moveStage: " . $notifEx->getMessage());
+            }
+        }
+
         logInteraction($this->db, $auth['tenant_id'], $auth['user_id'], 'note', $subject, $fullNote, 'contact', $id);
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'MOVE_STAGE', 'contact', $id, json_encode([
             'stage_id' => $stageId,
@@ -1837,7 +1909,8 @@ class ContactController {
             'from_stage_name' => $currStageName,
             'pipeline_status' => $newStatus,
             'lead_status' => $targetLeadStatus,
-            'note' => $fullNote
+            'note' => $fullNote,
+            'notify_user_ids' => $notifyUserIds
         ], JSON_UNESCAPED_UNICODE));
 
         respond(200, null, 'Đã cập nhật stage thành công');

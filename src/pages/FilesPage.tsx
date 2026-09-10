@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import api from '../api/axios';
 import { compressToWebP } from '../utils/imageCompress';
+import { downloadFileWithWebpToJpg } from '../utils/fileDownloader';
 import { useUIStore } from '../store/uiStore';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { Avatar } from '../components/ui/Avatar';
@@ -935,9 +936,12 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                         >
                                           <Eye size={14} /> Xem tài liệu
                                         </a>
-                                        <a 
-                                          href={`${import.meta.env.VITE_API_URL ?? '/backend'}/${f.file_path}`} 
-                                          download={f.name}
+                                        <button 
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveFileMenuId(null);
+                                            downloadFileWithWebpToJpg(`${import.meta.env.VITE_API_URL ?? '/backend'}/${f.file_path}`, f.name);
+                                          }}
                                           style={{ 
                                             padding: '6px 12px', 
                                             fontSize: '0.75rem', 
@@ -949,12 +953,13 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                             gap: '6px', 
                                             borderRadius: '6px',
                                             color: 'var(--color-text-light)',
-                                            textDecoration: 'none'
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer'
                                           }} 
-                                          onClick={() => setActiveFileMenuId(null)}
                                         >
                                           <Download size={14} /> Tải xuống
-                                        </a>
+                                        </button>
                                         {!isViewer && (!isSale || activeTab === 'personal') && (
                                           <button 
                                             className="btn-icon-bare" 
@@ -1313,9 +1318,12 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                           >
                                             <Eye size={14} /> Xem tài liệu
                                           </a>
-                                          <a 
-                                            href={`${import.meta.env.VITE_API_URL ?? '/backend'}/${f.file_path}`} 
-                                            download={f.name}
+                                          <button 
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveFileMenuId(null);
+                                              downloadFileWithWebpToJpg(`${import.meta.env.VITE_API_URL ?? '/backend'}/${f.file_path}`, f.name);
+                                            }}
                                             style={{ 
                                               padding: '6px 12px', 
                                               fontSize: '0.75rem', 
@@ -1327,12 +1335,13 @@ export const FilesPage: React.FC<FilesPageProps> = ({ embedProjectId, isEmbedded
                                               gap: '6px', 
                                               borderRadius: '6px',
                                               color: 'var(--color-text-light)',
-                                              textDecoration: 'none'
+                                              background: 'transparent',
+                                              border: 'none',
+                                              cursor: 'pointer'
                                             }} 
-                                            onClick={() => setActiveFileMenuId(null)}
                                           >
                                             <Download size={14} /> Tải xuống
-                                          </a>
+                                          </button>
                                           {!isViewer && (!isSale || activeTab === 'personal') && (
                                             <button 
                                               className="btn-icon-bare" 

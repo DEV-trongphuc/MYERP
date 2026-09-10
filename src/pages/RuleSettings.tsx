@@ -18,6 +18,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchAPI } from '../utils/api';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { Avatar } from '../components/ui/Avatar';
+import { canManageSystemSettings } from '../utils/roleUtils';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { useAuthStore } from '../store/authStore';
@@ -289,7 +290,7 @@ const RuleSettingsInner = () => {
 
   const { t } = useLanguage();
   const user = useAuthStore(state => state.user);
-  const isReadOnly = !['admin', 'superadmin', 'super_admin', 'assistant'].includes(user?.role || '');
+  const isReadOnly = !canManageSystemSettings(user);
   const [rules, setRules] = useState<any[]>([]);
   const [rounds, setRounds] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

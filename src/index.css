@@ -4007,10 +4007,10 @@ textarea, .form-textarea, textarea.form-input, textarea.form-control {
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
-  z-index: 10500;
+  z-index: 1000005 !important;
   cursor: pointer !important;
 }
 
@@ -4024,27 +4024,27 @@ textarea, .form-textarea, textarea.form-input, textarea.form-control {
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: block;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 19-7-7 7-7'/%3E%3Cpath d='M19 12H5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: none;
-    z-index: 10501;
+    z-index: 1000006;
   }
   .drawer-backdrop:hover::after {
-    background-color: rgba(255, 255, 255, 0.22);
+    background-color: rgba(255, 255, 255, 0.28);
     transform: translate(-50%, -50%) scale(1.08);
   }
 }
 
 .drawer-sheet {
-  z-index: 10600 !important;
+  z-index: 1000010 !important;
 }
 
 /* Mobile Header / Sidebar alignment */
@@ -4748,14 +4748,14 @@ div[role="status"] {
     border: none !important;
     display: flex !important;
     flex-direction: column !important;
-    z-index: 10600 !important;
+    z-index: 1000010 !important;
     background: var(--color-surface) !important;
   }
 
   /* When multiple drawer overlays stack, we adjust z-indexes dynamically */
   .drawer-sheet + .drawer-sheet,
   .modal-sheet + .modal-sheet {
-    z-index: 10700 !important;
+    z-index: 1000020 !important;
   }
 
   .modal-body, .drawer-body {
@@ -6006,9 +6006,7 @@ div[data-react-hot-toast] div,
   position: relative;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.98) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #ffffff !important;
   border-radius: 16px;
   padding: 14px 16px 12px 18px;
   width: 390px;
@@ -6018,10 +6016,13 @@ div[data-react-hot-toast] div,
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto !important;
   user-select: none;
+  box-shadow: 0 14px 34px -6px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05) !important;
+  border: 1px solid #e2e8f0 !important;
 }
 
 .realtime-notif-toast:hover {
-  transform: translateY(-2px) scale(1.01);
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -6px rgba(15, 23, 42, 0.18), 0 6px 16px rgba(15, 23, 42, 0.08) !important;
 }
 
 /* ================================================

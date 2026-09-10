@@ -886,7 +886,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   useEffect(() => {
     if (task) {
-      const isSaleRole = currentUser?.role as string === 'sale';
+      const isSaleRole = ['sale', 'sales'].includes(String(currentUser?.role || '').toLowerCase());
       const defaultUserId = task.user_id || (isSaleRole ? currentUser.id : null);
       const normalizedTask = {
         ...task,
@@ -2206,10 +2206,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     >
         {/* Drawer Header */}
         <div style={{
-          padding: isMobileOrTablet ? '0.5rem 0.75rem' : (embedMode ? '0.75rem 0.5rem' : '1.25rem 1.5rem'),
+          padding: isMobileOrTablet ? '0.65rem 0.85rem' : (embedMode ? '0.75rem 0.5rem' : '1.25rem 1.5rem'),
           borderBottom: '1px solid var(--color-border-light)',
           display: 'flex',
-          justifyContent: isMobileOrTablet ? 'flex-end' : 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           background: 'var(--color-surface)',
           zIndex: 100,
@@ -2218,7 +2218,51 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           flexShrink: 0,
           gap: '8px'
         }}>
-          {!isMobileOrTablet && (
+          {isMobileOrTablet ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: erpMeta.internal_type === 'announcement'
+                  ? 'rgba(163, 20, 34, 0.08)'
+                  : (formData.priority === 'high'
+                      ? 'rgba(239, 68, 68, 0.08)'
+                      : (formData.priority === 'low'
+                          ? 'rgba(59, 130, 246, 0.08)'
+                          : 'rgba(245, 158, 11, 0.08)')),
+                color: erpMeta.internal_type === 'announcement'
+                  ? 'var(--color-primary)'
+                  : (formData.priority === 'high'
+                      ? 'var(--color-danger)'
+                      : (formData.priority === 'low'
+                          ? 'var(--color-info)'
+                          : 'var(--color-warning)')),
+                flexShrink: 0
+              }}>
+                {erpMeta.internal_type === 'announcement' ? <AlertCircle size={17} /> : <CheckSquare2 size={17} />}
+              </div>
+              <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                <h3 style={{ 
+                  fontSize: '0.92rem', 
+                  fontWeight: 800, 
+                  color: 'var(--color-text)', 
+                  margin: 0, 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {task?.id === 'new' ? t('Tạo công việc mới') : (formData.subject || t('Chi tiết công việc'))}
+                </h3>
+                {formData.id && formData.id !== 'new' && (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>#{formData.id}</span>
+                )}
+              </div>
+            </div>
+          ) : (
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', minWidth: 0, flex: 1, overflow: 'hidden' }}>
               <div style={{
                 width: '40px',
@@ -2328,7 +2372,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: isMobileOrTablet ? '6px' : '10px', alignItems: 'center', flexShrink: 0, width: isMobileOrTablet ? '100%' : 'auto', justifyContent: isMobileOrTablet ? 'flex-end' : 'flex-start' }}>
+          <div style={{ display: 'flex', gap: isMobileOrTablet ? '6px' : '10px', alignItems: 'center', flexShrink: 0, justifyContent: 'flex-end' }}>
             {/* Share Task Button */}
             {formData.id && formData.id !== 'new' && (
               <button
@@ -2355,32 +2399,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 <Share2 size={isMobileOrTablet ? 15 : 18} />
               </button>
             )}
-
-            {/* Notification Mute Bell Button */}
-            <button
-              type="button"
-              onClick={handleBellClick}
-              disabled={loadingMute}
-              className="hover-lift"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: isMobileOrTablet ? '32px' : '36px',
-                height: isMobileOrTablet ? '32px' : '36px',
-                borderRadius: '8px',
-                border: isMuted ? '1px solid var(--color-border)' : '1px solid rgba(189, 29, 45, 0.3)',
-                background: isMuted ? 'var(--color-bg)' : 'rgba(189, 29, 45, 0.08)',
-                color: isMuted ? 'var(--color-text-muted)' : '#BD1D2D',
-                cursor: 'pointer',
-                boxShadow: 'var(--shadow-sm)',
-                transition: 'all 0.2s',
-                padding: 0
-              }}
-              title={isMuted ? t("Thông báo đang tắt (Bấm để bật)") : t("Thông báo đang bật (Bấm để tắt)")}
-            >
-              {isMuted ? <BellOff size={isMobileOrTablet ? 15 : 18} /> : <Bell size={isMobileOrTablet ? 15 : 18} />}
-            </button>
 
             {/* Hide task eye button */}
             {task?.id && task.id !== 'new' && (
@@ -2410,35 +2428,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </button>
             )}
 
-            {!embedMode && (window.location.pathname === '/workspace' || window.location.pathname === '/') && (
-              <button
-                type="button"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('enter-focus-mode', { detail: { task } }));
-                  handleCloseDrawer();
-                }}
-                className="hover-lift"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: isMobileOrTablet ? '32px' : '36px',
-                  height: isMobileOrTablet ? '32px' : '36px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-bg)',
-                  color: 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                  boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
-                  padding: 0
-                }}
-                title={t("Chế độ tập trung")}
-              >
-                <Target size={isMobileOrTablet ? 15 : 18} />
-              </button>
-            )}
-
             <button
               onClick={handleManualSave}
               disabled={isSaving}
@@ -2447,11 +2436,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: isMobileOrTablet ? '0' : '8px',
-                padding: isMobileOrTablet ? '0' : '8px 20px',
-                width: isMobileOrTablet ? '32px' : undefined,
+                gap: '6px',
+                padding: isMobileOrTablet ? '0 12px' : '8px 20px',
+                width: isMobileOrTablet ? 'auto' : undefined,
                 borderRadius: '8px',
-                fontSize: isMobileOrTablet ? '0.85rem' : '0.9rem',
+                fontSize: isMobileOrTablet ? '0.8rem' : '0.9rem',
                 fontWeight: 700,
                 height: isMobileOrTablet ? '32px' : '38px',
                 background: 'var(--color-primary)',
@@ -2463,8 +2452,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 transition: 'all 0.2s'
               }}
             >
-              {isSaving ? <RefreshCw className="spin" size={14} /> : <Save size={isMobileOrTablet ? 15 : 16} />}
-              {!isMobileOrTablet && <span>{isSaving ? t('Đang lưu...') : (task?.id === 'new' ? t('Tạo công việc') : t('Lưu thay đổi'))}</span>}
+              {isSaving ? <RefreshCw className="spin" size={14} /> : <Save size={isMobileOrTablet ? 14 : 16} />}
+              <span>{isSaving ? t('Đang lưu...') : (task?.id === 'new' ? t('Tạo việc') : (isMobileOrTablet ? t('Lưu') : t('Lưu thay đổi')))}</span>
             </button>
 
             <button 
@@ -3173,9 +3162,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                   className="subtask-assignee-dropdown"
                                   style={{
                                     position: 'absolute',
-                                    top: '100%',
+                                    top: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 'auto' : '100%',
+                                    bottom: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 'calc(100% + 6px)' : 'auto',
                                     right: 0,
-                                    marginTop: '6px',
+                                    marginTop: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 0 : '6px',
+                                    marginBottom: (typeof window !== 'undefined' && window.innerWidth <= 768) ? '6px' : 0,
                                     zIndex: 9999,
                                     background: 'var(--color-surface)',
                                     border: '1px solid var(--color-border-light)',
@@ -4539,204 +4530,225 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             </div>
 
             {/* Khách hàng liên quan */}
-            {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin' || currentUser?.role === 'sale') && (
-              <div className="card" style={cardStyle}>
-                
-                {/* Primary Contact (if any) */}
-                {((formData.related_type === 'contact' || formData.contact_id) && (formData.related_type === 'contact' ? formData.related_id : formData.contact_id)) ? (
-                  <div style={{ marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                        {t('Khách hàng chính')}
-                      </div>
-                      {task.id === 'new' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData({ 
-                              ...formData, 
-                              contact_id: null, 
-                              contact_name: '',
-                              ...(formData.related_type === 'contact' ? { related_id: '', related_type: null } : {})
-                            });
-                          }}
-                          style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.75rem', padding: '2px' }}
-                        >
-                          {t('Thay đổi')}
-                        </button>
-                      )}
-                    </div>
-                    <div 
-                      className="hover-lift"
-                      onClick={() => {
-                        if (onOpenContact) {
-                          onOpenContact(Number(formData.related_type === 'contact' ? formData.related_id : formData.contact_id));
-                        }
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        background: 'rgba(0, 0, 0, 0.015)',
-                        border: '1px solid var(--color-border-light)',
-                        borderRadius: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Avatar 
-                          name={formData.contact_name || t('Khách hàng')} 
-                          src={allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar}
-                          size={24} 
-                        />
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                            {formData.contact_name || t('Khách hàng')}
-                          </span>
-                          <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>
-                            {allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.phone || allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.email || t('Xem hồ sơ')}
-                          </span>
-                        </div>
-                      </div>
-                      <ArrowUpRight size={16} />
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+            <div className="card" style={cardStyle}>
+              
+              {/* Primary Contact (if any) */}
+              {((formData.related_type === 'contact' || formData.contact_id) && (formData.related_type === 'contact' ? formData.related_id : formData.contact_id)) ? (
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                      {t('Khách hàng chính *')}
+                      {t('Khách hàng liên kết')}
                     </div>
-                    <CustomSelect
-                      searchable
-                      options={contactOptions}
-                      value={formData.contact_id ? String(formData.contact_id) : (formData.related_type === 'contact' && formData.related_id ? String(formData.related_id) : '')}
-                      onChange={async val => {
-                        const selected = allowedContacts.find(c => String(c.id) === String(val));
-                        const contactIdVal = val ? Number(val) : null;
-                        const contactNameVal = selected ? getContactFullName(selected) : '';
-                        const isContactRelated = (formData.related_type === 'contact' || !formData.related_type);
-                        
-                        setFormData({
-                          ...formData,
-                          contact_id: contactIdVal,
-                          contact_name: contactNameVal,
-                          ...(isContactRelated ? {
-                            related_id: contactIdVal,
-                            related_type: contactIdVal ? 'contact' : null
-                          } : {})
-                        });
-
-                        if (task.id !== 'new') {
-                          try {
-                            await api.put(`/activities/${task.id}`, {
-                              contact_id: contactIdVal,
-                              ...(isContactRelated ? {
-                                related_id: contactIdVal,
-                                related_type: contactIdVal ? 'contact' : null
-                              } : {})
-                            });
-                            onUpdate();
-                          } catch (e: any) {
-                            toast.error(t('Lỗi cập nhật khách hàng liên kết: ') + e.message);
-                          }
-                        }
-                      }}
-                      placeholder={t('Chọn khách hàng chính...')}
-                    />
+                    {task.id === 'new' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({ 
+                            ...formData, 
+                            contact_id: null, 
+                            contact_name: '',
+                            ...(formData.related_type === 'contact' ? { related_id: '', related_type: null } : {})
+                          });
+                        }}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.75rem', padding: '2px' }}
+                      >
+                        {t('Thay đổi')}
+                      </button>
+                    )}
                   </div>
-                )}
+                  <div 
+                    className="hover-lift"
+                    onClick={() => {
+                      const contactIdVal = Number(formData.related_type === 'contact' ? formData.related_id : formData.contact_id);
+                      if (contactIdVal) {
+                        if (onOpenContact) {
+                          onOpenContact(contactIdVal);
+                        } else {
+                          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+                            detail: { id: contactIdVal, contactId: contactIdVal }
+                          }));
+                        }
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      background: 'rgba(0, 0, 0, 0.015)',
+                      border: '1px solid var(--color-border-light)',
+                      borderRadius: '12px',
+                      cursor: 'pointer'
+                    }}
+                    title={t('Nhấn để mở chi tiết hồ sơ khách hàng')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Avatar 
+                        name={formData.contact_name || t('Khách hàng')} 
+                        src={
+                          allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || 
+                          allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar ||
+                          formData.contact_avatar
+                        }
+                        size={24} 
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                          {formData.contact_name || t('Khách hàng')}
+                        </span>
+                        <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>
+                          {allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.phone || 
+                           allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.email || 
+                           formData.contact_phone || 
+                           formData.contact_email || 
+                           t('Xem hồ sơ')}
+                        </span>
+                      </div>
+                    </div>
+                    <ArrowUpRight size={16} />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {t('Khách hàng liên kết')}
+                  </div>
+                  <CustomSelect
+                    searchable
+                    options={contactOptions}
+                    value={formData.contact_id ? String(formData.contact_id) : (formData.related_type === 'contact' && formData.related_id ? String(formData.related_id) : '')}
+                    onChange={async val => {
+                      const selected = allowedContacts.find(c => String(c.id) === String(val));
+                      const contactIdVal = val ? Number(val) : null;
+                      const contactNameVal = selected ? getContactFullName(selected) : '';
+                      const isContactRelated = (formData.related_type === 'contact' || !formData.related_type);
+                      
+                      setFormData({
+                        ...formData,
+                        contact_id: contactIdVal,
+                        contact_name: contactNameVal,
+                        ...(isContactRelated ? {
+                          related_id: contactIdVal,
+                          related_type: contactIdVal ? 'contact' : null
+                        } : {})
+                      });
 
-                {/* Additional Contacts list */}
-                {(() => {
-                  const addContactIds = erpMeta.related_contact_ids || [];
-                  const addContacts = allowedContacts.filter(c => addContactIds.includes(Number(c.id)));
-                  const mainContactId = Number(formData.related_id || formData.contact_id || 0);
-                  
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {addContacts.length > 0 && (
+                      if (task.id !== 'new') {
+                        try {
+                          await api.put(`/activities/${task.id}`, {
+                            contact_id: contactIdVal,
+                            ...(isContactRelated ? {
+                              related_id: contactIdVal,
+                              related_type: contactIdVal ? 'contact' : null
+                            } : {})
+                          });
+                          onUpdate();
+                        } catch (e: any) {
+                          toast.error(t('Lỗi cập nhật khách hàng liên kết: ') + e.message);
+                        }
+                      }
+                    }}
+                    placeholder={t('Chọn khách hàng liên kết...')}
+                  />
+                </div>
+              )}
+
+              {/* Additional Contacts list */}
+              {(() => {
+                const addContactIds = erpMeta.related_contact_ids || [];
+                const addContacts = allowedContacts.filter(c => addContactIds.includes(Number(c.id)));
+                const mainContactId = Number(formData.related_id || formData.contact_id || 0);
+                
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {addContacts.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                          {t('Khách hàng liên kết thêm')} ({addContacts.length})
+                        </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                            {t('Khách hàng liên kết thêm')} ({addContacts.length})
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {addContacts.map(c => (
+                          {addContacts.map(c => (
+                            <div 
+                              key={c.id} 
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: 'rgba(0, 0, 0, 0.015)',
+                                border: '1px solid var(--color-border-light)',
+                                padding: '8px 12px',
+                                borderRadius: '10px'
+                              }}
+                            >
                               <div 
-                                key={c.id} 
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  background: 'rgba(0, 0, 0, 0.015)',
-                                  border: '1px solid var(--color-border-light)',
-                                  padding: '8px 12px',
-                                  borderRadius: '10px'
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}
+                                onClick={() => {
+                                  const targetAddId = Number(c.id);
+                                  if (targetAddId) {
+                                    if (onOpenContact) {
+                                      onOpenContact(targetAddId);
+                                    } else {
+                                      window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+                                        detail: { id: targetAddId, contactId: targetAddId }
+                                      }));
+                                    }
+                                  }
                                 }}
                               >
-                                <div 
-                                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}
-                                  onClick={() => {
-                                    if (onOpenContact) {
-                                      onOpenContact(Number(c.id));
-                                    }
-                                  }}
-                                >
-                                  <Avatar name={getContactFullName(c)} src={c.avatar_url || c.avatar} size={22} />
-                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{getContactFullName(c)}</span>
-                                    <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>{c.phone || c.email || t('Xem hồ sơ')}</span>
-                                  </div>
+                                <Avatar name={getContactFullName(c)} src={c.avatar_url || c.avatar} size={22} />
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{getContactFullName(c)}</span>
+                                  <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>{c.phone || c.email || t('Xem hồ sơ')}</span>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextIds = addContactIds.filter((id: number) => id !== Number(c.id));
-                                    const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
-                                    setErpMeta(updatedMeta);
-                                    handleSaveMeta(updatedMeta);
-                                  }}
-                                  style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.8rem', padding: '4px' }}
-                                >
-                                  ×
-                                </button>
                               </div>
-                            ))}
-                          </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextIds = addContactIds.filter((id: number) => id !== Number(c.id));
+                                  const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
+                                  setErpMeta(updatedMeta);
+                                  handleSaveMeta(updatedMeta);
+                                }}
+                                style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.8rem', padding: '4px' }}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                      
-                      {/* Picker/Dropdown */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                          {t('Thêm khách hàng liên kết')}
-                        </div>
-                        <CustomSelect
-                          multiple
-                          searchable
-                          showAvatars
-                          options={allowedContacts
-                            .filter(c => Number(c.id) !== mainContactId)
-                            .map(c => ({
-                              value: String(c.id),
-                              label: `${getContactFullName(c)} ${c.phone ? `(${c.phone})` : ''}`,
-                              avatar: c.avatar_url || c.avatar
-                            }))}
-                          value={addContactIds.map(String)}
-                          onChange={(vals) => {
-                            const nextIds = vals.map(Number);
-                            const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
-                            setErpMeta(updatedMeta);
-                            handleSaveMeta(updatedMeta);
-                          }}
-                          placeholder={t('Chọn khách hàng...')}
-                        />
                       </div>
+                    )}
+                    
+                    {/* Picker/Dropdown */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        {t('Thêm khách hàng liên kết')}
+                      </div>
+                      <CustomSelect
+                        multiple
+                        searchable
+                        showAvatars
+                        options={allowedContacts
+                          .filter(c => Number(c.id) !== mainContactId)
+                          .map(c => ({
+                            value: String(c.id),
+                            label: `${getContactFullName(c)} ${c.phone ? `(${c.phone})` : ''}`,
+                            avatar: c.avatar_url || c.avatar
+                          }))}
+                        value={addContactIds.map(String)}
+                        onChange={(vals) => {
+                          const nextIds = vals.map(Number);
+                          const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
+                          setErpMeta(updatedMeta);
+                          handleSaveMeta(updatedMeta);
+                        }}
+                        placeholder={t('Chọn khách hàng...')}
+                      />
                     </div>
-                  );
-                })()}
-              </div>
-            )}
+                  </div>
+                );
+              })()}
+            </div>
 
 
             {/* Approval Banner */}
@@ -5166,15 +5178,18 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         ref={participantDropdownRef}
                         style={{
                         position: 'absolute',
-                        top: '100%',
+                        top: isMobileOrTablet ? 'auto' : '100%',
+                        bottom: isMobileOrTablet ? 'calc(100% + 6px)' : 'auto',
                         left: 0,
-                        marginTop: '6px',
+                        marginTop: isMobileOrTablet ? 0 : '6px',
+                        marginBottom: isMobileOrTablet ? '6px' : 0,
                         zIndex: 9999,
                         background: 'var(--color-surface)',
                         border: '1px solid var(--color-border-light)',
                         borderRadius: '12px',
-                        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.18)',
+                        boxShadow: isMobileOrTablet ? '0 -10px 25px rgba(0, 0, 0, 0.18)' : '0 10px 25px rgba(0, 0, 0, 0.18)',
                         minWidth: '240px',
+                        maxWidth: isMobileOrTablet ? 'calc(100vw - 32px)' : '320px',
                         maxHeight: '280px',
                         overflowY: 'auto',
                         padding: '8px',

@@ -1141,31 +1141,54 @@ class CheckInController {
         $this->db->beginTransaction();
         try {
             // Check if there is already a pending bulk request for this month
+            $existingReq = null;
             $stmtCheck = $this->db->prepare("
                 SELECT id FROM attendance_bulk_requests 
                 WHERE user_id = ? AND month_period = ? AND status IN ('pending_manager', 'pending_hr')
-                LIMIT 1
+                ORDER BY id DESC LIMIT 1
             ");
             $stmtCheck->execute([$userId, $month]);
-            if ($stmtCheck->fetch()) {
-                respond(400, null, "Bạn đã có phiếu đề xuất bổ sung công đang chờ duyệt trong tháng $month.", false);
-            }
+            $existingReq = $stmtCheck->fetch(PDO::FETCH_ASSOC);
 
             // Look up manager/leader or HR as default if approver_id not provided
             $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
             if (empty($approverId)) {
-                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-                $stmtLeader->execute([$userId]);
-                $leadId = $stmtLeader->fetchColumn();
-                if (!empty($leadId) && (int)$leadId !== (int)$userId) {
-                    $approverId = (int)$leadId;
-                } else {
-                    // Fallback to HR Leader (Nguyễn Thị Duy Phương)
-                    $stmtHr = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
-                    $stmtHr->execute([$userId]);
-                    $hrId = $stmtHr->fetchColumn();
-                    if (!empty($hrId)) {
-                        $approverId = (int)$hrId;
+                $stmtUser = $this->db->prepare("SELECT email, department, team_id FROM users WHERE id = ?");
+                $stmtUser->execute([$userId]);
+                $uInfo = $stmtUser->fetch(PDO::FETCH_ASSOC);
+                $uEmail = strtolower($uInfo['email'] ?? '');
+                $uDept = mb_strtolower($uInfo['department'] ?? '', 'UTF-8');
+
+                if ($uEmail === 'nganph@ideas.edu.vn' || str_contains($uDept, 'học vụ') || str_contains($uDept, 'học thuật')) {
+                    $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email = 'tramlth@ideas.edu.vn' OR username = 'tramlth' OR full_name LIKE '%Huyền Trâm%' LIMIT 1");
+                    $stmtLead->execute();
+                    $foundLead = $stmtLead->fetchColumn();
+                    if (!empty($foundLead) && (int)$foundLead !== (int)$userId) {
+                        $approverId = (int)$foundLead;
+                    }
+                } elseif ($uEmail === 'cuongnph@ideas.edu.vn' || str_contains($uDept, 'nhân sự') || str_contains($uDept, 'hành chính')) {
+                    $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email LIKE 'phuongntd%' OR username = 'phuongntd' OR full_name LIKE '%Duy Phương%' LIMIT 1");
+                    $stmtLead->execute();
+                    $foundLead = $stmtLead->fetchColumn();
+                    if (!empty($foundLead) && (int)$foundLead !== (int)$userId) {
+                        $approverId = (int)$foundLead;
+                    }
+                }
+
+                if (empty($approverId)) {
+                    $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+                    $stmtLeader->execute([$userId]);
+                    $leadId = $stmtLeader->fetchColumn();
+                    if (!empty($leadId) && (int)$leadId !== (int)$userId) {
+                        $approverId = (int)$leadId;
+                    } else {
+                        // Fallback to HR Leader (Nguyễn Thị Duy Phương)
+                        $stmtHr = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
+                        $stmtHr->execute([$userId]);
+                        $hrId = $stmtHr->fetchColumn();
+                        if (!empty($hrId)) {
+                            $approverId = (int)$hrId;
+                        }
                     }
                 }
             }
@@ -1187,14 +1210,29 @@ class CheckInController {
             $approvedBy = null;
             $approvedAt = null;
             $adminNote = null;
+            $isUpdate = false;
 
-            // Create bulk request
-            $stmt = $this->db->prepare("
-                INSERT INTO attendance_bulk_requests (user_id, month_period, status, manager_id, related_user_ids, approved_by, approved_at, admin_note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([$userId, $month, $initialStatus, $approverId, $relatedUserIds, $approvedBy, $approvedAt, $adminNote]);
-            $requestId = (int)$this->db->lastInsertId();
+            if (!empty($existingReq['id'])) {
+                $requestId = (int)$existingReq['id'];
+                $stmtUpdate = $this->db->prepare("
+                    UPDATE attendance_bulk_requests 
+                    SET manager_id = ?, related_user_ids = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ");
+                $stmtUpdate->execute([$approverId, $relatedUserIds, $requestId]);
+
+                // Xóa chi tiết cũ để cập nhật danh sách ngày mới
+                $this->db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$requestId]);
+                $isUpdate = true;
+            } else {
+                // Create bulk request
+                $stmt = $this->db->prepare("
+                    INSERT INTO attendance_bulk_requests (user_id, month_period, status, manager_id, related_user_ids, approved_by, approved_at, admin_note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$userId, $month, $initialStatus, $approverId, $relatedUserIds, $approvedBy, $approvedAt, $adminNote]);
+                $requestId = (int)$this->db->lastInsertId();
+            }
 
             // Insert details
             $stmtDetail = $this->db->prepare("
@@ -1329,10 +1367,12 @@ class CheckInController {
                 error_log("Failed to send bulk request notification: " . $ne->getMessage());
             }
 
-            $msg = $isSelfApproved 
-                ? 'Đề xuất cập nhật công đã được tạo và tự động phê duyệt thành công' 
-                : 'Tạo phiếu đề xuất bổ sung công tổng hợp thành công';
-            respond(201, ['request_id' => $requestId, 'status' => $initialStatus, 'auto_approved' => $isSelfApproved], $msg);
+            $msg = $isUpdate
+                ? 'Đã cập nhật bổ sung ngày công vào phiếu đề xuất thành công'
+                : ($isSelfApproved 
+                    ? 'Đề xuất cập nhật công đã được tạo và tự động phê duyệt thành công' 
+                    : 'Tạo phiếu đề xuất bổ sung công tổng hợp thành công');
+            respond($isUpdate ? 200 : 201, ['request_id' => $requestId, 'status' => $initialStatus, 'auto_approved' => $isSelfApproved, 'is_update' => $isUpdate], $msg);
         } catch (\Throwable $ex) {
             $this->db->rollBack();
             respond(500, null, 'Lỗi hệ thống: ' . $ex->getMessage(), false);

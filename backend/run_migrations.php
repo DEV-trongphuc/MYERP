@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 248;
+$targetVersion = 251;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2245,7 +2245,7 @@ try {
                 [
                     'name' => '14 – Enrolled',
                     'slug' => 'enrolled',
-                    'color' => '#06b6d4',
+                    'color' => '#ec4899',
                     'order' => 14,
                     'is_won' => 1,
                     'is_lost' => 0,
@@ -2647,8 +2647,149 @@ try {
         $logMsg("Nâng cấp lên phiên bản 248 hoàn tất.", "success");
     }
 
+    // Migration 250: Đảm bảo cột department trong users, thiết lập Leader Lê Huyền Trâm cho phòng Học vụ - học thuật, gán Phan Hiếu Ngân và Nguyễn Phạm Hoàng Cương
+    if ($currentVersion < 250 && $apply) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 250 (Phân bổ phòng ban và leader cho Phan Hiếu Ngân, Lê Huyền Trâm, Nguyễn Phạm Hoàng Cương)...", "info");
+        try {
+            // 0. Bổ sung cột department cho bảng users nếu chưa có
+            $chkDept = $conn->query("SHOW COLUMNS FROM users LIKE 'department'");
+            if ($chkDept && $chkDept->num_rows === 0) {
+                $conn->query("ALTER TABLE users ADD COLUMN department VARCHAR(100) NULL AFTER role");
+                $logMsg("Đã thêm cột department vào bảng users.", "success");
+            }
+
+            // 1. Đảm bảo User Lê Huyền Trâm (tramlth@ideas.edu.vn) tồn tại và cập nhật vai trò
+            $tramId = null;
+            $checkTram = $conn->query("SELECT id FROM users WHERE email = 'tramlth@ideas.edu.vn' OR username = 'tramlth' OR full_name LIKE '%Huyền Trâm%' LIMIT 1");
+            if ($checkTram && $checkTram->num_rows > 0) {
+                $tramId = (int)$checkTram->fetch_assoc()['id'];
+                $conn->query("UPDATE users SET full_name = 'Lê Thị Huyền Trâm', role = 'manager', department = 'Học vụ - học thuật' WHERE id = {$tramId}");
+                $logMsg("Đã cập nhật User Lê Huyền Trâm (ID: {$tramId}) làm Manager Học vụ - học thuật.", "success");
+            } else {
+                $pwdHash = password_hash('Ideas@2026', PASSWORD_BCRYPT, ['cost' => 12]);
+                $conn->query("INSERT INTO users (tenant_id, full_name, email, username, password_hash, role, department, is_active) VALUES (1, 'Lê Thị Huyền Trâm', 'tramlth@ideas.edu.vn', 'tramlth', '{$pwdHash}', 'manager', 'Học vụ - học thuật', 1)");
+                $tramId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới User Lê Huyền Trâm (ID: {$tramId}) phòng Học vụ - học thuật.", "success");
+            }
+
+            // 2. Đảm bảo Team 'Học vụ - học thuật' tồn tại và có leader_id = Lê Huyền Trâm
+            $hocVuTeamId = null;
+            $checkTeamHV = $conn->query("SELECT id FROM teams WHERE name LIKE '%Học vụ%' OR name LIKE '%học thuật%' LIMIT 1");
+            if ($checkTeamHV && $checkTeamHV->num_rows > 0) {
+                $hocVuTeamId = (int)$checkTeamHV->fetch_assoc()['id'];
+                $conn->query("UPDATE teams SET name = 'Học vụ - học thuật', leader_id = {$tramId}, description = 'Phòng Học vụ - học thuật' WHERE id = {$hocVuTeamId}");
+                $logMsg("Đã cập nhật team 'Học vụ - học thuật' (ID: {$hocVuTeamId}) với Leader là Lê Huyền Trâm (ID: {$tramId}).", "success");
+            } else {
+                $conn->query("INSERT INTO teams (tenant_id, name, leader_id, description) VALUES (1, 'Học vụ - học thuật', {$tramId}, 'Phòng Học vụ - học thuật')");
+                $hocVuTeamId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới team 'Học vụ - học thuật' (ID: {$hocVuTeamId}) với Leader là Lê Huyền Trâm (ID: {$tramId}).", "success");
+            }
+            if ($tramId && $hocVuTeamId) {
+                $conn->query("UPDATE users SET team_id = {$hocVuTeamId} WHERE id = {$tramId}");
+            }
+
+            // 3. Đảm bảo User Phan Hiếu Ngân (nganph@ideas.edu.vn) thuộc phòng Học vụ - học thuật
+            $nganId = null;
+            $checkNgan = $conn->query("SELECT id FROM users WHERE email = 'nganph@ideas.edu.vn' OR username = 'nganph' OR full_name LIKE '%Hiếu Ngân%' LIMIT 1");
+            if ($checkNgan && $checkNgan->num_rows > 0) {
+                $nganId = (int)$checkNgan->fetch_assoc()['id'];
+                $conn->query("UPDATE users SET full_name = 'Phan Hiếu Ngân', department = 'Học vụ - học thuật', team_id = {$hocVuTeamId} WHERE id = {$nganId}");
+                $logMsg("Đã cập nhật User Phan Hiếu Ngân (ID: {$nganId}) vào team Học vụ - học thuật (Team ID: {$hocVuTeamId}).", "success");
+            } else {
+                $pwdHash = password_hash('Ideas@2026', PASSWORD_BCRYPT, ['cost' => 12]);
+                $conn->query("INSERT INTO users (tenant_id, full_name, email, username, password_hash, role, department, team_id, is_active) VALUES (1, 'Phan Hiếu Ngân', 'nganph@ideas.edu.vn', 'nganph', '{$pwdHash}', 'staff', 'Học vụ - học thuật', {$hocVuTeamId}, 1)");
+                $nganId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới User Phan Hiếu Ngân (ID: {$nganId}) phòng Học vụ - học thuật.", "success");
+            }
+
+            // 4. Cập nhật tất cả các đơn của Phan Hiếu Ngân: Người duyệt Cấp 1 là Lê Huyền Trâm
+            if ($nganId && $tramId) {
+                // Đơn nghỉ phép / OT / WFH / đi muộn
+                $conn->query("UPDATE hrm_leave_requests SET approver_id = {$tramId} WHERE user_id = {$nganId}");
+                $logMsg("Đã cập nhật approver_id = {$tramId} (Lê Huyền Trâm) cho toàn bộ đơn hrm_leave_requests của Phan Hiếu Ngân.", "success");
+
+                // Đề xuất thanh toán / chi phí (expenses)
+                $conn->query("UPDATE expenses SET approver_id = {$tramId} WHERE created_by = {$nganId}");
+                $logMsg("Đã cập nhật approver_id = {$tramId} (Lê Huyền Trâm) cho toàn bộ đơn expenses của Phan Hiếu Ngân.", "success");
+
+                // Đơn hàng mua sắm (purchase_orders)
+                $conn->query("UPDATE purchase_orders SET approver_id = {$tramId} WHERE created_by = {$nganId}");
+
+                // Tạm ứng lương (hrm_salary_advances nếu có)
+                $chkAdv = $conn->query("SHOW TABLES LIKE 'hrm_salary_advances'");
+                if ($chkAdv && $chkAdv->num_rows > 0) {
+                    $conn->query("UPDATE hrm_salary_advances SET approver_id = {$tramId} WHERE user_id = {$nganId}");
+                }
+
+                // Bảng approvals (nếu có)
+                $chkAppr = $conn->query("SHOW TABLES LIKE 'approvals'");
+                if ($chkAppr && $chkAppr->num_rows > 0) {
+                    $conn->query("UPDATE approvals SET approver_id = {$tramId} WHERE user_id = {$nganId} OR created_by = {$nganId}");
+                }
+            }
+
+            // 5. Đảm bảo Team 'Hành chính - Nhân sự' tồn tại và Leader là Nguyễn Thị Duy Phương
+            $phuongId = 100065;
+            $checkPhuong = $conn->query("SELECT id FROM users WHERE email LIKE 'phuongntd%' OR username = 'phuongntd' OR full_name LIKE '%Duy Phương%' LIMIT 1");
+            if ($checkPhuong && $checkPhuong->num_rows > 0) {
+                $phuongId = (int)$checkPhuong->fetch_assoc()['id'];
+            }
+
+            $hcnsTeamId = null;
+            $checkTeamHCNS = $conn->query("SELECT id FROM teams WHERE name LIKE '%Hành chính%' OR name LIKE '%Nhân sự%' LIMIT 1");
+            if ($checkTeamHCNS && $checkTeamHCNS->num_rows > 0) {
+                $hcnsTeamId = (int)$checkTeamHCNS->fetch_assoc()['id'];
+                $conn->query("UPDATE teams SET name = 'Hành chính - Nhân sự', leader_id = {$phuongId}, description = 'Phòng Hành chính - Nhân sự' WHERE id = {$hcnsTeamId}");
+                $logMsg("Đã cập nhật team 'Hành chính - Nhân sự' (ID: {$hcnsTeamId}) với Leader là Duy Phương (ID: {$phuongId}).", "success");
+            } else {
+                $conn->query("INSERT INTO teams (tenant_id, name, leader_id, description) VALUES (1, 'Hành chính - Nhân sự', {$phuongId}, 'Phòng Hành chính - Nhân sự')");
+                $hcnsTeamId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới team 'Hành chính - Nhân sự' (ID: {$hcnsTeamId}).", "success");
+            }
+            if ($phuongId && $hcnsTeamId) {
+                $conn->query("UPDATE users SET team_id = {$hcnsTeamId}, department = 'Hành chính - Nhân sự' WHERE id = {$phuongId}");
+            }
+
+            // 6. Đảm bảo User Nguyễn Phạm Hoàng Cương (cuongnph@ideas.edu.vn) thuộc phòng Hành chính - Nhân sự
+            $cuongId = null;
+            $checkCuong = $conn->query("SELECT id FROM users WHERE email = 'cuongnph@ideas.edu.vn' OR username = 'cuongnph' OR full_name LIKE '%Hoàng Cương%' LIMIT 1");
+            if ($checkCuong && $checkCuong->num_rows > 0) {
+                $cuongId = (int)$checkCuong->fetch_assoc()['id'];
+                $conn->query("UPDATE users SET full_name = 'Nguyễn Phạm Hoàng Cương', department = 'Hành chính - Nhân sự', team_id = {$hcnsTeamId} WHERE id = {$cuongId}");
+                $logMsg("Đã cập nhật User Nguyễn Phạm Hoàng Cương (ID: {$cuongId}) vào team Hành chính - Nhân sự (Team ID: {$hcnsTeamId}).", "success");
+            } else {
+                $pwdHash = password_hash('Ideas@2026', PASSWORD_BCRYPT, ['cost' => 12]);
+                $conn->query("INSERT INTO users (tenant_id, full_name, email, username, password_hash, role, department, team_id, is_active) VALUES (1, 'Nguyễn Phạm Hoàng Cương', 'cuongnph@ideas.edu.vn', 'cuongnph', '{$pwdHash}', 'staff', 'Hành chính - Nhân sự', {$hcnsTeamId}, 1)");
+                $cuongId = (int)$conn->insert_id;
+                $logMsg("Đã tạo mới User Nguyễn Phạm Hoàng Cương (ID: {$cuongId}) phòng Hành chính - Nhân sự.", "success");
+            }
+
+            if ($cuongId && $phuongId) {
+                $conn->query("UPDATE hrm_leave_requests SET approver_id = {$phuongId} WHERE user_id = {$cuongId} AND (status = 'pending' OR status_level_1 = 'pending')");
+                $conn->query("UPDATE expenses SET approver_id = {$phuongId} WHERE created_by = {$cuongId} AND status = 'pending'");
+                $conn->query("UPDATE purchase_orders SET approver_id = {$phuongId} WHERE created_by = {$cuongId} AND (approval_status = 'pending' OR status = 'pending')");
+            }
+
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 250: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 250 hoàn tất.", "success");
+    }
+
+    // Migration 251: Cập nhật màu Stage 14 (Enrolled) sang màu hồng (#ec4899)
+    if ($currentVersion < 251) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 251: Cập nhật màu Stage 14 (Enrolled) sang màu hồng (#ec4899)...", "info");
+        try {
+            $conn->query("UPDATE pipeline_stages SET color = '#ec4899' WHERE system_slug = 'enrolled' OR name LIKE '%14%' OR name LIKE '%Enrolled%'");
+            $logMsg("Đã cập nhật màu Stage 14 (Enrolled) thành màu hồng (#ec4899).", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 251: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 251 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '248') ON DUPLICATE KEY UPDATE setting_value = '248'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '251') ON DUPLICATE KEY UPDATE setting_value = '251'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

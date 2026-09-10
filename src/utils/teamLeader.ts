@@ -26,6 +26,8 @@ export const resolveTeamLeaderId = (
   const myRole = (myUser?.role || currentUser?.role || '').toLowerCase();
 
   let targetLeaderId: number | null = null;
+  const myEmail = (myUser?.email || currentUser?.email || '').toLowerCase();
+
   if (
     myDept.includes('sale') ||
     myRole.includes('sale') ||
@@ -47,19 +49,33 @@ export const resolveTeamLeaderId = (
   ) {
     targetLeaderId = 100069; // Trịnh Đình Thanh (Leader Marketing)
   } else if (
+    myEmail === 'cuongnph@ideas.edu.vn' ||
     myDept.includes('nhân sự') ||
     myDept.includes('hành chính') ||
     myRole.includes('hr') ||
     myRole.includes('human_resources')
   ) {
-    targetLeaderId = 100065; // Nguyễn Thị Duy Phương (Leader HC-NS)
+    const phuongUser = usersList.find((u: any) =>
+      u.username === 'phuongntd' ||
+      u.email?.startsWith('phuongntd') ||
+      String(u.full_name || '').toLowerCase().includes('duy phương') ||
+      Number(u.id) === 100065
+    );
+    targetLeaderId = phuongUser ? Number(phuongUser.id) : 100065; // Nguyễn Thị Duy Phương (Leader HC-NS)
   } else if (
+    myEmail === 'nganph@ideas.edu.vn' ||
     myDept.includes('học vụ') ||
     myDept.includes('học thuật') ||
     myRole.includes('teacher') ||
     myRole.includes('academic')
   ) {
-    targetLeaderId = 100073; // Lê Thị Huyền Trâm (Leader Học vụ)
+    const tramUser = usersList.find((u: any) =>
+      u.email === 'tramlth@ideas.edu.vn' ||
+      u.username === 'tramlth' ||
+      String(u.full_name || '').toLowerCase().includes('huyền trâm') ||
+      Number(u.id) === 100073
+    );
+    targetLeaderId = tramUser ? Number(tramUser.id) : 100073; // Lê Thị Huyền Trâm (Leader Học vụ - học thuật)
   }
 
   // If target leader found and user is not that leader, verify in users list

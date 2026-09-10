@@ -1266,7 +1266,11 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
 
       <CheckOutConfirmModal
         isOpen={showCheckOutConfirmModal}
-        onClose={() => setShowCheckOutConfirmModal(false)}
+        onClose={() => {
+          setShowCheckOutConfirmModal(false);
+          stopCamera();
+          onClose();
+        }}
         onConfirm={() => submitCheckIn(capturedImage || undefined, capturedBlob || undefined, true)}
         capturedImage={capturedImage}
         userName={user?.name || consultantProfile?.name}

@@ -15,6 +15,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { Pagination } from '../components/ui/Pagination';
 import { Avatar } from '../components/ui/Avatar';
 import styles from './EntityDrawer.module.css';
+import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 
 const PRESTIGE_OPTIONS = [
   { value: 'A', label: 'Hạng A (Rất uy tín)' },
@@ -35,9 +36,8 @@ const SUPPLIER_TABS = [
 
 export const SuppliersPage: React.FC = () => {
   const { user } = useAuth();
-  const userRole = (user?.role || '').toLowerCase();
-  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin', 'accountant', 'ke_toan'].includes(userRole);
-  const isSale = ['sale', 'sales'].includes(userRole);
+  const canEdit = canEditPartnerOrSupplier(user);
+  const isSale = isSales(user);
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   useEffect(() => {

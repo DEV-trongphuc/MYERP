@@ -55,36 +55,40 @@ function buildVietnameseWordRegex(string $word): string {
 }
 
 /**
- * Extract phone variants (e.g. 0938..., 938..., 84938...)
- * Only extracts if query looks like a phone number and not an email
+ * Extract phone variants (e.g. tail digits, 0938..., 938..., 84938...)
+ * Supports partial matching, tail numbers (1 vài số đuôi, e.g. 43, 643, 3643, 23643)
  */
 function getPhoneSearchVariants(string $search): array {
-    // If search contains @, it is an email, not a phone
+    // If search contains @, it is an email, not a phone query
     if (str_contains($search, '@')) {
         return [];
     }
 
-    // Check if query is composed of phone number characters or contains an isolated phone number
     $trimmed = trim($search);
     $clean = preg_replace('/[^0-9]/', '', $trimmed);
-    
-    // If there are letters in the query and clean digits < 7, don't treat as phone
-    if (preg_match('/[a-zA-Z]/', $trimmed) && strlen($clean) < 7) {
+
+    // If query has letters (e.g. "đuôi 643", "sđt 3643", "haodiep92"), only treat as phone if digits >= 3
+    $hasLetters = preg_match('/[a-zA-Z\x{00C0}-\x{1EF9}]/u', $trimmed);
+    if ($hasLetters && strlen($clean) < 3) {
         return [];
     }
 
-    if (strlen($clean) < 3) return [];
+    // Allow pure digit sequences of at least 2 digits (e.g. tail numbers "43", "88", "92", "643")
+    if (strlen($clean) < 2) {
+        return [];
+    }
 
     $variants = [$clean];
     if (str_starts_with($clean, '84') && strlen($clean) > 8) {
         $no84 = substr($clean, 2);
         $variants[] = $no84;
         $variants[] = '0' . $no84;
-    } elseif (str_starts_with($clean, '0')) {
+    } elseif (str_starts_with($clean, '0') && strlen($clean) >= 9) {
         $variants[] = substr($clean, 1);
-    } else {
+    } elseif (!str_starts_with($clean, '0') && strlen($clean) === 9) {
         $variants[] = '0' . $clean;
     }
+
     return array_values(array_unique($variants));
 }
 
@@ -93,8 +97,9 @@ function getPhoneSearchVariants(string $search): array {
  * 
  * Supports:
  * - Accented and unaccented Vietnamese names (multi-word, any order)
- * - Phone numbers with/without leading 0, +84, spaces, dots, dashes
- * - Email, exact ID, person_id
+ * - Phone numbers: full number, tail numbers (1 vài số đuôi), with/without leading 0, +84, spaces, dots, dashes, parentheses
+ * - Email: exact, partial username, tail numbers (e.g. 92 in haodiep92@gmail.com, 0584 in trangnguyen0584@gmail.com), fuzzy without dots/spaces
+ * - Exact ID, person_id
  */
 function buildContactSearchClause(string $search, string $prefix = 'c.'): array {
     $search = trim($search);
@@ -102,11 +107,35 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
         return ['clause' => '', 'params' => []];
     }
 
+    $tableRef = rtrim($prefix, '.') ?: 'contacts';
     $conds = [];
     $params = [];
 
-    // 1. Email check
-    $conds[] = "{$prefix}email LIKE ?";
+    // 1. Email check (case-insensitive, fuzzy/partial matching)
+    // 1.1 Direct LIKE
+    $conds[] = "LOWER({$prefix}email) LIKE LOWER(?)";
+    $params[] = "%$search%";
+
+    // 1.2 Normalized email without spaces, dots, hyphens, underscores (e.g. trangnguyen -> trang.nguyen@...)
+    $cleanEmailQuery = str_replace([' ', '.', '-', '_'], '', strtolower($search));
+    if (strlen($cleanEmailQuery) >= 2 && $cleanEmailQuery !== strtolower($search)) {
+        $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(IFNULL({$prefix}email, '')), '.', ''), '-', ''), '_', ''), ' ', '') LIKE ?";
+        $params[] = "%$cleanEmailQuery%";
+    }
+
+    // 1.3 If user typed Vietnamese accents without spaces (e.g. "hảo diệp" or "trang nguyễn") -> match email "haodiep..." / "trangnguyen..."
+    $unaccentedNoSpaces = removeVietnameseAccents($cleanEmailQuery);
+    if (strlen($unaccentedNoSpaces) >= 3 && $unaccentedNoSpaces !== $cleanEmailQuery) {
+        $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE(LOWER(IFNULL({$prefix}email, '')), '.', ''), '-', ''), '_', ''), ' ', '') LIKE ?";
+        $params[] = "%$unaccentedNoSpaces%";
+    }
+
+    // 1.4 Also search contact_emails table
+    $conds[] = "EXISTS (SELECT 1 FROM contact_emails ce WHERE ce.contact_id = {$tableRef}.id AND LOWER(ce.email) LIKE LOWER(?))";
+    $params[] = "%$search%";
+
+    // 1.5 Also search linked leads table by person_id
+    $conds[] = "({$tableRef}.person_id IS NOT NULL AND {$tableRef}.person_id > 0 AND EXISTS (SELECT 1 FROM leads l_e WHERE l_e.person_id = {$tableRef}.person_id AND LOWER(l_e.email) LIKE LOWER(?)))";
     $params[] = "%$search%";
 
     // 2. Exact ID / Person ID check if numeric
@@ -117,15 +146,40 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
         $params[] = (int)$search;
     }
 
-    // 3. Phone number variants check
+    // 3. Phone number variants check (Tail digits, partial, normalized across all phone fields)
     $phoneVariants = getPhoneSearchVariants($search);
     if (!empty($phoneVariants)) {
+        $cleanPhoneFn = function($field) {
+            return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(IFNULL($field, ''), ' ', ''), '.', ''), '-', ''), '+', ''), '(', ''), ')', '')";
+        };
+
         foreach ($phoneVariants as $pv) {
+            // Direct LIKE on all phone columns
             $conds[] = "{$prefix}phone LIKE ?";
             $params[] = "%$pv%";
             $conds[] = "{$prefix}mobile LIKE ?";
             $params[] = "%$pv%";
-            $conds[] = "REPLACE(REPLACE(REPLACE(REPLACE({$prefix}phone, ' ', ''), '.', ''), '-', ''), '+', '') LIKE ?";
+            $conds[] = "{$prefix}phone2 LIKE ?";
+            $params[] = "%$pv%";
+            $conds[] = "{$prefix}zalo_phone LIKE ?";
+            $params[] = "%$pv%";
+
+            // Normalized format (strips spaces, dots, hyphens, plus, parentheses)
+            $conds[] = $cleanPhoneFn("{$prefix}phone") . " LIKE ?";
+            $params[] = "%$pv%";
+            $conds[] = $cleanPhoneFn("{$prefix}mobile") . " LIKE ?";
+            $params[] = "%$pv%";
+            $conds[] = $cleanPhoneFn("{$prefix}phone2") . " LIKE ?";
+            $params[] = "%$pv%";
+            $conds[] = $cleanPhoneFn("{$prefix}zalo_phone") . " LIKE ?";
+            $params[] = "%$pv%";
+
+            // Check contact_phones table
+            $conds[] = "EXISTS (SELECT 1 FROM contact_phones cp WHERE cp.contact_id = {$tableRef}.id AND " . $cleanPhoneFn("cp.phone") . " LIKE ?)";
+            $params[] = "%$pv%";
+
+            // Check linked leads by person_id
+            $conds[] = "({$tableRef}.person_id IS NOT NULL AND {$tableRef}.person_id > 0 AND EXISTS (SELECT 1 FROM leads l_p WHERE l_p.person_id = {$tableRef}.person_id AND " . $cleanPhoneFn("l_p.phone") . " LIKE ?))";
             $params[] = "%$pv%";
         }
     }
@@ -135,7 +189,6 @@ function buildContactSearchClause(string $search, string $prefix = 'c.'): array 
     $params[] = "%$search%";
 
     // 5. Multi-word Regex for Vietnamese unaccented/accented support
-    // Only apply regex if search is not a pure phone number or email
     if (!str_contains($search, '@') && preg_match('/[a-zA-Z\x{00C0}-\x{1EF9}]/u', $search)) {
         $words = array_filter(explode(' ', $search), fn($w) => trim($w) !== '');
         if (!empty($words) && count($words) <= 6) {

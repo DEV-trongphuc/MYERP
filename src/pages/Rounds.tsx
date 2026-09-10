@@ -15,6 +15,7 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { useAuthStore } from '../store/authStore';
 import { Pagination } from '../components/ui/Pagination';
+import { canManageSystemSettings } from '../utils/roleUtils';
 
 const AVATAR_COLORS = [
   '#ef4444', '#f97316', '#f59e0b', '#10b981', '#0ea5e9',
@@ -40,7 +41,7 @@ const RoundsInner = ({ isActive }: { isActive: boolean }) => {
 
   const navigate = useNavigate();
   const user = useAuthStore(state => state.user);
-  const isReadOnly = !['admin', 'superadmin', 'super_admin', 'assistant'].includes(user?.role || '');
+  const isReadOnly = !canManageSystemSettings(user);
   const { t } = useLanguage();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';

@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApprovalDetailDrawer } from './Approvals';
+import { isHR } from '../utils/roleUtils';
 import type { ApprovalItem } from './Approvals';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
@@ -139,7 +140,7 @@ export default function HRM() {
   const [selectedApproval, setSelectedApproval] = useState<{ type: 'leave' | 'advance', data: any } | null>(null);
   const isMyPendingRequest = (req: any) => {
     if (Number(req.user_id) === Number(user?.id)) return false;
-    const isGlobalAdmin = ['superadmin', 'admin', 'director', 'hr'].includes(user?.role || '');
+    const isGlobalAdmin = isHR(user, true);
     const isLevel1Active = req.status_level_1 === 'pending';
     const isLevel2Active = req.status_level_1 === 'approved' && req.status_level_2 === 'pending';
     const isLevel1Approver = Number(req.approver_id) === Number(user?.id) || (isLevel1Active && isGlobalAdmin);
@@ -162,7 +163,7 @@ export default function HRM() {
       const isLevel1Active = req.status_level_1 === 'pending';
       const isLevel2Active = req.status_level_1 === 'approved' && req.status_level_2 === 'pending';
       
-      const isGlobalAdmin = ['superadmin', 'admin', 'director', 'hr'].includes(user?.role || '');
+      const isGlobalAdmin = isHR(user, true);
       const isLevel1Approver = Number(req.approver_id) === Number(user?.id) || (isLevel1Active && isGlobalAdmin);
       const isLevel2Approver = Number(req.approver_id_2) === Number(user?.id) || (isLevel2Active && isGlobalAdmin);
       const isMyTurn = (isLevel1Active && isLevel1Approver) || (isLevel2Active && isLevel2Approver);

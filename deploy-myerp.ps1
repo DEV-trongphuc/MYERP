@@ -17,6 +17,21 @@ $sshUser = "vhvxoigh"
 $sshHost = "chiefaiofficer.vn"
 $sshPort = "2210"
 
+# 0. Generate Unique Deployment Version Timestamp
+$deployVersion = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
+$deployTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+$versionPayload = "{`"version`": `"$deployVersion`", `"buildTime`": `"$deployTime`"}"
+try {
+    [System.IO.File]::WriteAllText("$PSScriptRoot\public\version.json", $versionPayload, [System.Text.Encoding]::UTF8)
+} catch {
+    Set-Content -Path "public\version.json" -Value $versionPayload -Encoding UTF8 -Force -ErrorAction SilentlyContinue
+}
+try {
+    [System.IO.File]::WriteAllText("$PSScriptRoot\backend\version.json", $versionPayload, [System.Text.Encoding]::UTF8)
+} catch {
+    Set-Content -Path "backend\version.json" -Value $versionPayload -Encoding UTF8 -Force -ErrorAction SilentlyContinue
+}
+
 # 1. Build Frontend if requested
 if (-not $BackendOnly) {
     Write-Host "`n[1/4] Building Frontend UI Production Bundle..." -ForegroundColor Yellow
@@ -63,6 +78,9 @@ if ((-not $BackendOnly) -and (Test-Path "$distArchive")) {
     Write-Host "  -> Extracting frontend dist files to document root..." -ForegroundColor Gray
     cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""tar -xzf - -C ${RemoteDir}/"" < ""$distArchive"""
 }
+
+# Ensure version.json is present in both root and backend
+cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""cp -f ${RemoteDir}/version.json ${RemoteDir}/backend/version.json 2>/dev/null || true"""
 
 # 4. Clean up local temp archives
 Remove-Item "$backendArchive" -ErrorAction SilentlyContinue

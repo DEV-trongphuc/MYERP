@@ -95,16 +95,21 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
   useEffect(() => {
     if (isOpen && containerRef.current) {
+      const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
-      if (spaceBelow < 260 && spaceAbove > spaceBelow) {
+      
+      // On mobile for multi-select (or when space below is tight), drop up
+      if (isMobile && (multiple || spaceBelow < 280) && spaceAbove > 160) {
+        setDropdownDirection('up');
+      } else if (spaceBelow < 260 && spaceAbove > spaceBelow) {
         setDropdownDirection('up');
       } else {
         setDropdownDirection(direction);
       }
     }
-  }, [isOpen, direction]);
+  }, [isOpen, direction, multiple]);
 
   const selectedOption = React.useMemo(() => {
     if (multiple) return null;

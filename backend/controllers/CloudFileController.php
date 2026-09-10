@@ -565,6 +565,38 @@ class CloudFileController {
             if ($resolvedFile) {
                 $folder = trim($f['folder'] ?? '', '/\\');
                 $origName = $f['name'] ?: basename($resolvedFile);
+                $isWebp = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) === 'webp' || strtolower(pathinfo($resolvedFile, PATHINFO_EXTENSION)) === 'webp';
+
+                // Automatically convert WebP to JPG when downloading
+                if ($isWebp && function_exists('imagecreatefromstring') && function_exists('imagejpeg')) {
+                    try {
+                        $raw = @file_get_contents($resolvedFile);
+                        if ($raw) {
+                            $img = @imagecreatefromstring($raw);
+                            if ($img) {
+                                $w = imagesx($img);
+                                $h = imagesy($img);
+                                $canvas = imagecreatetruecolor($w, $h);
+                                $white = imagecolorallocate($canvas, 255, 255, 255);
+                                imagefilledrectangle($canvas, 0, 0, $w, $h, $white);
+                                imagecopy($canvas, $img, 0, 0, 0, 0, $w, $h);
+
+                                $tmpJpg = tempnam(sys_get_temp_dir(), 'zip_jpg_');
+                                imagejpeg($canvas, $tmpJpg, 92);
+                                imagedestroy($canvas);
+                                imagedestroy($img);
+
+                                $jpgName = preg_replace('/\.webp$/i', '.jpg', $origName);
+                                $zipEntry = ($folder ? $folder . '/' : '') . $jpgName;
+                                $zip->addFile($tmpJpg, $zipEntry);
+                                $addedCount++;
+                                $tmpJpgFiles[] = $tmpJpg;
+                                continue;
+                            }
+                        }
+                    } catch (\Throwable $convEx) {}
+                }
+
                 $zipEntry = ($folder ? $folder . '/' : '') . $origName;
                 $zip->addFile($resolvedFile, $zipEntry);
                 $addedCount++;
@@ -572,6 +604,13 @@ class CloudFileController {
         }
 
         $zip->close();
+
+        // Clean up temporary converted JPG files
+        if (!empty($tmpJpgFiles)) {
+            foreach ($tmpJpgFiles as $tj) {
+                @unlink($tj);
+            }
+        }
 
         if ($addedCount === 0) {
             @unlink($tmpZip);

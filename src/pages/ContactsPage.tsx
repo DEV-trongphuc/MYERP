@@ -159,9 +159,9 @@ const getContactStage = (c: any, stages: any[]) => {
     const isEnrolled = c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled';
     return {
       name: c.stage_name,
-      color: isEnrolled ? '#0891b2' : (c.stage_color || '#3b82f6'),
-      bgColor: `${isEnrolled ? '#06b6d4' : (c.stage_color || '#3b82f6')}1a`,
-      borderColor: `${isEnrolled ? '#06b6d4' : (c.stage_color || '#3b82f6')}33`,
+      color: isEnrolled ? '#db2777' : (c.stage_color || '#3b82f6'),
+      bgColor: `${isEnrolled ? '#ec4899' : (c.stage_color || '#3b82f6')}1a`,
+      borderColor: `${isEnrolled ? '#ec4899' : (c.stage_color || '#3b82f6')}33`,
       isEnrolled
     };
   }
@@ -175,9 +175,9 @@ const getContactStage = (c: any, stages: any[]) => {
       const isEnrolled = found.system_slug === 'enrolled' || found.name === 'Học viên' || found.name === '14 – Enrolled';
       return {
         name: found.name,
-        color: isEnrolled ? '#0891b2' : (found.color || '#3b82f6'),
-        bgColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}1a`,
-        borderColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}33`,
+        color: isEnrolled ? '#db2777' : (found.color || '#3b82f6'),
+        bgColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}1a`,
+        borderColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}33`,
         isEnrolled
       };
     }
@@ -192,9 +192,9 @@ const getContactStage = (c: any, stages: any[]) => {
         const isEnrolled = found.system_slug === 'enrolled' || found.name === 'Học viên' || found.name === '14 – Enrolled';
         return {
           name: found.name,
-          color: isEnrolled ? '#0891b2' : (found.color || '#3b82f6'),
-          bgColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}1a`,
-          borderColor: `${isEnrolled ? '#06b6d4' : (found.color || '#3b82f6')}33`,
+          color: isEnrolled ? '#db2777' : (found.color || '#3b82f6'),
+          bgColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}1a`,
+          borderColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}33`,
           isEnrolled
         };
       }
@@ -202,9 +202,9 @@ const getContactStage = (c: any, stages: any[]) => {
     const isEnrolled = extractedName.includes('Enrolled') || extractedName.includes('Học viên');
     return {
       name: extractedName,
-      color: isEnrolled ? '#0891b2' : '#8b5cf6',
-      bgColor: isEnrolled ? '#06b6d41a' : '#8b5cf61a',
-      borderColor: isEnrolled ? '#06b6d433' : '#8b5cf633',
+      color: isEnrolled ? '#db2777' : '#8b5cf6',
+      bgColor: isEnrolled ? '#ec48991a' : '#8b5cf61a',
+      borderColor: isEnrolled ? '#ec489933' : '#8b5cf633',
       isEnrolled
     };
   }
@@ -386,20 +386,20 @@ const FMT_VND = (n: any) => {
 const AGO_DAYS = (d: string) => d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 999;
 
 const DEFAULT_PIPELINE_STAGES = [
-  { id: '1', name: '01 – New Lead', system_slug: 'new_lead', color: '#3b82f6', order_index: 1 },
-  { id: '2', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#6366f1', order_index: 2 },
-  { id: '3', name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
-  { id: '4', name: '04 – Needed', system_slug: 'needed', color: '#a855f7', order_index: 4 },
-  { id: '5', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#d946ef', order_index: 5 },
-  { id: '6', name: '06 – Program Matched', system_slug: 'program_matched', color: '#ec4899', order_index: 6 },
-  { id: '7', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#f43f5e', order_index: 7 },
-  { id: '8', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#f97316', order_index: 8 },
-  { id: '9', name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
-  { id: '10', name: '10 – Application Completed', system_slug: 'application_completed', color: '#eab308', order_index: 10 },
-  { id: '11', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#84cc16', order_index: 11 },
-  { id: '12', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#22c55e', order_index: 12 },
-  { id: '13', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#10b981', order_index: 13 },
-  { id: '14', name: '14 – Enrolled', system_slug: 'enrolled', color: '#06b6d4', order_index: 14 }
+  { id: '31', name: '01 – New Lead', system_slug: 'new_lead', color: '#3b82f6', order_index: 1 },
+  { id: '32', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#6366f1', order_index: 2 },
+  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
+  { id: '34', name: '04 – Needed', system_slug: 'needed', color: '#a855f7', order_index: 4 },
+  { id: '35', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#d946ef', order_index: 5 },
+  { id: '36', name: '06 – Program Matched', system_slug: 'program_matched', color: '#ec4899', order_index: 6 },
+  { id: '37', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#f43f5e', order_index: 7 },
+  { id: '38', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#f97316', order_index: 8 },
+  { id: '39', name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
+  { id: '40', name: '10 – Application Completed', system_slug: 'application_completed', color: '#eab308', order_index: 10 },
+  { id: '41', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#84cc16', order_index: 11 },
+  { id: '42', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#22c55e', order_index: 12 },
+  { id: '43', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#10b981', order_index: 13 },
+  { id: '44', name: '14 – Enrolled', system_slug: 'enrolled', color: '#ec4899', order_index: 14 }
 ];
 
 interface ContactsPageProps {
@@ -705,6 +705,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
 
 
+
+
+
   const getEffectiveTeamId = () => {
     const isMarketing = user?.role === 'marketing' || 
       Number((user as any)?.team_id) === 3 || 
@@ -837,14 +840,22 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     const saved = localStorage.getItem(savedKey) || localStorage.getItem('contacts_page_columns_v4');
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
+        let parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // If non-sale, ensure created_at is visible
           if (!isSale) {
             const hasCreatedAt = parsed.some((c: any) => c.id === 'created_at');
             if (hasCreatedAt) {
-              return parsed.map((c: any) => c.id === 'created_at' ? { ...c, visible: true } : c);
+              parsed = parsed.map((c: any) => c.id === 'created_at' ? { ...c, visible: true } : c);
             }
+          }
+          if (!parsed.some((c: any) => c.id === 'program')) {
+            const tagsIdx = parsed.findIndex((c: any) => c.id === 'tags');
+            parsed.splice(tagsIdx !== -1 ? tagsIdx + 1 : 5, 0, { id: 'program', label: 'Tên chương trình', visible: true });
+          }
+          if (!parsed.some((c: any) => c.id === 'admission_date')) {
+            const progIdx = parsed.findIndex((c: any) => c.id === 'program');
+            parsed.splice(progIdx !== -1 ? progIdx + 1 : 6, 0, { id: 'admission_date', label: 'Ngày nhập học', visible: true });
           }
           return parsed;
         }
@@ -858,6 +869,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       { id: 'phone', label: 'SĐT', visible: true },
       { id: 'company', label: 'Công ty', visible: false },
       { id: 'tags', label: 'Phân loại (Tags)', visible: true },
+      { id: 'program', label: 'Tên chương trình', visible: true },
+      { id: 'admission_date', label: 'Ngày nhập học', visible: true },
       { id: 'status', label: 'Trạng thái', visible: true },
       { id: 'contact', label: 'Liên lạc cuối', visible: true },
       { id: 'deal', label: 'Deal hiện tại', visible: false },
@@ -1525,7 +1538,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
 
 
-      {/* QUICK STATUS TABS (1 hàng ngang kéo chuột / lướt xem đầy đủ dữ liệu) */}
+      {/* QUICK STATUS TABS (1 hàng ngang kéo chuột / lướt xem đầy đủ dữ liệu có nút next/prev) */}
       {segment !== 'customer' && (
         <div style={{ position: 'relative', marginBottom: '0.85rem' }}>
           {/* Nút cuộn sang trái */}
@@ -1543,14 +1556,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 width: '28px',
                 height: '28px',
                 borderRadius: '50%',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                background: 'var(--color-primary, #BD1D2D)',
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(189, 29, 45, 0.4)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                color: 'var(--color-text)',
+                color: '#ffffff',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -1567,12 +1580,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             onMouseUp={handlePipelineMouseUp}
             onMouseMove={handlePipelineMouseMove}
             onWheel={handlePipelineWheel}
+            className="custom-scrollbar"
             style={{
               display: 'flex',
               flexWrap: 'nowrap',
               alignItems: 'center',
               gap: '8px',
-              padding: '8px 12px',
+              padding: isMobile ? '8px 10px' : '10px 14px',
               background: 'var(--color-surface)',
               borderRadius: '12px',
               border: '1px solid var(--color-border)',
@@ -1585,7 +1599,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             }}
           >
             {PIPELINE_TABS.map((tab) => {
-              const isActive = quickPipelineStage === tab.id;
+              const isActive = quickPipelineStage === tab.id || (Boolean(tab.slug) && quickPipelineStage === tab.slug);
               const count = getTabCount(tab);
 
               return (
@@ -1597,14 +1611,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       handleSelectQuickTab(tab.id);
                     }
                   }}
-                  title={tab.label}
+                  title={`${tab.label}: ${count.toLocaleString('vi-VN')} liên hệ`}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    padding: isMobile ? '4px 9px' : '5px 12px',
+                    padding: isMobile ? '5px 10px' : '6px 13px',
                     borderRadius: '20px',
-                    fontSize: isMobile ? '0.73rem' : '0.78rem',
+                    fontSize: isMobile ? '0.72rem' : '0.77rem',
                     fontWeight: isActive ? 700 : 500,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
@@ -1613,7 +1627,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
                     background: isActive ? `${tab.color}18` : 'var(--color-bg)',
                     color: isActive ? tab.color : 'var(--color-text)',
-                    boxShadow: isActive ? `0 2px 6px ${tab.color}20` : 'none'
+                    boxShadow: isActive ? `0 2px 8px ${tab.color}28` : 'none'
                   }}
                 >
                   <span
@@ -1640,7 +1654,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       lineHeight: '1.4'
                     }}
                   >
-                    {loading && !Object.keys(stageCounts).length ? '...' : count}
+                    {loading && !Object.keys(stageCounts).length ? '...' : (count > 999 ? count.toLocaleString('vi-VN') : count)}
                   </span>
                 </button>
               );
@@ -1662,14 +1676,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 width: '28px',
                 height: '28px',
                 borderRadius: '50%',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                background: 'var(--color-primary, #BD1D2D)',
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(189, 29, 45, 0.4)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                color: 'var(--color-text)',
+                color: '#ffffff',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -2712,8 +2726,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
       <ColumnCustomizer 
         isOpen={showColumns} 
         onClose={() => setShowColumns(false)} 
-        columns={columns} 
-        onChange={setColumns} 
+        columns={segment === 'customer' ? columns.filter(c => c.id !== 'tags') : columns.filter(c => c.id !== 'program' && c.id !== 'admission_date')} 
+        onChange={(newCols) => {
+          setColumns(prev => {
+            const preserved = segment === 'customer' 
+              ? prev.filter(c => c.id === 'tags') 
+              : prev.filter(c => c.id === 'program' || c.id === 'admission_date');
+            return [...newCols, ...preserved];
+          });
+        }} 
       />
 
       {/* Bulk Action Bar */}
@@ -2860,9 +2881,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     {columns.find(c => c.id === 'company')?.visible && !columns.find(c => c.id === 'name')?.visible && (
                       <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>Công ty</th>
                     )}
-                    {columns.find(c => c.id === 'tags')?.visible && (
+                    {/* For Tiềm năng: Tags column */}
+                    {segment !== 'customer' && columns.find(c => c.id === 'tags')?.visible && (
                       <th style={{ width: '230px', maxWidth: '290px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         Tags
+                      </th>
+                    )}
+                    {/* For Học viên (all sub-tabs: chính thức, lệ phí hồ sơ, nộp hồ sơ): 2 cột Tên chương trình & Ngày nhập học */}
+                    {segment === 'customer' && (columns.find(c => c.id === 'program')?.visible ?? true) && (
+                      <th style={{ width: '190px', maxWidth: '240px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Tên chương trình
+                      </th>
+                    )}
+                    {segment === 'customer' && (columns.find(c => c.id === 'admission_date')?.visible ?? true) && (
+                      <th style={{ width: '140px', maxWidth: '160px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        Ngày nhập học
                       </th>
                     )}
                     {columns.find(c => c.id === 'status')?.visible && (
@@ -2979,17 +3012,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>
                               {columns.find(col => col.id === 'phone')?.visible && (c.phone || c.mobile || c.phone2) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  {c.phone && (
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                      <PhoneLink phone={c.phone} style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }} />
-                                    </div>
-                                  )}
-                                  {(c.mobile || c.phone2) && (c.mobile || c.phone2) !== c.phone && (
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                      <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', background: 'var(--color-bg, #f1f5f9)', padding: '1px 4px', borderRadius: '4px', border: '1px solid var(--color-border-light, #e2e8f0)', lineHeight: '1.2' }}>Phụ:</span>
-                                      <PhoneLink phone={c.mobile || c.phone2} style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-muted)' }} />
-                                    </div>
-                                  )}
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <PhoneLink phone={c.phone || c.mobile || c.phone2} style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }} />
+                                  </div>
                                 </div>
                               ) : null}
                               {columns.find(col => col.id === 'email')?.visible && c.email ? (
@@ -3008,7 +3033,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                         )}
 
-                        {columns.find(col => col.id === 'tags')?.visible && (
+                        {/* Tags column for non-student pages */}
+                        {segment !== 'customer' && columns.find(col => col.id === 'tags')?.visible && (
                           <td style={{ width: '230px', maxWidth: '290px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}>
                             {(() => {
                               const rawTagList = typeof c.tags === 'string' 
@@ -3071,6 +3097,76 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </div>
                               );
                             })()}
+                          </td>
+                        )}
+
+                        {/* For student segment: 2 columns Tên chương trình & Ngày nhập học */}
+                        {segment === 'customer' && (columns.find(col => col.id === 'program')?.visible ?? true) && (
+                          <td style={{ width: '190px', maxWidth: '240px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}>
+                            {(() => {
+                              let displayProg = (c.program || '').trim();
+                              if (!displayProg && c.tags) {
+                                const rawTags = typeof c.tags === 'string' 
+                                  ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
+                                  : (Array.isArray(c.tags) ? c.tags : []);
+                                const progTag = rawTags.find((t: string) => {
+                                  const lt = t.toLowerCase();
+                                  return lt.includes('mba') || lt.includes('bba') || lt.includes('dba') || lt.includes('msc') || lt.includes('umef') || lt.includes('emba');
+                                });
+                                if (progTag) {
+                                  displayProg = progTag.replace(/^\d+\.\s*(status\s*-\s*)?/i, '').trim();
+                                }
+                              }
+
+                              if (!displayProg) {
+                                return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
+                              }
+
+                              return (
+                                <span 
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    background: 'rgba(37, 99, 235, 0.08)',
+                                    color: '#2563eb',
+                                    border: '1px solid rgba(37, 99, 235, 0.25)',
+                                    maxWidth: '220px',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                  }}
+                                  title={displayProg}
+                                >
+                                  <GraduationCap size={13} style={{ flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayProg}</span>
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
+
+                        {segment === 'customer' && (columns.find(col => col.id === 'admission_date')?.visible ?? true) && (
+                          <td style={{ width: '140px', maxWidth: '160px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                            {c.admission_date ? (() => {
+                              const d = new Date(c.admission_date);
+                              if (isNaN(d.getTime())) {
+                                return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)' }}>{String(c.admission_date).slice(0, 10)}</span>;
+                              }
+                              const pad = (n: number) => String(n).padStart(2, '0');
+                              return (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                                  <Calendar size={13} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                  <span>{`${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`}</span>
+                                </div>
+                              );
+                            })() : (
+                              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                            )}
                           </td>
                         )}
 
@@ -3673,22 +3769,46 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                             {/* Footer Grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.875rem', borderTop: '1px solid var(--color-border-light)' }}>
-                              <div>
-                                <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Ngày tạo</p>
-                                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                  {c.created_at ? (() => {
-                                    const d = new Date(c.created_at);
-                                    const pad = (n: number) => String(n).padStart(2, '0');
-                                    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-                                  })() : '—'}
-                                </p>
-                              </div>
-                              <div>
-                                <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Tương tác cuối</p>
-                                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                  {renderInteractionInfo(c)}
-                                </div>
-                              </div>
+                              {segment === 'customer' ? (
+                                <>
+                                  <div>
+                                    <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Chương trình</p>
+                                    <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={c.program || ''}>
+                                      {c.program || '—'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Ngày nhập học</p>
+                                    <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                      {c.admission_date ? (() => {
+                                        const d = new Date(c.admission_date);
+                                        if (isNaN(d.getTime())) return String(c.admission_date).slice(0, 10);
+                                        const pad = (n: number) => String(n).padStart(2, '0');
+                                        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+                                      })() : '—'}
+                                    </p>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div>
+                                    <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Ngày tạo</p>
+                                    <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                      {c.created_at ? (() => {
+                                        const d = new Date(c.created_at);
+                                        const pad = (n: number) => String(n).padStart(2, '0');
+                                        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+                                      })() : '—'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '2px', letterSpacing: '0.02em' }}>Tương tác cuối</p>
+                                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                                      {renderInteractionInfo(c)}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           </div>
                         </>

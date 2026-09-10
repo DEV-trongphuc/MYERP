@@ -8,6 +8,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { useAuthStore } from '../store/authStore';
+import { canManageSystemSettings } from '../utils/roleUtils';
 
 const SYSTEM_FIELDS = [
   // --- Thông tin Cá nhân & Liên hệ ---
@@ -345,7 +346,7 @@ function normalizePhone(phone) {
 const IntegrationsInner = () => {
   const { language, t } = useLanguage();
   const user = useAuthStore(state => state.user);
-  const isReadOnly = !['admin', 'superadmin', 'super_admin', 'assistant'].includes(user?.role || '');
+  const isReadOnly = !canManageSystemSettings(user);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selected, setSelected] = useState<Connection | null>(null);
   const [mobileActiveView, setMobileActiveView] = useState<'list' | 'detail'>('list');

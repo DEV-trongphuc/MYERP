@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Loader2, Hand, User, Laptop } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import api from '../api/axios';
+import { getDefaultRouteByRole } from '../utils/roleUtils';
 import styles from './LoginPage.module.css';
 
 export const LoginPage: React.FC = () => {
@@ -19,7 +20,7 @@ export const LoginPage: React.FC = () => {
     try {
       const { data } = await api.post('/auth/login', form);
       const userRole = data.data.user?.role || '';
-      const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
+      const targetPath = getDefaultRouteByRole(userRole);
       setAuth(data.data.user, data.data.access_token, data.data.refresh_token);
       navigate(targetPath);
     } catch (err: any) {

@@ -17,6 +17,7 @@ import { numberToText } from '../utils/numberToText';
 import { useAuth } from '../contexts/AuthContext';
 import { CurrencyInput } from '../components/ui/CurrencyInput';
 import { CopyButton } from '../components/ui/CopyButton';
+import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 
 interface CompanyDrawerProps {
   isOpen: boolean;
@@ -42,9 +43,8 @@ const TABS = [
 export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, entity, onSave }) => {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
-  const userRole = (currentUser?.role || '').toLowerCase();
-  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'].includes(userRole);
-  const isSale = ['sale', 'sales'].includes(userRole);
+  const canEdit = canEditPartnerOrSupplier(currentUser);
+  const isSale = isSales(currentUser);
   const disableEdit = !canEdit;
   const { addToast, showConfirm } = useUIStore();
   const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= 1024);

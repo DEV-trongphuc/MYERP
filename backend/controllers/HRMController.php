@@ -234,14 +234,38 @@ class HRMController {
 
         $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
         if (empty($approverId)) {
-            $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
-            $stmtLeader->execute([$auth['user_id']]);
-            $leadId = $stmtLeader->fetchColumn();
-            if (!empty($leadId) && (int)$leadId !== (int)$auth['user_id']) {
-                $approverId = (int)$leadId;
-            } else {
-                $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$auth['user_id'] . " LIMIT 1");
-                $approverId = (int)($stmtDir->fetchColumn() ?: 1003);
+            $stmtUser = $this->db->prepare("SELECT email, department, team_id FROM users WHERE id = ?");
+            $stmtUser->execute([$auth['user_id']]);
+            $uInfo = $stmtUser->fetch(PDO::FETCH_ASSOC);
+            $uEmail = strtolower($uInfo['email'] ?? '');
+            $uDept = mb_strtolower($uInfo['department'] ?? '', 'UTF-8');
+
+            if ($uEmail === 'nganph@ideas.edu.vn' || str_contains($uDept, 'học vụ') || str_contains($uDept, 'học thuật')) {
+                $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email = 'tramlth@ideas.edu.vn' OR username = 'tramlth' OR full_name LIKE '%Huyền Trâm%' LIMIT 1");
+                $stmtLead->execute();
+                $foundLead = $stmtLead->fetchColumn();
+                if (!empty($foundLead) && (int)$foundLead !== (int)$auth['user_id']) {
+                    $approverId = (int)$foundLead;
+                }
+            } elseif ($uEmail === 'cuongnph@ideas.edu.vn' || str_contains($uDept, 'nhân sự') || str_contains($uDept, 'hành chính')) {
+                $stmtLead = $this->db->prepare("SELECT id FROM users WHERE email LIKE 'phuongntd%' OR username = 'phuongntd' OR full_name LIKE '%Duy Phương%' LIMIT 1");
+                $stmtLead->execute();
+                $foundLead = $stmtLead->fetchColumn();
+                if (!empty($foundLead) && (int)$foundLead !== (int)$auth['user_id']) {
+                    $approverId = (int)$foundLead;
+                }
+            }
+
+            if (empty($approverId)) {
+                $stmtLeader = $this->db->prepare("SELECT t.leader_id FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ?");
+                $stmtLeader->execute([$auth['user_id']]);
+                $leadId = $stmtLeader->fetchColumn();
+                if (!empty($leadId) && (int)$leadId !== (int)$auth['user_id']) {
+                    $approverId = (int)$leadId;
+                } else {
+                    $stmtDir = $this->db->query("SELECT id FROM users WHERE LOWER(role) IN ('director', 'superadmin', 'super_admin') AND id != " . (int)$auth['user_id'] . " LIMIT 1");
+                    $approverId = (int)($stmtDir->fetchColumn() ?: 1003);
+                }
             }
         }
         $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : null;

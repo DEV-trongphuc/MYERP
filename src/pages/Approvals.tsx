@@ -23,6 +23,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { MentionInput } from '../components/ui/MentionInput';
 import { ProcessFeed } from '../components/ui/ProcessFeed';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isExecutive, isHR, isManagement, isAccountant } from '../utils/roleUtils';
 import { Pagination } from '../components/ui/Pagination';
 import { useUIStore } from '../store/uiStore';
 import { NoteDetailModal, NoteCell, renderLinkifiedText } from '../components/ui/NoteDetailModal';
@@ -377,7 +378,7 @@ export default function Approvals() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  const isAdmin = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'hr'].includes(String(user?.role).toLowerCase());
+  const isAdmin = isManagement(user) || isHR(user);
   const [activeTab, setActiveTab] = useState<'pending' | 'my_requests' | 'following' | 'all'>('pending');
   const hasAutoSwitchedTabRef = useRef(false);
   const pendingOpenRef = useRef<{ id: number; type?: string; status?: string } | null>(null);
@@ -875,7 +876,7 @@ export default function Approvals() {
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || t('Lỗi quét ngày thiếu công'));
+      toast.error(err?.response?.data?.message || err?.message || t('Lỗi quét ngày thiếu công'));
     } finally {
       setSuggestedLoading(false);
     }
@@ -1576,7 +1577,7 @@ export default function Approvals() {
       setActiveTab('my_requests');
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || t('Lỗi gửi đề xuất'));
+      toast.error(err?.response?.data?.message || err?.message || t('Lỗi gửi đề xuất'));
     } finally {
       setSubmitting(false);
     }
@@ -2256,7 +2257,7 @@ export default function Approvals() {
       window.dispatchEvent(new CustomEvent('refresh-approvals'));
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || t('Lỗi khi phê duyệt'));
+      toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi phê duyệt'));
     }
   };
 
@@ -2302,7 +2303,7 @@ export default function Approvals() {
       setSelectedTimelineItem(null);
       loadData();
     } catch (err: any) {
-      toast.error(err?.message || t('Lỗi khi từ chối'));
+      toast.error(err?.response?.data?.message || err?.message || t('Lỗi khi từ chối'));
     }
   };
 
@@ -3258,7 +3259,7 @@ export default function Approvals() {
               {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
                 const role = (user?.role || '').toLowerCase();
                 const userId = Number(user?.id || 0);
-                const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
+                const isSuperAdmin = isExecutive(user);
                 
                 const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                 const isCreator = creatorId > 0 && creatorId === userId;
@@ -3453,7 +3454,7 @@ export default function Approvals() {
                   {currentList.slice((page - 1) * pageSize, page * pageSize).map(item => {
                     const role = (user?.role || '').toLowerCase();
                     const userId = Number(user?.id || 0);
-                    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
+                    const isSuperAdmin = isExecutive(user);
                     
                     const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                     const isCreator = creatorId > 0 && creatorId === userId;
@@ -3643,7 +3644,7 @@ export default function Approvals() {
                                 >
                                   <Eye size={12} /> {t('Chi tiết')}
                                 </button>
-                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
+                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || (isManagement(user) || isHR(user))) && (
                                   <button
                                     onClick={() => handleDeleteRequest(item)}
                                     className="btn secondary"
@@ -3987,7 +3988,7 @@ export default function Approvals() {
       })(), document.body)}
 
       {/* Progress Timeline Drawer */}
-      {selectedTimelineItem && (
+      {selectedTimelineItem && createPortal(
         <ApprovalDetailDrawer
           item={selectedTimelineItem}
           onClose={() => {
@@ -4002,7 +4003,8 @@ export default function Approvals() {
           onDuplicate={handleDuplicate}
           onEdit={handleEditRequest}
           onDelete={handleDeleteRequest}
-        />
+        />,
+        document.body
       )}
 
       {/* Creation and Directory Portals */}
@@ -8878,16 +8880,19 @@ export default function Approvals() {
                               ref={relatedDropdownRef}
                               style={{
                                 position: 'absolute',
-                                top: '100%',
+                                top: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 'auto' : '100%',
+                                bottom: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 'calc(100% + 6px)' : 'auto',
                                 left: 0,
-                                marginTop: '6px',
+                                marginTop: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 0 : '6px',
+                                marginBottom: (typeof window !== 'undefined' && window.innerWidth <= 768) ? '6px' : 0,
                                 zIndex: 9999,
                                 background: 'var(--color-surface)',
                                 border: '1px solid var(--color-border-light)',
                                 borderRadius: '12px',
-                                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.18)',
+                                boxShadow: (typeof window !== 'undefined' && window.innerWidth <= 768) ? '0 -10px 25px rgba(0, 0, 0, 0.18)' : '0 10px 25px rgba(0, 0, 0, 0.18)',
                                 minWidth: '240px',
-                                maxHeight: '280px',
+                                maxWidth: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 'calc(100vw - 32px)' : '320px',
+                                maxHeight: (typeof window !== 'undefined' && window.innerWidth <= 768) ? '250px' : '280px',
                                 overflowY: 'auto',
                                 padding: '8px',
                                 display: 'flex',
@@ -9150,8 +9155,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     const role = (user?.role || '').toLowerCase();
     const userId = Number(user?.id || 0);
-    const isSuperAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(role);
-    const isHrAdmin = ['superadmin', 'super_admin', 'admin', 'director', 'hr'].includes(role);
+    const isSuperAdmin = isExecutive(user);
+    const isHrAdmin = isHR(user, true);
 
     // CRITICAL SECURITY & BUSINESS RULE: The creator can NEVER approve their own proposal!
     const creatorId = Number(detail?.user_id || detail?.created_by || item.user_id || (item as any)?.created_by || 0);
@@ -11907,7 +11912,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     });
                     toast.success(`${t('Đã gửi nhắc nhở thành công đến')} ${targetName}!`);
                   } catch (err: any) {
-                    toast.error(err?.message || t('Lỗi gửi nhắc nhở'));
+                    toast.error(err?.response?.data?.message || err?.message || t('Lỗi gửi nhắc nhở'));
                   } finally {
                     setReminderTargetUser(null);
                     setReminderMessage('');
@@ -11937,12 +11942,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           background: 'rgba(0, 0, 0, 0.45)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-          zIndex: 10500
+          zIndex: 1000005
         }}
       />
 
       {/* Drawer Sheet Container */}
       <motion.div 
+        className="drawer-sheet"
         initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
         animate={{ y: 0, x: 0, opacity: 1 }}
         exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
@@ -11958,7 +11964,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           display: 'flex',
           flexDirection: 'column',
           boxSizing: 'border-box',
-          zIndex: 10600,
+          zIndex: 1000010,
           overflow: 'hidden'
         }} onClick={e => e.stopPropagation()}>
         

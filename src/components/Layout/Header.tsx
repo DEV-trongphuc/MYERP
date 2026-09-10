@@ -44,10 +44,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '🏢',
       badge: 'KHO DỮ LIỆU',
-      badgeBg: 'rgba(245, 158, 11, 0.18)',
-      badgeColor: '#fbbf24',
-      borderColor: 'rgba(245, 158, 11, 0.45)',
-      glowColor: 'rgba(245, 158, 11, 0.22)',
+      badgeBg: '#fef3c7',
+      badgeColor: '#b45309',
+      borderColor: '#fde68a',
+      leftPill: '#f59e0b',
       ctaText: 'Mở chi tiết Lead →'
     };
   }
@@ -57,10 +57,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '🔄',
       badge: 'CHUYỂN GIAO LEAD',
-      badgeBg: 'rgba(168, 85, 247, 0.18)',
-      badgeColor: '#c084fc',
-      borderColor: 'rgba(168, 85, 247, 0.45)',
-      glowColor: 'rgba(168, 85, 247, 0.22)',
+      badgeBg: '#f3e8ff',
+      badgeColor: '#7e22ce',
+      borderColor: '#e9d5ff',
+      leftPill: '#a855f7',
       ctaText: 'Mở chi tiết Lead →'
     };
   }
@@ -70,10 +70,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '🎯',
       badge: 'LEAD MỚI',
-      badgeBg: 'rgba(16, 185, 129, 0.18)',
-      badgeColor: '#34d399',
-      borderColor: 'rgba(16, 185, 129, 0.45)',
-      glowColor: 'rgba(16, 185, 129, 0.22)',
+      badgeBg: '#ecfdf5',
+      badgeColor: '#047857',
+      borderColor: '#a7f3d0',
+      leftPill: '#10b981',
       ctaText: 'Mở chi tiết Lead →'
     };
   }
@@ -83,10 +83,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '🛡️',
       badge: 'PHÊ DUYỆT',
-      badgeBg: 'rgba(244, 63, 94, 0.18)',
-      badgeColor: '#fb7185',
-      borderColor: 'rgba(244, 63, 94, 0.45)',
-      glowColor: 'rgba(244, 63, 94, 0.22)',
+      badgeBg: '#fef2f2',
+      badgeColor: '#b91c1c',
+      borderColor: '#fecaca',
+      leftPill: '#BD1D2D',
       ctaText: 'Xem yêu cầu →'
     };
   }
@@ -96,10 +96,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '⏰',
       badge: 'CHẤM CÔNG',
-      badgeBg: 'rgba(234, 179, 8, 0.18)',
-      badgeColor: '#facc15',
-      borderColor: 'rgba(234, 179, 8, 0.45)',
-      glowColor: 'rgba(234, 179, 8, 0.22)',
+      badgeBg: '#fefce8',
+      badgeColor: '#a16207',
+      borderColor: '#fef08a',
+      leftPill: '#eab308',
       ctaText: 'Xem bảng công →'
     };
   }
@@ -109,10 +109,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '⚠️',
       badge: 'CẢNH BÁO',
-      badgeBg: 'rgba(239, 68, 68, 0.18)',
-      badgeColor: '#f87171',
-      borderColor: 'rgba(239, 68, 68, 0.45)',
-      glowColor: 'rgba(239, 68, 68, 0.22)',
+      badgeBg: '#fff1f2',
+      badgeColor: '#be123c',
+      borderColor: '#fecdd3',
+      leftPill: '#f43f5e',
       ctaText: 'Kiểm tra ngay →'
     };
   }
@@ -122,10 +122,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '📋',
       badge: 'CÔNG VIỆC',
-      badgeBg: 'rgba(59, 130, 246, 0.18)',
-      badgeColor: '#60a5fa',
-      borderColor: 'rgba(59, 130, 246, 0.45)',
-      glowColor: 'rgba(59, 130, 246, 0.22)',
+      badgeBg: '#eff6ff',
+      badgeColor: '#1d4ed8',
+      borderColor: '#bfdbfe',
+      leftPill: '#3b82f6',
       ctaText: 'Mở công việc →'
     };
   }
@@ -135,10 +135,10 @@ const getNotifMeta = (notif: any) => {
     return {
       icon: '💬',
       badge: 'THẢO LUẬN',
-      badgeBg: 'rgba(56, 189, 248, 0.18)',
-      badgeColor: '#38bdf8',
-      borderColor: 'rgba(56, 189, 248, 0.45)',
-      glowColor: 'rgba(56, 189, 248, 0.22)',
+      badgeBg: '#f0fdf4',
+      badgeColor: '#15803d',
+      borderColor: '#bbf7d0',
+      leftPill: '#22c55e',
       ctaText: 'Xem thảo luận →'
     };
   }
@@ -147,10 +147,10 @@ const getNotifMeta = (notif: any) => {
   return {
     icon: '🔔',
     badge: 'THÔNG BÁO',
-    badgeBg: 'rgba(99, 102, 241, 0.18)',
-    badgeColor: '#a5b4fc',
-    borderColor: 'rgba(99, 102, 241, 0.45)',
-    glowColor: 'rgba(99, 102, 241, 0.22)',
+    badgeBg: '#f1f5f9',
+    badgeColor: '#334155',
+    borderColor: '#e2e8f0',
+    leftPill: '#64748b',
     ctaText: 'Xem chi tiết →'
   };
 };
@@ -823,11 +823,16 @@ export const Header = ({
           animation: t.visible
             ? 'notifToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
             : 'notifToastSlideOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-          border: `1px solid ${meta.borderColor}`,
-          boxShadow: `0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 24px ${meta.glowColor}`
+          background: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 14px 34px -6px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05)',
+          padding: '14px 16px 12px 18px',
+          position: 'relative',
+          overflow: 'hidden'
         }}
       >
-        {/* Glowing left accent line */}
+        {/* Left accent color pill */}
         <div
           style={{
             position: 'absolute',
@@ -836,8 +841,7 @@ export const Header = ({
             bottom: '12px',
             width: '4px',
             borderRadius: '0 4px 4px 0',
-            background: meta.badgeColor,
-            boxShadow: `0 0 10px ${meta.badgeColor}`
+            background: meta.leftPill || meta.badgeColor
           }}
         />
 
@@ -847,11 +851,11 @@ export const Header = ({
             <span style={{ fontSize: '18px', lineHeight: 1 }}>{meta.icon}</span>
             <span
               style={{
-                padding: '2px 8px',
+                padding: '3px 8px',
                 borderRadius: '6px',
-                fontSize: '10.5px',
+                fontSize: '11px',
                 fontWeight: 700,
-                letterSpacing: '0.5px',
+                letterSpacing: '0.4px',
                 background: meta.badgeBg,
                 color: meta.badgeColor,
                 border: `1px solid ${meta.borderColor}`
@@ -865,12 +869,11 @@ export const Header = ({
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  background: '#ef4444',
-                  boxShadow: '0 0 8px #ef4444',
-                  animation: 'notifPulseGlow 1.4s infinite ease-in-out'
+                  background: '#10b981',
+                  boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)'
                 }}
               />
-              <span style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 500 }}>Vừa xong</span>
+              <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Vừa xong</span>
             </div>
           </div>
 
@@ -882,11 +885,11 @@ export const Header = ({
             }}
             title="Đóng thông báo"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'transparent',
               border: 'none',
               color: '#94a3b8',
               cursor: 'pointer',
-              padding: '3px 6px',
+              padding: '4px 6px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -896,12 +899,12 @@ export const Header = ({
               transition: 'all 0.15s ease'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#ffffff';
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+              e.currentTarget.style.color = '#0f172a';
+              e.currentTarget.style.background = '#f1f5f9';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.color = '#94a3b8';
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+              e.currentTarget.style.background = 'transparent';
             }}
           >
             ✕
@@ -912,8 +915,8 @@ export const Header = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
           <div
             style={{
-              color: '#ffffff',
-              fontWeight: 600,
+              color: '#0f172a',
+              fontWeight: 700,
               fontSize: '13.5px',
               lineHeight: 1.35,
               wordBreak: 'break-word'
@@ -924,7 +927,7 @@ export const Header = ({
           {item.body && (
             <div
               style={{
-                color: '#cbd5e1',
+                color: '#475569',
                 fontSize: '12px',
                 lineHeight: 1.45,
                 display: '-webkit-box',
@@ -947,17 +950,17 @@ export const Header = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             paddingTop: '8px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            borderTop: '1px solid #f1f5f9',
             fontSize: '11.5px'
           }}
         >
-          <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
             {item.actor_name ? `Từ: ${item.actor_name}` : 'Nhấn vào để mở'}
           </span>
           <span
             style={{
-              color: meta.badgeColor,
-              fontWeight: 600,
+              color: 'var(--color-primary, #BD1D2D)',
+              fontWeight: 700,
               display: 'inline-flex',
               alignItems: 'center',
               gap: '4px',

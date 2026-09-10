@@ -3,6 +3,8 @@
  * Solves Route Guards, Sidebar Visibility, and Approval Authority for Managers & Team Leaders
  */
 
+import { isExecutive } from './roleUtils';
+
 export interface UserContext {
   id?: number | string;
   role?: string;
@@ -24,7 +26,7 @@ export function hasModuleApprovalAccess(
 
   const role = (user.role || '').toLowerCase().trim();
 
-  if (['admin', 'superadmin', 'super_admin', 'director'].includes(role)) {
+  if (isExecutive(user)) {
     return true;
   }
 

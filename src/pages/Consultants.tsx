@@ -2220,7 +2220,7 @@ const ConsultantsInner = () => {
                   <label className="form-label">{t('Nội dung tin nhắn')} <span style={{ color: 'var(--color-danger)' }}>*</span></label>
                   <textarea
                     className="form-input"
-                    placeholder={t('Nhập nội dung cần thông báo cho Sale...')}
+                    placeholder={t('Nhập nội dung cần thông báo cho nhân sự...')}
                     value={quickMessageText}
                     onChange={e => setQuickMessageText(e.target.value)}
                     required
@@ -2774,13 +2774,21 @@ const ConsultantsInner = () => {
           {teamModalOpen && (
             <>
               {/* Backdrop */}
-              <div
+              <motion.div
                 className="drawer-backdrop"
                 onClick={() => setTeamModalOpen(false)}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
                 style={{
-                  zIndex: 1000,
-                  opacity: 1,
-                  pointerEvents: 'auto'
+                  position: 'fixed',
+                  inset: 0,
+                  zIndex: 1000005,
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  cursor: 'pointer'
                 }}
               />
               <motion.div
@@ -2790,7 +2798,7 @@ const ConsultantsInner = () => {
                 transition={{ type: 'tween', duration: 0.3 }}
                 className={styles.drawer}
                 style={{
-                  zIndex: 10600
+                  zIndex: 1000010
                 }}
               >
                 {/* Header */}
@@ -2820,7 +2828,7 @@ const ConsultantsInner = () => {
                     <div>
                       <h2 className={styles.title}>{teamFormData.name || t('Tên Phòng ban')}</h2>
                       <p className={styles.subtitle} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Users size={14} /> {t('Quy mô')}: {teamFormData.member_ids.length} sales · KPI: {teamFormData.kpi_target ? Number(teamFormData.kpi_target).toLocaleString('vi-VN') : '0'} VND
+                        <Users size={14} /> {t('Quy mô')}: {teamFormData.member_ids.length} {t('nhân sự')} · KPI: {teamFormData.kpi_target ? Number(teamFormData.kpi_target).toLocaleString('vi-VN') : '0'} VND
                       </p>
                     </div>
                   </div>

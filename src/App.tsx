@@ -13,6 +13,7 @@ import { GlobalConfirmModal } from './components/ui/GlobalConfirmModal';
 import { QRCodeCallModal } from './components/ui/QRCodeCallModal';
 import { ProfileModal } from './components/ProfileModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
+import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 
 
 // Lazy load all pages for Code Splitting (including Enterprise Social Feed)
@@ -612,6 +613,7 @@ export default function App() {
             <GlobalConfirmModal />
             <QRCodeCallModal />
             <ProfileModal />
+            <AutoUpdateChecker />
           </UploadProgressProvider>
         </AuthProvider>
 

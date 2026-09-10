@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Users, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap } from 'lucide-react';
+import { X, User, Users, UserPlus, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap, Bell } from 'lucide-react';
 import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
@@ -18,6 +18,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { CustomModal } from '../components/ui/CustomModal';
 import { SignaturePadModal } from '../components/ui/SignaturePadModal';
 import { compressToWebP } from '../utils/imageCompress';
+import { downloadFileWithWebpToJpg, convertWebpBlobToJpgBlob, isWebpFile } from '../utils/fileDownloader';
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
@@ -296,7 +297,7 @@ const DEFAULT_PIPELINE_STAGES = [
     id: 'enrolled',
     name: '14 – Enrolled',
     system_slug: 'enrolled',
-    color: '#06b6d4',
+    color: '#ec4899',
     order_index: 14,
     is_won: 1,
     definition: 'Khách chính thức trở thành học viên và được xác nhận trong intake.',
@@ -2063,13 +2064,49 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [savingQuickTask, setSavingQuickTask] = useState(false);
 
   const handleOpenQuickTaskModal = () => {
-    setQuickTaskSubject('Gọi lại khách hàng');
-    setQuickTaskCustomSubject('');
-    setQuickTaskDateType('tomorrow');
-    setQuickTaskCustomDate('');
-    setQuickTaskDescription('');
-    setQuickTaskAssigneeId(String(formData.owner_id || contact?.owner_id || currentUser?.id || ''));
-    setShowQuickTaskModal(true);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const targetContactId = effectiveContactId || contact?.id;
+    const targetContactName = formData.full_name || contact?.full_name || '';
+    const targetContactAvatar = formData.avatar_url || formData.avatar || contact?.avatar_url || contact?.avatar || '';
+    const targetContactPhone = formData.phone || contact?.phone || '';
+    const targetContactEmail = formData.email || contact?.email || '';
+    setSelectedTaskForDetails({
+      id: 'new',
+      subject: '',
+      body: '',
+      contact_id: targetContactId,
+      contact_name: targetContactName,
+      contact_avatar: targetContactAvatar,
+      contact_phone: targetContactPhone,
+      contact_email: targetContactEmail,
+      related_type: 'contact',
+      related_id: targetContactId,
+      due_date: todayStr,
+      user_id: formData.owner_id || contact?.owner_id || currentUser?.id,
+      created_by: currentUser?.id,
+      type: 'task',
+      status: 'open',
+      priority: 'medium'
+    });
+  };
+
+  const openTaskDetails = (t: any) => {
+    if (!t) return;
+    const targetContactId = t.contact_id || (t.related_type === 'contact' ? t.related_id : effectiveContactId || contact?.id);
+    const targetContactName = t.contact_name || formData.full_name || contact?.full_name || '';
+    const targetContactAvatar = t.contact_avatar || formData.avatar_url || formData.avatar || contact?.avatar_url || contact?.avatar || '';
+    const targetContactPhone = t.contact_phone || formData.phone || contact?.phone || '';
+    const targetContactEmail = t.contact_email || formData.email || contact?.email || '';
+    setSelectedTaskForDetails({
+      ...t,
+      contact_id: targetContactId,
+      contact_name: targetContactName,
+      contact_avatar: targetContactAvatar,
+      contact_phone: targetContactPhone,
+      contact_email: targetContactEmail,
+      related_type: t.related_type || (targetContactId ? 'contact' : null),
+      related_id: t.related_id || targetContactId
+    });
   };
 
   const handleSaveQuickTask = async () => {
@@ -2286,6 +2323,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     nurtureReason: string;
     lostReason: string;
     exitCriteriaConfirmed: boolean;
+    notifyUserIds: number[];
   }>({
     isOpen: false,
     targetId: '',
@@ -2299,8 +2337,27 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     expectedIntake: '',
     nurtureReason: '',
     lostReason: '',
-    exitCriteriaConfirmed: false
+    exitCriteriaConfirmed: false,
+    notifyUserIds: []
   });
+
+  const [showNotifyUserDropdown, setShowNotifyUserDropdown] = useState(false);
+  const [notifyUserSearch, setNotifyUserSearch] = useState('');
+  const notifyUserDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifyUserDropdownRef.current && !notifyUserDropdownRef.current.contains(e.target as Node)) {
+        setShowNotifyUserDropdown(false);
+      }
+    };
+    if (showNotifyUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifyUserDropdown]);
 
   useEffect(() => {
     if (showDealModal && users.length > 0) {
@@ -2604,10 +2661,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         try {
           const res = await fetch(fileUrl);
           if (res.ok) {
-            const blob = await res.blob();
+            let blob = await res.blob();
+            let fileName = doc.name;
+            if (isWebpFile(fileName) || isWebpFile(fileUrl)) {
+              try {
+                blob = await convertWebpBlobToJpgBlob(blob);
+                fileName = fileName.replace(/\.webp$/i, '.jpg');
+              } catch (convErr) {
+                console.warn('Zip webp conversion error:', convErr);
+              }
+            }
             const folderName = (!doc.category || doc.category === 'general') ? 'Tài liệu chung' : doc.category;
             const folder = zip.folder(folderName) || zip;
-            folder.file(doc.name, blob);
+            folder.file(fileName, blob);
             count++;
           }
         } catch (fetchErr) {
@@ -3570,7 +3636,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     
     // Fallback to task details modal
     if (ev.rawActivity) {
-      setSelectedTaskForDetails(ev.rawActivity);
+      openTaskDetails(ev.rawActivity);
     }
   };
 
@@ -6383,6 +6449,61 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
     };
 
+    const isStage09 = (s: any) => {
+      if (!s) return false;
+      const slug = String(s.system_slug || '').toLowerCase();
+      const name = String(s.name || '').toLowerCase();
+      const order = Number(s.order_index) || 0;
+      const id = String(s.id || '');
+      return slug === 'application_started' || order === 9 || id === '39' || id === '9' || name.includes('09') || name.includes('application started') || targetId === '39' || targetId === 'application_started';
+    };
+
+    const isStage10 = (s: any) => {
+      if (!s) return false;
+      const slug = String(s.system_slug || '').toLowerCase();
+      const name = String(s.name || '').toLowerCase();
+      const order = Number(s.order_index) || 0;
+      const id = String(s.id || '');
+      return slug === 'application_completed' || order === 10 || id === '40' || id === '10' || name.includes('10') || name.includes('application completed') || targetId === '40' || targetId === 'application_completed';
+    };
+
+    const isStage14 = (s: any) => {
+      if (!s) return false;
+      const slug = String(s.system_slug || '').toLowerCase();
+      const name = String(s.name || '').toLowerCase();
+      const order = Number(s.order_index) || 0;
+      const id = String(s.id || '');
+      return slug === 'enrolled' || slug === 'hoc_vien' || order === 14 || id === '44' || id === '14' || name.includes('14') || name.includes('enrolled') || targetId === 'enrolled' || targetId === 'hoc_vien' || targetId === '44';
+    };
+
+    // Find notification target user IDs
+    const saleAdminUser = users.find((u: any) => 
+      u.role === 'sale_admin' || u.role === 'saleadmin' || u.username === 'linhdk' || u.email === 'linhdk@ideas.edu.vn' || Number(u.id) === 100066
+    );
+    const saleAdminId = saleAdminUser ? Number(saleAdminUser.id) : 100066;
+
+    const maiThiNuUser = users.find((u: any) =>
+      u.email === 'numt@ideas.edu.vn' || u.username === 'numt' || String(u.full_name || '').toLowerCase().includes('mai thị nữ') || Number(u.id) === 100062
+    );
+    const maiThiNuId = maiThiNuUser ? Number(maiThiNuUser.id) : 100062;
+
+    const huyenTramUser = users.find((u: any) =>
+      u.email === 'tramlth@ideas.edu.vn' || u.username === 'tramlth' || String(u.full_name || '').toLowerCase().includes('huyền trâm') || Number(u.id) === 100073
+    );
+    const huyenTramId = huyenTramUser ? Number(huyenTramUser.id) : 100073;
+
+    let defaultNotifyIds: number[] = [];
+    if (isStage14(targetStageObj)) {
+      // Bất kì đâu lên 14: mặc định thông báo cả Mai Thị Nữ và Lê Thị Huyền Trâm
+      defaultNotifyIds = [maiThiNuId, huyenTramId].filter(Boolean);
+    } else if (isStage09(currentStageObj) && isStage10(targetStageObj)) {
+      // Từ 09 lên 10: mặc định fill Mai Thị Nữ
+      defaultNotifyIds = [maiThiNuId].filter(Boolean);
+    } else if (isStage09(targetStageObj)) {
+      // Bất kì bước nào lên 09: mặc định fill Sale Admin
+      defaultNotifyIds = [saleAdminId].filter(Boolean);
+    }
+
     setPipelineModal({
       isOpen: true,
       targetId,
@@ -6396,7 +6517,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       expectedIntake: formData.expected_intake || contact.expected_intake || '',
       nurtureReason: formData.nurture_reason || contact.nurture_reason || '',
       lostReason: formData.lost_reason || contact.lost_reason || '',
-      exitCriteriaConfirmed: false
+      exitCriteriaConfirmed: false,
+      notifyUserIds: defaultNotifyIds
     });
   };
 
@@ -12730,7 +12852,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       onDragEnd={() => setDraggedTaskId(null)}
                                       onClick={() => {
                                         if (t.done) return;
-                                        setSelectedTaskForDetails(t);
+                                        openTaskDetails(t);
                                       }}
                                       style={{
                                         background: 'var(--color-surface)',
@@ -12910,7 +13032,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   return (
                                     <div 
                                       key={t.id}
-                                      onClick={() => { if (!t.done) setSelectedTaskForDetails(t); }}
+                                      onClick={() => { if (!t.done) openTaskDetails(t); }}
                                       style={{ 
                                         background: 'var(--color-surface)',
                                         borderRadius: '12px',
@@ -13052,7 +13174,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     return (
                                       <tr 
                                         key={t.id}
-                                        onClick={() => { if (!t.done) setSelectedTaskForDetails(t); }}
+                                        onClick={() => { if (!t.done) openTaskDetails(t); }}
                                         style={{ 
                                           borderBottom: '1px solid var(--color-border-light)', 
                                           cursor: t.done ? 'default' : 'pointer', 
@@ -13226,7 +13348,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               </>
                             ) : (
                               <>
-                                <Archive size={16} /> download Zip
+                                <Archive size={16} /> Download ZIP
                               </>
                             )}
                           </button>
@@ -13827,11 +13949,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   <p className="text-xs text-light mt-1">Tải lên: {doc.date} • {isLink ? 'Google Drive Link' : doc.size}</p>
                                 </div>
                                 {!isLink && fileUrl && (
-                                  <a
-                                    href={fileUrl}
-                                    download={doc.name}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadFileWithWebpToJpg(fileUrl, doc.name)}
                                     style={{
                                       background: 'rgba(16, 185, 129, 0.08)',
                                       color: '#059669',
@@ -13850,10 +13970,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       flexShrink: 0
                                     }}
                                     className="hover-lift"
-                                    title="Tải tệp này về máy"
+                                    title="Tải tệp này về máy (tự động chuyển sang JPG nếu là ảnh WebP)"
                                   >
                                     <Download size={13} /> Tải về
-                                  </a>
+                                  </button>
                                 )}
                                 {isOwnerOrAdmin && !doc.isCoopAttachment && (
                                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
@@ -14107,9 +14227,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   <ExternalLink size={13} />
                                   <span>Mở tab mới</span>
                                 </a>
-                                <a
-                                  href={previewDocImage.url}
-                                  download={previewDocImage.name}
+                                <button
+                                  type="button"
+                                  onClick={() => downloadFileWithWebpToJpg(previewDocImage.url, previewDocImage.name)}
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
@@ -14118,16 +14238,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     borderRadius: '8px',
                                     background: 'rgba(255, 255, 255, 0.1)',
                                     color: '#ffffff',
+                                    border: 'none',
                                     fontSize: '0.78rem',
                                     fontWeight: 600,
-                                    textDecoration: 'none',
+                                    cursor: 'pointer',
                                     transition: 'all 0.15s ease'
                                   }}
-                                  title="Tải về máy"
+                                  title="Tải về máy (tự động chuyển sang JPG)"
                                 >
                                   <Upload size={13} style={{ transform: 'rotate(180deg)' }} />
                                   <span>Tải về</span>
-                                </a>
+                                </button>
                                 <button
                                   onClick={() => setPreviewDocImage(null)}
                                   style={{
@@ -15104,6 +15225,240 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     </>
                   )}
 
+                  {/* Người nhận thông báo chuyển bước (Notification Recipients) */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label className="form-label" style={{ fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Bell size={14} style={{ color: 'var(--color-primary)' }} />
+                        <span>Người nhận thông báo chuyển bước</span>
+                      </label>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                        {(pipelineModal.notifyUserIds || []).length} người nhận
+                      </span>
+                    </div>
+
+                    {/* Danh sách người nhận đã chọn */}
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      padding: '8px',
+                      background: 'var(--color-bg-alt, rgba(0,0,0,0.02))',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border-light)',
+                      minHeight: '42px',
+                      alignItems: 'center',
+                      marginBottom: '6px'
+                    }}>
+                      {(pipelineModal.notifyUserIds || []).length === 0 ? (
+                        <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>
+                          Chưa chọn người nhận thông báo nào (chọn từ danh sách bên dưới)
+                        </span>
+                      ) : (
+                        (pipelineModal.notifyUserIds || []).map((uid: number) => {
+                          const u = users.find((x: any) => Number(x.id) === Number(uid));
+                          const uName = u?.full_name || u?.name || `ID ${uid}`;
+                          const uRole = u?.role ? (u.job_title || u.role) : '';
+                          return (
+                            <span
+                              key={uid}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '3px 8px',
+                                borderRadius: '16px',
+                                background: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                color: 'var(--color-text)',
+                                boxShadow: 'var(--shadow-xs)'
+                              }}
+                            >
+                              <Avatar name={uName} size={20} />
+                              <span>{uName}</span>
+                              {uRole && (
+                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>
+                                  ({uRole})
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPipelineModal({
+                                    ...pipelineModal,
+                                    notifyUserIds: (pipelineModal.notifyUserIds || []).filter(id => id !== uid)
+                                  });
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '1px',
+                                  color: 'var(--color-text-muted)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  borderRadius: '50%'
+                                }}
+                                title="Xóa người nhận này"
+                              >
+                                <X size={13} />
+                              </button>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Thêm người nhận từ dropdown tùy chỉnh đẹp mắt */}
+                    <div style={{ position: 'relative' }} ref={notifyUserDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNotifyUserDropdown(prev => !prev);
+                          setNotifyUserSearch('');
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          color: 'var(--color-primary)',
+                          background: 'rgba(189, 29, 45, 0.06)',
+                          border: '1px solid rgba(189, 29, 45, 0.25)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        className="hover-lift"
+                      >
+                        <UserPlus size={14} />
+                        <span>+ Thêm nhân sự nhận thông báo...</span>
+                        <ChevronDown size={14} style={{ transform: showNotifyUserDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                      </button>
+
+                      {showNotifyUserDropdown && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 6px)',
+                            left: 0,
+                            zIndex: 99999,
+                            background: 'var(--color-surface, #ffffff)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                            minWidth: '280px',
+                            maxWidth: '360px',
+                            maxHeight: '280px',
+                            overflowY: 'auto',
+                            padding: '8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }}
+                        >
+                          <div style={{ position: 'sticky', top: 0, background: 'var(--color-surface, #ffffff)', zIndex: 10, paddingBottom: '6px' }}>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+                              <input
+                                type="text"
+                                placeholder="Tìm nhân sự..."
+                                value={notifyUserSearch}
+                                onChange={(e) => setNotifyUserSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px 6px 26px',
+                                  fontSize: '0.75rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--color-border)',
+                                  background: 'var(--color-bg)',
+                                  color: 'var(--color-text)',
+                                  outline: 'none',
+                                  boxSizing: 'border-box'
+                                }}
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+
+                          {(() => {
+                            const query = notifyUserSearch.trim().toLowerCase();
+                            const filteredUsers = users.filter((u: any) => {
+                              if (!query) return true;
+                              const fullName = (u.full_name || u.name || '').toLowerCase();
+                              const email = (u.email || '').toLowerCase();
+                              const title = (u.job_title || u.role || '').toLowerCase();
+                              return fullName.includes(query) || email.includes(query) || title.includes(query);
+                            });
+
+                            if (filteredUsers.length === 0) {
+                              return (
+                                <div style={{ textAlign: 'center', padding: '12px 6px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                  Không tìm thấy nhân sự
+                                </div>
+                              );
+                            }
+
+                            return filteredUsers.map((u: any) => {
+                              const isSelected = (pipelineModal.notifyUserIds || []).includes(Number(u.id));
+                              const uName = u.full_name || u.name || `User #${u.id}`;
+                              const uRole = u.job_title || u.role || '';
+                              return (
+                                <div
+                                  key={u.id}
+                                  onClick={() => {
+                                    const uid = Number(u.id);
+                                    const currentList = pipelineModal.notifyUserIds || [];
+                                    const nextList = isSelected
+                                      ? currentList.filter(id => id !== uid)
+                                      : [...currentList, uid];
+                                    setPipelineModal({ ...pipelineModal, notifyUserIds: nextList });
+                                  }}
+                                  style={{
+                                    padding: '6px 8px',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: isSelected ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
+                                    color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                                    fontWeight: isSelected ? 600 : 400,
+                                    transition: 'background 0.15s ease'
+                                  }}
+                                  className="hover-bg-alt"
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                    <Avatar src={u.avatar || u.avatar_url} name={uName} size={22} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                        {uName}
+                                      </span>
+                                      {uRole && (
+                                        <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {uRole} {u.email ? `• ${u.email}` : ''}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <Check size={14} color="var(--color-primary)" strokeWidth={2.5} style={{ flexShrink: 0, marginLeft: '6px' }} />
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Note / Audit Trail (Always Available & Mandatory) */}
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
@@ -15292,7 +15647,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           lost_reason: pipelineModal.leadStatus === 'lost' ? pipelineModal.lostReason : null,
                           from_stage_name: formData.stage_name || '',
                           to_stage_name: targetLabel,
-                          note: note || ''
+                          note: note || '',
+                          notify_user_ids: pipelineModal.notifyUserIds || []
                         });
 
                         await fetchData(activeTab || 'timeline', true, effectiveContactId);
@@ -15433,143 +15789,20 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             }}
             users={users}
             zIndex={zIndex ? zIndex + 100 : undefined}
+            onOpenContact={(cid) => {
+              setSelectedTaskForDetails(null);
+              if (cid && String(cid) !== String(effectiveContactId || contact?.id)) {
+                window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+                  detail: { id: cid, contactId: cid }
+                }));
+              }
+            }}
           />
         </Suspense>
       )}
 
 {/* CREATE TICKET MODAL */}
-      <AnimatePresence>
-        {showQuickTaskModal && (
-          <div className="overlay-backdrop" style={{ zIndex: 1000030 }} onClick={() => setShowQuickTaskModal(false)}>
-            <motion.div
-              className="modal-sheet"
-              style={{ width: '100%', maxWidth: 480 }}
-              initial={{ opacity: 0, scale: 0.95, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 16 }}
-              transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <CheckSquare size={20} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontWeight: 800 }}>Tạo công việc nhanh</h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>Tạo lịch nhắc nhở gọi lại hoặc gặp mặt</p>
-                  </div>
-                </div>
-                <button className="btn-icon sm" onClick={() => setShowQuickTaskModal(false)}><X size={18} /></button>
-              </div>
 
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Loại công việc / Tiêu đề *</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                    {['Gọi lại khách hàng', 'Gặp mặt tư vấn', 'Gửi tài liệu/báo giá', 'Khác'].map(subj => (
-                      <button
-                        key={subj}
-                        type="button"
-                        onClick={() => {
-                          setQuickTaskSubject(subj);
-                          if (subj !== 'Khác') setQuickTaskCustomSubject('');
-                        }}
-                        className={`btn sm ${quickTaskSubject === subj ? 'primary' : 'outline'}`}
-                        style={{ borderRadius: '8px', fontSize: '0.75rem', padding: '4px 10px' }}
-                      >
-                        {subj}
-                      </button>
-                    ))}
-                  </div>
-                  {quickTaskSubject === 'Khác' && (
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Nhập tiêu đề công việc..."
-                      value={quickTaskCustomSubject}
-                      onChange={e => setQuickTaskCustomSubject(e.target.value)}
-                      style={{ fontSize: '0.85rem' }}
-                    />
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Hạn hoàn thành *</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                    {[
-                      { value: 'tomorrow', label: 'Ngày mai' },
-                      { value: 'day_after', label: 'Ngày kia' },
-                      { value: 'today', label: 'Hôm nay' },
-                      { value: 'custom', label: 'Chọn ngày khác' }
-                    ].map(item => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => setQuickTaskDateType(item.value)}
-                        className={`btn sm ${quickTaskDateType === item.value ? 'primary' : 'outline'}`}
-                        style={{ borderRadius: '8px', fontSize: '0.75rem', padding: '4px 10px' }}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  {quickTaskDateType === 'custom' && (
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={quickTaskCustomDate}
-                      onChange={e => setQuickTaskCustomDate(e.target.value)}
-                      style={{ fontSize: '0.85rem' }}
-                    />
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Người thực hiện</label>
-                  <CustomSelect
-                    options={users.map(u => ({
-                      value: String(u.id),
-                      label: u.full_name,
-                      avatar: u.avatar_url,
-                      sublabel: u.role
-                    }))}
-                    value={quickTaskAssigneeId}
-                    onChange={val => setQuickTaskAssigneeId(String(val))}
-                    placeholder="Chọn nhân sự thực hiện..."
-                    searchable
-                    showAvatars
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 700 }}>Ghi chú / Chi tiết (Không bắt buộc)</label>
-                  <textarea
-                    className="form-control"
-                    rows={3}
-                    placeholder="Nhập nội dung cần ghi chú khi làm việc..."
-                    value={quickTaskDescription}
-                    onChange={e => setQuickTaskDescription(e.target.value)}
-                    style={{ fontSize: '0.85rem', resize: 'vertical' }}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
-                <button type="button" className="btn outline" onClick={() => setShowQuickTaskModal(false)}>Hủy</button>
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={handleSaveQuickTask}
-                  disabled={savingQuickTask}
-                >
-                  {savingQuickTask ? 'Đang tạo...' : 'Tạo công việc'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {showTicketModal && (

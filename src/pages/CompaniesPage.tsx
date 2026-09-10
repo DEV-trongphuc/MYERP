@@ -13,6 +13,7 @@ import { PhoneLink } from '../components/ui/PhoneLink';
 import { useDebounce } from '../hooks/useDebounce';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { EmptyCard } from '../components/ui/EmptyCard';
+import { canEditPartnerOrSupplier, isSales } from '../utils/roleUtils';
 
 const STATUSES = ['active', 'inactive', 'prospect'];
 const ST_LABEL: Record<string, string> = { active: 'Hoạt động', inactive: 'Ngừng', prospect: 'Tiềm năng' };
@@ -21,9 +22,8 @@ const PAGE_SIZE = 10;
 
 export const CompaniesPage: React.FC = () => {
   const { user } = useAuth();
-  const userRole = (user?.role || '').toLowerCase();
-  const canEdit = ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'assistant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'accountant', 'ke_toan'].includes(userRole);
-  const isSale = ['sale', 'sales'].includes(userRole);
+  const canEdit = canEditPartnerOrSupplier(user);
+  const isSale = isSales(user);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);

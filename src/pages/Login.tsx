@@ -7,6 +7,7 @@ import { fetchAPI } from '../utils/api';
 import toast from 'react-hot-toast';
 import { CustomModal } from '../components/ui/CustomModal';
 import { DigitPinInput } from '../components/ui/DigitPinInput';
+import { getDefaultRouteByRole } from '../utils/roleUtils';
 
 export const Login = () => {
   const { t } = useLanguage();
@@ -57,7 +58,7 @@ export const Login = () => {
           (window as any).showSplashScreen('Đang đăng nhập...');
         }
         const userRole = json.user?.role || '';
-        const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
+        const targetPath = getDefaultRouteByRole(userRole);
         login(json.token, json.user, json.refresh_token);
         navigate(targetPath);
       } else {
@@ -164,7 +165,7 @@ export const Login = () => {
             (window as any).showSplashScreen('Đang tải dữ liệu...');
           }
           const userRole = res.data.user?.role || '';
-          const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
+          const targetPath = getDefaultRouteByRole(userRole);
           login(res.data.access_token, res.data.user, res.data.refresh_token);
           navigate(targetPath);
         }
@@ -197,7 +198,7 @@ export const Login = () => {
           (window as any).showSplashScreen('Đang tải dữ liệu...');
         }
         const userRole = res.data.user?.role || '';
-        const targetPath = ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'].includes(userRole) ? '/workspace' : '/';
+        const targetPath = getDefaultRouteByRole(userRole);
         login(res.data.access_token, res.data.user, res.data.refresh_token);
         setShow2FAModal(false);
         navigate(targetPath);

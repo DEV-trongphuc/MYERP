@@ -18,6 +18,7 @@ import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import { useUIStore } from '../store/uiStore';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { motion } from 'framer-motion';
+import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as checkCanApproveShifts, isRegularEmployee } from '../utils/roleUtils';
 
 const resolveAttachmentUrl = (path: string | null | undefined): string => {
   if (!path) return '';
@@ -56,10 +57,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [sysSettings, setSysSettings] = useState<any>(null);
   const managerBehaviorMode = user?.manager_behavior_mode || 'combined';
-  const isSales = user?.role && ['sale', 'sales', 'marketing', 'employee'].includes(user.role.toLowerCase());
-  const canSelectUser = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'manager', 'hr', 'accountant'].includes(user?.role || '');
-  const canApprove = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'hr', 'accountant'].includes(user?.role || '') || (user?.role === 'manager' && managerBehaviorMode === 'pure');
-  const canApproveShifts = ['admin', 'superadmin', 'super_admin', 'director', 'assistant', 'hr'].includes(user?.role || '') || (user?.role === 'manager' && managerBehaviorMode === 'pure');
+  const canSelectUser = canSelectAttendanceUser(user);
+  const isSales = isRegularEmployee(user);
+  const canApprove = canApproveAttendance(user);
+  const canApproveShifts = checkCanApproveShifts(user);
   useEffect(() => {
     fetchAPI('get_settings').then(res => {
       if (res && res.success) {
@@ -229,9 +230,28 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       String(u.role).toLowerCase() === 'accountant'
     );
 
-    // 4. First priority: Team Leader from teams table
+    // 4. First priority: Team Leader from teams table or specific department mapping
     let teamLeader = null;
-    if (userTeamId && activeTeams.length > 0) {
+    const userEmail = (currentUserInList?.email || user?.email || '').toLowerCase();
+    const userDept = (currentUserInList?.department || (user as any)?.department || '').toLowerCase();
+
+    if (userEmail === 'nganph@ideas.edu.vn' || userDept.includes('học vụ') || userDept.includes('học thuật')) {
+      const tramLeader = list.find((u: any) =>
+        u.email === 'tramlth@ideas.edu.vn' ||
+        u.username === 'tramlth' ||
+        String(u.full_name || u.name || '').toLowerCase().includes('huyền trâm') ||
+        Number(u.id) === 100073
+      );
+      if (tramLeader && Number(tramLeader.id) !== Number(currentUserId)) {
+        teamLeader = tramLeader;
+      }
+    } else if (userEmail === 'cuongnph@ideas.edu.vn' || userDept.includes('hành chính') || userDept.includes('nhân sự')) {
+      if (hrDuyPhuong && Number(hrDuyPhuong.id) !== Number(currentUserId)) {
+        teamLeader = hrDuyPhuong;
+      }
+    }
+
+    if (!teamLeader && userTeamId && activeTeams.length > 0) {
       const myTeam = activeTeams.find((t: any) => Number(t.id) === Number(userTeamId));
       if (myTeam && myTeam.leader_id && Number(myTeam.leader_id) !== Number(currentUserId)) {
         teamLeader = list.find((u: any) => Number(u.id) === Number(myTeam.leader_id));
@@ -250,7 +270,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     );
 
     // Level 1: Team Leader / Manager; if user is leader or no manager, fallback to Director / Admin
-    const defaultApprover1 = teamManager || directorOrAdmin || hrDuyPhuong || approvers[0];
+    const defaultApprover1 = teamLeader || teamManager || directorOrAdmin || hrDuyPhuong || approvers[0];
 
     // Level 2: Chỉ áp dụng cho tăng ca (overtime). Với nghỉ phép / đi muộn / WFH: Người duyệt 2 không cần, Duy Phương bên dưới liên quan theo dõi
     let defaultApprover2: any = null;
@@ -464,9 +484,19 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [customRange, setCustomRange] = useState<DateRange>(() => {
     return getDateRange('7d');
   });
-  const [filterUser, setFilterUser] = useState<string>(isSales ? String(user?.id) : 'all');
+  const [filterUser, setFilterUser] = useState<string>((!canSelectUser || isSales) && user?.id ? String(user.id) : 'all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const isViewingSelf = Boolean(user?.id) && String(filterUser) === String(user?.id);
+
+  // Automatically ensure employees without full selection privileges always view their own calendar
+  useEffect(() => {
+    if (user?.id && (!canSelectUser || isSales)) {
+      const currentParam = new URLSearchParams(location.search).get('user_id');
+      if (!currentParam) {
+        setFilterUser(String(user.id));
+      }
+    }
+  }, [user?.id, canSelectUser, isSales, location.search]);
 
   const userSelectOptions = useMemo(() => {
     const opts: Array<{ value: string; label: string; avatar?: string }> = [
@@ -3844,16 +3874,19 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   ref={relatedDropdownRef}
                   style={{
                     position: 'absolute',
-                    top: '100%',
+                    top: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 'auto' : '100%',
+                    bottom: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 'calc(100% + 6px)' : 'auto',
                     left: 0,
-                    marginTop: '6px',
+                    marginTop: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 0 : '6px',
+                    marginBottom: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? '6px' : 0,
                     zIndex: 9999,
                     background: 'var(--color-surface)',
                     border: '1px solid var(--color-border-light)',
                     borderRadius: '12px',
-                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.18)',
+                    boxShadow: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? '0 -10px 25px rgba(0, 0, 0, 0.18)' : '0 10px 25px rgba(0, 0, 0, 0.18)',
                     minWidth: '240px',
-                    maxHeight: '280px',
+                    maxWidth: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 'calc(100vw - 32px)' : '320px',
+                    maxHeight: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? '250px' : '280px',
                     overflowY: 'auto',
                     padding: '8px',
                     display: 'flex',

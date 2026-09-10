@@ -5749,17 +5749,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               minWidth: isMobile ? '100%' : '260px',
               boxSizing: 'border-box'
             }}>
-              <Search 
-                size={14} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '10px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)', 
-                  color: 'var(--color-text-muted)', 
-                  pointerEvents: 'none' 
-                }} 
-              />
               <input
                 type="text"
                 className="form-input"
@@ -5769,13 +5758,24 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 style={{ 
                   height: '34px', 
                   fontSize: '0.8rem', 
-                  padding: '4px 10px 4px 30px', 
+                  padding: wsSearch ? '4px 48px 4px 12px' : '4px 30px 4px 12px', 
                   borderRadius: '8px', 
                   width: '100%',
                   boxSizing: 'border-box',
                   border: '1px solid var(--color-border)',
                   background: 'var(--color-surface)'
                 }}
+              />
+              <Search 
+                size={14} 
+                style={{ 
+                  position: 'absolute', 
+                  right: wsSearch ? '28px' : '10px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  color: 'var(--color-text-muted)', 
+                  pointerEvents: 'none' 
+                }} 
               />
               {wsSearch && (
                 <button

@@ -151,12 +151,16 @@
     padding: 0 !important;
     margin: 0 !important;
     bottom: 0 !important;
-    height: 100vh !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 100dvh !important;
+    height: -webkit-fill-available !important;
   }
   .modal {
-    height: 92dvh !important;
-    max-height: 92dvh !important;
-    min-height: 92dvh !important;
+    height: 96dvh !important;
+    max-height: 96dvh !important;
+    min-height: 96dvh !important;
     border-radius: 20px 20px 0 0 !important;
     border-left: none !important;
     border-right: none !important;
@@ -166,7 +170,7 @@
     margin: 0 !important;
     margin-bottom: 0 !important;
     bottom: 0 !important;
-    padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 24px) !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 8px) !important;
   }
   .modal.fullScreenMobile {
     height: 100dvh !important;
@@ -181,7 +185,7 @@
     display: none !important;
   }
   .content {
-    padding: 20px 20px calc(env(safe-area-inset-bottom, 20px) + 75px) 20px !important;
+    padding: 20px 20px calc(env(safe-area-inset-bottom, 20px) + 30px) 20px !important;
   }
   .header {
     padding: 10px 20px 14px !important;
@@ -193,7 +197,7 @@
 
 @media (max-width: 576px) {
   .content {
-    padding: 16px 16px calc(env(safe-area-inset-bottom, 20px) + 75px) 16px !important;
+    padding: 16px 16px calc(env(safe-area-inset-bottom, 20px) + 24px) 16px !important;
   }
   .header {
     padding: 8px 16px 12px !important;
@@ -202,7 +206,7 @@
 
 @media (max-width: 480px) {
   .content {
-    padding: 12px 12px calc(env(safe-area-inset-bottom, 20px) + 75px) 12px !important;
+    padding: 14px 14px calc(env(safe-area-inset-bottom, 20px) + 20px) 14px !important;
   }
   .header {
     padding: 6px 12px 10px !important;

@@ -21,13 +21,21 @@ assertTest("Sale Admin stage setting exists or default is valid", $saleAdminStag
 assertTest("Accountant stage setting exists or default is valid", $accountantStage === null || is_string($accountantStage));
 
 // 2. Chạy thử câu truy vấn danh sách trạng thái để xem thứ tự order_index
-$stagesQuery = "SELECT system_slug, name, order_index FROM pipeline_stages ORDER BY order_index ASC";
+$stagesQuery = "SELECT id, system_slug, name, order_index FROM pipeline_stages ORDER BY order_index ASC";
 $stagesRes = $conn->query($stagesQuery);
 $stages = [];
 while ($row = $stagesRes->fetch_assoc()) {
     $stages[$row['system_slug']] = (int)$row['order_index'];
-    echo "  -> Stage: {$row['system_slug']} (Tên: {$row['name']}, Thứ tự: {$row['order_index']})\n";
+    echo "  -> Stage ID: {$row['id']} | Slug: {$row['system_slug']} | Tên: {$row['name']} | Thứ tự: {$row['order_index']}\n";
 }
+
+echo "\n--- Phân bố status của stage 44 (enrolled) ---\n";
+$st44 = $conn->query("SELECT status, COUNT(*) as cnt FROM contacts WHERE stage_id = 44 GROUP BY status");
+while ($r = $st44->fetch_assoc()) {
+    echo "  -> status: " . var_export($r['status'], true) . " => COUNT: {$r['cnt']}\n";
+}
+
+
 
 $saleAdminSlug = $saleAdminStage ?? 'nop_ho_so';
 $accountantSlug = $accountantStage ?? 'dong_le_phi_ho_so';
