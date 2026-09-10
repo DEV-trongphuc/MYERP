@@ -135,11 +135,13 @@ class CompanyController {
 
     public function store(array $auth): void {
         $scope = $this->getScope($auth, 'write');
-        if ($scope === 'none') {
+        $b = getBody();
+        $isSale = in_array(strtolower($auth['role'] ?? ''), ['sale', 'sales', 'sale_admin', 'saleadmin'], true);
+        $isReferrer = ($b['tier'] ?? '') === 'referrer';
+        if ($scope === 'none' && !($isSale && $isReferrer)) {
             respond(403, null, 'Bạn không có quyền thêm đối tác mới', false);
         }
 
-        $b = getBody();
         if (empty($b['name'])) respond(422, null, 'Tên đại lý/đối tác là bắt buộc', false);
         // Verify stage belongs to tenant
         $stageId = $b['stage_id'] ?? null;
@@ -154,9 +156,13 @@ class CompanyController {
         }
 
         // Check duplicate name
-        $checkName = $this->db->prepare("SELECT id FROM companies WHERE tenant_id=? AND name=? AND deleted_at IS NULL LIMIT 1");
+        $checkName = $this->db->prepare("SELECT id, name FROM companies WHERE tenant_id=? AND name=? AND deleted_at IS NULL LIMIT 1");
         $checkName->execute([$auth['tenant_id'], $b['name']]);
-        if ($checkName->fetch()) {
+        $existingComp = $checkName->fetch(PDO::FETCH_ASSOC);
+        if ($existingComp) {
+            if ($isReferrer) {
+                respond(200, $existingComp, "Đã liên kết người giới thiệu '{$b['name']}'.", true);
+            }
             respond(409, null, "Tên đại lý/đối tác '{$b['name']}' đã tồn tại trong hệ thống.", false);
         }
 

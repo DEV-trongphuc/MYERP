@@ -2783,7 +2783,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       const res = await api.get(`/contacts`, {
         params: {
           search: searchQuery.trim(),
-          limit: 30
+          limit: 30,
+          is_referrer_lookup: 1
         }
       });
       setContactsList(res.data.data?.items || res.data.data || []);
@@ -10453,7 +10454,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </div>
                           </div>
                           
-                          {/* Toggle Nguồn khách đối tác */}
+                          {/* Toggle Nguồn giới thiệu */}
                           <div style={{ 
                             display: 'flex', 
                             alignItems: 'center', 
@@ -10466,10 +10467,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <span style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                {t('Nguồn khách đối tác')}
+                                {t('Nguồn giới thiệu')}
                               </span>
                               <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
-                                {t('Khách hàng đến từ CTV hoặc Đại lý đối tác')}
+                                {t('Khách hàng đến từ Người giới thiệu, CTV hoặc Đối tác')}
                               </span>
                             </div>
                             <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px' }}>
@@ -10488,6 +10489,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   } else {
                                     setFormData((prev: any) => ({
                                       ...prev,
+                                      source: prev.source || 'gioi_thieu',
                                       company_id: '',
                                       company_name: ''
                                     }));
@@ -10524,21 +10526,21 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                           <div className="form-group">
                             <label className="form-label">
-                              {isPartnerSource ? t('Đối tác / CTV chăm sóc (Nguồn đối tác)') : t('Người đang chăm sóc (Sale)')}
+                              {isPartnerSource ? t('Người giới thiệu / Đối tác / CTV') : t('Người đang chăm sóc (Sale)')}
                             </label>
                             {isPartnerSource ? (
-                              currentUser?.role === 'sale' ? (
+                              isViewer ? (
                                 <div 
                                   style={{ padding: '8px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '8px', fontSize: '0.875rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}
                                 >
-                                  <span>{formData.company_name || t('Chưa liên kết đối tác')}</span>
+                                  <span>{formData.company_name || t('Chưa liên kết người giới thiệu')}</span>
                                 </div>
                               ) : (
                                 <CustomSelect
                                   options={referrerOptions}
                                   value={formData.company_id || ''}
                                   onChange={handleSelectReferrer}
-                                  placeholder={t('Chọn đối tác / CTV phụ trách...')}
+                                  placeholder={t('Chọn người giới thiệu / đối tác / CTV...')}
                                   searchable
                                   showAvatars={true}
                                   onSearchChange={handleSearchContacts}

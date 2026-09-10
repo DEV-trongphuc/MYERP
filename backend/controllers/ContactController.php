@@ -115,48 +115,53 @@ class ContactController {
             }
         }
 
-        $scope = $this->getScope($auth, 'leads', 'read');
-        if ($scope === 'all') {
-            // No filters
-        } else if ($scope === 'team' || $scope === 'own') {
-            $teamMemberIds = [$auth['user_id']];
-            if ($scope === 'team') {
-                $stmtTeam = $this->db->prepare("
-                    SELECT id FROM users 
-                    WHERE team_id IN (
-                        SELECT id FROM teams 
-                        WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
-                    ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
-                ");
-                $stmtTeam->execute([$auth['user_id'], $auth['user_id']]);
-                $fetchedIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN);
-                if ($fetchedIds) {
-                    foreach ($fetchedIds as $fid) {
-                        $teamMemberIds[] = (int)$fid;
-                    }
-                }
-                $teamMemberIds = array_unique($teamMemberIds);
-            }
-
-            $idsClause = implode(',', $teamMemberIds);
-            
-            $collabChecks = [];
-            foreach ($teamMemberIds as $id) {
-                $collabChecks[] = "FIND_IN_SET(" . (int)$id . ", c.collaborator_ids)";
-            }
-            $collabClause = implode(' OR ', $collabChecks);
-            
-            $coopChecks = [];
-            foreach ($teamMemberIds as $id) {
-                $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$id . " AS CHAR)))";
-            }
-            $coopClause = implode(' OR ', $coopChecks);
-
-            $where[] = "(c.owner_id IN ($idsClause) OR c.created_by IN ($idsClause) OR ($collabClause) OR c.id IN (
-                SELECT contact_id FROM cooperation_slips WHERE $coopClause
-            ))";
+        $isReferrerLookup = !empty($_GET['is_referrer_lookup']) || (!empty($_GET['mode']) && $_GET['mode'] === 'referrer');
+        if ($isReferrerLookup) {
+            // Allow tenant-wide search for linking existing contacts as referrers
         } else {
-            $where[] = '1=0';
+            $scope = $this->getScope($auth, 'leads', 'read');
+            if ($scope === 'all') {
+                // No filters
+            } else if ($scope === 'team' || $scope === 'own') {
+                $teamMemberIds = [$auth['user_id']];
+                if ($scope === 'team') {
+                    $stmtTeam = $this->db->prepare("
+                        SELECT id FROM users 
+                        WHERE team_id IN (
+                            SELECT id FROM teams 
+                            WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                        ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+                    ");
+                    $stmtTeam->execute([$auth['user_id'], $auth['user_id']]);
+                    $fetchedIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN);
+                    if ($fetchedIds) {
+                        foreach ($fetchedIds as $fid) {
+                            $teamMemberIds[] = (int)$fid;
+                        }
+                    }
+                    $teamMemberIds = array_unique($teamMemberIds);
+                }
+
+                $idsClause = implode(',', $teamMemberIds);
+                
+                $collabChecks = [];
+                foreach ($teamMemberIds as $id) {
+                    $collabChecks[] = "FIND_IN_SET(" . (int)$id . ", c.collaborator_ids)";
+                }
+                $collabClause = implode(' OR ', $collabChecks);
+                
+                $coopChecks = [];
+                foreach ($teamMemberIds as $id) {
+                    $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$id . " AS CHAR)))";
+                }
+                $coopClause = implode(' OR ', $coopChecks);
+
+                $where[] = "(c.owner_id IN ($idsClause) OR c.created_by IN ($idsClause) OR ($collabClause) OR c.id IN (
+                    SELECT contact_id FROM cooperation_slips WHERE $coopClause
+                ))";
+            } else {
+                $where[] = '1=0';
+            }
         }
 
         if ($search !== '') {
@@ -798,6 +803,12 @@ class ContactController {
     }
 
     private function resolveCompanyId(array $auth, array $b): ?int {
+        if (!empty($b['company_id'])) {
+            $stmt = $this->db->prepare("SELECT id FROM companies WHERE tenant_id=? AND id=? AND deleted_at IS NULL");
+            $stmt->execute([$auth['tenant_id'], (int)$b['company_id']]);
+            $id = $stmt->fetchColumn();
+            if ($id) return (int)$id;
+        }
         $name = isset($b['company_name']) ? trim($b['company_name']) : '';
         if ($name !== '') {
             $stmt = $this->db->prepare("SELECT id FROM companies WHERE tenant_id=? AND name=?");
@@ -805,11 +816,10 @@ class ContactController {
             $id = $stmt->fetchColumn();
             if ($id) return (int)$id;
             
-            $stmt = $this->db->prepare("INSERT INTO companies (tenant_id, name, owner_id, created_by) VALUES (?, ?, ?, ?)");
+            $stmt = $this->db->prepare("INSERT INTO companies (tenant_id, name, owner_id, created_by, tier) VALUES (?, ?, ?, ?, 'referrer')");
             $stmt->execute([$auth['tenant_id'], $name, $auth['user_id'], $auth['user_id']]);
             return (int)$this->db->lastInsertId();
         }
-        if (!empty($b['company_id'])) return (int)$b['company_id'];
         return null;
     }
 
