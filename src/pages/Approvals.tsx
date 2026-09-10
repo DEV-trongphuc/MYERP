@@ -9163,11 +9163,6 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const isSuperAdmin = isExecutive(user);
     const isHrAdmin = isHR(user, true);
 
-    // CRITICAL SECURITY & BUSINESS RULE: The creator can NEVER approve their own proposal!
-    const creatorId = Number(detail?.user_id || detail?.created_by || item.user_id || (item as any)?.created_by || 0);
-    if (creatorId > 0 && creatorId === userId) {
-      return false;
-    }
 
     if (item.type === 'expense') {
       const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();

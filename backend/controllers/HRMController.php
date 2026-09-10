@@ -497,15 +497,15 @@ class HRMController {
             respond(404, null, 'Yêu cầu nghỉ phép không tồn tại', false);
         }
 
-        $isCreator = ((int)$auth['user_id'] === (int)$leaveRow['user_id']);
-        if ($isCreator) {
-            respond(403, null, 'Người tạo đơn không được tự phê duyệt đề xuất của chính mình', false);
-        }
-
         $isApprover1 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id']);
         $isApprover2 = ((int)$auth['user_id'] === (int)$leaveRow['approver_id_2']);
         $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
-        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
+        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
+
+        $isCreator = ((int)$auth['user_id'] === (int)$leaveRow['user_id']);
+        if ($isCreator && !$isApprover1 && !$isApprover2 && !$isPrivileged) {
+            respond(403, null, 'Người tạo đơn không được tự phê duyệt đề xuất của chính mình', false);
+        }
 
         if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
@@ -614,12 +614,24 @@ class HRMController {
                 $profStmt->execute([$userId]);
                 $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
                 
-                $remComp = 0.0;
-                $remAnnual = 0.0;
-                if ($profile) {
-                    $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
-                    $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
+                if (!$profile) {
+                    try {
+                        $this->db->prepare("
+                            INSERT INTO hrm_profiles (user_id, joined_date, annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used)
+                            VALUES (?, CURDATE(), 12.0, 0.0, 0.0, 0.0)
+                            ON DUPLICATE KEY UPDATE annual_leave_total = COALESCE(annual_leave_total, 12.0)
+                        ")->execute([$userId]);
+                    } catch (\Throwable $eProf) {}
+                    $profile = [
+                        'annual_leave_total' => 12.0,
+                        'annual_leave_used' => 0.0,
+                        'compensatory_leave_total' => 0.0,
+                        'compensatory_leave_used' => 0.0
+                    ];
                 }
+
+                $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
+                $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
                 
                 $deductComp = min($days, $remComp);
                 $deductAnnual = min(max(0.0, $days - $deductComp), $remAnnual);
@@ -664,12 +676,24 @@ class HRMController {
                     $profStmt->execute([$userId]);
                     $profile = $profStmt->fetch(PDO::FETCH_ASSOC);
                     
-                    $remComp = 0.0;
-                    $remAnnual = 0.0;
-                    if ($profile) {
-                        $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
-                        $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
+                    if (!$profile) {
+                        try {
+                            $this->db->prepare("
+                                INSERT INTO hrm_profiles (user_id, joined_date, annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used)
+                                VALUES (?, CURDATE(), 12.0, 0.0, 0.0, 0.0)
+                                ON DUPLICATE KEY UPDATE annual_leave_total = COALESCE(annual_leave_total, 12.0)
+                            ")->execute([$userId]);
+                        } catch (\Throwable $eProf) {}
+                        $profile = [
+                            'annual_leave_total' => 12.0,
+                            'annual_leave_used' => 0.0,
+                            'compensatory_leave_total' => 0.0,
+                            'compensatory_leave_used' => 0.0
+                        ];
                     }
+
+                    $remComp = max(0.0, (float)$profile['compensatory_leave_total'] - (float)$profile['compensatory_leave_used']);
+                    $remAnnual = max(0.0, (float)$profile['annual_leave_total'] - (float)$profile['annual_leave_used']);
                     
                     $deductComp = min($overQuotaDays, $remComp);
                     $remOverAfterComp = $overQuotaDays - $deductComp;
@@ -959,16 +983,17 @@ class HRMController {
             respond(404, null, 'Yêu cầu tạm ứng không tồn tại', false);
         }
 
+        $isApprover1 = ((int)$auth['user_id'] === (int)$advRow['approver_id']);
+        $isApprover2 = ((int)$auth['user_id'] === (int)$advRow['approver_id_2']);
+        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
+
         $isCreator = ((int)$auth['user_id'] === (int)$advRow['user_id']);
-        if ($isCreator) {
+        if ($isCreator && !$isApprover1 && !$isApprover2 && !$isPrivileged) {
             respond(403, null, 'Người tạo đề xuất không được tự phê duyệt đề xuất của chính mình', false);
         }
 
-        $isApprover1 = ((int)$auth['user_id'] === (int)$advRow['approver_id']);
-        $isApprover2 = ((int)$auth['user_id'] === (int)$advRow['approver_id_2']);
-        $isSuperAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin'], true);
-
-        if (!$isApprover1 && !$isApprover2 && !$isSuperAdmin) {
+        if (!$isApprover1 && !$isApprover2 && !$isPrivileged) {
             respond(403, null, 'Bạn không có quyền phê duyệt yêu cầu này', false);
         }
 

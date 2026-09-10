@@ -1500,14 +1500,7 @@ class CheckInController {
         // 3. Has admin/director/manager/hr role
         // 4. Is team leader of creator
         $isAssignedApprover = ((int)($req['manager_id'] ?? 0) === (int)$auth['user_id']) || ((int)($req['hr_id'] ?? 0) === (int)$auth['user_id']);
-        $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
-        if ($isCreator) {
-            respond(403, null, 'Người tạo đề xuất không được tự phê duyệt đề xuất của chính mình', false);
-            return;
-        }
-
-        $isAssignedApprover = ((int)($req['manager_id'] ?? 0) === (int)$auth['user_id']) || ((int)($req['hr_id'] ?? 0) === (int)$auth['user_id']);
-        $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
+        $isPrivileged = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'leader', 'team_lead', 'teamlead', 'marketing_lead'], true);
 
         $isTeamLeader = false;
         if (!$isAssignedApprover && !$isPrivileged) {
@@ -1522,6 +1515,12 @@ class CheckInController {
                 $stmtCheckManager->execute([$targetUserTeamId, $auth['user_id']]);
                 $isTeamLeader = (bool)$stmtCheckManager->fetch();
             }
+        }
+
+        $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
+        if ($isCreator && !$isAssignedApprover && !$isPrivileged && !$isTeamLeader) {
+            respond(403, null, 'Người tạo đề xuất không được tự phê duyệt đề xuất của chính mình', false);
+            return;
         }
 
         if (!$isAssignedApprover && !$isPrivileged && !$isTeamLeader) {

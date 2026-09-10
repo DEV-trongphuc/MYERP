@@ -3,6 +3,7 @@
 // Script to pull data from Google Sheets based on active connections
 
 require_once __DIR__ . '/db_connect.php';
+require_once __DIR__ . '/mailer.php';
 
 // Đặt thời gian thực thi không giới hạn để tránh timeout khi xử lý file lớn hoặc gửi nhiều Email/Zalo
 set_time_limit(0);

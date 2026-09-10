@@ -869,15 +869,14 @@ export const Header = ({
           overflow: 'hidden'
         }}
       >
-        {/* Left accent color pill */}
+        {/* Left accent color strip extending to rounded corners */}
         <div
           style={{
             position: 'absolute',
             left: 0,
-            top: '12px',
-            bottom: '12px',
-            width: '4px',
-            borderRadius: '0 4px 4px 0',
+            top: 0,
+            bottom: 0,
+            width: '5px',
             background: meta.leftPill || meta.badgeColor
           }}
         />

@@ -47,16 +47,24 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
   const currentHM = now.toTimeString().substring(0, 5);
   const currentDateStr = now.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
 
-  // Calculate worked duration if checkInTime is available
+  // Calculate worked duration if checkInTime is available, subtracting lunch break (12:00 -> 13:00)
   let durationStr = '';
+  let lunchBreakDeductedMin = 0;
   if (checkInTime) {
     const inParts = checkInTime.substring(0, 5).split(':').map(Number);
     if (inParts.length === 2 && !isNaN(inParts[0]) && !isNaN(inParts[1])) {
       const inTotalMin = inParts[0] * 60 + inParts[1];
       const curTotalMin = now.getHours() * 60 + now.getMinutes();
-      const diff = Math.max(0, curTotalMin - inTotalMin);
-      const h = Math.floor(diff / 60);
-      const m = diff % 60;
+
+      // Lunch break: 12:00 to 13:00 (60 minutes)
+      const lunchStartMin = 12 * 60; // 12:00 (720 min)
+      const lunchEndMin = 13 * 60;   // 13:00 (780 min)
+      const lunchOverlapMin = Math.max(0, Math.min(curTotalMin, lunchEndMin) - Math.max(inTotalMin, lunchStartMin));
+      lunchBreakDeductedMin = lunchOverlapMin;
+
+      const netDiff = Math.max(0, (curTotalMin - inTotalMin) - lunchOverlapMin);
+      const h = Math.floor(netDiff / 60);
+      const m = netDiff % 60;
       durationStr = `${h}h ${m < 10 ? '0' : ''}${m}m`;
     }
   }
@@ -415,7 +423,14 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: isEarly ? '#b45309' : '#047857', fontWeight: 600 }}>
                     <Clock size={14} />
-                    {t('Thời gian làm việc ca này:')}
+                    <span>
+                      {t('Thời gian làm việc ca này:')}
+                      {lunchBreakDeductedMin > 0 && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--color-text-muted)', marginLeft: '6px' }}>
+                          ({t('đã trừ')} {lunchBreakDeductedMin >= 60 ? `${Math.round((lunchBreakDeductedMin / 60) * 10) / 10}h` : `${lunchBreakDeductedMin}p`} {t('nghỉ trưa')})
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span style={{ fontWeight: 800, color: isEarly ? '#b45309' : '#047857' }}>
                     {durationStr}

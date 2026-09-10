@@ -167,28 +167,20 @@ class NotificationService {
                 'HOLIDAY_REGISTRATION_OPENED', 'HOLIDAY_UPDATE', 'HOLIDAY_RETURN_REMINDER', 'SYSTEM_ANNOUNCEMENT'
             ], true);
 
-            // Defer heavy external network dispatches (Zalo, Telegram, Email) to shutdown function so API responds instantly to user UI!
-            register_shutdown_function(function() use (
+            // Defer heavy external network dispatches (Zalo, Telegram, Email) to shutdown function (in Web) or execute immediately (in CLI)
+            $dispatchClosure = function() use (
                 $zaloBotToken, $zaloMsg, $zaloGroupChatId, $zaloOnlyGroup, $isAdminBroadcastEvent,
                 $tgBotToken, $tgMsg, $tgGroupChatId, $tgOnlyGroup,
                 $emailSubject, $emailTitle, $emailContent,
-                $recipients, $isChannelEnabled, $eventType
+                $recipients, $isChannelEnabled, $eventType, $db
             ) {
                 if (function_exists('fastcgi_finish_request')) {
                     @fastcgi_finish_request();
                 }
 
-                // Recreate database connection inside shutdown function using global configuration variables
-                global $servername, $username, $password, $dbname;
-                if (!empty($servername) && !empty($username)) {
-                    try {
-                        $shutdownDb = new PDO("mysql:host=$servername;dbname=$dbname;charset=utf8mb4", $username, $password, [
-                            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-                        ]);
-                        $GLOBALS['pdo'] = $shutdownDb;
-                    } catch (\Throwable $dbEx) {
-                        error_log("NotificationService Shutdown Reconnection Error: " . $dbEx->getMessage());
-                    }
+                // Ensure PDO connection is active for mailer / queue
+                if (!isset($GLOBALS['pdo']) || !$GLOBALS['pdo']) {
+                    $GLOBALS['pdo'] = $db;
                 }
 
                 // ==================== CHANNEL 2: ZALO BOT (INDEPENDENT) ====================
@@ -278,7 +270,13 @@ class NotificationService {
                 } catch (\Throwable $emEx) {
                     error_log("NotificationService Email Channel Error: " . $emEx->getMessage());
                 }
-            });
+            };
+
+            if (php_sapi_name() === 'cli') {
+                $dispatchClosure();
+            } else {
+                register_shutdown_function($dispatchClosure);
+            }
 
         } catch (\Throwable $outerEx) {
             error_log("NotificationService Global Dispatch Error: " . $outerEx->getMessage());

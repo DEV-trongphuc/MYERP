@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 252;
+$targetVersion = 253;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2804,8 +2804,26 @@ try {
         $logMsg("Nâng cấp lên phiên bản 252 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 253) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 253: Khởi tạo hrm_profiles mặc định cho toàn bộ người dùng...", "info");
+        try {
+            $conn->query("
+                INSERT INTO hrm_profiles (user_id, joined_date, annual_leave_total, annual_leave_used, compensatory_leave_total, compensatory_leave_used)
+                SELECT id, CURDATE(), 12.0, 0.0, 0.0, 0.0
+                FROM users u
+                WHERE NOT EXISTS (SELECT 1 FROM hrm_profiles p WHERE p.user_id = u.id)
+            ");
+            $conn->query("UPDATE hrm_leave_requests SET unpaid_days = 0.0, reason = 'Em off phép ạ [Khấu trừ thực tế: -1 ngày phép năm]' WHERE id = 17 AND unpaid_days > 0");
+            $conn->query("UPDATE hrm_profiles SET annual_leave_used = 1.0 WHERE user_id = 100071 AND annual_leave_used = 0.0");
+            $logMsg("Đã khởi tạo hrm_profiles thành công cho người dùng thiếu hồ sơ.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 253: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 253 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '252') ON DUPLICATE KEY UPDATE setting_value = '252'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '253') ON DUPLICATE KEY UPDATE setting_value = '253'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 
