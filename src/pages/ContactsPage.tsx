@@ -1580,7 +1580,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
             onMouseUp={handlePipelineMouseUp}
             onMouseMove={handlePipelineMouseMove}
             onWheel={handlePipelineWheel}
-            className="custom-scrollbar"
+            className="no-scrollbar"
             style={{
               display: 'flex',
               flexWrap: 'nowrap',
@@ -1592,7 +1592,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
               border: '1px solid var(--color-border)',
               boxShadow: 'var(--shadow-sm)',
               overflowX: 'auto',
-              scrollbarWidth: 'thin',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
               cursor: isPipelineDownRef.current ? 'grabbing' : 'grab',
               userSelect: 'none'
