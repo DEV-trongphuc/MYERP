@@ -117,6 +117,7 @@ export const QuickAddLeadModal = () => {
   const [previewCons, setPreviewCons] = useState<any>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+  const isSubmittingManualRef = useRef(false);
   const [overrideConsId, setOverrideConsId] = useState<string>('');
   const [showOverrideSelector, setShowOverrideSelector] = useState(false);
   const [compensateSkipped, setCompensateSkipped] = useState(true);
@@ -1142,18 +1143,18 @@ export const QuickAddLeadModal = () => {
   };
 
   const handleManualSubmit = async () => {
+    if (isSubmittingManualRef.current) return;
+    isSubmittingManualRef.current = true;
     setIsSubmittingManual(true);
     try {
       if (activeTab === 'single') {
         const isReferralOrPersonal = manualData.source === 'gioi_thieu' || manualData.source === 'ca_nhan';
         if (!isReferralOrPersonal && !manualData.phone && !manualData.email) {
           toast.error(t('Vui lòng nhập SĐT hoặc Email'));
-          setIsSubmittingManual(false);
           return;
         }
         if (isReferralOrPersonal && !manualData.name.trim()) {
           toast.error(t('Vui lòng nhập họ và tên khách hàng'));
-          setIsSubmittingManual(false);
           return;
         }
         
@@ -1187,7 +1188,6 @@ export const QuickAddLeadModal = () => {
       } else {
         if (bulkParsedLeads.length === 0) {
           toast.error(t('Danh sách liên hệ trống'));
-          setIsSubmittingManual(false);
           return;
         }
 
@@ -1213,8 +1213,10 @@ export const QuickAddLeadModal = () => {
       }
     } catch (e: any) {
       toast.error(t('Lỗi: ') + e.message);
+    } finally {
+      isSubmittingManualRef.current = false;
+      setIsSubmittingManual(false);
     }
-    setIsSubmittingManual(false);
   };  return (
     <CustomModal
       isOpen={isOpen}

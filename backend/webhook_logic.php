@@ -4241,9 +4241,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
 
         // Get all active contacts for this person
         $existingContacts = [];
-        // Only lookup existing contacts if phone or email is provided.
-        // For referral/personal leads without phone & email, NEVER merge with existing contacts!
-        if (!empty($phone) || !empty($email)) {
+        if (!empty($person_id)) {
             $stmtExist = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE person_id = ? AND deleted_at IS NULL ORDER BY id DESC");
             $stmtExist->bind_param("i", $person_id);
             $stmtExist->execute();
@@ -4252,21 +4250,21 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                 $existingContacts[] = $rowExist;
             }
             $stmtExist->close();
+        }
 
-            // Tìm tiếp qua phone nếu person_id chưa có contact để tránh tạo trùng
-            if (empty($existingContacts) && !empty($phone)) {
-                $noZeroP = ltrim($phone, '0');
-                $withZeroP = '0' . $noZeroP;
-                $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
-                if ($stmtExistPhone) {
-                    $stmtExistPhone->bind_param("ss", $withZeroP, $noZeroP);
-                    $stmtExistPhone->execute();
-                    $resExistPhone = $stmtExistPhone->get_result();
-                    while ($rowExistP = $resExistPhone->fetch_assoc()) {
-                        $existingContacts[] = $rowExistP;
-                    }
-                    $stmtExistPhone->close();
+        // Tìm tiếp qua phone nếu person_id chưa có contact để tránh tạo trùng (khi có SĐT)
+        if (empty($existingContacts) && !empty($phone)) {
+            $noZeroP = ltrim($phone, '0');
+            $withZeroP = '0' . $noZeroP;
+            $stmtExistPhone = $conn->prepare("SELECT id, owner_id, status, pipeline_status, stage_id FROM contacts WHERE (phone = ? OR phone = ?) AND deleted_at IS NULL ORDER BY id DESC");
+            if ($stmtExistPhone) {
+                $stmtExistPhone->bind_param("ss", $withZeroP, $noZeroP);
+                $stmtExistPhone->execute();
+                $resExistPhone = $stmtExistPhone->get_result();
+                while ($rowExistP = $resExistPhone->fetch_assoc()) {
+                    $existingContacts[] = $rowExistP;
                 }
+                $stmtExistPhone->close();
             }
         }
 
