@@ -1025,8 +1025,8 @@ class FinanceController
             $expId = (int) $this->db->lastInsertId();
 
             if ($statusVal === 'approved') {
-                $stmtApprove = $this->db->prepare("UPDATE expenses SET approver_id = ?, approved_at = NOW(), status_level_1='approved', approval_status='approved' WHERE id = ?");
-                $stmtApprove->execute([$auth['user_id'], $expId]);
+                $stmtApprove = $this->db->prepare("UPDATE expenses SET approver_id = ?, approved_by = ?, approved_at = NOW(), status_level_1='approved', approval_status='approved' WHERE id = ?");
+                $stmtApprove->execute([$auth['user_id'], $auth['user_id'], $expId]);
             }
 
             if (!empty($entities)) {
@@ -1489,7 +1489,8 @@ class FinanceController
                 }
 
                 $approvedAtVal = ($nextStatus === 'approved') ? 'NOW()' : 'NULL';
-                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', approved_at=" . ($nextStatus === 'approved' ? "NOW()" : "NULL") . " WHERE id=?")
+                $approvedByVal = ($nextStatus === 'approved') ? (int)$userId : 'NULL';
+                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', approved_at=" . $approvedAtVal . ", approved_by=" . $approvedByVal . " WHERE id=?")
                     ->execute([$nextStatus, $nextApprovalStatus, $id]);
             }
 
@@ -1497,17 +1498,19 @@ class FinanceController
 
             // Send multi-channel notification via NotificationService
             require_once __DIR__ . '/../NotificationService.php';
-            if ($nextStatus === 'approved' || $nextStatus === 'rejected') {
-                NotificationService::send($this->db, $auth['tenant_id'], $nextStatus === 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_REJECTED', [
+            
+            if ($nextStatus === 'rejected') {
+                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REJECTED', [
                     'target_user_id' => (int)$expenseRow['created_by'],
                     'title' => $expenseRow['title'],
                     'amount' => (float)$expenseRow['amount'],
                     'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                     'reject_reason' => $data['reject_reason'] ?? '',
-                    'ref_id' => $id
+                    'ref_id' => $id,
+                    'level' => $currentLevel
                 ]);
 
-                // Notify related persons of outcome
+                // Also notify related persons of rejection
                 if (!empty($expenseRow['related_user_ids'])) {
                     $relList = is_array($expenseRow['related_user_ids']) ? $expenseRow['related_user_ids'] : json_decode($expenseRow['related_user_ids'], true);
                     if (!is_array($relList)) {
@@ -1517,36 +1520,75 @@ class FinanceController
                         foreach ($relList as $relUid) {
                             $relUid = (int)$relUid;
                             if ($relUid > 0 && $relUid !== (int)$expenseRow['created_by'] && $relUid !== (int)$auth['user_id']) {
-                                NotificationService::send($this->db, $auth['tenant_id'], $nextStatus === 'approved' ? 'EXPENSE_APPROVED' : 'EXPENSE_REJECTED', [
+                                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REJECTED', [
                                     'target_user_id' => $relUid,
                                     'title' => $expenseRow['title'],
                                     'amount' => (float)$expenseRow['amount'],
                                     'approver_name' => $auth['full_name'] ?? 'Người duyệt',
                                     'reject_reason' => $data['reject_reason'] ?? '',
-                                    'ref_id' => $id
+                                    'ref_id' => $id,
+                                    'level' => $currentLevel
                                 ]);
                             }
                         }
                     }
                 }
-            } else if ($nextStatus === 'pending') {
-                // If transitioning to next approval level (Level 2 or Level 3), notify the next approver
-                $nextApproverId = 0;
-                if ($currentLevel === 1 && !empty($expenseRow['approver_id_2'])) {
-                    $nextApproverId = (int)$expenseRow['approver_id_2'];
-                } elseif ($currentLevel === 2 && !empty($expenseRow['approver_id_3'])) {
-                    $nextApproverId = (int)$expenseRow['approver_id_3'];
-                }
-                if ($nextApproverId > 0) {
-                    NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
-                        'approver_id' => $nextApproverId,
-                        'user_id' => $nextApproverId,
-                        'user_name' => $auth['full_name'] ?? 'Hệ thống',
-                        'title' => $expenseRow['title'] . ' (Duyệt Cấp ' . ($currentLevel + 1) . ')',
-                        'amount' => (float)$expenseRow['amount'],
-                        'reason' => $expenseRow['notes'] ?? '',
-                        'ref_id' => $id
-                    ]);
+            } else {
+                // An approval level succeeded: ALWAYS notify creator!
+                NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_APPROVED', [
+                    'target_user_id' => (int)$expenseRow['created_by'],
+                    'title' => $expenseRow['title'],
+                    'amount' => (float)$expenseRow['amount'],
+                    'approver_name' => $auth['full_name'] ?? 'Người duyệt',
+                    'ref_id' => $id,
+                    'level' => $currentLevel,
+                    'is_complete' => ($nextStatus === 'approved')
+                ]);
+
+                // If fully approved (all levels finished), notify all related users
+                if ($nextStatus === 'approved') {
+                    if (!empty($expenseRow['related_user_ids'])) {
+                        $relList = is_array($expenseRow['related_user_ids']) ? $expenseRow['related_user_ids'] : json_decode($expenseRow['related_user_ids'], true);
+                        if (!is_array($relList)) {
+                            $relList = explode(',', (string)$expenseRow['related_user_ids']);
+                        }
+                        if (is_array($relList)) {
+                            foreach ($relList as $relUid) {
+                                $relUid = (int)$relUid;
+                                if ($relUid > 0 && $relUid !== (int)$expenseRow['created_by'] && $relUid !== (int)$auth['user_id']) {
+                                    NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_APPROVED', [
+                                        'target_user_id' => $relUid,
+                                        'title' => $expenseRow['title'],
+                                        'amount' => (float)$expenseRow['amount'],
+                                        'approver_name' => $auth['full_name'] ?? 'Người duyệt',
+                                        'ref_id' => $id,
+                                        'level' => $currentLevel,
+                                        'is_complete' => true
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                } else if ($nextStatus === 'pending') {
+                    // Transitioning to next approval level (Level 2 or Level 3) -> notify the next approver
+                    $nextApproverId = 0;
+                    if ($currentLevel === 1 && !empty($expenseRow['approver_id_2'])) {
+                        $nextApproverId = (int)$expenseRow['approver_id_2'];
+                    } elseif ($currentLevel === 2 && !empty($expenseRow['approver_id_3'])) {
+                        $nextApproverId = (int)$expenseRow['approver_id_3'];
+                    }
+                    if ($nextApproverId > 0) {
+                        NotificationService::send($this->db, $auth['tenant_id'], 'EXPENSE_REQUEST', [
+                            'approver_id' => $nextApproverId,
+                            'target_user_id' => $nextApproverId,
+                            'user_id' => $nextApproverId,
+                            'user_name' => $expenseRow['employee_name'] ?? ($auth['full_name'] ?? 'Hệ thống'),
+                            'title' => $expenseRow['title'] . ' (Chờ duyệt Cấp ' . ($currentLevel + 1) . ')',
+                            'amount' => (float)$expenseRow['amount'],
+                            'reason' => $expenseRow['notes'] ?? '',
+                            'ref_id' => $id
+                        ]);
+                    }
                 }
             }
 

@@ -957,7 +957,7 @@ const AccountsInner = () => {
                 <CustomSelect
                   options={[
                     { value: 'admin', label: t('Quản trị viên (Admin)') },
-                    { value: 'director', label: t('Giám đốc kinh doanh (Director)') },
+                    { value: 'director', label: t('Giám đốc (Director)') },
                     { value: 'manager', label: t('Trưởng phòng / Trưởng nhóm (Manager)') },
                     { value: 'assistant', label: t('Trợ lý (Assistant)') },
                     { value: 'sale', label: t('Sale / Nhân viên (Sales)') },

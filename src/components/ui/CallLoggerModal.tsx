@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Phone, X, Check, Clock, Mic, User, PhoneOutgoing, PhoneIncoming, CheckCircle, PhoneOff, Voicemail, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../../store/uiStore';
@@ -9,6 +10,7 @@ interface CallLoggerModalProps {
   onClose: () => void;
   contact: { id: number; full_name: string; phone?: string };
   onSave?: (log: CallLog) => void;
+  zIndex?: number;
 }
 
 export interface CallLog {
@@ -33,7 +35,7 @@ const NEXT_ACTIONS = [
   'Lên lịch demo', 'Gửi tài liệu sản phẩm', 'Chờ khách phản hồi', 'Đánh dấu quan tâm thấp'
 ];
 
-export const CallLoggerModal: React.FC<CallLoggerModalProps> = ({ isOpen, onClose, contact, onSave }) => {
+export const CallLoggerModal: React.FC<CallLoggerModalProps> = ({ isOpen, onClose, contact, onSave, zIndex }) => {
   const { addToast } = useUIStore();
   const [outcome, setOutcome] = useState<CallLog['outcome']>('reached');
   const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
@@ -56,10 +58,10 @@ export const CallLoggerModal: React.FC<CallLoggerModalProps> = ({ isOpen, onClos
     onClose();
   };
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
-        <div className="overlay-backdrop" style={{ zIndex: 11000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+        <div className="overlay-backdrop" style={{ zIndex: zIndex || 2147483640, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -183,4 +185,6 @@ export const CallLoggerModal: React.FC<CallLoggerModalProps> = ({ isOpen, onClos
       )}
     </AnimatePresence>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 };

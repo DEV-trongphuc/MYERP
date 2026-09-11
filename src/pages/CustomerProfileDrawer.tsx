@@ -4698,12 +4698,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             width: '24px',
             height: '24px',
             borderRadius: '6px',
-            background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+            background: 'linear-gradient(135deg, var(--color-primary) 0%, #83101b 100%)',
             color: '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+            boxShadow: '0 2px 4px rgba(163, 20, 34, 0.25)'
           }}>
             <Layers size={13} />
           </div>
@@ -4718,7 +4718,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               Chương trình ({linkedProfiles.length})
             </span>
             {loadingLinkedProfiles && (
-              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', color: '#3b82f6' }} />
+              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-primary)' }} />
             )}
           </div>
         </div>
@@ -4726,7 +4726,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '2px 0', flex: 1, minWidth: 0 }}>
           {linkedProfiles.map((p: any) => {
             const isCurrent = Number(p.id) === Number(effectiveContactId);
-            const stageColor = p.stage_color || '#3b82f6';
+            const stageColor = p.stage_color || 'var(--color-primary)';
             const programTitle = p.program?.trim() || (p.pipeline_status === 'enrolled' || p.status === 'customer' ? 'Học viên chính thức' : 'Chưa đặt tên CT');
             
             return (
@@ -4743,17 +4743,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   fontSize: '0.75rem',
                   fontWeight: isCurrent ? 800 : 600,
                   cursor: isCurrent ? 'default' : 'pointer',
-                  border: isCurrent ? '2px solid #2563eb' : '1px solid var(--color-border)',
+                  border: isCurrent ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                   background: isCurrent ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
-                  color: isCurrent ? '#1d4ed8' : 'var(--color-text)',
-                  boxShadow: isCurrent ? '0 2px 8px rgba(37, 99, 235, 0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
+                  color: isCurrent ? 'var(--color-primary)' : 'var(--color-text)',
+                  boxShadow: isCurrent ? '0 2px 8px rgba(163, 20, 34, 0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
                 }}
                 onMouseEnter={(e) => {
                   if (!isCurrent) {
-                    e.currentTarget.style.borderColor = '#93c5fd';
+                    e.currentTarget.style.borderColor = 'rgba(163, 20, 34, 0.4)';
                     e.currentTarget.style.background = '#ffffff';
                   }
                 }}
@@ -4787,11 +4787,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   <span style={{
                     fontSize: '0.625rem',
                     fontWeight: 800,
-                    color: '#2563eb',
-                    background: '#eff6ff',
+                    color: 'var(--color-primary)',
+                    background: 'rgba(163, 20, 34, 0.08)',
                     padding: '1px 5px',
                     borderRadius: '4px',
-                    border: '1px solid rgba(37, 99, 235, 0.25)'
+                    border: '1px solid rgba(163, 20, 34, 0.25)'
                   }}>
                     Đang xem
                   </span>
@@ -4812,22 +4812,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               borderRadius: '20px',
               fontSize: '0.725rem',
               fontWeight: 700,
-              color: '#2563eb',
-              background: 'rgba(37, 99, 235, 0.08)',
-              border: '1px dashed #3b82f6',
+              color: 'var(--color-primary)',
+              background: 'rgba(163, 20, 34, 0.06)',
+              border: '1px dashed rgba(163, 20, 34, 0.35)',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               flexShrink: 0,
               transition: 'all 0.15s ease'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#2563eb';
+              e.currentTarget.style.background = 'var(--color-primary)';
               e.currentTarget.style.color = '#ffffff';
               e.currentTarget.style.borderStyle = 'solid';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
-              e.currentTarget.style.color = '#2563eb';
+              e.currentTarget.style.background = 'rgba(163, 20, 34, 0.06)';
+              e.currentTarget.style.color = 'var(--color-primary)';
               e.currentTarget.style.borderStyle = 'dashed';
             }}
             title="Nhân bản thêm hồ sơ cho khách hàng này với chương trình học khác"
@@ -4864,7 +4864,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       const normalizedContact = normalizeContactData(contact);
       setFormData(normalizedContact);
-      setIsPartnerSource(!!normalizedContact.company_id);
+      setIsPartnerSource(Boolean(normalizedContact.company_id || normalizedContact.source === 'gioi_thieu' || normalizedContact.source === 'ref' || normalizedContact.source === 'referral'));
       const cleanRegex = /^\d+\.\s*(status\s*-\s*)?/i;
       const cleanedLoadedTags = (normalizedContact.tags || [])
         .map((tag: string) => tag.replace(cleanRegex, '').trim())
@@ -11198,7 +11198,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 leftBorder = '4px solid #f59e0b';
                                 statusIcon = <Clock size={18} style={{ color: '#f59e0b', animation: 'pulse 2s infinite' }} />;
                                 statusTitle = 'Chờ phê duyệt';
-                                statusDesc = 'Đang chờ Quản lý hoặc Giám đốc kinh doanh duyệt.';
+                                statusDesc = 'Đang chờ Quản lý hoặc Giám đốc duyệt.';
                                 badgeClass = 'warning';
                                 iconBg = 'rgba(245, 158, 11, 0.08)';
                                 iconBorder = '1px solid rgba(245, 158, 11, 0.25)';
@@ -12334,6 +12334,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           onClose={() => setShowScoringSystemModal(false)}
                           title={t('Hệ thống quy tắc chấm điểm Lead Scoring')}
                           width="600px"
+                          zIndex={effectiveZIndex + 15}
                         >
                           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
@@ -14121,6 +14122,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           onClose={() => setMovingFile(null)}
                           title={t('Di chuyển tài liệu')}
                           width="420px"
+                          zIndex={effectiveZIndex + 15}
                         >
                           <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
@@ -14691,6 +14693,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       <CallLoggerModal
         isOpen={showCallLogger}
         onClose={() => setShowCallLogger(false)}
+        zIndex={effectiveZIndex + 15}
         contact={{ id: effectiveContactId, full_name: fullName, phone: formData?.phone || contact?.phone }}
         onSave={async (log) => {
           try {
@@ -14724,6 +14727,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       <ActivityModal
         isOpen={showActivityModal}
         onClose={() => { setShowActivityModal(false); setEditingActivity(null); }}
+        zIndex={effectiveZIndex + 15}
         entityType="contact"
         entityId={effectiveContactId}
         onSuccess={() => {
@@ -14737,7 +14741,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       {/* PROOF UPLOAD MODAL FOR MEETING COMPLETION */}
       <AnimatePresence>
         {meetingToComplete && (
-          <div className="overlay-backdrop" style={{ zIndex: 1000020, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMeetingToComplete(null)}>
+          <div className="overlay-backdrop" style={{ zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMeetingToComplete(null)}>
             <motion.div 
               className="modal-sheet" 
               style={{ width: '100%', maxWidth: 500, padding: '1.5rem', borderRadius: '16px', overflow: 'hidden', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
@@ -14880,7 +14884,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       {/* ADD/EDIT NOTE MODAL */}
       <AnimatePresence>
         {showNoteModal && (
-          <div className="overlay-backdrop" style={{ zIndex: 1000020, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setShowNoteModal(false); setEditingNote(null); }}>
+          <div className="overlay-backdrop" style={{ zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setShowNoteModal(false); setEditingNote(null); }}>
             <motion.div 
               className="modal-sheet" 
               style={{ width: '100%', maxWidth: 780, padding: 0, borderRadius: '12px', overflow: 'hidden' }}
@@ -15048,7 +15052,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           ];
 
           return (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1000020, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobileOrTablet ? '0.75rem' : '1.5rem' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobileOrTablet ? '0.75rem' : '1.5rem' }}>
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
@@ -15711,7 +15715,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       <AnimatePresence>
         {requiredDocsUploadModal.isOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1000020, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.82)', backdropFilter: 'blur(4px)' }}
@@ -15813,7 +15817,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               fetchData();
             }}
             users={users}
-            zIndex={zIndex ? zIndex + 100 : undefined}
+            zIndex={zIndex ? zIndex + 100 : Math.min(effectiveZIndex + 10, 2147483640)}
             onOpenContact={(cid) => {
               setSelectedTaskForDetails(null);
               if (cid && String(cid) !== String(effectiveContactId || contact?.id)) {
@@ -15831,7 +15835,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       <AnimatePresence>
         {showTicketModal && (
-          <div className="overlay-backdrop" style={{ zIndex: 1000020 }} onClick={() => setShowTicketModal(false)}>
+          <div className="overlay-backdrop" style={{ zIndex: effectiveZIndex + 15 }} onClick={() => setShowTicketModal(false)}>
             <motion.div
               className="modal-sheet"
               style={{ width: '100%', maxWidth: 540 }}
@@ -15939,7 +15943,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
         title="Báo cáo dữ liệu lỗi / Trùng lặp"
-        zIndex={1000020}
+        zIndex={effectiveZIndex + 15}
       >
         <div style={{ padding: '0.5rem 0' }}>
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>
@@ -16040,6 +16044,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         onClose={() => setShowQuoteEditor(false)}
         quote={selectedQuote}
         initialContact={formData?.id ? formData : contact}
+        zIndex={effectiveZIndex + 15}
         onSuccess={() => {
           setShowQuoteEditor(false);
           fetchData();
@@ -16070,7 +16075,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       {/* Signature Modal */}
       {isSignModalOpen && coopSlip && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }} onClick={() => setIsSignModalOpen(false)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }} onClick={() => setIsSignModalOpen(false)}>
           <div className="card animate-fade" style={{ maxWidth: '800px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>Đọc tài liệu &amp; Ký xác nhận điện tử</h2>
@@ -16394,7 +16399,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           isOpen={true}
           onClose={() => setReschedulingMeeting(null)}
           title="Dời lịch gặp gỡ"
-          zIndex={1000020}
+          zIndex={effectiveZIndex + 15}
         >
           <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
@@ -16446,7 +16451,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           isOpen={true}
           onClose={() => setCancellingMeeting(null)}
           title="Hủy lịch gặp gỡ"
-          zIndex={1000020}
+          zIndex={effectiveZIndex + 15}
         >
           <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
@@ -16499,7 +16504,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         isOpen={isCreateCoopModalOpen}
         onClose={() => setIsCreateCoopModalOpen(false)}
         title={selectedCollaborators.length === 0 ? "Khởi tạo phiếu đặt cọc" : "Thiết lập hợp tác hoa hồng"}
-        zIndex={1000020}
+        zIndex={effectiveZIndex + 15}
       >
         <div style={{ padding: '0.5rem 0' }}>
           <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
@@ -16666,7 +16671,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
       {/* Quick View Expense Modal */}
       {viewExpense && createPortal(
-        <div className="overlay-backdrop" onClick={() => setViewExpense(null)} style={{ zIndex: 1000020, position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        <div className="overlay-backdrop" onClick={() => setViewExpense(null)} style={{ zIndex: effectiveZIndex + 15, position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <motion.div 
             className="modal-sheet shadow-2xl"
             initial={{ opacity: 0, scale: 0.96, y: 20 }} 
@@ -16974,7 +16979,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       )}
 
       {rejectingExpense && createPortal(
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1000030, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }} onClick={() => setRejectingExpense(null)}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: effectiveZIndex + 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', padding: '1rem' }} onClick={() => setRejectingExpense(null)}>
           <motion.div 
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -17036,7 +17041,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       {showMobilePipelineSelector && (
         <div 
           className="overlay-backdrop" 
-          style={{ zIndex: 1000050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)' }} 
+          style={{ zIndex: effectiveZIndex + 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)' }} 
           onClick={() => setShowMobilePipelineSelector(false)}
         >
           <motion.div
@@ -17120,6 +17125,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           onClose={() => setShowDriveLinkModal(false)}
           title="Liên kết thư mục Google Drive"
           width="480px"
+          zIndex={effectiveZIndex + 15}
         >
           <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
@@ -17196,7 +17202,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             </div>
           }
           maxWidth="440px"
-          zIndex={zIndex ? zIndex + 60 : 1000250}
+          zIndex={effectiveZIndex + 15}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
             {/* File info banner */}
@@ -17341,7 +17347,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           onClose={() => setDuplicatePhoneModal(prev => ({ ...prev, isOpen: false }))}
           title="Trùng số điện thoại trên hệ thống"
           width="520px"
-          zIndex={zIndex ? zIndex + 50 : 1000150}
+          zIndex={effectiveZIndex + 15}
         >
           <div style={{ padding: '4px 0' }}>
             <div style={{
@@ -17462,7 +17468,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           onClose={() => !cloningProfile && setShowCloneModal(false)}
           title="Nhân bản hồ sơ khách hàng (Chương trình mới)"
           maxWidth="560px"
-          zIndex={zIndex ? zIndex + 50 : 1000200}
+          zIndex={effectiveZIndex + 15}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '4px 0' }}>
             {/* Header summary of current profile */}
@@ -17495,18 +17501,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               </div>
             </div>
 
-            {/* Information note */}
-            <div style={{
-              padding: '10px 12px',
-              borderRadius: '8px',
-              background: 'rgba(59, 130, 246, 0.08)',
-              border: '1px solid rgba(59, 130, 246, 0.2)',
-              fontSize: '0.75rem',
-              color: '#1e40af',
-              lineHeight: 1.5
-            }}>
-              💡 <strong>Cơ chế chăm sóc song song:</strong> Bản sao sẽ kế thừa đầy đủ thông tin cá nhân (SĐT, Email, CCCD, địa chỉ, công ty, nguồn gốc), bắt đầu theo <strong>Giai đoạn Pipeline</strong> bạn chọn bên dưới với các tương tác, công việc, deals học phí và tài liệu hoàn toàn độc lập cho chương trình mới.
-            </div>
 
             {/* Program input & suggestions */}
             <div>

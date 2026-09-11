@@ -967,9 +967,21 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
   };
 
+  const fetchUsersList = async () => {
+    try {
+      const res = await fetchAPI('users?all=1');
+      if (res && res.success && Array.isArray(res.data)) {
+        setUsersList(res.data);
+      }
+    } catch (e) {
+      console.error('Error fetching users on mount:', e);
+    }
+  };
+
   useEffect(() => {
     fetchConsultantsList();
     fetchContactsList();
+    fetchUsersList();
   }, []);
 
   useEffect(() => {
@@ -2377,7 +2389,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   bulkRequests.map((req) => {
                     const statusConfig: Record<string, { label: string, color: string, bg: string }> = {
                       pending_manager: { label: t('Chờ Quản lý duyệt'), color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-                      pending_hr: { label: t('Chờ HR duyệt'), color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+                      pending_hr: { label: t('Chờ HR duyệt'), color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
                       approved: { label: t('Đã duyệt cấp công'), color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
                       rejected: { label: t('Bị từ chối'), color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
                     };
@@ -7297,6 +7309,58 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     })}
                   </div>
                 </div>
+
+                {/* Related Watchers (Người liên quan theo dõi) */}
+                {(() => {
+                  const relIdsRaw = selectedBulkRequest.related_user_ids;
+                  if (!relIdsRaw) return null;
+                  let rawList: any[] = [];
+                  if (Array.isArray(relIdsRaw)) {
+                    rawList = relIdsRaw;
+                  } else if (typeof relIdsRaw === 'string') {
+                    const trimmed = relIdsRaw.trim();
+                    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                      try {
+                        const parsed = JSON.parse(trimmed);
+                        if (Array.isArray(parsed)) rawList = parsed;
+                        else rawList = [parsed];
+                      } catch {
+                        rawList = trimmed.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+                      }
+                    } else {
+                      rawList = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+                    }
+                  }
+                  const relUsers = rawList.map((entry: any) => {
+                    if (!entry) return null;
+                    const entryId = typeof entry === 'object' ? (entry.id || entry.user_id) : entry;
+                    const numId = Number(entryId);
+                    const matched = usersList.find((u: any) => Number(u.id) === numId || String(u.id) === String(entryId)) ||
+                                    consultants.find((c: any) => Number(c.id) === numId || String(c.id) === String(entryId));
+                    if (matched) return matched;
+                    if (typeof entry === 'object' && (entry.full_name || entry.name)) return entry;
+                    if (numId > 0) return { id: numId, full_name: `User #${numId}`, name: `User #${numId}` };
+                    return null;
+                  }).filter(Boolean);
+
+                  if (relUsers.length === 0) return null;
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '12px', marginTop: '10px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {t('Người liên quan (Theo dõi)')} ({relUsers.length})
+                      </label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {relUsers.map((u: any, idx: number) => (
+                          <div key={u.id || idx} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
+                            <Avatar src={resolveAttachmentUrl(u.avatar || u.avatar_url)} name={u.full_name || u.name} size={20} />
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Feedback note */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '12px', marginTop: '10px' }}>

@@ -42,26 +42,11 @@ import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Avatar } from '../components/ui/Avatar';
 import { prewarmSmartCheckInGPS } from '../components/ui/SmartCheckInModal';
+import { getUserDisplayRoleOrTitle } from '../utils/roleUtils';
 
 const getRoleDisplayName = (user: any) => {
   if (!user) return '';
-  if (user.job_title) return user.job_title;
-  const roleMap: Record<string, string> = {
-    super_admin: 'Super Admin',
-    superadmin: 'Super Admin',
-    admin: 'Admin',
-    director: 'Giám đốc',
-    manager: 'Quản lý',
-    sales: 'Kinh doanh',
-    sale: 'Kinh doanh',
-    accountant: 'Kế toán',
-    hr: 'Nhân sự',
-    sale_admin: 'Sale Admin',
-    saleadmin: 'Sale Admin',
-    marketing: 'Marketing',
-    viewer: 'Viewer'
-  };
-  return roleMap[user.role?.toLowerCase()] || user.role || '';
+  return getUserDisplayRoleOrTitle(user);
 };
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { Pagination } from '../components/ui/Pagination';
@@ -1208,7 +1193,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         const isContactOrDealInvolved = (task.contact_owner_id && Number(task.contact_owner_id) === uid) ||
                                        (task.owner_id && Number(task.owner_id) === uid) ||
                                        (task.collaborator_ids && String(task.collaborator_ids).split(',').map(s => s.trim()).includes(uidStr));
-        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass'));
+        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass') || (currentUser?.team_id && Number(task.team_id) === Number(currentUser.team_id)));
 
         if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isContactOrDealInvolved && !isManagerViewingTeam) {
           return false;
@@ -1338,7 +1323,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         const isContactOrDealInvolved = (task.contact_owner_id && Number(task.contact_owner_id) === uid) ||
                                        (task.owner_id && Number(task.owner_id) === uid) ||
                                        (task.collaborator_ids && String(task.collaborator_ids).split(',').map(s => s.trim()).includes(currentUserIdStr));
-        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass'));
+        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass') || (currentUser?.team_id && Number(task.team_id) === Number(currentUser.team_id)));
 
         if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isContactOrDealInvolved && !isManagerViewingTeam) {
           return;

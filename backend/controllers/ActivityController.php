@@ -342,20 +342,10 @@ class ActivityController {
         }
 
         $userRole = strtolower($auth['role'] ?? '');
-        $isMarketing = ($userRole === 'marketing');
-        if (!$isMarketing && !empty($auth['user_id'])) {
-            $stmtM = $this->db->prepare("SELECT u.team_id, t.name as team_name, u.job_title FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.id = ? LIMIT 1");
-            $stmtM->execute([$auth['user_id']]);
-            $uInfo = $stmtM->fetch(PDO::FETCH_ASSOC);
-            if ($uInfo && ((int)$uInfo['team_id'] === 3 || stripos($uInfo['team_name'] ?? '', 'marketing') !== false || stripos($uInfo['job_title'] ?? '', 'marketing') !== false)) {
-                $isMarketing = true;
-            }
-        }
-
-        $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin', 'accountant', 'marketing', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'assistant'], true) || $isMarketing;
+        $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin', 'accountant'], true);
 
         if ($hasBroadOversight) {
-            // Super Admin / Admin / Accountant / Marketing / Academic / Assistant: broad oversight, can filter by team_id or user_id
+            // Super Admin / Admin / Accountant: broad oversight, can filter by team_id or user_id
         } else if (in_array($userRole, ['director'], true)) {
             // Director: oversight of company-wide tasks except private personal tasks
             $where[] = '(

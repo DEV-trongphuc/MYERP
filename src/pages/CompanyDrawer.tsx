@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User } from 'lucide-react';
+import { X, Building2, FileText, FileBadge, Tag as TagIcon, Phone, Mail, MapPin, Search, Calendar, Users, Briefcase, Plus, HelpCircle, Globe, Settings, Download, Trash2, Edit, Pencil, Loader2, History, ChevronLeft, ChevronRight, ChevronDown, Camera, Save, TrendingUp, DollarSign, BookOpen, List, GitBranch, CheckCircle2, Clock, RefreshCw, XCircle, Filter, ArrowRight, User, UserPlus } from 'lucide-react';
+import { CustomerProfileDrawer } from './CustomerProfileDrawer';
+import { Avatar } from '../components/ui/Avatar';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { AddressSelect } from '../components/ui/AddressSelect';
@@ -91,6 +93,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   const [pipelineStatsLoading, setPipelineStatsLoading] = useState(false);
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>('all');
   const [showZeroStages, setShowZeroStages] = useState(false);
+  const [selectedCustomerContact, setSelectedCustomerContact] = useState<any | null>(null);
+  const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(false);
 
   const visibleTabs = useMemo(() => {
     let list = disableEdit ? TABS.filter(t => t.id !== 'settings') : TABS;
@@ -450,6 +454,31 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     setDealsLoading(true);
   }
 
+  const fetchSubContacts = useCallback(() => {
+    if (!entity?.id) return;
+    setSubLoading(true);
+    fetchPipelineStats(entity.id);
+    api.get('/contacts', { params: { company_id: entity.id, limit: 500 } })
+      .then(r => setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
+        id: c.id,
+        name: (c.full_name || '').trim() || 'Chưa có tên',
+        role: c.job_title || '',
+        phone: c.phone || '',
+        email: c.email || '',
+        isPrimary: c.is_primary || false,
+        stage_id: c.stage_id,
+        stage_name: c.stage_name,
+        stage_color: c.stage_color,
+        pipeline_status: c.pipeline_status,
+        lead_status: c.lead_status,
+        created_at: c.created_at,
+        owner_name: c.owner_name,
+        owner_avatar: c.owner_avatar
+      }))))
+      .catch(() => setSubContacts([]))
+      .finally(() => setSubLoading(false));
+  }, [entity?.id, fetchPipelineStats]);
+
   useEffect(() => {
     if (entity) {
       setFormData(entity);
@@ -457,29 +486,9 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
       setBaseData(entity);
       setBaseTags(entity.tags || []);
       setPrevEntityId(entity.id);
-      setSubLoading(true);
-      fetchPipelineStats(entity.id);
-      api.get('/contacts', { params: { company_id: entity.id, limit: 500 } })
-        .then(r => setSubContacts((r.data.data?.items || r.data.data || []).map((c: any) => ({
-          id: c.id,
-          name: (c.full_name || '').trim() || 'Chưa có tên',
-          role: c.job_title || '',
-          phone: c.phone || '',
-          email: c.email || '',
-          isPrimary: c.is_primary || false,
-          stage_id: c.stage_id,
-          stage_name: c.stage_name,
-          stage_color: c.stage_color,
-          pipeline_status: c.pipeline_status,
-          lead_status: c.lead_status,
-          created_at: c.created_at,
-          owner_name: c.owner_name,
-          owner_avatar: c.owner_avatar
-        }))))
-        .catch(() => setSubContacts([]))
-        .finally(() => setSubLoading(false));
+      fetchSubContacts();
         
-        setDealsLoading(true);
+      setDealsLoading(true);
         api.get('/deals', { params: { company_id: entity.id } })
           .then(r => setDeals(r.data.data?.items || r.data.data || []))
           .catch(() => setDeals([]))
@@ -2333,8 +2342,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                 </div>
                                 <div style={{ minWidth: 0, flex: 1 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                    <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                                      {sc.name}
+                                    <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                      <span>{sc.name}</span>
+                                      <span title="Khách hàng được giới thiệu (Ref)" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--color-primary, #BD1D2D)' }}>
+                                        <UserPlus size={14} />
+                                      </span>
                                     </h4>
                                     {sc.stage_name && (
                                       <span style={{
@@ -2369,6 +2381,24 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                         <Mail size={12} style={{ opacity: 0.6 }} /> {sc.email}
                                       </span>
                                     )}
+                                    {!sc.phone && !sc.email && (
+                                      <span style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '6px',
+                                        background: 'rgba(139, 92, 246, 0.08)',
+                                        border: '1px solid rgba(139, 92, 246, 0.2)',
+                                        borderRadius: '14px',
+                                        padding: '2px 8px',
+                                        fontSize: '0.75rem'
+                                      }} title={`Được giới thiệu bởi ${entity?.name || 'Đối tác'}`}>
+                                        <Avatar name={entity?.name || 'Ref'} src={entity?.avatar_url} size={16} />
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          <span style={{ color: '#7c3aed', fontWeight: 700 }}>Ref:</span>
+                                          <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{entity?.name || 'Đối tác'}</span>
+                                        </span>
+                                      </span>
+                                    )}
                                     {sc.owner_name && (
                                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                         <User size={12} style={{ opacity: 0.6 }} /> Sale: {sc.owner_name}
@@ -2386,7 +2416,18 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                 <button 
                                   className="btn secondary sm"
                                   onClick={() => {
-                                    navigate(`/contacts?open_contact_id=${sc.id}`);
+                                    setSelectedCustomerContact({
+                                      id: sc.id,
+                                      name: sc.name,
+                                      phone: sc.phone,
+                                      email: sc.email,
+                                      pipeline_stage: sc.pipeline_stage || sc.pipeline_status || 'new',
+                                      partner_id: entity?.id,
+                                      partner_name: entity?.name,
+                                      referrer_name: entity?.name,
+                                      ...sc
+                                    });
+                                    setIsCustomerDrawerOpen(true);
                                   }}
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                 >
@@ -2959,7 +3000,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
           {/* Help Modal */}
           <AnimatePresence>
             {helpModal && (
-              <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <motion.div 
                   className="overlay-backdrop" 
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
@@ -2971,7 +3012,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   style={{
                     position: 'relative',
                     background: 'var(--color-surface)', width: '400px', borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-xl)', zIndex: 1110, border: '1px solid var(--color-border)',
+                    boxShadow: 'var(--shadow-xl)', zIndex: 2147483641, border: '1px solid var(--color-border)',
                     overflow: 'hidden'
                   }}
                 >
@@ -2993,7 +3034,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
           {/* CREATE DEAL MODAL */}
           <AnimatePresence>
             {showDealModal && (
-              <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 2147483640, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <motion.div 
                   className="overlay-backdrop" 
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
@@ -3002,7 +3043,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                 />
                 <motion.div
                   className="modal-sheet"
-                  style={{ position: 'relative', width: '100%', maxWidth: 680, zIndex: 1110 }}
+                  style={{ position: 'relative', width: '100%', maxWidth: 680, zIndex: 2147483641 }}
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
                 >
@@ -3063,7 +3104,23 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
             entityId={entity?.id}
             onSuccess={fetchActivities}
             userId={entity?.owner_id || currentUser?.id}
+            zIndex={2147483640}
           />
+
+          {isCustomerDrawerOpen && selectedCustomerContact && (
+            <CustomerProfileDrawer
+              isOpen={isCustomerDrawerOpen}
+              onClose={() => {
+                setIsCustomerDrawerOpen(false);
+                setSelectedCustomerContact(null);
+              }}
+              contact={selectedCustomerContact}
+              zIndex={2147483620}
+              onUpdate={() => {
+                fetchSubContacts();
+              }}
+            />
+          )}
     </>,
     document.body
   );

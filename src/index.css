@@ -346,6 +346,10 @@
     gap: 6px !important;
     justify-content: flex-start !important;
   }
+  .page-header > div:last-child.no-wrap-mobile,
+  .page-header .header-actions.no-wrap-mobile {
+    flex-wrap: nowrap !important;
+  }
   .page-header > div:last-child button,
   .page-header .header-actions button {
     flex-grow: 1 !important;
@@ -619,6 +623,7 @@
 
   /* Neutrals */
   --color-bg: #F6F6FA; /* iOS system gray background */
+  --color-bg-secondary: #F2F2F7; /* iOS grouped background / solid opaque header */
   --color-surface: #FFFFFF; /* Pure white */
   --color-border: #E5E5EA; /* iOS separator line */
   --color-border-light: #EFEFF4; /* Extremely soft divider */
@@ -6010,16 +6015,23 @@ div[data-react-hot-toast] div,
   flex-direction: column;
   background: #ffffff !important;
   border-radius: 16px;
-  padding: 14px 16px 12px 18px;
-  width: 390px;
-  max-width: calc(100vw - 32px);
+  padding: 14px 18px 12px 18px;
+  width: 480px;
+  max-width: min(480px, calc(100vw - 32px));
   cursor: pointer;
   overflow: hidden;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto !important;
   user-select: none;
-  box-shadow: 0 14px 34px -6px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 14px 34px -6px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+@media (min-width: 1024px) {
+  .realtime-notif-toast {
+    width: 500px;
+    max-width: min(500px, calc(100vw - 32px));
+  }
 }
 
 .realtime-notif-toast:hover {

@@ -125,6 +125,20 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
   }, [resolvedSrc]);
 
 
+  const calcFontSize = React.useMemo(() => {
+    if (initials.length >= 2) {
+      if (finalSize <= 18) return 6;
+      if (finalSize <= 20) return 6.5;
+      if (finalSize <= 24) return 7.5;
+      if (finalSize <= 32) return 9.5;
+      return Math.floor(finalSize * 0.32);
+    }
+    if (finalSize <= 18) return 7.5;
+    if (finalSize <= 20) return 8.5;
+    if (finalSize <= 24) return 10;
+    return Math.floor(finalSize * 0.38);
+  }, [finalSize, initials.length]);
+
   const avatarEl = (
     <div 
       className={`${styles.avatar} ${className}`}
@@ -132,7 +146,7 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
       style={{ 
         width: finalSize, 
         height: finalSize, 
-        fontSize: finalSize * 0.4,
+        fontSize: `${calcFontSize}px`,
         backgroundColor: resolvedSrc && !hasError ? 'transparent' : bgColor,
         ...style 
       }}
@@ -145,7 +159,7 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
           onError={() => setHasError(true)} 
         />
       ) : (
-        <span className={styles.initials}>{initials}</span>
+        <span className={styles.initials} style={{ letterSpacing: initials.length >= 2 ? '-0.02em' : 'normal' }}>{initials}</span>
       )}
     </div>
   );

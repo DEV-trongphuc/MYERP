@@ -50,7 +50,8 @@ import {
   Camera,
   CheckSquare,
   DollarSign,
-  Clipboard
+  Clipboard,
+  EyeOff
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -80,7 +81,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   
   const { showPOS, setShowPOS } = useUIStore();
   
-  const { user, token } = useAuth();
+  const { user, token, updateUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -111,7 +112,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const [heldLeadsCount, setHeldLeadsCount] = useState<number>(0);
   const [pendingCheckInsCount, setPendingCheckInsCount] = useState<number>(0);
   const [pendingCoopsCount, setPendingCoopsCount] = useState<number>(0);
-  const [pendingExpensesCount, setPendingExpensesCount] = useState<number>(0);
+  const [pendingExpensesCount, setPendingExpensesCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('pending_approvals_count');
+      return saved ? Number(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [isUnifiedInboxOpen, setIsUnifiedInboxOpen] = useState<boolean>(false);
   const hasAutoOpenedRef = useRef<boolean>(false);
   
@@ -186,8 +194,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     if (!user) return;
     try {
       const res = await fetchAPI('consultant-profile');
-      if (res.success) {
+      if (res.success && res.data) {
         setConsultantProfile(res.data);
+        if (res.data.job_title && res.data.job_title !== user.job_title) {
+          updateUser({ job_title: res.data.job_title });
+        }
       }
     } catch (err) {
       console.error("Error loading consultant profile:", err);
@@ -578,13 +589,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           setPendingCheckInsCount(checkinsCount);
           setPendingCoopsCount(coopsCount);
           setSupportTicketsCount(supportCount);
-          setPendingExpensesCount(expensesCount);
+          const localApprovals = Number(localStorage.getItem('pending_approvals_count') || 0);
+          setPendingExpensesCount(Math.max(Number(expensesCount) || 0, localApprovals));
           setSalesPendingSignCount(salesPendingSignCount);
 
           const currentPath = window.location.pathname;
           if (currentPath !== '/support-tickets' && currentPath !== '/expenses') {
-            if (ticketsCount > 0 || heldCount > 0 || checkinsCount > 0 || coopsCount > 0 || supportCount > 0 || expensesCount > 0 || salesPendingSignCount > 0) {
-              if (!hasAutoOpenedRef.current) {
+            if (ticketsCount > 0 || heldCount > 0 || checkinsCount > 0 || coopsCount > 0 || supportCount > 0 || expensesCount > 0 || salesPendingSignCount > 0 || localApprovals > 0) {
+              const isPermanentlyDisabled = localStorage.getItem('unified_inbox_auto_open_disabled') === 'true';
+              const todayStr = new Date().toISOString().slice(0, 10);
+              const dismissedToday = localStorage.getItem('unified_inbox_dismissed_date') === todayStr;
+
+              if (!isPermanentlyDisabled && !dismissedToday && !hasAutoOpenedRef.current) {
                 hasAutoOpenedRef.current = true;
                 const openInbox = () => {
                   setTimeout(() => {
@@ -615,10 +631,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [fetchPendingCounts]);
 
   useEffect(() => {
+    const handleApprovalBadge = (e: Event) => {
+      const custom = e as CustomEvent;
+      if (custom.detail && typeof custom.detail.count === 'number') {
+        setPendingExpensesCount(custom.detail.count);
+      }
+    };
+    window.addEventListener('approval-badge-updated', handleApprovalBadge);
     window.addEventListener('refresh-pending-counts', fetchPendingCounts);
     window.addEventListener('realtime-update-received', fetchPendingCounts);
     window.addEventListener('ticket-resolved', fetchPendingCounts);
     return () => {
+      window.removeEventListener('approval-badge-updated', handleApprovalBadge);
       window.removeEventListener('refresh-pending-counts', fetchPendingCounts);
       window.removeEventListener('realtime-update-received', fetchPendingCounts);
       window.removeEventListener('ticket-resolved', fetchPendingCounts);
@@ -1198,9 +1222,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div className="unified-inbox-icon" style={{ background: 'rgba(16, 185, 129, 0.08)', color: '#10b981' }}>
-                            <DollarSign size={18} />
+                            <CheckSquare size={18} />
                           </div>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Phê duyệt đề xuất & chi phí")}</span>
+                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>{t("Quy trình & Đề xuất cần duyệt")}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <span className="badge success" style={{ borderRadius: '20px', padding: '4px 10px', fontWeight: 700, fontSize: '0.72rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.12)' }}>{pendingExpensesCount} {t('chờ duyệt')}</span>
@@ -1290,11 +1314,76 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             }
           })()}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button 
+                type="button"
+                onClick={() => {
+                  try {
+                    const isCurrentlyDisabled = localStorage.getItem('unified_inbox_auto_open_disabled') === 'true';
+                    if (isCurrentlyDisabled) {
+                      localStorage.removeItem('unified_inbox_auto_open_disabled');
+                      toast.success(t('Đã bật lại tính năng tự động hiển thị hộp thư tồn đọng.'));
+                    } else {
+                      localStorage.setItem('unified_inbox_auto_open_disabled', 'true');
+                      toast.success(t('Đã tắt tự động hiển thị hộp thư tồn đọng. Bạn vẫn có thể mở lại bất cứ lúc nào từ biểu tượng trên thanh menu.'));
+                    }
+                  } catch (e) {}
+                  setIsUnifiedInboxOpen(false);
+                }}
+                className="btn outline sm"
+                style={{ 
+                  borderRadius: '8px', 
+                  padding: '7px 13px', 
+                  fontWeight: 600, 
+                  height: 36, 
+                  fontSize: '0.8rem',
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  color: 'var(--color-text-muted)',
+                  borderColor: 'var(--color-border)'
+                }}
+                title={t("Tắt hoàn toàn tự động mở hộp thư tồn đọng khi vào hệ thống")}
+              >
+                <EyeOff size={14} />
+                <span>{t("Không hiển thị lại")}</span>
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => {
+                  try {
+                    const todayStr = new Date().toISOString().slice(0, 10);
+                    localStorage.setItem('unified_inbox_dismissed_date', todayStr);
+                    toast.success(t('Hộp thư tồn đọng sẽ không tự động mở lại trong ngày hôm nay.'));
+                  } catch (e) {}
+                  setIsUnifiedInboxOpen(false);
+                }}
+                className="btn outline sm"
+                style={{ 
+                  borderRadius: '8px', 
+                  padding: '7px 13px', 
+                  fontWeight: 600, 
+                  height: 36, 
+                  fontSize: '0.8rem',
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  color: 'var(--color-text-muted)',
+                  borderColor: 'var(--color-border)'
+                }}
+                title={t("Không tự động hiển thị lại trong ngày hôm nay")}
+              >
+                <Clock size={14} />
+                <span>{t("Không nhắc hôm nay")}</span>
+              </button>
+            </div>
+
             <button 
               onClick={() => setIsUnifiedInboxOpen(false)}
               className="btn outline sm"
-              style={{ borderRadius: '8px', padding: '8px 18px', fontWeight: 600, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ borderRadius: '8px', padding: '8px 20px', fontWeight: 600, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
             >
               {t("Đóng")}
             </button>
@@ -1369,6 +1458,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         onClose={() => setIsActivityFeedOpen(false)}
         title={t("Bản tin hoạt động hệ thống")}
         width={850}
+        zIndex={2147483640}
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: '60vh' }}>
           {/* Tab Selector */}

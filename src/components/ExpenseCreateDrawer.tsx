@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check, Users, User, Landmark, Zap } from 'lucide-react';
+import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check, Users, User, Landmark, Zap, Bookmark } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
@@ -11,6 +11,7 @@ import { compressToWebP } from '../utils/imageCompress';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { PasteDropzoneArea } from './ui/PasteDropzoneArea';
 import { resolveTeamLeaderId } from '../utils/teamLeader';
+import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 
 const CATEGORIES = [
   { label: 'Di chuyển', icon: Truck, color: '#3b82f6' },
@@ -44,6 +45,25 @@ const EMPTY_FORM = {
   bank_account_name: ''
 };
 
+const extractExpenseTitleSuffix = (rawTitle: string) => {
+  if (!rawTitle) return '';
+  const trimmed = rawTitle.trim();
+  const prefixes = [
+    'Đề nghị thanh toán',
+    'Đề xuất thanh toán',
+    'Thanh toán',
+    'Đề nghị tạm ứng',
+    'Tạm ứng'
+  ];
+  for (const p of prefixes) {
+    const regex = new RegExp(`^${p}\\s*([—\\-–:]\\s*)?`, 'i');
+    if (regex.test(trimmed)) {
+      return trimmed.replace(regex, '').trim();
+    }
+  }
+  return trimmed;
+};
+
 interface ExpenseCreateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -52,6 +72,7 @@ interface ExpenseCreateDrawerProps {
   onSaveSuccess: () => void;
   user: any;
   users?: any[];
+  zIndex?: number;
 }
 
 export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
@@ -61,10 +82,20 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   initialDate,
   onSaveSuccess,
   user,
-  users: propUsers
+  users: propUsers,
+  zIndex
 }) => {
+  const baseZIndex = zIndex || 2000000000;
   const { addToast } = useUIStore();
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
+  const [titleSuffix, setTitleSuffix] = useState<string>('');
+
+  const handleSuffixChange = (val: string) => {
+    setTitleSuffix(val);
+    const trimmed = val.trim();
+    const combined = trimmed ? `Đề nghị thanh toán — ${trimmed}` : 'Đề nghị thanh toán';
+    setForm((prev: any) => ({ ...prev, title: combined }));
+  };
   const [threshold, setThreshold] = useState<number>(5000000);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -88,6 +119,121 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [participantSearch, setParticipantSearch] = useState('');
   const [beneficiaryType, setBeneficiaryType] = useState<'vendor' | 'employee'>('vendor');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+
+  const EXPENSE_DRAFT_KEY = 'myerp_expense_create_draft';
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [existingDraft, setExistingDraft] = useState<any>(null);
+
+  // Check for saved draft when opening create drawer
+  useEffect(() => {
+    if (isOpen && !editItem) {
+      try {
+        const saved = localStorage.getItem(EXPENSE_DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.form?.title || parsed.form?.amount || parsed.form?.notes || (parsed.images && parsed.images.length > 0))) {
+            setExistingDraft(parsed);
+          } else {
+            setExistingDraft(null);
+          }
+        } else {
+          setExistingDraft(null);
+        }
+      } catch {
+        setExistingDraft(null);
+      }
+    } else if (!isOpen) {
+      setShowExitConfirm(false);
+    }
+  }, [isOpen, editItem]);
+
+  const isFormDirty = () => {
+    if (editItem) return false;
+    return Boolean(
+      titleSuffix?.trim() ||
+      form.title?.trim() ||
+      (Number(form.amount) || 0) > 0 ||
+      form.notes?.trim() ||
+      images.length > 0 ||
+      vendorSearch?.trim() ||
+      form.bank_account_number?.trim() ||
+      form.bank_name?.trim() ||
+      (form.items && form.items.length > 0)
+    );
+  };
+
+  const saveDraftToStorage = () => {
+    const payload = {
+      form,
+      titleSuffix,
+      images,
+      vendorSearch,
+      vatPercent,
+      beneficiaryType,
+      selectedEmployeeId,
+      savedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(EXPENSE_DRAFT_KEY, JSON.stringify(payload));
+      setExistingDraft(payload);
+    } catch (e) {
+      console.error('Failed to save expense draft', e);
+    }
+  };
+
+  const handleSaveDraftAndExit = () => {
+    saveDraftToStorage();
+    addToast('Đã lưu bản nháp chi phí thành công!', 'success');
+    setShowExitConfirm(false);
+    onClose();
+  };
+
+  const handleExplicitSaveDraft = () => {
+    saveDraftToStorage();
+    addToast('Đã lưu bản nháp chi phí thành công!', 'success');
+  };
+
+  const handleDiscardAndExit = () => {
+    try {
+      localStorage.removeItem(EXPENSE_DRAFT_KEY);
+    } catch {}
+    setExistingDraft(null);
+    setShowExitConfirm(false);
+    onClose();
+  };
+
+  const handleRequestClose = () => {
+    if (isFormDirty()) {
+      setShowExitConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleRestoreDraft = () => {
+    if (!existingDraft) return;
+    if (existingDraft.form) setForm({ ...EMPTY_FORM, ...existingDraft.form });
+    if (existingDraft.titleSuffix !== undefined) {
+      setTitleSuffix(existingDraft.titleSuffix);
+    } else if (existingDraft.form?.title) {
+      setTitleSuffix(extractExpenseTitleSuffix(existingDraft.form.title));
+    }
+    if (Array.isArray(existingDraft.images)) setImages(existingDraft.images);
+    if (existingDraft.vendorSearch) setVendorSearch(existingDraft.vendorSearch);
+    if (existingDraft.vatPercent) setVatPercent(existingDraft.vatPercent);
+    if (existingDraft.beneficiaryType) setBeneficiaryType(existingDraft.beneficiaryType);
+    if (existingDraft.selectedEmployeeId) setSelectedEmployeeId(existingDraft.selectedEmployeeId);
+    addToast('Đã khôi phục dữ liệu bản nháp chi phí', 'info');
+    setExistingDraft(null);
+  };
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem(EXPENSE_DRAFT_KEY);
+    } catch {}
+    setExistingDraft(null);
+    addToast('Đã xóa bản nháp', 'info');
+  };
 
   // Combine and filter suppliers and companies/partners for vendor search
   const filteredVendors = useMemo(() => {
@@ -188,7 +334,20 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   useEffect(() => {
     if (isOpen && editItem) {
       if (editItem.amount && editItem.vat_amount) {
-        const pct = Math.round((Number(editItem.vat_amount) / Number(editItem.amount)) * 100);
+        const amt = Number(editItem.amount);
+        const vAmt = Number(editItem.vat_amount);
+        let pct = 10;
+        if (amt > vAmt && vAmt > 0) {
+          const rateInclusive = Math.round((vAmt / (amt - vAmt)) * 100);
+          const rateExclusive = Math.round((vAmt / amt) * 100);
+          if ([0, 5, 8, 10].includes(rateInclusive)) {
+            pct = rateInclusive;
+          } else if ([0, 5, 8, 10].includes(rateExclusive)) {
+            pct = rateExclusive;
+          } else {
+            pct = rateInclusive;
+          }
+        }
         setVatPercent(String(pct));
       } else {
         setVatPercent('10');
@@ -319,13 +478,27 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           let bank_name = '';
           let bank_account_number = '';
           let bank_account_name = '';
-          let cleanNotes = editItem.notes ? editItem.notes.replace(bankRegex, '').replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '').trim() : '';
+          let cleanNotes = '';
+          const detailMatch = editItem.notes?.match(/Chi tiết:\s*([^\n]+(?:\n(?!\[|\bPhòng ban:|\bĐối tượng:|\bThụ hưởng:|\bHình thức:)[^\n]+)*)/i);
+          if (detailMatch) {
+            cleanNotes = detailMatch[1].trim();
+          } else {
+            cleanNotes = editItem.notes ? editItem.notes
+              .replace(bankRegex, '')
+              .replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '')
+              .replace(/Phòng ban:[^\n]*/gi, '')
+              .replace(/Đối tượng:[^\n]*/gi, '')
+              .replace(/Thụ hưởng[^\n]*/gi, '')
+              .replace(/Hình thức:[^\n]*/gi, '')
+              .replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
+              .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+              .trim() : '';
+          }
           if (match) {
             request_bank_transfer = true;
             bank_name = match[1].trim();
             bank_account_number = match[2].trim();
             bank_account_name = match[3].trim();
-            cleanNotes = editItem.notes.replace(bankRegex, '').trim();
           }
 
           let initialEntities: any[] = [];
@@ -360,8 +533,12 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             setSelectedEmployeeId('');
           }
 
+          const initialSuffix = extractExpenseTitleSuffix(editItem.title || '');
+          setTitleSuffix(initialSuffix);
+          const fullTitle = initialSuffix ? `Đề nghị thanh toán — ${initialSuffix}` : (editItem.title || '');
+
           setForm({
-            title: editItem.title || '',
+            title: fullTitle,
             category: editItem.category || 'Khác',
             amount: String(editItem.amount || 0),
             currency: editItem.currency || 'VND',
@@ -400,8 +577,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           setImages([]);
           setBeneficiaryType('vendor');
           setSelectedEmployeeId('');
+          setTitleSuffix('');
           setForm({
             ...EMPTY_FORM,
+            title: '',
             date: initialDate || new Date().toISOString().split('T')[0],
             approver_id: defaultApproverId
           });
@@ -492,8 +671,13 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const isAutoApprove = form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id);
 
   const handleSave = async () => {
-    if (!form.title || !form.amount) {
-      addToast('Điền đầy đủ nội dung và số tiền', 'error');
+    const finalTitle = titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : (form.title?.trim() || '');
+    if (!titleSuffix.trim() && (!finalTitle || finalTitle === 'Đề nghị thanh toán')) {
+      addToast('Vui lòng nhập chi tiết nội dung chi (ví dụ: In ấn, Tiền thuê văn phòng...)', 'error');
+      return;
+    }
+    if (!form.amount) {
+      addToast('Điền đầy đủ số tiền chi', 'error');
       return;
     }
     if (form.approver_id === null) {
@@ -553,6 +737,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       if (editItem && editItem.id && !editItem.isClone) {
         await api.put(`/expenses/${editItem.id}`, {
           ...form,
+          title: finalTitle,
           image_url: uniqueImages[0] || null,
           notes: finalNotes,
           amount: Number(form.amount),
@@ -562,6 +747,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       } else {
         await api.post('/expenses', {
           ...form,
+          title: finalTitle,
           image_url: uniqueImages[0] || null,
           notes: finalNotes,
           amount: Number(form.amount),
@@ -574,6 +760,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
           addToast('Đã nhập chi phí mới – chờ phê duyệt', 'success');
         }
       }
+      try {
+        localStorage.removeItem(EXPENSE_DRAFT_KEY);
+      } catch {}
+      setExistingDraft(null);
       onSaveSuccess();
       onClose();
     } catch (e: any) {
@@ -586,17 +776,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex, display: 'flex', justifyContent: 'flex-end' }}>
           <motion.div
             className="drawer-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => !saving && onClose()}
+            onClick={() => !saving && handleRequestClose()}
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 2000000005,
+              zIndex: baseZIndex + 5,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
@@ -615,9 +805,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               position: 'fixed',
               top: 0,
               bottom: 0,
-              left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+              left: 0,
               right: 0,
-              width: isMobile ? '100vw' : 'auto',
+              width: '100vw',
               height: isMobile ? '100dvh' : '100vh',
               background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
               boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
@@ -625,7 +815,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               flexDirection: 'column',
               boxSizing: 'border-box',
               overflow: 'hidden',
-              zIndex: 2000000010
+              zIndex: baseZIndex + 10
             }}
           >
             {/* Header with Cancel and Save buttons at the top right */}
@@ -644,7 +834,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 {/* Close Button as "<" ChevronLeft on the Left */}
                 <button 
                   type="button"
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   style={{
                     padding: '8px',
                     borderRadius: '8px',
@@ -676,20 +866,21 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               {/* Action Buttons in top right corner */}
               <div style={{
                 display: 'flex',
-                gap: '0.75rem',
+                gap: '0.6rem',
                 alignItems: 'center',
                 justifyContent: isMobile ? 'space-between' : 'flex-end',
-                width: isMobile ? '100%' : 'auto'
+                width: isMobile ? '100%' : 'auto',
+                flexWrap: isMobile ? 'wrap' : 'nowrap'
               }}>
                 <button
                   type="button"
                   className="btn outline"
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   disabled={saving}
                   style={{
                     height: '34px',
                     flex: isMobile ? 1 : 'none',
-                    minWidth: isMobile ? 'none' : '90px',
+                    minWidth: isMobile ? 'none' : '80px',
                     fontSize: '0.85rem',
                     fontWeight: 700,
                     borderRadius: '10px'
@@ -697,6 +888,29 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 >
                   Hủy
                 </button>
+                {!editItem && (
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={handleExplicitSaveDraft}
+                    disabled={saving}
+                    style={{
+                      height: '34px',
+                      flex: isMobile ? 1 : 'none',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      borderRadius: '10px'
+                    }}
+                    title="Lưu bản nháp để hoàn thiện sau"
+                  >
+                    <Bookmark size={14} />
+                    <span>Lưu nháp</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn primary"
@@ -724,10 +938,132 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
 
             <div className="modal-body custom-scrollbar" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '1.5rem', padding: '1.5rem', flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 65px)', WebkitOverflowScrolling: 'touch' }}>
               {/* Left Column: Main form details */}
-              <div style={{ flex: isMobile ? 'none' : 7, display: 'flex', flexDirection: 'column', gap: '1.25rem', borderRight: isMobile ? 'none' : '1px solid var(--color-border-light)', paddingRight: isMobile ? '0' : '1.5rem', paddingBottom: '80px' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Nội dung chi *</label>
-                  <input className="form-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="VD: Thuê văn phòng tháng 6..." />
+              <div style={{ flex: isMobile ? 'none' : 7, display: 'flex', flexDirection: 'column', gap: '1.25rem', borderRight: isMobile ? 'none' : '1px solid var(--color-border-light)', paddingRight: isMobile ? '0' : '1.5rem', paddingBottom: '180px' }}>
+                
+                {/* Draft Notification Banner */}
+                {existingDraft && !editItem && (
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    borderRadius: '12px',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.28)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--color-text)' }}>
+                      <Bookmark size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
+                      <span>
+                        Có 1 bản nháp đã lưu lúc <strong>{existingDraft.savedAt ? new Date(existingDraft.savedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}</strong>
+                        {existingDraft.form?.title ? ` - "${existingDraft.form.title}"` : ''}.
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleRestoreDraft}
+                        style={{
+                          padding: '5px 12px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          background: 'var(--color-primary)',
+                          color: '#fff',
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 6px rgba(163, 20, 34, 0.2)'
+                        }}
+                      >
+                        Khôi phục bản nháp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearDraft}
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          background: 'transparent',
+                          color: 'var(--color-text-muted)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--color-border)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Xóa nháp
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '4px' }}>
+                    <label className="form-label" style={{ fontWeight: 700, margin: 0, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Nội dung chi <span style={{ color: 'var(--color-danger)' }}>*</span>
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                      Tên loại quy trình cố định khúc đầu, nhập nội dung chi tiết khúc sau
+                    </span>
+                  </div>
+                  
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'stretch',
+                    borderRadius: '10px',
+                    border: '1.5px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    overflow: 'hidden',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                  }}>
+                    {/* Fixed Prefix */}
+                    <div style={{
+                      padding: '0 14px',
+                      background: 'var(--color-bg-secondary, #f1f5f9)',
+                      borderRight: '1.5px solid var(--color-border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      color: 'var(--color-text)',
+                      whiteSpace: 'nowrap',
+                      userSelect: 'none',
+                      flexShrink: 0
+                    }}>
+                      <span style={{ color: '#10b981', fontSize: '0.9rem' }}>●</span>
+                      <span>Đề nghị thanh toán</span>
+                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                    </div>
+
+                    {/* Editable Suffix */}
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={titleSuffix}
+                      onChange={e => handleSuffixChange(e.target.value)}
+                      placeholder="Nhập nội dung chi cụ thể (VD: In ấn, thi công Lễ tốt nghiệp, Tiền thuê văn phòng...) *"
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        borderRadius: 0,
+                        height: '42px',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        background: 'transparent',
+                        padding: '0 14px'
+                      }}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Hiển thị trên phiếu chi & quy trình:</span>
+                    <strong style={{ color: 'var(--color-primary)' }}>
+                      {titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : 'Đề nghị thanh toán'}
+                    </strong>
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -1951,6 +2287,17 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Draft Exit Confirmation Modal */}
+            <DraftExitConfirmModal
+              isOpen={showExitConfirm}
+              onSaveDraft={handleSaveDraftAndExit}
+              onDiscard={handleDiscardAndExit}
+              onContinue={() => setShowExitConfirm(false)}
+              title="Lưu bản nháp khoản chi?"
+              message="Bạn có các thông tin khoản chi đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
+              zIndex={baseZIndex + 50}
+            />
           </motion.div>
         </div>
       )}

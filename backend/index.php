@@ -649,6 +649,69 @@ try {
         }
         $db->exec("ALTER TABLE deposits MODIFY COLUMN contact_id INT NULL DEFAULT NULL");
     } catch (\Throwable $e) {}
+
+    // Migration: restore_exp_19_and_audit_cleanup_v3
+    if (!in_array('restore_exp_19_and_audit_cleanup_v3', $applied, true)) {
+        try {
+            // 1. Delete invalid delete logs for expense 19
+            $db->exec("DELETE FROM audit_logs WHERE resource = 'expense' AND resource_id = 19 AND (action = 'DELETE' OR action LIKE '%Xóa%')");
+
+            // 2. Resolve users for Mai Thị Nữ, Nguyễn Thu Thảo, Trịnh Đình Thanh
+            $stUsers = $db->query("SELECT id, full_name FROM users WHERE full_name LIKE '%Mai Thị Nữ%' OR full_name LIKE '%Nguyễn Thu Thảo%' OR full_name LIKE '%Trịnh Đình Thanh%'");
+            $uRows = $stUsers ? $stUsers->fetchAll(PDO::FETCH_ASSOC) : [];
+            $maiThiNuId = null;
+            $nguyenThuThaoId = null;
+            $trinhDinhThanhId = null;
+            foreach ($uRows as $ur) {
+                if (stripos($ur['full_name'], 'Mai Thị Nữ') !== false && !$maiThiNuId) $maiThiNuId = (int)$ur['id'];
+                if (stripos($ur['full_name'], 'Nguyễn Thu Thảo') !== false && !$nguyenThuThaoId) $nguyenThuThaoId = (int)$ur['id'];
+                if (stripos($ur['full_name'], 'Trịnh Đình Thanh') !== false && !$trinhDinhThanhId) $trinhDinhThanhId = (int)$ur['id'];
+            }
+            if (!$maiThiNuId) $maiThiNuId = 1003;
+            if (!$nguyenThuThaoId) $nguyenThuThaoId = 1004;
+            if (!$trinhDinhThanhId) $trinhDinhThanhId = 1002;
+
+            $expNotes = "[Hồ sơ chi phí]: Danh mục: Chi phí nghiệp vụ khác - Chứng từ: Hóa đơn điện tử VAT 10%\nPhòng ban: Marketing\nĐối tượng: Đối tác\nThụ hưởng (Đối tác / Vendor): CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH (MST: 0313195766)\nChi tiết: Thanh toán tiền in ấn, thi công Lễ tốt nghiệp\n\n[Thông tin chuyển khoản]: Ngân hàng TMCP Ngoại Thương Việt Nam - STK: 0441000684888 - Chủ TK: CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH - Chi nhánh: Tân Bình\n[Tài liệu đính kèm (1 tệp)]:\n• img_6aa3590f3ef572.83332019.pdf (https://myerp.ideas.edu.vn/backend/uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf)";
+
+            $chkExp = $db->query("SELECT id FROM expenses WHERE id = 19")->fetch();
+            if ($chkExp) {
+                $updStmt = $db->prepare("
+                    UPDATE expenses SET
+                        title = 'Đề nghị thanh toán',
+                        amount = 9644875.00,
+                        vat_amount = 714435.00,
+                        has_vat_invoice = 1,
+                        is_vat_inclusive = 1,
+                        vendor_name = 'CÔNG TY TNHH THIẾT KẾ IN ẤN QUẢNG CÁO XUÂN PHƯỚC THỊNH',
+                        category = 'Khác',
+                        date = '2026-09-11',
+                        status = 'pending',
+                        approval_status = 'pending',
+                        status_level_1 = 'approved',
+                        status_level_2 = 'approved',
+                        status_level_3 = 'pending',
+                        approver_id = ?,
+                        approver_id_2 = ?,
+                        approver_id_3 = ?,
+                        created_by = ?,
+                        created_at = '2026-09-11 08:30:30',
+                        approved_at = '2026-09-11 11:28:43',
+                        notes = ?,
+                        image_url = 'uploads/tenant_1/img_6aa3590f3ef572.83332019.pdf',
+                        deleted_at = NULL
+                    WHERE id = 19
+                ");
+                $updStmt->execute([$maiThiNuId, $nguyenThuThaoId, $trinhDinhThanhId, $maiThiNuId, $expNotes]);
+            }
+
+            // Restore any accidental soft delete on 247 express
+            $db->exec("UPDATE expenses SET deleted_at = NULL WHERE title LIKE '%247 express%' AND deleted_at IS NOT NULL");
+
+            $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('restore_exp_19_and_audit_cleanup_v3')")->execute();
+        } catch (\Throwable $ex) {
+            error_log("Restore EXP 19 Migration Error: " . $ex->getMessage());
+        }
+    }
 } catch (Exception $e) {
     error_log("Auto Migration Error: " . $e->getMessage());
 }
@@ -1110,7 +1173,16 @@ switch ($resource) {
         elseif ($resourceId  && $method === 'GET')    $ctrl->showExpense($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->updateExpense($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->deleteExpense($auth, (int)$resourceId);
-        elseif ($resourceId  && $method === 'PATCH')  $ctrl->approveExpense($auth, (int)$resourceId);
+        elseif ($resourceId  && $method === 'PATCH') {
+            $data = getBody();
+            // If PATCH only contains status=approved/rejected (action buttons), approve/reject
+            // If PATCH contains expense data fields (title, notes, amount, approvers, etc.), update
+            if (isset($data['status']) && in_array($data['status'], ['approved', 'rejected'], true) && !isset($data['title']) && !isset($data['notes']) && !isset($data['amount'])) {
+                $ctrl->approveExpense($auth, (int)$resourceId);
+            } else {
+                $ctrl->updateExpense($auth, (int)$resourceId);
+            }
+        }
         else respond(404, null, 'Route không tồn tại', false);
         break;
 

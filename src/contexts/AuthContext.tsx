@@ -17,6 +17,7 @@ type User = {
   two_factor_type?: string;
   job_title?: string;
   address?: string;
+  team_id?: number | null;
   erp_profile?: any;
   bio?: string | null;
 };
@@ -44,11 +45,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let role = u.role;
     if (role === 'sales') role = 'sale';
     if (role === 'super_admin') role = 'superadmin';
+    let job_title = u.job_title || u.erp_profile?.job_title || u.title || u.position;
+    if (!job_title && u.address) {
+      try {
+        const p = typeof u.address === 'string' ? JSON.parse(u.address) : u.address;
+        if (p?.erp_profile?.job_title) job_title = p.erp_profile.job_title;
+      } catch (e) {}
+    }
     return {
       ...u,
       name: u.full_name || u.name || u.username || '',
       avatar: u.avatar || u.avatar_url || '',
       signature_url: u.signature_url !== undefined ? u.signature_url : (u.signature_img || null),
+      job_title: job_title || u.job_title || '',
       role
     };
   };
@@ -105,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const latestAvatar = data.avatar_url || data.avatar;
             const latestName = data.full_name || data.name;
             const latestSignatureUrl = data.signature_url !== undefined ? data.signature_url : (data.signature_img || user.signature_url);
-            const latestJobTitle = data.job_title || (data.address ? (() => { try { return JSON.parse(data.address)?.erp_profile?.job_title; } catch(e) { return null; } })() : null);
+            const latestJobTitle = data.job_title || (data.address ? (() => { try { return JSON.parse(data.address)?.erp_profile?.job_title; } catch(e) { return null; } })() : null) || data.title || data.position;
             if (
               (latestAvatar && latestAvatar !== user.avatar) || 
               (latestName && latestName !== user.name) ||

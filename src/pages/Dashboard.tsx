@@ -24,6 +24,7 @@ import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skele
 import { Avatar } from '../components/ui/Avatar';
 import { WarRoomFlightDeck } from '../components/Dashboard/WarRoomFlightDeck';
 import { useAuth } from '../contexts/AuthContext';
+import { getUserJobTitle, getUserDisplayRoleOrTitle } from '../utils/roleUtils';
 
 const parseServerDate = (dateStr: string) => {
   if (!dateStr) return new Date();
@@ -713,65 +714,60 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     setShowDateModal(false);
   };
 
-  const getRoleLabel = (role: string) => {
-    if (role === 'admin') return t('Quản trị viên');
-    if (role === 'superadmin' || role === 'super_admin') return t('Giám đốc điều hành');
-    if (role === 'director') return t('Giám đốc');
-    if (role === 'manager') return t('Quản lý');
-    if (role === 'hr') return t('Nhân sự');
-    if (role === 'accountant') return t('Kế toán');
-    if (role === 'marketing') return t('Marketing');
-    if (role === 'sale_admin' || role === 'saleadmin') return t('Sale Admin');
-    return role;
+  const getRoleLabel = (role: string, targetUser?: any) => {
+    const u = targetUser || user;
+    return getUserDisplayRoleOrTitle(u, role);
   };
 
-  const getRoleBadgeStyle = (role: string) => {
-    if (role === 'sale_admin' || role === 'saleadmin') {
-      return {
-        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.4)'
-      };
-    }
-    if (role === 'superadmin' || role === 'super_admin') {
+  const getRoleBadgeStyle = (role: string, customTitle?: string) => {
+    const r = (role || '').toLowerCase();
+    const t = (customTitle || '').toLowerCase();
+    if (r === 'superadmin' || r === 'super_admin' || t.includes('điều hành') || t.includes('ceo') || t.includes('founder')) {
       return {
         background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
         boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)'
       };
     }
-    if (role === 'director') {
+    if (r === 'director' || t.includes('giám đốc')) {
       return {
         background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
         boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)'
       };
     }
-    if (role === 'manager') {
+    if (r === 'manager' || t.includes('quản lý') || t.includes('trưởng phòng')) {
       return {
         background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
         boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)'
       };
     }
-    if (role === 'hr') {
+    if (r === 'hr' || t.includes('nhân sự')) {
       return {
         background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
         boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)'
       };
     }
-    if (role === 'accountant') {
+    if (r === 'accountant' || t.includes('kế toán')) {
       return {
         background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
         boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
       };
     }
-      if (role === 'academic' || role === 'hoc_vu' || role === 'tro_giang' || role === 'teacher' || role === 'giang_vien') {
-        return {
-          background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-          boxShadow: '0 2px 8px rgba(14, 165, 233, 0.4)'
-        };
-      }
-    if (role === 'marketing') {
+    if (r === 'academic' || r === 'hoc_vu' || r === 'tro_giang' || r === 'teacher' || r === 'giang_vien' || t.includes('học vụ') || t.includes('giảng viên')) {
+      return {
+        background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+        boxShadow: '0 2px 8px rgba(14, 165, 233, 0.4)'
+      };
+    }
+    if (r === 'marketing' || t.includes('marketing')) {
       return {
         background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
         boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)'
+      };
+    }
+    if (r === 'sale_admin' || r === 'saleadmin') {
+      return {
+        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.4)'
       };
     }
     return {
@@ -882,9 +878,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   borderRadius: '20px', 
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  ...getRoleBadgeStyle(user?.role || '')
+                  ...getRoleBadgeStyle(user?.role || '', getUserJobTitle(user))
                 }}>
-                  {getRoleLabel(user?.role || '')}
+                  {getRoleLabel(user?.role || '', user)}
                 </span>
               )}
             </div>
@@ -906,9 +902,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   borderRadius: '20px', 
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  ...getRoleBadgeStyle(user?.role || '')
+                  ...getRoleBadgeStyle(user?.role || '', getUserJobTitle(user))
                 }}>
-                  {getRoleLabel(user?.role || '')}
+                  {getRoleLabel(user?.role || '', user)}
                 </span>
               </div>
             )}
@@ -1207,77 +1203,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       if (pendingExpensesCount > 0) {
         issues.push({
           type: 'expense',
-          text: pendingExpensesCount + ' ' + t('yêu cầu thanh toán chi phí cần duyệt.'),
-          action: () => navigate('/expenses?status=pending')
+          text: pendingExpensesCount + ' ' + t('quy trình & đề xuất cần duyệt.'),
+          action: () => navigate('/approvals?tab=pending')
         });
       }
     }
-
-    const getRoleLabel = (role: string) => {
-      if (role === 'admin') return t('Quản trị viên');
-      if (role === 'superadmin' || role === 'super_admin') return t('Giám đốc điều hành');
-      if (role === 'director') return t('Giám đốc');
-      if (role === 'manager') return t('Quản lý');
-      if (role === 'assistant') return t('Trợ lý');
-      if (role === 'sale_admin' || role === 'saleadmin') return t('Sale Admin');
-      if (role === 'marketing') return t('Marketing');
-      if (role === 'sales' || role === 'sale') return t('Tư vấn viên');
-      if (role === 'hr') return t('Nhân sự');
-      if (role === 'accountant') return t('Kế toán');
-      if (role === 'academic' || role === 'hoc_vu') return t('Học vụ');
-      if (role === 'tro_giang' || role === 'teacher' || role === 'giang_vien') return t('Học thuật / Giảng viên');
-      if (role === 'viewer') return t('Người xem');
-      return role;
-    };
-
-    const getRoleBadgeStyle = (role: string) => {
-      if (role === 'superadmin' || role === 'super_admin') {
-        return {
-          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-          boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)'
-        };
-      }
-      if (role === 'director') {
-        return {
-          background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-          boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)'
-        };
-      }
-      if (role === 'manager') {
-        return {
-          background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
-          boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)'
-        };
-      }
-      if (role === 'hr') {
-        return {
-          background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-          boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)'
-        };
-      }
-      if (role === 'accountant') {
-        return {
-          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
-        };
-      }
-      if (role === 'academic' || role === 'hoc_vu' || role === 'tro_giang' || role === 'teacher' || role === 'giang_vien') {
-        return {
-          background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-          boxShadow: '0 2px 8px rgba(14, 165, 233, 0.4)'
-        };
-      }
-      if (role === 'marketing') {
-        return {
-          background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-          boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)'
-        };
-      }
-      return {
-        background: 'linear-gradient(135deg, #BD1D2D 0%, #a31422 100%)',
-        boxShadow: '0 2px 8px rgba(189, 29, 45, 0.5)'
-      };
-    };
 
     return (
       <>
@@ -1437,9 +1367,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   color: '#ffffff',
                   textTransform: 'uppercase',
                   letterSpacing: '0.03em',
-                  ...getRoleBadgeStyle(user?.role || '')
+                  ...getRoleBadgeStyle(user?.role || '', getUserJobTitle(user))
                 }}>
-                  {getRoleLabel(user?.role || '')}
+                  {getRoleLabel(user?.role || '', user)}
                 </span>
               </div>
             </div>

@@ -2289,14 +2289,63 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         <td style={{ padding: '12px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <Avatar name={lead.full_name || t('Khách hàng')} size={32} />
-                            <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{lead.full_name || t('Khách hàng')}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{lead.full_name || t('Khách hàng')}</span>
+                              {(lead.is_referral || lead.referrer_name || lead.partner_id || lead.original_source === 'ref' || lead.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu') && (
+                                <span title={lead.referrer_name ? `Khách hàng giới thiệu bởi: ${lead.referrer_name}` : 'Khách hàng giới thiệu (Ref)'} style={{ display: 'inline-flex', color: 'var(--color-primary, #BD1D2D)' }}>
+                                  <UserPlus size={13} />
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td style={{ padding: '12px 16px' }}>
-                          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                            {lead.phone || '-'}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{lead.email || '-'}</div>
+                          {(() => {
+                            const isRef = Boolean(lead.is_referral || lead.referrer_name || lead.partner_id || lead.original_source === 'ref' || lead.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu');
+                            const hasPhone = Boolean(lead.phone && lead.phone !== '-');
+                            const hasEmail = Boolean(lead.email && lead.email !== '-');
+                            if (!hasPhone && !hasEmail && isRef) {
+                              const refName = lead.referrer_name || lead.partner_name || '';
+                              const refAvatar = lead.referrer_avatar || lead.partner_avatar || '';
+                              return (
+                                <div 
+                                  style={{ 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '5px', 
+                                    background: 'rgba(59, 130, 246, 0.08)', 
+                                    border: '1px solid rgba(59, 130, 246, 0.2)', 
+                                    borderRadius: '14px', 
+                                    padding: '2px 8px', 
+                                    fontSize: '0.75rem', 
+                                    maxWidth: '100%', 
+                                    overflow: 'hidden' 
+                                  }} 
+                                  title={refName ? `Được giới thiệu bởi: ${refName}` : 'Khách hàng có nguồn giới thiệu'}
+                                >
+                                  {refName ? (
+                                    <>
+                                      <Avatar name={refName} src={refAvatar} size={18} />
+                                      <span style={{ color: 'var(--color-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{refName}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
+                                      <span style={{ color: '#2563eb', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Được giới thiệu</span>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return (
+                              <>
+                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                                  {lead.phone || '-'}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{lead.email || '-'}</div>
+                              </>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '12px 16px' }}>
                           <span className="badge" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px' }}>
@@ -2682,14 +2731,64 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                         <td style={{ padding: '1rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <Avatar name={lead.name} size={32} />
-                            <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{lead.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{lead.name}</span>
+                              {Boolean((lead as any).is_referral || (lead as any).referrer_name || (lead as any).partner_id || (lead as any).original_source === 'ref' || (lead as any).original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu') && (
+                                <span title={(lead as any).referrer_name ? `Khách hàng giới thiệu bởi: ${(lead as any).referrer_name}` : 'Khách hàng giới thiệu (Ref)'} style={{ display: 'inline-flex', color: 'var(--color-primary, #BD1D2D)' }}>
+                                  <UserPlus size={13} />
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td style={{ padding: '1rem' }}>
-                          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                            {maskPhone(lead.phone)}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{maskEmail(lead.email)}</div>
+                          {(() => {
+                            const leadAny = lead as any;
+                            const isRef = Boolean(leadAny.is_referral || leadAny.referrer_name || leadAny.partner_id || leadAny.original_source === 'ref' || leadAny.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu');
+                            const hasPhone = Boolean(lead.phone && lead.phone !== '-');
+                            const hasEmail = Boolean(lead.email && lead.email !== '-');
+                            if (!hasPhone && !hasEmail && isRef) {
+                              const refName = leadAny.referrer_name || leadAny.partner_name || '';
+                              const refAvatar = leadAny.referrer_avatar || leadAny.partner_avatar || '';
+                              return (
+                                <div 
+                                  style={{ 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '5px', 
+                                    background: 'rgba(59, 130, 246, 0.08)', 
+                                    border: '1px solid rgba(59, 130, 246, 0.2)', 
+                                    borderRadius: '14px', 
+                                    padding: '2px 8px', 
+                                    fontSize: '0.75rem', 
+                                    maxWidth: '100%', 
+                                    overflow: 'hidden' 
+                                  }} 
+                                  title={refName ? `Được giới thiệu bởi: ${refName}` : 'Khách hàng có nguồn giới thiệu'}
+                                >
+                                  {refName ? (
+                                    <>
+                                      <Avatar name={refName} src={refAvatar} size={18} />
+                                      <span style={{ color: 'var(--color-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{refName}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
+                                      <span style={{ color: '#2563eb', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Được giới thiệu</span>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return (
+                              <>
+                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                                  {maskPhone(lead.phone)}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{maskEmail(lead.email)}</div>
+                              </>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '1rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>

@@ -14,7 +14,7 @@ const R_LABEL: Record<string, string> = {
   superadmin: 'Super Admin',
   super_admin: 'Super Admin',
   admin: 'Quản trị viên', 
-  director: 'Giám đốc kinh doanh',
+  director: 'Giám đốc',
   manager: 'Quản lý', 
   assistant: 'Trợ lý',
   sales: 'Sale / Nhân viên', 

@@ -16,6 +16,7 @@ export interface AuthUser {
   manager_behavior_mode?: string | null;
   two_factor_enabled?: number;
   two_factor_type?: string;
+  team_id?: number | null;
 }
 
 interface AuthStore {

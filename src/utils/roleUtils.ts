@@ -217,6 +217,21 @@ export function isSales(input: RoleInput): boolean {
  * Checks if the user is in Marketing
  */
 export function isMarketing(input: RoleInput): boolean {
+  if (!input) return false;
+  if (typeof input === 'object') {
+    const u = input as any;
+    const role = normalizeRole(u.role || u);
+    if (ROLE_GROUPS.MARKETING.includes(role as any)) return true;
+    if (Number(u.team_id) === 3) return true;
+    const combined = [
+      u.job_title,
+      u.title,
+      u.team_name,
+      u.department
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (combined.includes('marketing')) return true;
+    return false;
+  }
   const role = normalizeRole(input);
   return ROLE_GROUPS.MARKETING.includes(role as any);
 }
@@ -353,4 +368,77 @@ export function isPrivilegedCRM(input: RoleInput): boolean {
   const role = normalizeRole(input);
   return isExecutive(input) || ['assistant', 'manager', 'sale_admin', 'saleadmin'].includes(role);
 }
+
+/**
+ * Extracts the user's explicit job title (chức vụ / vị trí)
+ * Checks job_title, erp_profile.job_title, address JSON, title, position.
+ * Returns empty string if none configured or if dummy/fake.
+ */
+export function getUserJobTitle(user: any): string {
+  if (!user) return '';
+  if (typeof user === 'string') return '';
+  
+  let jt = user.job_title || user.erp_profile?.job_title || user.title || user.position;
+  if (!jt && user.address) {
+    try {
+      const p = typeof user.address === 'string' ? JSON.parse(user.address) : user.address;
+      if (p?.erp_profile?.job_title) jt = p.erp_profile.job_title;
+    } catch (e) {}
+  }
+  if (!jt) {
+    try {
+      const stored = localStorage.getItem('Ideas_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (!user.id || parsed?.id === user.id) {
+          jt = parsed?.job_title || parsed?.erp_profile?.job_title || parsed?.title;
+        }
+      }
+    } catch (e) {}
+  }
+  if (typeof jt === 'string') {
+    const trimmed = jt.trim();
+    const lower = trimmed.toLowerCase();
+    if (lower.includes('fake') || lower.includes('dummy')) return '';
+    return trimmed;
+  }
+  return '';
+}
+
+/**
+ * Returns the display role or title for a user.
+ * MANDATORY: If the user has a configured job title / position, that title MUST be rendered!
+ * Only when no title is configured does it fallback to default role label.
+ * Fallback for 'director' is 'Giám đốc' (NEVER 'Giám đốc kinh doanh').
+ */
+export function getUserDisplayRoleOrTitle(user: any, fallbackRole?: string): string {
+  const explicitTitle = getUserJobTitle(user);
+  if (explicitTitle) return explicitTitle;
+
+  const role = normalizeRole(fallbackRole || (typeof user === 'string' ? user : user?.role));
+  switch (role) {
+    case 'superadmin':
+    case 'super_admin': return 'Giám đốc điều hành';
+    case 'admin': return 'Quản trị viên';
+    case 'director': return 'Giám đốc';
+    case 'manager': return 'Quản lý';
+    case 'assistant':
+    case 'tro_ly': return 'Trợ lý';
+    case 'sale_admin':
+    case 'saleadmin': return 'Sale Admin';
+    case 'marketing': return 'Marketing';
+    case 'sales':
+    case 'sale': return 'Tư vấn viên';
+    case 'hr': return 'Nhân sự';
+    case 'accountant': return 'Kế toán';
+    case 'academic':
+    case 'hoc_vu': return 'Học vụ';
+    case 'tro_giang':
+    case 'teacher':
+    case 'giang_vien': return 'Học thuật / Giảng viên';
+    case 'viewer': return 'Người xem';
+    default: return role ? (role.charAt(0).toUpperCase() + role.slice(1)) : 'Người dùng';
+  }
+}
+
 

@@ -8,10 +8,10 @@ export const numberToText = (number: number | string, currency: string = 'VND', 
 export const numberToVietnameseText = (number: number | string, currency: string = 'VND', showSuffix: boolean = true): string => {
   if (number === "" || number === null || number === undefined) return "";
   
-  const str = String(number).replace(/[^0-9]/g, "");
-  const n = parseInt(str);
-  
-  if (isNaN(n) || n === 0) return "";
+  const rawNum = typeof number === 'number' ? number : parseFloat(String(number).replace(/,/g, ''));
+  if (isNaN(rawNum) || rawNum === 0) return "";
+  const n = Math.round(Math.abs(rawNum));
+  if (n === 0) return "";
   if (n > 9999999999999) return "Số quá lớn (vượt quá 9999 tỷ)";
 
   const units = ["", " nghìn", " triệu", " tỷ", " nghìn tỷ", " triệu tỷ"];

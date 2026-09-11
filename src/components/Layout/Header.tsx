@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { getUserDisplayRoleOrTitle } from '../../utils/roleUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useUIStore } from '../../store/uiStore';
 import { toast } from 'react-hot-toast';
@@ -268,6 +269,7 @@ export const Header = ({
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifAvatars, setNotifAvatars] = useState<any>({});
+  const notifAvatarsRef = useRef<any>({});
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
 
   // --- Tab Title Flashing & Browser Push notifications ---
@@ -448,7 +450,9 @@ export const Header = ({
         
         setNotifications(items);
         setUnreadCount(newUnreadCount);
-        setNotifAvatars(res.data.avatars || {});
+        const avs = res.data.avatars || {};
+        setNotifAvatars(avs);
+        notifAvatarsRef.current = avs;
         
         if (newUnreadCount === 0) {
           stopFlashingTitle();
@@ -849,6 +853,23 @@ export const Header = ({
   const showNotificationToast = (item: any) => {
     const meta = getNotifMeta(item);
 
+    let actorName = item.actor_name;
+    let actorAvatar = item.actor_avatar || (actorName ? (notifAvatars?.[actorName] || notifAvatarsRef.current?.[actorName]) : undefined);
+
+    if (!actorName && item.body) {
+      const clean = item.body
+        .replace(/^(?:\[[^\]]+\]\s*)+/g, '')
+        .replace(/^(?:Nhân viên|Nhân sự|Đồng nghiệp|Quản lý|Trưởng nhóm|Admin|Kế toán|Giám đốc)\s+/gi, '')
+        .trim();
+      const m = clean.match(/^(.+?)(?:\s*\([^)]*\))?\s+(?:đã|vừa|gửi|báo|có|check-in|nhắc|tạo|yêu cầu)\s+/i);
+      if (m && m[1] && m[1].trim().length >= 2) {
+        actorName = m[1].trim();
+        if (!actorAvatar) {
+          actorAvatar = notifAvatars?.[actorName] || notifAvatarsRef.current?.[actorName];
+        }
+      }
+    }
+
     toast.custom((t) => (
       <div
         onClick={() => {
@@ -865,7 +886,7 @@ export const Header = ({
           border: '1px solid #e2e8f0',
           borderLeft: `6px solid ${meta.leftPill || meta.badgeColor}`,
           boxShadow: '0 14px 34px -6px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.05)',
-          padding: '14px 16px 12px 18px',
+          padding: '14px 18px 12px 18px',
           position: 'relative',
           overflow: 'hidden'
         }}
@@ -977,12 +998,27 @@ export const Header = ({
             justifyContent: 'space-between',
             paddingTop: '8px',
             borderTop: '1px solid #f1f5f9',
-            fontSize: '11.5px'
+            fontSize: '11.5px',
+            gap: '8px'
           }}
         >
-          <span style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
-            {item.actor_name ? `Từ: ${item.actor_name}` : 'Nhấn vào để mở'}
-          </span>
+          {actorName ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', minWidth: 0, overflow: 'hidden' }}>
+              <Avatar 
+                src={actorAvatar || undefined} 
+                name={actorName} 
+                size={22} 
+                style={{ flexShrink: 0, border: '1.5px solid #ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }} 
+              />
+              <span style={{ color: '#334155', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {actorName}
+              </span>
+            </div>
+          ) : (
+            <span style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+              Nhấn vào để mở
+            </span>
+          )}
           <span
             style={{
               color: 'var(--color-primary, #BD1D2D)',
@@ -990,7 +1026,9 @@ export const Header = ({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '4px',
-              textDecoration: 'none'
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
             {meta.ctaText}
@@ -1207,7 +1245,7 @@ export const Header = ({
       case 'viewer': return t('Người xem');
       case 'sale':
       case 'sales': return t('Tư vấn viên');
-      case 'director': return t('Giám đốc kinh doanh');
+      case 'director': return t('Giám đốc');
       case 'manager': return t('Quản lý');
       case 'hr': return t('Nhân sự');
       case 'accountant': return t('Kế toán');
@@ -1932,18 +1970,7 @@ export const Header = ({
             <div className="responsive-hide-mobile" style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{user?.name || 'User'}</span>
               <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>
-                {(() => {
-                  const u = user as any;
-                  const jt = u?.job_title || u?.erp_profile?.job_title;
-                  if (jt) return jt;
-                  if (u?.address) {
-                    try {
-                      const p = typeof u.address === 'string' ? JSON.parse(u.address) : u.address;
-                      if (p?.erp_profile?.job_title) return p.erp_profile.job_title;
-                    } catch(e) {}
-                  }
-                  return getRoleLabel(user?.role);
-                })()}
+                {getUserDisplayRoleOrTitle(user)}
               </span>
             </div>
           </div>

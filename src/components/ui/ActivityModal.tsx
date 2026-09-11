@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, Clock, AlignLeft, Phone, Mail, Users, CheckSquare, Zap, PhoneOutgoing, PhoneIncoming, Camera, FileText } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -16,6 +17,7 @@ interface ActivityModalProps {
   userId?: number;
   activity?: any; // If passed, we are in edit mode
   onSwitchToTask?: () => void;
+  zIndex?: number;
 }
 
 const TYPES = [
@@ -42,7 +44,7 @@ const PLACEHOLDERS: Record<string, string> = {
   note: 'Ví dụ: Ghi chú trao đổi với khách hàng...'
 };
 
-export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, entityType, entityId, onSuccess, userId, activity, onSwitchToTask }) => {
+export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, entityType, entityId, onSuccess, userId, activity, onSwitchToTask, zIndex }) => {
   const { addToast } = useUIStore();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -192,22 +194,25 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
     }
   };
 
-  return (
+  const modalContent = (
     <AnimatePresence>
-      <motion.div 
-        className="overlay-backdrop" 
-        style={{ 
-          zIndex: 1000050, 
-          display: 'flex', 
-          alignItems: isMobile ? 'flex-end' : 'center', 
-          justifyContent: 'center' 
-        }} 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        onClick={onClose}
-      >
+      {isOpen && (
+        <motion.div 
+          className="overlay-backdrop" 
+          style={{ 
+            zIndex: zIndex || 2147483640, 
+            display: 'flex', 
+            alignItems: isMobile ? 'flex-end' : 'center', 
+            justifyContent: 'center',
+            position: 'fixed',
+            inset: 0
+          }} 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          onClick={onClose}
+        >
         <motion.div 
           className="modal-sheet" 
           style={{ 
@@ -612,6 +617,9 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ isOpen, onClose, e
           </div>
         </motion.div>
       </motion.div>
+    )}
     </AnimatePresence>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 };

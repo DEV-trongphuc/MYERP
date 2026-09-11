@@ -13,6 +13,7 @@ import { GlobalConfirmModal } from './components/ui/GlobalConfirmModal';
 import { QRCodeCallModal } from './components/ui/QRCodeCallModal';
 import { ProfileModal } from './components/ProfileModal';
 import { hasModuleApprovalAccess } from './utils/approvalPermissions';
+import { isMarketing } from './utils/roleUtils';
 import { AutoUpdateChecker } from './components/AutoUpdateChecker';
 
 
@@ -148,7 +149,7 @@ const AppTabs = () => {
   } else if (currentPath === '/expenses') {
     // All authenticated roles can create and view their Purchase Orders (PO)
   } else if (currentPath === '/tickets') {
-    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales', 'marketing'].includes(user?.role || '') && !hasModuleApprovalAccess(user, 'ticket')) {
+    if (!['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'sale', 'sales', 'marketing'].includes(user?.role || '') && !hasModuleApprovalAccess(user, 'ticket') && !isMarketing(user)) {
       console.warn("[Router] Access denied for /tickets, role:", user?.role);
       return <Navigate to="/" replace />;
     }
@@ -172,7 +173,7 @@ const AppTabs = () => {
       return <Navigate to="/" replace />;
     }
   } else if (['/rounds', '/rules', '/integrations', '/gatekeeper'].includes(currentPath)) {
-    if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '')) {
+    if (!['admin', 'superadmin', 'super_admin', 'director', 'marketing'].includes(user?.role || '') && !isMarketing(user)) {
       return <Navigate to="/" replace />;
     }
   } else if (isAdminPath) {

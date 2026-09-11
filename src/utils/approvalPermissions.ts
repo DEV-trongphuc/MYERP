@@ -107,3 +107,95 @@ export function hasModuleApprovalAccess(
 
   return false;
 }
+
+/**
+ * Checks whether an approval item is currently at the logged-in user's step to approve.
+ * Strictly mirrors the multi-tier workflow of HRM, Expenses, Check-ins, and Advances.
+ */
+export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: Map<string, any>): boolean {
+  if (!item || !user) return false;
+  const currentUid = Number(user?.id || 0);
+  const currentRole = (user?.role || '').toLowerCase();
+  const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
+
+  const itemUid = Number(item.user_id || item.created_by || 0);
+  const itEmpName = (item.employee_name || '').toLowerCase().trim();
+  // Người tạo KHÔNG BAO GIỜ tự phê duyệt yêu cầu của chính mình trong "Chờ duyệt"
+  if ((currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName)) {
+    return false;
+  }
+
+  const rawStatus = (item.status || 'pending').toLowerCase();
+  if (['approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed'].includes(rawStatus)) {
+    return false;
+  }
+
+  const lvl1 = (item.status_level_1 || 'pending').toLowerCase();
+  const lvl2 = (item.status_level_2 || 'none').toLowerCase();
+  const lvl3 = (item.status_level_3 || 'none').toLowerCase();
+
+  // Helper: kiểm tra đích danh người duyệt cấp theo ID hoặc Tên
+  const isUserMatch = (appId: any, appName: any) => {
+    const numId = Number(appId || 0);
+    if (numId > 0 && numId === currentUid) return true;
+    if (appName) {
+      const cleanName = String(appName).toLowerCase().trim();
+      if (cleanName && (cleanName === currentUserName || currentUserName.includes(cleanName) || cleanName.includes(currentUserName))) return true;
+      if (usersByNameMap) {
+        const matchedU = usersByNameMap.get(cleanName);
+        if (matchedU && Number(matchedU.id) === currentUid) return true;
+      }
+    }
+    return false;
+  };
+
+  // 1. Chờ duyệt Cấp 1
+  if (lvl1 === 'pending') {
+    const app1 = item.approver_id || item.manager_id;
+    const appName1 = item.approver_name || item.manager_name;
+    if (app1 || appName1) {
+      return isUserMatch(app1, appName1);
+    }
+    // Fallback nếu không chỉ định người duyệt cấp 1: các vai trò quản lý có thể duyệt
+    return ['manager', 'director', 'superadmin', 'super_admin', 'admin'].includes(currentRole) || isExecutive(user);
+  }
+
+  // 2. Cấp 1 đã duyệt -> Chờ duyệt Cấp 2
+  if (lvl1 === 'approved' && lvl2 === 'pending') {
+    const app2 = item.approver_id_2;
+    const appName2 = item.approver_name_2;
+    if (app2 || appName2) {
+      return isUserMatch(app2, appName2);
+    }
+    // Fallback nếu không có người duyệt cấp 2 chỉ định: người đã duyệt cấp 1 không tự duyệt cấp 2
+    const app1 = item.approver_id || item.manager_id;
+    const appName1 = item.approver_name || item.manager_name;
+    if (isUserMatch(app1, appName1)) return false;
+    return ['director', 'accountant', 'superadmin', 'super_admin', 'admin'].includes(currentRole);
+  }
+
+  // 3. Cấp 2 đã duyệt -> Chờ duyệt Cấp 3
+  if (lvl1 === 'approved' && lvl2 === 'approved' && lvl3 === 'pending') {
+    const app3 = item.approver_id_3;
+    const appName3 = item.approver_name_3;
+    if (app3 || appName3) {
+      return isUserMatch(app3, appName3);
+    }
+    // Fallback nếu không có người duyệt cấp 3 chỉ định
+    const app1 = item.approver_id || item.manager_id;
+    const appName1 = item.approver_name || item.manager_name;
+    const app2 = item.approver_id_2;
+    const appName2 = item.approver_name_2;
+    if (isUserMatch(app1, appName1) || isUserMatch(app2, appName2)) return false;
+    return ['director', 'superadmin', 'super_admin'].includes(currentRole);
+  }
+
+  // Fallback cho luồng 1 cấp
+  const app1 = item.approver_id || item.manager_id;
+  const appName1 = item.approver_name || item.manager_name;
+  if (app1 || appName1) {
+    return isUserMatch(app1, appName1);
+  }
+  return isExecutive(user);
+}
+

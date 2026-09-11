@@ -4,7 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
-import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
+import { hasModuleApprovalAccess, isItemAtMyStepToApprove } from '../../utils/approvalPermissions';
+import { isMarketing } from '../../utils/roleUtils';
 
 export interface SidebarItem {
   name: string;
@@ -282,7 +283,13 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   const [pendingCoopCount, setPendingCoopCount] = useState(0);
   const [undoneTasksCount, setUndoneTasksCount] = useState(0);
   const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
-  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('pending_approvals_count') || localStorage.getItem('pending_approvals_count');
+      return cached ? parseInt(cached, 10) || 0 : 0;
+    }
+    return 0;
+  });
   const [isHovered, setIsHovered] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
 
@@ -295,11 +302,25 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         const isAdminOrManager = role === 'admin' || role === 'superadmin' || role === 'super_admin' || role === 'manager' || role === 'director';
 
         // Fetch undone tasks for all roles
-        const resTasks = await fetchAPI('activities&status=planned&limit=200&type=task,meeting');
+        const resTasks = await fetchAPI('activities?status=planned&limit=500&type=task,meeting');
         if (resTasks && resTasks.success) {
           const rawTasks = resTasks.data?.items || resTasks.data || [];
           if (Array.isArray(rawTasks)) {
-            const count = rawTasks.filter((task: any) => task.type === 'task' || task.type === 'meeting').length;
+            const uid = Number(user.id);
+            const uidStr = String(uid);
+            const count = rawTasks.filter((task: any) => {
+              if (task.type !== 'task' && task.type !== 'meeting') return false;
+              if (task.is_hidden && Number(task.is_hidden) === 1) return false;
+              if (task.status === 'done' || task.status === 'completed' || task.status === 'cancelled') return false;
+
+              const isAssignee = Number(task.user_id) === uid;
+              const isCreator = Number(task.created_by) === uid;
+              const isApprover = Number(task.approver_id) === uid;
+              const isParticipant = task.participant_ids ? String(task.participant_ids).split(',').map((s: string) => s.trim()).includes(uidStr) : false;
+              const isTeamMember = role === 'manager' && user.team_id && Number(task.team_id) === Number(user.team_id);
+
+              return isAssignee || isCreator || isApprover || isParticipant || isTeamMember;
+            }).length;
             setUndoneTasksCount(count);
           }
         }
@@ -327,16 +348,35 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           setPendingDepositsCount(0);
         }
 
-        // Fetch pending approvals for ALL roles (so any employee/manager/director/marketing/etc. who is an approver sees their badge count)
+        // Fetch pending approvals for ALL roles (strictly matching "Chờ tôi duyệt")
         try {
-          const resApps = await fetchAPI('hrm/approvals/pending');
-          if (resApps && resApps.success && Array.isArray(resApps.data)) {
-            setPendingApprovalsCount(resApps.data.length);
+          const resApps = await fetchAPI('hrm/approvals/overview');
+          if (resApps && resApps.success && resApps.data) {
+            const allItems = Array.isArray(resApps.data.all) ? resApps.data.all : [];
+            const pItems = Array.isArray(resApps.data.pending) ? resApps.data.pending : [];
+            const candidateMap = new Map<string, any>();
+            [...allItems, ...pItems].forEach((it: any) => {
+              const key = `${it.type}-${it.id}`;
+              if (!candidateMap.has(key)) candidateMap.set(key, it);
+            });
+            const myPendingCount = Array.from(candidateMap.values()).filter(it => isItemAtMyStepToApprove(it, user)).length;
+            setPendingApprovalsCount(myPendingCount);
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('pending_approvals_count', String(myPendingCount));
+              localStorage.setItem('pending_approvals_count', String(myPendingCount));
+            }
           } else {
-            setPendingApprovalsCount(0);
+            const fallbackApps = await fetchAPI('hrm/approvals/all');
+            const items = Array.isArray(fallbackApps?.data) ? fallbackApps.data : [];
+            const myPendingCount = items.filter((it: any) => isItemAtMyStepToApprove(it, user)).length;
+            setPendingApprovalsCount(myPendingCount);
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('pending_approvals_count', String(myPendingCount));
+              localStorage.setItem('pending_approvals_count', String(myPendingCount));
+            }
           }
         } catch {
-          setPendingApprovalsCount(0);
+          // Keep cached count
         }
 
         if (isAdminOrManager) {
@@ -397,6 +437,16 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     };
     fetchPending();
     const interval = setInterval(fetchPending, 60000);
+    const handleApprovalBadgeUpdated = (e: any) => {
+      if (typeof e.detail?.count === 'number') {
+        setPendingApprovalsCount(e.detail.count);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('pending_approvals_count', String(e.detail.count));
+          localStorage.setItem('pending_approvals_count', String(e.detail.count));
+        }
+      }
+    };
+
     window.addEventListener('ticket-resolved', fetchPending);
     window.addEventListener('task-updated', fetchPending);
     window.addEventListener('lead-accepted', fetchPending);
@@ -407,6 +457,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     window.addEventListener('approval-updated', fetchPending);
     window.addEventListener('approval-created', fetchPending);
     window.addEventListener('refresh-approvals', fetchPending);
+    window.addEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
     return () => {
       clearInterval(interval);
       window.removeEventListener('ticket-resolved', fetchPending);
@@ -419,6 +470,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       window.removeEventListener('approval-updated', fetchPending);
       window.removeEventListener('approval-created', fetchPending);
       window.removeEventListener('refresh-approvals', fetchPending);
+      window.removeEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
     };
   }, [user]);
 
@@ -515,6 +567,12 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       // Dynamic Unlocking for Approvers / Team Leaders
       const moduleKey = getModuleKeyForHref(item.href);
       if (moduleKey && hasModuleApprovalAccess(user, moduleKey)) {
+        return true;
+      }
+
+      // Marketing users/teams always have access to AI Pre-screener and Ticket data lỗi
+      const isMkt = isMarketing(user);
+      if (isMkt && (item.href === '/gatekeeper' || item.href === '/tickets')) {
         return true;
       }
 

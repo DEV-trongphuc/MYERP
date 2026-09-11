@@ -56,13 +56,16 @@ const getDefaultRoleLabel = (role: string) => {
   switch (role?.toLowerCase()) {
     case 'superadmin': return 'Super Admin';
     case 'admin': return 'Quản trị viên';
-    case 'director': return 'Giám đốc kinh doanh';
-    case 'manager': return 'Trưởng phòng kinh doanh';
-    case 'assistant': return 'Trợ lý kinh doanh';
+    case 'director': return 'Giám đốc';
+    case 'manager': return 'Quản lý';
+    case 'assistant': return 'Trợ lý';
     case 'sale':
-    case 'sales': return 'Nhân viên kinh doanh';
+    case 'sales': return 'Tư vấn viên';
+    case 'marketing': return 'Marketing';
+    case 'hr': return 'Nhân sự';
+    case 'accountant': return 'Kế toán';
     case 'viewer': return 'Người xem';
-    default: return role || 'Nhân viên kinh doanh';
+    default: return role || 'Nhân viên';
   }
 };
 
@@ -428,7 +431,8 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
       setAvatar(account.avatar || '');
       setPhone(account.phone || '');
       setIsActive(String(account.is_active ?? '1'));
-      setSignatureUrl(account.signature_url || account.signature_img || currentUser?.signature_url || null);
+      const isSelf = currentUser && (String(currentUser.id) === String(account.id));
+      setSignatureUrl(account.signature_url || account.signature_img || (isSelf ? (currentUser?.signature_url || null) : null));
 
       // Fetch Full Consultant Profile (for ERP metadata, Schedules, etc.)
       const fetchFullDetails = async () => {
@@ -437,6 +441,9 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
           const res = await fetchAPI(`consultant-profile?${param}`);
           if (res.success && res.data) {
             const d = res.data;
+            if (d.signature_url) {
+              setSignatureUrl(d.signature_url);
+            }
             setZaloChatId(d.zalo_chat_id || '');
             setTelegramChatId(d.telegram_chat_id || '');
             setVacationMode(d.vacation_mode === 1);
@@ -1277,8 +1284,8 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                       options={[
                         { value: 'superadmin', label: t('Super Admin (Quản trị cấp cao)') },
                         { value: 'admin', label: t('Admin (Toàn quyền)') },
-                        { value: 'director', label: t('Director (Giám đốc kinh doanh)') },
-                        { value: 'manager', label: t('Manager (Trưởng nhóm kinh doanh)') },
+                        { value: 'director', label: t('Director (Giám đốc)') },
+                        { value: 'manager', label: t('Manager (Quản lý)') },
                         { value: 'assistant', label: t('Assistant (Trợ lý / Phân bổ Data)') },
                         { value: 'sale', label: t('Sales (Nhân viên kinh doanh)') },
                         { value: 'viewer', label: t('Viewer (Chỉ xem Data)') }
@@ -2410,8 +2417,8 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                               options={[
                                 { value: 'superadmin', label: t('Super Admin (Quản trị cấp cao)') },
                                 { value: 'admin', label: t('Admin (Toàn quyền)') },
-                                { value: 'director', label: t('Director (Giám đốc kinh doanh)') },
-                                { value: 'manager', label: t('Manager (Trưởng nhóm kinh doanh)') },
+                                { value: 'director', label: t('Director (Giám đốc)') },
+                                { value: 'manager', label: t('Manager (Quản lý)') },
                                 { value: 'assistant', label: t('Assistant (Trợ lý / Phân bổ Data)') },
                                 { value: 'sale', label: t('Sales (Nhân viên kinh doanh)') },
                                 { value: 'viewer', label: t('Viewer (Chỉ xem Data)') }

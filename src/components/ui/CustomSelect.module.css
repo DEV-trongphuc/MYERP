@@ -89,7 +89,7 @@
   left: 0;
   min-width: 100%;
   width: max-content;
-  max-width: min(340px, 92vw);
+  max-width: min(450px, 92vw);
   box-sizing: border-box;
   background: var(--color-surface);
   border: 1px solid rgba(0, 0, 0, 0.1);

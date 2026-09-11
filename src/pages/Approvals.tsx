@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { fetchAPI } from '../utils/api';
+import { isItemAtMyStepToApprove as checkItemAtMyStepToApprove } from '../utils/approvalPermissions';
 import api from '../api/axios';
 import { 
   FileText, Calendar, CheckCircle2, XCircle, Clock,
@@ -10,10 +11,11 @@ import {
   HelpCircle, HardDrive, FileSignature, Receipt, Package, Briefcase, ChevronRight, CheckSquare, Server, Home,
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon, Building2, Truck,
-  GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark,
-  Landmark, Wallet, BarChart2, Palmtree
+  GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
+  Landmark, Wallet, BarChart2, Palmtree, QrCode
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { DraftExitConfirmModal } from '../components/ui/DraftExitConfirmModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
@@ -24,12 +26,18 @@ import { MentionInput } from '../components/ui/MentionInput';
 import { ProcessFeed } from '../components/ui/ProcessFeed';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isExecutive, isHR, isManagement, isAccountant } from '../utils/roleUtils';
+import { VIETNAM_BANKS, getVietQrUrl, findBank, standardizeBankName } from '../utils/vietnamBanks';
+import { BankSelect } from '../components/ui/BankSelect';
+import { BankLogo } from '../components/ui/BankLogo';
 import { Pagination } from '../components/ui/Pagination';
 import { useUIStore } from '../store/uiStore';
 import { NoteDetailModal, NoteCell, renderLinkifiedText } from '../components/ui/NoteDetailModal';
+import { QrImageModal } from '../components/ui/QrImageModal';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { numberToVietnameseText } from '../utils/numberToText';
+import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
+import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
 
 const workflowList = [
   { id: 'payment', name: 'Đề nghị thanh toán', description: 'Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác.', category: 'finance', icon: FileSignature, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
@@ -222,11 +230,61 @@ export interface ApprovalItem {
   approver_name?: string;
   status_level_1?: string;
   status_level_2?: string;
-  status_level_3?: string;
   manager_id?: number;
   related_user_ids?: number[];
   is_following?: boolean;
+  is_draft?: boolean;
+  draft_id?: string;
 }
+
+export interface ApprovalDraft {
+  id: string;
+  userId: number | string;
+  workflowDefId: string;
+  workflowDefName: string;
+  formType: string;
+  title: string;
+  amount: number;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+  formData: any;
+}
+
+const APPROVAL_DRAFTS_KEY = 'myerp_approval_drafts';
+
+const getStoredApprovalDrafts = (userId?: number | string): ApprovalDraft[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(APPROVAL_DRAFTS_KEY);
+    if (!raw) return [];
+    const all = JSON.parse(raw);
+    if (!Array.isArray(all)) return [];
+    if (!userId) return all;
+    return all.filter((d: any) => String(d.userId) === String(userId));
+  } catch (e) {
+    return [];
+  }
+};
+
+const persistApprovalDrafts = (drafts: ApprovalDraft[], userId?: number | string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(APPROVAL_DRAFTS_KEY);
+    let all: ApprovalDraft[] = [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) all = parsed;
+    }
+    if (userId) {
+      all = all.filter(d => String(d.userId) !== String(userId));
+      all = [...drafts, ...all];
+    } else {
+      all = drafts;
+    }
+    localStorage.setItem(APPROVAL_DRAFTS_KEY, JSON.stringify(all));
+  } catch (e) {}
+};
 
 
 const GreenToggle = ({ checked, onChange, disabled, label, id }: { checked: boolean, onChange?: (val: boolean) => void, disabled?: boolean, label: string, id: string }) => {
@@ -282,7 +340,7 @@ const formatApprovalCurrency = (amount: number | string, currency: string = 'VND
   const normCurrency = currency === 'EURO' ? 'EUR' : currency;
   const num = Number(amount || 0);
   if (normCurrency === 'VND') {
-    return num.toLocaleString('vi-VN') + ' đ';
+    return Math.round(num).toLocaleString('vi-VN') + ' đ';
   }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -427,6 +485,20 @@ export default function Approvals() {
   const [directorySearch, setDirectorySearch] = useState('');
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingItemType, setEditingItemType] = useState<string | null>(null);
+  const [editingExpenseItem, setEditingExpenseItem] = useState<any>(null);
+  const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
+
+  // Drafts & Exit Confirmation States
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const [exitTargetAction, setExitTargetAction] = useState<'back' | 'close' | null>(null);
+  const [draftsList, setDraftsList] = useState<ApprovalDraft[]>(() => getStoredApprovalDrafts(user?.id));
+
+  useEffect(() => {
+    if (user?.id) {
+      setDraftsList(getStoredApprovalDrafts(user.id));
+    }
+  }, [user?.id]);
 
   const [recentWorkflows, setRecentWorkflows] = useState<any[]>([]);
 
@@ -502,9 +574,40 @@ export default function Approvals() {
   const [otType, setOtType] = useState<'compensatory' | 'salary'>('compensatory');
   const [otRate, setOtRate] = useState<number>(1.5);
   const [expenseTitle, setExpenseTitle] = useState('');
+  const [workflowTitleSuffix, setWorkflowTitleSuffix] = useState('');
+
+  const getFullWorkflowTitle = useCallback((def?: any, suffix?: string): string => {
+    const prefix = def?.name || selectedWorkflowDef?.name || 'Đề xuất';
+    const s = (suffix !== undefined ? suffix : workflowTitleSuffix).trim();
+    return s ? `${prefix} - ${s}` : prefix;
+  }, [selectedWorkflowDef, workflowTitleSuffix]);
+
+  const extractTitleSuffix = useCallback((title: string, defName?: string): string => {
+    if (!title) return '';
+    const prefix = defName || selectedWorkflowDef?.name || '';
+    if (prefix) {
+      const lowerTitle = title.toLowerCase();
+      const lowerPrefix = prefix.toLowerCase();
+      if (lowerTitle.startsWith((lowerPrefix + ' - ').toLowerCase())) {
+        return title.substring(prefix.length + 3).trim();
+      }
+      if (lowerTitle.startsWith((lowerPrefix + ' — ').toLowerCase())) {
+        return title.substring(prefix.length + 3).trim();
+      }
+      if (lowerTitle.startsWith((lowerPrefix + ': ').toLowerCase())) {
+        return title.substring(prefix.length + 2).trim();
+      }
+      if (lowerTitle.startsWith(lowerPrefix)) {
+        const rest = title.substring(prefix.length).trim();
+        return rest.replace(/^[\s\-–—:]+/, '').trim();
+      }
+    }
+    return title.trim();
+  }, [selectedWorkflowDef]);
   const [jobPosition, setJobPosition] = useState('');
   const [departmentName, setDepartmentName] = useState('');
   const [teams, setTeams] = useState<any[]>([]);
+  const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
 
   const getUserPrimaryDepartment = useCallback(() => {
     if (!user) return '';
@@ -639,7 +742,7 @@ export default function Approvals() {
 
   // Expense claim / Phân loại chi phí states
   const [expenseCategory, setExpenseCategory] = useState('general');
-  const [invoiceType, setInvoiceType] = useState<'vat_10' | 'vat_8' | 'retail' | 'none'>('vat_10');
+  const [invoiceType, setInvoiceType] = useState<'vat_10' | 'vat_8' | 'vat_5' | 'vat_0' | 'retail' | 'none'>('vat_10');
 
   const [paymentMethod, setPaymentMethod] = useState('Chuyển khoản');
   const [paymentDetails, setPaymentDetails] = useState('');
@@ -774,6 +877,7 @@ export default function Approvals() {
   const onSelectWorkflowItem = (item: any) => {
     setSelectedWorkflowDef(item);
     setExpenseTitle(item.name);
+    setWorkflowTitleSuffix('');
     handleSelectWorkflow(item.id);
     if (item.id === 'advance_money') {
       setFormType('expense');
@@ -944,6 +1048,327 @@ export default function Approvals() {
     }
   };
 
+  // --- DRAFT & EXIT CONFIRMATION HELPERS ---
+  const isFormDirty = () => {
+    if (!selectedWorkflowDef) return false;
+    if (expenseTitle && expenseTitle.trim() !== '') return true;
+    if (leaveReason && leaveReason.trim() !== '') return true;
+    if (paymentDetails && paymentDetails.trim() !== '') return true;
+    if (paymentBeneficiaryName && paymentBeneficiaryName.trim() !== '') return true;
+    if (paymentBankAccount && paymentBankAccount.trim() !== '') return true;
+    if (paymentAccountName && paymentAccountName.trim() !== '') return true;
+    if (paymentDestination && paymentDestination.trim() !== '') return true;
+    if (meetingClientName && meetingClientName.trim() !== '') return true;
+    if (pssRecipientName && pssRecipientName.trim() !== '') return true;
+    if (pssRecipientAddress && pssRecipientAddress.trim() !== '') return true;
+    if (pssRecipientPhone && pssRecipientPhone.trim() !== '') return true;
+    if (attachments && attachments.length > 0) return true;
+    if (stationeryItems && stationeryItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
+    if (expenseItems && expenseItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
+    if (relatedUserIds && relatedUserIds.length > 0) return true;
+    return false;
+  };
+
+  const handleSaveCurrentDraft = (andExit = false) => {
+    if (!selectedWorkflowDef) return;
+    const draftId = currentDraftId || `draft_${Date.now()}`;
+    
+    let calcAmount = 0;
+    if (formType === 'general' || formType === 'expense') {
+      if (stationeryItems && stationeryItems.length > 0) {
+        calcAmount = stationeryItems.reduce((acc, it) => acc + ((Number(it.quantity) || 1) * (Number(it.price) || 0)) * (1 + (Number(it.vat !== undefined ? it.vat : 10) / 100)), 0);
+      }
+      if (calcAmount === 0 && expenseItems && expenseItems.length > 0) {
+        calcAmount = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0);
+      }
+    } else if (formType === 'advance') {
+      calcAmount = Number(paymentDetails) || 0;
+    }
+
+    const fullDraftTitle = getFullWorkflowTitle();
+    const newDraft: ApprovalDraft = {
+      id: draftId,
+      userId: user?.id || 1003,
+      workflowDefId: selectedWorkflowDef.id,
+      workflowDefName: selectedWorkflowDef.name,
+      formType,
+      title: fullDraftTitle,
+      amount: calcAmount,
+      currency: currencyType || 'VND',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      formData: {
+        selectedWorkflowDef,
+        expenseTitle: fullDraftTitle,
+        workflowTitleSuffix,
+        expenseItems,
+        stationeryItems,
+        attachments,
+        relatedUserIds,
+        jobPosition,
+        departmentName,
+        paymentTarget,
+        paymentMethod,
+        paymentEmployeeId,
+        paymentSupplierId,
+        paymentLecturerId,
+        paymentContactId,
+        paymentBeneficiaryName,
+        paymentBankName,
+        paymentBankAccount,
+        paymentAccountName,
+        paymentBankBranch,
+        paymentPhone,
+        paymentTaxCode,
+        paymentDestination,
+        paymentWalletType,
+        paymentWalletPhone,
+        paymentCorporateCard,
+        paymentDetails,
+        currencyType,
+        formType,
+        leaveType,
+        leaveReason,
+        leaveFrom,
+        leaveTo,
+        leaveSession,
+        intermittentDates,
+        lateEarlyType,
+        lateEarlyMinutes,
+        otType,
+        otRate,
+        otDate,
+        otStart,
+        otEnd,
+        isRecurring,
+        recurringFrequency,
+        recurringEndDate,
+        meetingTargetType,
+        meetingSelectedEntityId,
+        meetingClientName,
+        meetingContactPerson,
+        meetingContactPhone,
+        meetingLocation,
+        meetingDate,
+        meetingTime,
+        meetingClientCount,
+        meetingInternalCount,
+        meetingPurpose,
+        meetingInternalAttendees,
+        meetingReimbursementMethod,
+        pssReqEmployeeId,
+        pssReqDate,
+        pssExecutorId,
+        pssSendMethod,
+        pssSendTimeFrame,
+        pssRecipientName,
+        pssRecipientAddress,
+        pssRecipientPhone,
+        pssRequiredSendDate,
+        advanceType,
+        advanceSettlementDate,
+        expenseCategory,
+        invoiceType,
+        customApprover1,
+        customApprover2,
+        customApprover3,
+        showStepManager,
+        showStepAccountant,
+        showStepDirector,
+        editingItemId,
+        editingItemType
+      }
+    };
+
+    const updatedDrafts = [newDraft, ...draftsList.filter(d => d.id !== draftId)];
+    setDraftsList(updatedDrafts);
+    persistApprovalDrafts(updatedDrafts, user?.id);
+    setCurrentDraftId(draftId);
+    toast.success(t('Đã lưu bản nháp thành công!'));
+
+    if (andExit) {
+      setShowExitConfirmModal(false);
+      if (exitTargetAction === 'back') {
+        setSelectedWorkflowDef(null);
+        setCurrentDraftId(null);
+      } else {
+        setShowCreateModal(false);
+        setSelectedWorkflowDef(null);
+        setEditingItemId(null);
+        setEditingItemType(null);
+        setCurrentDraftId(null);
+      }
+      setExitTargetAction(null);
+    }
+  };
+
+  const handleDiscardExit = () => {
+    setShowExitConfirmModal(false);
+    if (exitTargetAction === 'back') {
+      setSelectedWorkflowDef(null);
+      setCurrentDraftId(null);
+      setEditingItemId(null);
+      setEditingItemType(null);
+    } else {
+      setShowCreateModal(false);
+      setSelectedWorkflowDef(null);
+      setEditingItemId(null);
+      setEditingItemType(null);
+      setCurrentDraftId(null);
+    }
+    setExitTargetAction(null);
+  };
+
+  const handleRequestExit = (target: 'back' | 'close') => {
+    if (isFormDirty()) {
+      setExitTargetAction(target);
+      setShowExitConfirmModal(true);
+    } else {
+      if (target === 'back') {
+        setSelectedWorkflowDef(null);
+        setCurrentDraftId(null);
+        setEditingItemId(null);
+        setEditingItemType(null);
+      } else {
+        setShowCreateModal(false);
+        setSelectedWorkflowDef(null);
+        setEditingItemId(null);
+        setEditingItemType(null);
+        setCurrentDraftId(null);
+      }
+    }
+  };
+
+  const handleDeleteDraft = (draftId: string, silent = false) => {
+    const updated = draftsList.filter(d => d.id !== draftId);
+    setDraftsList(updated);
+    persistApprovalDrafts(updated, user?.id);
+    if (currentDraftId === draftId) setCurrentDraftId(null);
+    if (!silent) toast.success(t('Đã xóa bản nháp!'));
+  };
+
+  const handleResumeDraft = (draft: ApprovalDraft) => {
+    const fd = draft.formData;
+    if (!fd) return;
+    setCurrentDraftId(draft.id);
+    const curDef = fd.selectedWorkflowDef || workflowList.find(w => w.id === draft.workflowDefId) || workflowList[0];
+    setSelectedWorkflowDef(curDef);
+    if (fd.workflowTitleSuffix !== undefined) {
+      setWorkflowTitleSuffix(fd.workflowTitleSuffix);
+      setExpenseTitle(getFullWorkflowTitle(curDef, fd.workflowTitleSuffix));
+    } else if (fd.expenseTitle) {
+      const s = extractTitleSuffix(fd.expenseTitle, curDef?.name);
+      setWorkflowTitleSuffix(s);
+      setExpenseTitle(fd.expenseTitle);
+    } else {
+      setWorkflowTitleSuffix('');
+      setExpenseTitle(curDef.name);
+    }
+    if (fd.expenseItems) setExpenseItems(fd.expenseItems);
+    if (fd.stationeryItems) setStationeryItems(fd.stationeryItems);
+    if (fd.attachments) setAttachments(fd.attachments);
+    if (fd.relatedUserIds) setRelatedUserIds(fd.relatedUserIds);
+    if (fd.jobPosition) setJobPosition(fd.jobPosition);
+    if (fd.departmentName) setDepartmentName(fd.departmentName);
+    if (fd.paymentTarget) setPaymentTarget(fd.paymentTarget);
+    if (fd.paymentMethod) setPaymentMethod(fd.paymentMethod);
+    if (fd.paymentEmployeeId) setPaymentEmployeeId(fd.paymentEmployeeId);
+    if (fd.paymentSupplierId) setPaymentSupplierId(fd.paymentSupplierId);
+    if (fd.paymentLecturerId) setPaymentLecturerId(fd.paymentLecturerId);
+    if (fd.paymentContactId) setPaymentContactId(fd.paymentContactId);
+    if (fd.paymentBeneficiaryName) setPaymentBeneficiaryName(fd.paymentBeneficiaryName);
+    if (fd.paymentBankName) setPaymentBankName(fd.paymentBankName);
+    if (fd.paymentBankAccount) setPaymentBankAccount(fd.paymentBankAccount);
+    if (fd.paymentAccountName) setPaymentAccountName(fd.paymentAccountName);
+    if (fd.paymentBankBranch) setPaymentBankBranch(fd.paymentBankBranch);
+    if (fd.paymentPhone) setPaymentPhone(fd.paymentPhone);
+    if (fd.paymentTaxCode) setPaymentTaxCode(fd.paymentTaxCode);
+    if (fd.paymentDestination) setPaymentDestination(fd.paymentDestination);
+    if (fd.paymentWalletType) setPaymentWalletType(fd.paymentWalletType);
+    if (fd.paymentWalletPhone) setPaymentWalletPhone(fd.paymentWalletPhone);
+    if (fd.paymentCorporateCard) setPaymentCorporateCard(fd.paymentCorporateCard);
+    if (fd.paymentDetails) setPaymentDetails(fd.paymentDetails);
+    if (fd.currencyType) setCurrencyType(fd.currencyType);
+    if (fd.formType) setFormType(fd.formType);
+    if (fd.leaveType) setLeaveType(fd.leaveType);
+    if (fd.leaveReason) setLeaveReason(fd.leaveReason);
+    if (fd.leaveFrom) setLeaveFrom(fd.leaveFrom);
+    if (fd.leaveTo) setLeaveTo(fd.leaveTo);
+    if (fd.leaveSession) setLeaveSession(fd.leaveSession);
+    if (fd.intermittentDates) setIntermittentDates(fd.intermittentDates);
+    if (fd.lateEarlyType) setLateEarlyType(fd.lateEarlyType);
+    if (fd.lateEarlyMinutes) setLateEarlyMinutes(fd.lateEarlyMinutes);
+    if (fd.otType) setOtType(fd.otType);
+    if (fd.otRate) setOtRate(fd.otRate);
+    if (fd.otDate) setOtDate(fd.otDate);
+    if (fd.otStart) setOtStart(fd.otStart);
+    if (fd.otEnd) setOtEnd(fd.otEnd);
+    if (fd.isRecurring !== undefined) setIsRecurring(fd.isRecurring);
+    if (fd.recurringFrequency) setRecurringFrequency(fd.recurringFrequency);
+    if (fd.recurringEndDate) setRecurringEndDate(fd.recurringEndDate);
+    if (fd.meetingTargetType) setMeetingTargetType(fd.meetingTargetType);
+    if (fd.meetingSelectedEntityId) setMeetingSelectedEntityId(fd.meetingSelectedEntityId);
+    if (fd.meetingClientName) setMeetingClientName(fd.meetingClientName);
+    if (fd.meetingContactPerson) setMeetingContactPerson(fd.meetingContactPerson);
+    if (fd.meetingContactPhone) setMeetingContactPhone(fd.meetingContactPhone);
+    if (fd.meetingLocation) setMeetingLocation(fd.meetingLocation);
+    if (fd.meetingDate) setMeetingDate(fd.meetingDate);
+    if (fd.meetingTime) setMeetingTime(fd.meetingTime);
+    if (fd.meetingClientCount) setMeetingClientCount(fd.meetingClientCount);
+    if (fd.meetingInternalCount) setMeetingInternalCount(fd.meetingInternalCount);
+    if (fd.meetingPurpose) setMeetingPurpose(fd.meetingPurpose);
+    if (fd.meetingInternalAttendees) setMeetingInternalAttendees(fd.meetingInternalAttendees);
+    if (fd.meetingReimbursementMethod) setMeetingReimbursementMethod(fd.meetingReimbursementMethod);
+    if (fd.pssReqEmployeeId) setPssReqEmployeeId(fd.pssReqEmployeeId);
+    if (fd.pssReqDate) setPssReqDate(fd.pssReqDate);
+    if (fd.pssExecutorId) setPssExecutorId(fd.pssExecutorId);
+    if (fd.pssSendMethod) setPssSendMethod(fd.pssSendMethod);
+    if (fd.pssSendTimeFrame) setPssSendTimeFrame(fd.pssSendTimeFrame);
+    if (fd.pssRecipientName) setPssRecipientName(fd.pssRecipientName);
+    if (fd.pssRecipientAddress) setPssRecipientAddress(fd.pssRecipientAddress);
+    if (fd.pssRecipientPhone) setPssRecipientPhone(fd.pssRecipientPhone);
+    if (fd.pssRequiredSendDate) setPssRequiredSendDate(fd.pssRequiredSendDate);
+    if (fd.advanceType) setAdvanceType(fd.advanceType);
+    if (fd.advanceSettlementDate) setAdvanceSettlementDate(fd.advanceSettlementDate);
+    if (fd.expenseCategory) setExpenseCategory(fd.expenseCategory);
+    if (fd.invoiceType) setInvoiceType(fd.invoiceType);
+    if (fd.customApprover1) setCustomApprover1(fd.customApprover1);
+    if (fd.customApprover2) setCustomApprover2(fd.customApprover2);
+    if (fd.customApprover3) setCustomApprover3(fd.customApprover3);
+    if (fd.showStepManager !== undefined) setShowStepManager(fd.showStepManager);
+    if (fd.showStepAccountant !== undefined) setShowStepAccountant(fd.showStepAccountant);
+    if (fd.showStepDirector !== undefined) setShowStepDirector(fd.showStepDirector);
+    if (fd.editingItemId !== undefined) setEditingItemId(fd.editingItemId);
+    if (fd.editingItemType !== undefined) setEditingItemType(fd.editingItemType);
+
+    setShowCreateModal(true);
+    toast.success(t('Đã mở bản nháp để tiếp tục!'));
+  };
+
+  const draftApprovalItems: ApprovalItem[] = useMemo(() => {
+    return draftsList.map(d => ({
+      id: -Math.abs(d.id.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0) || 9999),
+      type: (d.formType === 'leave' || d.formType === 'advance' || d.formType === 'checkin' || d.formType === 'attendance_bulk') ? d.formType : 'expense',
+      user_id: Number(user?.id) || 1003,
+      created_by: Number(user?.id) || 1003,
+      employee_name: (user as any)?.full_name || (user as any)?.name || t('Tôi'),
+      title: d.title || d.workflowDefName,
+      description: `[Bản nháp] ${d.workflowDefName}${d.amount > 0 ? ` • ${new Intl.NumberFormat('vi-VN').format(d.amount)} ${d.currency || 'đ'}` : ''}`,
+      status: 'draft',
+      created_at: d.createdAt,
+      updated_at: d.updatedAt,
+      currency: d.currency || 'VND',
+      amount: d.amount,
+      is_draft: true,
+      draft_id: d.id
+    }));
+  }, [draftsList, user, t]);
+
+  const activeDraftForWf = useMemo(() => {
+    if (!selectedWorkflowDef) return null;
+    return draftsList.find(d => d.workflowDefId === selectedWorkflowDef.id && d.id !== currentDraftId);
+  }, [selectedWorkflowDef, draftsList, currentDraftId]);
+
   const handleCreateSubmit = async () => {
     setSubmitting(true);
     try {
@@ -954,8 +1379,10 @@ export default function Approvals() {
           await fetchAPI(`hrm/advances/${editingItemId}`, { method: 'DELETE' });
         } else if (editingItemType === 'checkin') {
           await api.delete(`/check-ins/${editingItemId}`);
-        } else if (editingItemType === 'expense') {
-          await api.delete(`/expenses/${editingItemId}`);
+        } else if (editingItemType === 'attendance_bulk') {
+          try {
+            await api.delete(`/check-ins/bulk-requests/${editingItemId}`);
+          } catch (e) {}
         }
       }
       // Resolve multi-level approver chain:
@@ -1305,8 +1732,8 @@ export default function Approvals() {
         }
 
         if (editingItemId && (editingItemType === 'expense' || formType === 'general')) {
-          await api.patch(`/expenses/${editingItemId}`, {
-            title: expenseTitle || selectedWorkflowDef.name,
+          await api.put(`/expenses/${editingItemId}`, {
+            title: getFullWorkflowTitle(),
             description: generalDesc,
             notes: generalDesc,
             amount: totalStationeryCost,
@@ -1316,11 +1743,16 @@ export default function Approvals() {
             approver_id_3: appVal3,
             related_user_ids: relatedUserIds,
             currency: currencyType,
-            image_url: attachments[0]?.url || null
+            image_url: attachments[0]?.url || null,
+            bank_name: paymentBankName || null,
+            bank_account_number: paymentBankAccount || null,
+            bank_account_name: paymentAccountName || null,
+            bank_branch: paymentBankBranch || null,
+            vendor_name: paymentBeneficiaryName || null
           });
         } else {
           await api.post('/expenses', {
-            title: expenseTitle || selectedWorkflowDef.name,
+            title: getFullWorkflowTitle(),
             description: generalDesc,
             notes: generalDesc,
             amount: totalStationeryCost,
@@ -1331,7 +1763,12 @@ export default function Approvals() {
             approver_id_3: appVal3,
             related_user_ids: relatedUserIds,
             currency: currencyType,
-            image_url: attachments[0]?.url || null
+            image_url: attachments[0]?.url || null,
+            bank_name: paymentBankName || null,
+            bank_account_number: paymentBankAccount || null,
+            bank_account_name: paymentAccountName || null,
+            bank_branch: paymentBankBranch || null,
+            vendor_name: paymentBeneficiaryName || null
           });
         }
       } else {
@@ -1441,10 +1878,22 @@ export default function Approvals() {
         }
 
         let invoiceStr = '';
-        if (selectedWorkflowDef?.id === 'expense_claim' || invoiceType) {
+        if (selectedWorkflowDef?.id === 'expense_claim' || invoiceType || formType === 'expense') {
+          const totalNetPrice = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price), 0);
+          const totalVatAmt = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0);
+          let dynamicVatLabel = '';
+          if (totalNetPrice > 0 && totalVatAmt > 0) {
+            const effRate = Math.round((totalVatAmt / totalNetPrice) * 100);
+            dynamicVatLabel = `Hóa đơn điện tử VAT ${effRate}%`;
+          } else if (invoiceType === 'vat_0' || (totalNetPrice > 0 && totalVatAmt === 0)) {
+            dynamicVatLabel = 'Hóa đơn điện tử VAT 0% / Không chịu thuế';
+          }
+
           const invMap: Record<string, string> = {
             vat_10: 'Hóa đơn điện tử VAT 10%',
             vat_8: 'Hóa đơn điện tử VAT 8%',
+            vat_5: 'Hóa đơn điện tử VAT 5%',
+            vat_0: 'Hóa đơn điện tử VAT 0% / Không chịu thuế',
             retail: 'Hóa đơn bán lẻ / Biên lai thu tiền',
             none: 'Không có hóa đơn (Giải trình nội bộ)'
           };
@@ -1455,9 +1904,13 @@ export default function Approvals() {
             marketing: 'Tiếp thị / Sự kiện / Quảng cáo',
             general: 'Chi phí nghiệp vụ khác'
           };
+          const chosenDocLabel = (invoiceType === 'retail' || invoiceType === 'none')
+            ? invMap[invoiceType]
+            : (dynamicVatLabel || invMap[invoiceType] || 'Hóa đơn điện tử VAT 10%');
+
           const parts = [
             catMap[expenseCategory] ? `Danh mục: ${catMap[expenseCategory]}` : '',
-            invMap[invoiceType] ? `Chứng từ: ${invMap[invoiceType]}` : ''
+            chosenDocLabel ? `Chứng từ: ${chosenDocLabel}` : ''
           ].filter(Boolean);
           if (parts.length > 0) {
             invoiceStr = `[Hồ sơ chi phí]: ${parts.join(' - ')}`;
@@ -1521,22 +1974,52 @@ export default function Approvals() {
           const attsStr = attachments.map(a => `• ${a.name} (${baseUrl}/${a.url})`).join('\n');
           finalDesc += `\n\n[Tài liệu đính kèm (${attachments.length} tệp)]:\n${attsStr}`;
         }
-        await api.post('/expenses', {
-          title: expenseTitle || selectedWorkflowDef.name,
-          description: finalDesc,
-          notes: finalDesc,
-          amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0),
-          vat_amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0),
-          status: 'pending',
-          approver_id: appVal1 || finalApproverId,
-          approver_id_2: appVal2,
-          approver_id_3: appVal3,
-          related_user_ids: relatedUserIds,
-          currency: currencyType,
-          image_url: attachments[0]?.url || null
-        });
+        if (editingItemId && (editingItemType === 'expense' || formType === 'expense')) {
+          await api.put(`/expenses/${editingItemId}`, {
+            title: getFullWorkflowTitle(),
+            description: finalDesc,
+            notes: finalDesc,
+            amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0),
+            vat_amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0),
+            approver_id: appVal1 || finalApproverId,
+            approver_id_2: appVal2,
+            approver_id_3: appVal3,
+            related_user_ids: relatedUserIds,
+            currency: currencyType,
+            image_url: attachments[0]?.url || null,
+            bank_name: paymentBankName || null,
+            bank_account_number: paymentBankAccount || null,
+            bank_account_name: paymentAccountName || null,
+            bank_branch: paymentBankBranch || null,
+            vendor_name: paymentBeneficiaryName || null
+          });
+        } else {
+          await api.post('/expenses', {
+            title: getFullWorkflowTitle(),
+            description: finalDesc,
+            notes: finalDesc,
+            amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0),
+            vat_amount: expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (it.vat / 100), 0),
+            status: 'pending',
+            approver_id: appVal1 || finalApproverId,
+            approver_id_2: appVal2,
+            approver_id_3: appVal3,
+            related_user_ids: relatedUserIds,
+            currency: currencyType,
+            image_url: attachments[0]?.url || null,
+            bank_name: paymentBankName || null,
+            bank_account_number: paymentBankAccount || null,
+            bank_account_name: paymentAccountName || null,
+            bank_branch: paymentBankBranch || null,
+            vendor_name: paymentBeneficiaryName || null
+          });
+        }
       }
-      toast.success(t('Gửi đề xuất thành công!'));
+      toast.success(editingItemId ? t('Cập nhật đề xuất thành công!') : t('Gửi đề xuất thành công!'));
+      if (currentDraftId) {
+        handleDeleteDraft(currentDraftId, true);
+        setCurrentDraftId(null);
+      }
       window.dispatchEvent(new CustomEvent('checkin-status-changed'));
       window.dispatchEvent(new CustomEvent('approval-updated'));
       window.dispatchEvent(new CustomEvent('refresh-approvals'));
@@ -2148,6 +2631,44 @@ export default function Approvals() {
     }
   }, [location.search, location.state, pendingList, myRequestsList, followingList, allList]);
 
+  const isItemAtMyStepToApprove = useCallback((item: any): boolean => {
+    return checkItemAtMyStepToApprove(item, user, usersByNameMap);
+  }, [user, usersByNameMap]);
+
+  const getApprovalDisplayTitle = useCallback((it: ApprovalItem): string => {
+    let t = (it.title || '').trim();
+    t = t.replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '');
+
+    const genericNames = [
+      'đề nghị thanh toán',
+      'yêu cầu thanh toán',
+      'tạm ứng chi phí',
+      'đề nghị tạm ứng',
+      'thanh toán chi phí',
+      'quy trình phê duyệt',
+      'đề xuất chi phí',
+      'chi phí nghiệp vụ khác',
+      'chi phí',
+      'yêu cầu chi phí'
+    ];
+    const isGeneric = !t || genericNames.some(g => t.toLowerCase() === g || t.toLowerCase().startsWith(g + ' #'));
+
+    if (it.description) {
+      const match = it.description.match(/(?:Chi tiết|Nội dung|Mục đích|Lý do):\s*([^\n\r.]+)/i);
+      if (match && match[1]) {
+        const detailText = match[1].trim();
+        if (detailText && !t.toLowerCase().includes(detailText.toLowerCase())) {
+          if (isGeneric && t) {
+            return `${t} - ${detailText}`;
+          } else if (!t) {
+            return detailText;
+          }
+        }
+      }
+    }
+    return t || `Quy trình #${it.id}`;
+  }, []);
+
   const loadData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
@@ -2179,10 +2700,38 @@ export default function Approvals() {
         aList = Array.isArray(allRes?.data) ? allRes.data : [];
       }
 
+      const currentUid = Number(user?.id || 0);
+      const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
+
+      // 1. Đồng bộ yêu cầu của người tạo từ aList vào mList để đảm bảo người tạo luôn thấy yêu cầu của mình
+      aList.forEach((it: any) => {
+        const itemUid = Number(it.user_id || it.created_by || 0);
+        const itEmpName = (it.employee_name || '').toLowerCase().trim();
+        const isMine = (currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName);
+        if (isMine && !mList.some((m: any) => m.id === it.id && m.type === it.type)) {
+          mList.unshift(it);
+        }
+      });
+
+      // 2. Lọc danh sách "Chờ tôi duyệt": CHỈ gồm các yêu cầu ĐANG TỚI LƯỢT người đăng nhập duyệt
+      // Hợp nhất pList và aList để không bao giờ bỏ sót bất kỳ yêu cầu nào đang chờ cấp của user
+      const candidateMap = new Map<string, ApprovalItem>();
+      [...aList, ...pList].forEach(it => {
+        const key = `${it.type}-${it.id}`;
+        if (!candidateMap.has(key)) candidateMap.set(key, it);
+      });
+      pList = Array.from(candidateMap.values()).filter(isItemAtMyStepToApprove);
+
       setPendingList(pList);
       setMyRequestsList(mList);
       setFollowingList(fList);
       setAllList(aList);
+
+      window.dispatchEvent(new CustomEvent('approval-badge-updated', { detail: { count: pList.length } }));
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('pending_approvals_count', String(pList.length));
+        localStorage.setItem('pending_approvals_count', String(pList.length));
+      }
 
       // Tự động active tab 'all' (Tất cả đề xuất) nếu tab 'pending' đang trống
       if (!hasAutoSwitchedTabRef.current) {
@@ -2361,166 +2910,643 @@ export default function Approvals() {
     setEditingItemId(item.id);
     setEditingItemType(item.type);
 
-    const rawDesc = item.description || '';
-    const isItemized = (
-      rawDesc.includes('DANH SÁCH') ||
-      rawDesc.includes('Đồ vật đề xuất:') ||
-      String(item.title).toLowerCase().includes('văn phòng phẩm') ||
-      String(item.title).toLowerCase().includes('trang thiết bị') ||
-      String(item.title).toLowerCase().includes('mua sắm') ||
-      String(item.title).toLowerCase().includes('thiết bị')
-    );
+    const matchingDef = getWorkflowDefFromItem(item);
 
-    let matchingDef = getWorkflowDefFromItem(item);
-    if (isItemized) {
-      const lowerTitle = String(item.title).toLowerCase();
-      if (lowerTitle.includes('văn phòng phẩm') || rawDesc.includes('VĂN PHÒNG PHẨM')) {
-        matchingDef = workflowList.find(w => w.id === 'stationery') || matchingDef;
-      } else if (lowerTitle.includes('it') || lowerTitle.includes('phần mềm') || rawDesc.includes('THIẾT BỊ IT')) {
-        matchingDef = workflowList.find(w => w.id === 'it_request') || matchingDef;
-      } else {
-        matchingDef = workflowList.find(w => w.id === 'purchase_request') || matchingDef;
-      }
-    }
-    setSelectedWorkflowDef(matchingDef);
-    
+    // 1. HR Leave & Specialized HR Requests: leave, late_early, overtime, remote_work
     if (item.type === 'leave') {
-      setFormType('leave');
       try {
         const res = await fetchAPI('hrm/leaves');
         const found = res?.data?.find((l: any) => l.id === item.id);
         if (found) {
-          setLeaveType(found.leave_type || 'annual');
-          setLeaveFrom(found.start_date || '');
-          setLeaveTo(found.end_date || '');
-          setLeaveReason(found.reason || '');
-          if (found.approver_id) setCustomApprover1(users.find(u => u.id === found.approver_id) || null);
-          if (found.approver_id_2) setCustomApprover2(users.find(u => u.id === found.approver_id_2) || null);
+          const lType = found.leave_type;
+          if (lType === 'late_early') {
+            const def = workflowList.find(w => w.id === 'late_early') || matchingDef;
+            setSelectedWorkflowDef(def);
+            setFormType('late_early');
+            setExpenseTitle(def.name);
+            const r = found.reason || '';
+            setLateEarlyType(r.includes('Về sớm') ? 'early' : 'late');
+            const minMatch = r.match(/(\d+)\s*phút/i);
+            if (minMatch) setLateEarlyMinutes(Number(minMatch[1]));
+            const timeMatch = r.match(/Thời gian:\s*(\d{1,2}:\d{2})/i);
+            if (timeMatch) setOtStart(timeMatch[1]);
+            const startD = (found.from_date || found.start_date || '').split(' ')[0] || getTodayDateString();
+            setLeaveFrom(startD);
+            const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
+            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+          } else if (lType === 'overtime') {
+            const def = workflowList.find(w => w.id === 'overtime') || matchingDef;
+            setSelectedWorkflowDef(def);
+            setFormType('overtime');
+            setExpenseTitle(def.name);
+            const r = found.reason || '';
+            setOtType(found.ot_type || (r.includes('Lấy OT bù') ? 'compensatory' : 'salary'));
+            setOtRate(Number(found.ot_rate) || 1.5);
+            const d = (found.from_date || found.start_date || '').split('T')[0] || (found.from_date || found.start_date || '').split(' ')[0] || getTodayDateString();
+            setOtDate(d);
+            const timeRangeMatch = r.match(/Thời gian:\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/i);
+            if (timeRangeMatch) {
+              setOtStart(timeRangeMatch[1]);
+              setOtEnd(timeRangeMatch[2]);
+            } else {
+              if (found.from_date?.includes('T')) setOtStart(found.from_date.split('T')[1].substring(0, 5));
+              if (found.to_date?.includes('T')) setOtEnd(found.to_date.split('T')[1].substring(0, 5));
+            }
+            const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
+            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+          } else if (lType === 'remote_work') {
+            const def = workflowList.find(w => w.id === 'remote_work') || matchingDef;
+            setSelectedWorkflowDef(def);
+            setFormType('remote_work');
+            setExpenseTitle(def.name);
+            setLeaveFrom(found.start_date || found.from_date || '');
+            setLeaveTo(found.end_date || found.to_date || '');
+            const r = found.reason || '';
+            const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
+            setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+          } else {
+            const def = workflowList.find(w => w.id === 'leave_late') || matchingDef;
+            setSelectedWorkflowDef(def);
+            setFormType('leave');
+            setExpenseTitle(def.name);
+            setLeaveType(found.leave_type || 'annual');
+            setLeaveFrom(found.start_date || found.from_date || '');
+            setLeaveTo(found.end_date || found.to_date || '');
+            setLeaveReason(found.reason || '');
+          }
+          if (found.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(found.approver_id)) || null);
+          if (found.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(found.approver_id_2)) || null);
+          setShowCreateModal(true);
+          return;
         }
-      } catch (e) {}
-    } else if (item.type === 'advance') {
+      } catch (e) {
+        console.error('Error fetching leave for edit:', e);
+      }
+    }
+
+    // 2. Attendance bulk / check-in
+    if (item.type === 'attendance_bulk' || item.type === 'checkin') {
+      const def = workflowList.find(w => w.id === 'attendance_bulk') || matchingDef;
+      setSelectedWorkflowDef(def);
+      setFormType('attendance_bulk');
+      setExpenseTitle(def.name);
+      try {
+        const bulkRes = await api.get(`/check-ins/bulk-requests/${item.id}`);
+        const bulkData = bulkRes?.data?.data || bulkRes?.data;
+        if (bulkData) {
+          setBulkMonth(bulkData.month_period || getDefaultBulkMonth());
+          if (Array.isArray(bulkData.details) && bulkData.details.length > 0) {
+            setSuggestedDays(bulkData.details);
+          }
+          if (bulkData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(bulkData.approver_id)) || null);
+          if (bulkData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(bulkData.approver_id_2)) || null);
+        }
+      } catch (e) {
+        console.error('Error fetching bulk attendance for edit:', e);
+      }
+      setShowCreateModal(true);
+      return;
+    }
+
+    // 3. Advance Request (hrm/advances)
+    if (item.type === 'advance') {
+      const def = workflowList.find(w => w.id === 'advance_money') || matchingDef;
+      setSelectedWorkflowDef(def);
       setFormType('advance');
+      setExpenseTitle(def.name);
       try {
         const res = await fetchAPI('hrm/advances');
         const found = res?.data?.find((a: any) => a.id === item.id);
         if (found) {
           setPaymentDetails(String(found.amount || ''));
-          setLeaveReason(found.reason || '');
           setCurrencyType(found.currency || 'VND');
-          if (found.approver_id) setCustomApprover1(users.find(u => u.id === found.approver_id) || null);
+          const r = found.reason || '';
+          const bMatch = r.match(/\[Thông tin chuyển khoản\]:\s*([^\n]+)/i);
+          if (bMatch) setPaymentDestination(bMatch[1].trim());
+          const advTypeMatch = r.match(/Mục đích tạm ứng:\s*([^\n]+)/i);
+          if (advTypeMatch) {
+            const rawAdvType = advTypeMatch[1].trim();
+            if (rawAdvType.includes('công tác')) setAdvanceType('business_trip');
+            else if (rawAdvType.includes('mua sắm')) setAdvanceType('procurement');
+            else if (rawAdvType.includes('sự kiện')) setAdvanceType('event');
+            else if (rawAdvType.includes('giảng viên')) setAdvanceType('lecturer');
+            else if (rawAdvType.includes('lương')) setAdvanceType('salary');
+            else setAdvanceType('other');
+          }
+          const settleMatch = r.match(/Hạn hoàn ứng[^:]*:\s*([^\n]+)/i);
+          if (settleMatch) setAdvanceSettlementDate(settleMatch[1].trim());
+          const cleanReason = r.replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
+                               .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+                               .replace(/\[Đề nghị tạm ứng[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+                               .trim();
+          setLeaveReason(cleanReason);
+          if (found.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(found.approver_id)) || null);
+          if (found.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(found.approver_id_2)) || null);
         }
-      } catch (e) {}
-    } else if (isItemized || matchingDef.id === 'stationery' || matchingDef.id === 'purchase_request' || matchingDef.id === 'it_request') {
-      setFormType('general');
-      setExpenseTitle(item.title);
+      } catch (e) {
+        console.error('Error fetching advance for edit:', e);
+      }
+      setShowCreateModal(true);
+      return;
+    }
+
+    // 4. Expenses and Admin / Finance workflows
+    if (item.type === 'expense') {
       try {
         const res = await api.get(`/expenses/${item.id}`);
         const expData = res.data?.data || res.data;
         const notes = expData?.notes || expData?.description || item.description || '';
-        
-        // Parse itemized items line by line
-        const lines = notes.split('\n');
-        let parsedItems: any[] = [];
-        for (const line of lines) {
-          const lineTrim = line.trim();
-          if (!lineTrim.startsWith('•') && !lineTrim.match(/^\[?\d+\]/)) continue;
-          const mainMatch = lineTrim.match(/^[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*Số lượng:\s*(\d+(?:\.\d+)?)\s*([^\(\n]*)/i);
-          if (mainMatch) {
-            const name = mainMatch[2].trim();
-            const quantity = Number(mainMatch[3].trim()) || 1;
-            const unit = mainMatch[4].trim() || 'Cái';
+        const lowerTitle = (expData?.title || item.title || '').toLowerCase();
 
-            let price: any = '';
-            let vat = 10;
-            let vatType: any = '10';
-            let itemNotes = '';
+        // 4.1 Specialized: In, đóng dấu và gửi hồ sơ (print_stamp_send)
+        if (lowerTitle.includes('in, đóng dấu') || notes.includes('In, đóng dấu và gửi hồ sơ')) {
+          const def = workflowList.find(w => w.id === 'print_stamp_send') || matchingDef;
+          setSelectedWorkflowDef(def);
+          setFormType('general');
+          setExpenseTitle(expData.title || def.name);
+          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
 
-            const priceMatch = lineTrim.match(/Đơn giá:\s*([0-9.,]+)/i);
-            if (priceMatch) {
-              price = Number(priceMatch[1].replace(/\D/g, '')) || '';
-            } else {
-              const oldPriceMatch = lineTrim.match(/\(Giá:\s*([0-9.,]+)/i);
-              if (oldPriceMatch) price = Number(oldPriceMatch[1].replace(/\D/g, '')) || '';
-            }
+          const extractLine = (prefix: string) => {
+            const m = notes.match(new RegExp(`${prefix}:\\s*([^\\n]+)`, 'i'));
+            return m ? m[1].trim() : '';
+          };
 
-            const kctMatch = lineTrim.match(/VAT:\s*Không chịu thuế/i);
-            if (kctMatch) {
-              vat = 0;
-              vatType = 'kct';
-            } else {
-              const vatMatch = lineTrim.match(/VAT:\s*(\d+)%/i);
-              if (vatMatch) {
-                vat = Number(vatMatch[1]) || 0;
-                vatType = [0, 5, 8, 10].includes(vat) ? String(vat) : 'custom';
-              }
-            }
-
-            const noteMatch = lineTrim.match(/Ghi chú:\s*([^\)]+)/i);
-            if (noteMatch) {
-              itemNotes = noteMatch[1].trim();
-            }
-
-            parsedItems.push({
-              id: Date.now() + Math.random(),
-              name,
-              quantity,
-              unit,
-              price,
-              vat,
-              vatType,
-              notes: itemNotes
-            });
+          const reqEmp = extractLine('Nhân viên yêu cầu');
+          if (reqEmp) {
+            const u = users.find(x => x.full_name?.toLowerCase() === reqEmp.toLowerCase() || x.name?.toLowerCase() === reqEmp.toLowerCase());
+            if (u) setPssReqEmployeeId(String(u.id));
           }
-        }
-        if (parsedItems.length > 0) {
-          setStationeryItems(parsedItems);
-        } else {
-          setStationeryItems([{ id: Date.now(), name: '', quantity: 1, unit: 'Cái', notes: '', price: '', vat: 10, vatType: '10' }]);
-        }
+          const reqDate = extractLine('Ngày yêu cầu');
+          if (reqDate) setPssReqDate(reqDate);
 
-        const extractMetaField = (text: string, label: string) => {
-          const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
-          const m = text.match(reg);
-          return m ? m[1].trim() : '';
-        };
+          const exec = extractLine('Người thực hiện');
+          if (exec) {
+            const u = users.find(x => x.full_name?.toLowerCase() === exec.toLowerCase() || x.name?.toLowerCase() === exec.toLowerCase());
+            if (u) setPssExecutorId(String(u.id));
+          }
 
-        const pos = extractMetaField(notes, 'Vị trí');
-        const dept = extractMetaField(notes, 'Phòng ban');
-        const content = extractMetaField(notes, 'Nội dung đề xuất');
-        const reason = extractMetaField(notes, 'Lý do');
+          const sendMethod = extractLine('Hình thức gửi');
+          if (sendMethod) setPssSendMethod(sendMethod);
 
-        if (pos) setJobPosition(pos);
-        if (dept) setDepartmentName(dept);
-        if (content) setPaymentDetails(content);
-        if (reason) setLeaveReason(reason);
+          const timeFrame = extractLine('Khung giờ gửi');
+          if (timeFrame) setPssSendTimeFrame(timeFrame);
 
-        if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
-        if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
-        if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
-        if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
-      } catch (e) {
-        console.error('Error fetching itemized request for edit:', e);
-      }
-    } else if (matchingDef.category === 'finance' || item.type === 'expense') {
-      setFormType('general');
-      setExpenseTitle(item.title);
-      try {
-        const res = await api.get(`/expenses/${item.id}`);
-        const expData = res.data?.data || res.data;
-        if (expData) {
-          setPaymentDetails(expData.notes || expData.description || '');
+          const recName = extractLine('Tên người nhận');
+          if (recName) setPssRecipientName(recName);
+
+          const recAddr = extractLine('Địa chỉ người nhận');
+          if (recAddr) setPssRecipientAddress(recAddr);
+
+          const recPhone = extractLine('SĐT người nhận');
+          if (recPhone) setPssRecipientPhone(recPhone);
+
+          const sendDate = extractLine('Ngày cần gửi hồ sơ');
+          if (sendDate) setPssRequiredSendDate(sendDate);
+
           if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
           if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
           if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
           if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+
+          setShowCreateModal(true);
+          return;
         }
-      } catch (e) {}
-    } else {
-      setFormType('general');
-      setExpenseTitle(item.title);
-      setPaymentDetails(item.description || '');
+
+        // 4.2 Specialized: Đề xuất tiếp khách (client_meeting)
+        if (lowerTitle.includes('tiếp khách') || notes.includes('[Thông tin tiếp khách]')) {
+          const def = workflowList.find(w => w.id === 'client_meeting') || matchingDef;
+          setSelectedWorkflowDef(def);
+          setFormType('expense');
+          setExpenseTitle(expData.title || def.name);
+          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
+
+          const extractBullet = (label: string) => {
+            const m = notes.match(new RegExp(`•\\s*${label}:\\s*([^\\n]+)`, 'i'));
+            return m ? m[1].trim() : '';
+          };
+
+          const targetTypeStr = extractBullet('Phân loại đối tượng');
+          if (targetTypeStr.includes('Doanh nghiệp')) setMeetingTargetType('company');
+          else if (targetTypeStr.includes('Giảng viên')) setMeetingTargetType('lecturer');
+          else if (targetTypeStr.includes('Khách hàng')) setMeetingTargetType('contact');
+          else if (targetTypeStr.includes('Nhà nước')) setMeetingTargetType('gov');
+          else if (targetTypeStr) setMeetingTargetType('other');
+
+          const clientName = extractBullet('Đơn vị / Khách mời');
+          if (clientName) setMeetingClientName(clientName);
+
+          const repMatch = notes.match(/•\s*Người đại diện:\s*([^\n(]+)(?:\(SĐT:\s*([^\)]+)\))?/i);
+          if (repMatch) {
+            setMeetingContactPerson(repMatch[1].trim());
+            if (repMatch[2]) setMeetingContactPhone(repMatch[2].trim());
+          }
+
+          const loc = extractBullet('Địa điểm');
+          if (loc) setMeetingLocation(loc);
+
+          const timeMatch = notes.match(/•\s*Thời gian:\s*([0-9\-\/]+)(?:\s*lúc\s*([0-9:]+))?/i);
+          if (timeMatch) {
+            setMeetingDate(timeMatch[1].trim());
+            if (timeMatch[2]) setMeetingTime(timeMatch[2].trim());
+          }
+
+          const scaleMatch = notes.match(/Quy mô tham gia:\s*Khách mời\s*\((\d+)\s*người\)\s*-\s*Công ty\s*\((\d+)\s*người\)/i);
+          if (scaleMatch) {
+            setMeetingClientCount(scaleMatch[1]);
+            setMeetingInternalCount(scaleMatch[2]);
+          }
+
+          const purpose = extractBullet('Kế hoạch / Mục đích tiếp đón');
+          if (purpose) setMeetingPurpose(purpose);
+
+          const reimbStr = extractBullet('Phương thức thanh toán');
+          if (reimbStr.includes('Hoàn ứng')) setMeetingReimbursementMethod('host_claim');
+          else if (reimbStr.includes('trực tiếp')) setMeetingReimbursementMethod('direct_partner');
+          else if (reimbStr.includes('tín dụng')) setMeetingReimbursementMethod('corporate_card');
+          else if (reimbStr.includes('Tạm ứng')) setMeetingReimbursementMethod('cash_advance');
+
+          const amt = Number(expData.amount) || 0;
+          setExpenseItems([{ id: Date.now(), name: 'Chi phí tiếp khách', quantity: 1, price: amt, vat: 0 }]);
+
+          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
+          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
+          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+
+          setShowCreateModal(true);
+          return;
+        }
+
+        // 4.3 Specialized: Thanh toán theo đợt (phased_payment)
+        if (notes.includes('[Kế hoạch thanh toán theo đợt') || lowerTitle.includes('theo đợt')) {
+          const def = workflowList.find(w => w.id === 'phased_payment') || matchingDef;
+          setSelectedWorkflowDef(def);
+          setFormType('expense');
+          setExpenseTitle(expData.title || def.name);
+          setIsPhasedPayment(true);
+
+          const instMatches = [...notes.matchAll(/•\s*([^:]+):\s*([0-9.,]+)[^(\n]*(?:\(Hạn:\s*([^\)]+)\))?/gi)];
+          if (instMatches.length > 0) {
+            const parsedInst = instMatches.map(m => ({
+              id: Date.now() + Math.random(),
+              title: m[1].trim(),
+              amount: Number(m[2].replace(/\D/g, '')) || 0,
+              dueDate: m[3] ? m[3].trim() : ''
+            }));
+            setInstallments(parsedInst);
+          }
+          const amt = Number(expData.amount) || 0;
+          setExpenseItems([{ id: Date.now(), name: 'Thanh toán theo đợt', quantity: 1, price: amt, vat: 0 }]);
+
+          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
+          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
+          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+
+          setShowCreateModal(true);
+          return;
+        }
+
+        // 4.4 Specialized: Thanh toán định kỳ (recurring_payment)
+        if (notes.includes('[Thiết lập định kỳ]:') || notes.includes('[Lặp lại định kỳ') || lowerTitle.includes('định kỳ')) {
+          const def = workflowList.find(w => w.id === 'recurring_payment') || matchingDef;
+          setSelectedWorkflowDef(def);
+          setFormType('expense');
+          setExpenseTitle(expData.title || def.name);
+          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', def?.name));
+          setIsRecurring(true);
+
+          if (notes.includes('Hàng tuần')) setRecurringFrequency('weekly');
+          else if (notes.includes('Hàng quý')) setRecurringFrequency('quarterly');
+          else if (notes.includes('Hàng năm')) setRecurringFrequency('yearly');
+          else setRecurringFrequency('monthly');
+
+          const contractMatch = notes.match(/Căn cứ Hợp đồng[^:]*:\s*([^\n]+)/i);
+          if (contractMatch) setRecurringContractNumber(contractMatch[1].trim());
+
+          const amt = Number(expData.amount) || 0;
+          setExpenseItems([{ id: Date.now(), name: 'Thanh toán định kỳ', quantity: 1, price: amt, vat: 0 }]);
+
+          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
+          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
+          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+
+          setShowCreateModal(true);
+          return;
+        }
+
+        // 4.5 Specialized: Văn phòng phẩm, Mua sắm trang thiết bị, Cấp thiết bị IT
+        const isItemized = (
+          notes.includes('DANH SÁCH') ||
+          notes.includes('Đồ vật đề xuất:') ||
+          lowerTitle.includes('văn phòng phẩm') ||
+          lowerTitle.includes('trang thiết bị') ||
+          lowerTitle.includes('mua sắm') ||
+          lowerTitle.includes('thiết bị it')
+        );
+
+        if (isItemized) {
+          let itemDef = workflowList.find(w => w.id === 'stationery') || matchingDef;
+          if (lowerTitle.includes('it') || lowerTitle.includes('phần mềm') || notes.includes('THIẾT BỊ IT')) {
+            itemDef = workflowList.find(w => w.id === 'it_request') || itemDef;
+          } else if (lowerTitle.includes('mua sắm') || lowerTitle.includes('trang thiết bị') || notes.includes('MUA SẮM')) {
+            itemDef = workflowList.find(w => w.id === 'purchase_request') || itemDef;
+          }
+          setSelectedWorkflowDef(itemDef);
+          setFormType('general');
+          setExpenseTitle(expData.title || itemDef.name);
+          setWorkflowTitleSuffix(extractTitleSuffix(expData.title || '', itemDef?.name));
+
+          const lines = notes.split('\n');
+          let parsedItems: any[] = [];
+          for (const line of lines) {
+            const lineTrim = line.trim();
+            if (!lineTrim.startsWith('•') && !lineTrim.match(/^\[?\d+\]/)) continue;
+            const mainMatch = lineTrim.match(/^[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*Số lượng:\s*(\d+(?:\.\d+)?)\s*([^\(\n]*)/i);
+            if (mainMatch) {
+              const name = mainMatch[2].trim();
+              const quantity = Number(mainMatch[3].trim()) || 1;
+              const unit = mainMatch[4].trim() || 'Cái';
+
+              let price: any = '';
+              let vat = 10;
+              let vatType: any = '10';
+              let itemNotes = '';
+
+              const priceMatch = lineTrim.match(/Đơn giá:\s*([0-9.,]+)/i);
+              if (priceMatch) {
+                price = Number(priceMatch[1].replace(/\D/g, '')) || '';
+              } else {
+                const oldPriceMatch = lineTrim.match(/\(Giá:\s*([0-9.,]+)/i);
+                if (oldPriceMatch) price = Number(oldPriceMatch[1].replace(/\D/g, '')) || '';
+              }
+
+              const kctMatch = lineTrim.match(/VAT:\s*Không chịu thuế/i);
+              if (kctMatch) {
+                vat = 0;
+                vatType = 'kct';
+              } else {
+                const vatMatch = lineTrim.match(/VAT:\s*(\d+)%/i);
+                if (vatMatch) {
+                  vat = Number(vatMatch[1]) || 0;
+                  vatType = [0, 5, 8, 10].includes(vat) ? String(vat) : 'custom';
+                }
+              }
+
+              const noteMatch = lineTrim.match(/Ghi chú:\s*([^\)]+)/i);
+              if (noteMatch) itemNotes = noteMatch[1].trim();
+
+              parsedItems.push({
+                id: Date.now() + Math.random(),
+                name,
+                quantity,
+                unit,
+                price,
+                vat,
+                vatType,
+                notes: itemNotes
+              });
+            }
+          }
+          if (parsedItems.length > 0) {
+            setStationeryItems(parsedItems);
+          } else {
+            setStationeryItems([{ id: Date.now(), name: '', quantity: 1, unit: 'Cái', notes: '', price: '', vat: 10, vatType: '10' }]);
+          }
+
+          const extractMetaField = (text: string, label: string) => {
+            const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+            const m = text.match(reg);
+            return m ? m[1].trim() : '';
+          };
+
+          const pos = extractMetaField(notes, 'Vị trí');
+          const dept = extractMetaField(notes, 'Phòng ban');
+          const content = extractMetaField(notes, 'Nội dung đề xuất');
+          const reason = extractMetaField(notes, 'Lý do');
+
+          if (pos) setJobPosition(pos);
+          if (dept) setDepartmentName(dept);
+          if (content) setPaymentDetails(content);
+          if (reason) setLeaveReason(reason);
+
+          if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
+          if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
+          if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+          if (expData.image_url) setAttachments([{ name: expData.image_url.split('/').pop() || 'Tài liệu', url: expData.image_url }]);
+
+          setShowCreateModal(true);
+          return;
+        }
+
+        // 4.6 Standard Finance, PO, Expense Claim, Payment Proposals:
+        // Open native Approval Workflow Drawer (showCreateModal) with full structured form & BẢNG CHI TIẾT THANH TOÁN
+        let def = matchingDef?.id && matchingDef.id !== 'general' 
+          ? matchingDef 
+          : workflowList.find(w => w.id === 'payment') || workflowList[0];
+
+        if (lowerTitle.includes('tạm ứng') || notes.includes('[Đề nghị tạm ứng]')) {
+          def = workflowList.find(w => w.id === 'advance_money') || def;
+        } else if (lowerTitle.includes('hoàn ứng') || notes.includes('hoàn ứng')) {
+          def = workflowList.find(w => w.id === 'expense_claim') || def;
+        } else if (lowerTitle.includes('định kỳ') || notes.includes('định kỳ')) {
+          def = workflowList.find(w => w.id === 'recurring_payment') || def;
+        } else if (lowerTitle.includes('theo đợt') || notes.includes('theo đợt')) {
+          def = workflowList.find(w => w.id === 'phased_payment') || def;
+        }
+
+        setSelectedWorkflowDef(def);
+        setFormType('expense');
+        setEditingItemId(item.id);
+        setEditingItemType('expense');
+
+        const fullTitle = expData.title || item.title || def.name;
+        setExpenseTitle(fullTitle);
+
+        let cleanSuffix = extractTitleSuffix(fullTitle, def.name);
+        if (!cleanSuffix) {
+          const detailMatch = notes.match(/Chi tiết:\s*([^\n]+)/i);
+          if (detailMatch) cleanSuffix = detailMatch[1].trim();
+        }
+        setWorkflowTitleSuffix(cleanSuffix);
+
+        // Helper to extract a single line field
+        const extractField = (label: string) => {
+          const m = notes.match(new RegExp(`${label}:\\s*([^\\n]+)`, 'i'));
+          return m ? m[1].trim() : '';
+        };
+
+        // 1. Department
+        const dept = extractField('Phòng ban');
+        if (dept) setDepartmentName(dept);
+
+        // 2. Target / Đối tượng
+        const targetStr = extractField('Đối tượng');
+        if (targetStr) {
+          if (targetStr.includes('Nội bộ')) setPaymentTarget('Nội bộ');
+          else if (targetStr.includes('Đối tác')) setPaymentTarget('Đối tác');
+          else if (targetStr.includes('Giảng viên')) setPaymentTarget('Giảng viên');
+          else if (targetStr.includes('Khách hàng')) setPaymentTarget('Khách hàng');
+          else if (targetStr.includes('Cộng tác viên')) setPaymentTarget('Cộng tác viên');
+          else if (targetStr.includes('Nhà nước')) setPaymentTarget('Cơ quan Nhà nước');
+          else setPaymentTarget(targetStr);
+        } else {
+          setPaymentTarget(expData.vendor_name ? 'Đối tác' : 'Nội bộ');
+        }
+
+        // 3. Beneficiary name & employee
+        const benRaw = extractField('Thụ hưởng[^:]*');
+        const benName = benRaw ? benRaw.replace(/\(MST:[^\)]+\)/i, '').trim() : (expData.vendor_name || '');
+        if (benName) setPaymentBeneficiaryName(benName);
+
+        const mstMatch = notes.match(/MST:\s*([0-9A-Za-z\-]+)/i);
+        if (mstMatch) setPaymentTaxCode(mstMatch[1].trim());
+
+        const matchedEmp = users.find(u => 
+          (u.full_name && benName && u.full_name.toLowerCase() === benName.toLowerCase()) ||
+          (u.name && benName && u.name.toLowerCase() === benName.toLowerCase())
+        );
+        if (matchedEmp) {
+          setPaymentEmployeeId(String(matchedEmp.id));
+        }
+
+        // 4. Method & Banking
+        const methodStr = extractField('Hình thức');
+        if (methodStr) {
+          if (methodStr.includes('Chuyển khoản')) setPaymentMethod('Chuyển khoản');
+          else if (methodStr.includes('Tiền mặt')) setPaymentMethod('Tiền mặt');
+          else if (methodStr.includes('Ví điện tử')) setPaymentMethod('Ví điện tử');
+          else if (methodStr.includes('Thẻ tín dụng')) setPaymentMethod('Thẻ tín dụng');
+        } else {
+          setPaymentMethod('Chuyển khoản');
+        }
+
+        const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n-]+)(?:\s*-\s*Chi nhánh:\s*([^\n]+))?/i;
+        const bankMatch = notes.match(bankRegex);
+        if (bankMatch) {
+          setPaymentBankName(bankMatch[1].trim());
+          setPaymentBankAccount(bankMatch[2].trim());
+          setPaymentAccountName(bankMatch[3].trim());
+          if (bankMatch[4]) setPaymentBankBranch(bankMatch[4].trim());
+        } else {
+          if (expData.bank_name) setPaymentBankName(expData.bank_name);
+          if (expData.bank_account_number) setPaymentBankAccount(expData.bank_account_number);
+          if (expData.bank_account_name) setPaymentAccountName(expData.bank_account_name);
+          if (expData.bank_branch) setPaymentBankBranch(expData.bank_branch);
+        }
+
+        // 5. Payment details (Chi tiết)
+        const details = extractField('Chi tiết');
+        if (details) {
+          setPaymentDetails(details);
+        } else {
+          const cleanDesc = notes
+            .replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '')
+            .replace(/Phòng ban:[^\n]*/gi, '')
+            .replace(/Đối tượng:[^\n]*/gi, '')
+            .replace(/Thụ hưởng[^\n]*/gi, '')
+            .replace(/Hình thức:[^\n]*/gi, '')
+            .replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
+            .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+            .trim();
+          setPaymentDetails(cleanDesc || cleanSuffix || fullTitle);
+        }
+
+        // 6. Expense Category & Invoice Type
+        const rawAmt = Number(expData.amount) || 0;
+        const rawVatAmt = Number(expData.vat_amount) || 0;
+        const calcVatPct = (rawAmt > rawVatAmt && rawVatAmt > 0) ? Math.round((rawVatAmt / (rawAmt - rawVatAmt)) * 100) : 0;
+
+        if (notes.includes('Hóa đơn điện tử VAT 8%') || calcVatPct === 8) setInvoiceType('vat_8');
+        else if (notes.includes('Hóa đơn điện tử VAT 5%') || calcVatPct === 5) setInvoiceType('vat_5');
+        else if (notes.includes('Hóa đơn điện tử VAT 0%') || notes.includes('Không chịu thuế')) setInvoiceType('vat_0');
+        else if (notes.includes('Hóa đơn bán lẻ')) setInvoiceType('retail');
+        else if (notes.includes('Không có hóa đơn')) setInvoiceType('none');
+        else setInvoiceType('vat_10');
+
+        // 7. BẢNG CHI TIẾT THANH TOÁN (expenseItems)
+        if (Array.isArray(expData.items) && expData.items.length > 0) {
+          setExpenseItems(expData.items.map((it: any, i: number) => ({
+            id: it.id || Date.now() + i,
+            content: it.content || it.name || cleanSuffix || 'Nội dung chi tiêu',
+            quantity: Number(it.quantity) || 1,
+            price: Number(it.price) || 0,
+            vat: it.vat !== undefined ? Number(it.vat) : 10
+          })));
+        } else {
+          const amt = Number(expData.amount) || 0;
+          const vatAmt = Number(expData.vat_amount) || 0;
+          let vatPct = 10;
+          let netPrice = amt;
+          if (vatAmt > 0 && amt > 0) {
+            netPrice = Math.round(amt - vatAmt);
+            const calcPct = Math.round((vatAmt / netPrice) * 100);
+            vatPct = [0, 5, 8, 10].includes(calcPct) ? calcPct : Math.round((vatAmt / amt) * 100);
+            if (![0, 5, 8, 10].includes(vatPct)) vatPct = 8;
+          }
+          const itemContent = cleanSuffix || details || fullTitle || 'Nội dung chi tiêu';
+          setExpenseItems([
+            {
+              id: Date.now(),
+              content: itemContent,
+              quantity: 1,
+              price: netPrice > 0 ? netPrice : amt,
+              vat: vatPct
+            }
+          ]);
+        }
+
+        // 8. Approvers
+        if (expData.approver_id) setCustomApprover1(users.find(u => Number(u.id) === Number(expData.approver_id)) || null);
+        if (expData.approver_id_2) setCustomApprover2(users.find(u => Number(u.id) === Number(expData.approver_id_2)) || null);
+        if (expData.approver_id_3) setCustomApprover3(users.find(u => Number(u.id) === Number(expData.approver_id_3)) || null);
+        setShowStepManager(true);
+        setShowStepAccountant(true);
+        setShowStepDirector(!!expData.approver_id_3 || (Number(expData.amount) >= 5000000));
+
+        // 9. Related users
+        if (expData.related_user_ids) {
+          try {
+            const rIds = typeof expData.related_user_ids === 'string' 
+              ? JSON.parse(expData.related_user_ids) 
+              : expData.related_user_ids;
+            if (Array.isArray(rIds)) setRelatedUserIds(rIds.map(Number));
+          } catch {}
+        }
+
+        // 10. Attachments
+        const parsedAtts: any[] = [];
+        if (expData.image_url) {
+          parsedAtts.push({
+            name: expData.image_url.split('?')[0].split('/').pop() || 'Tài liệu',
+            url: expData.image_url
+          });
+        }
+        if (notes) {
+          const attMatches = notes.matchAll(/•\s*([^\n\r(]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+          for (const m of attMatches) {
+            const aName = m[1].trim();
+            const aUrl = m[2].trim();
+            if (!parsedAtts.some(a => a.url === aUrl || a.name === aName)) {
+              parsedAtts.push({ name: aName, url: aUrl });
+            }
+          }
+        }
+        setAttachments(parsedAtts);
+
+        setShowCreateModal(true);
+        return;
+      } catch (e) {
+        console.error('Error fetching expense for edit:', e);
+      }
     }
-    
+
+    // Default Fallback
+    setFormType('general');
+    setExpenseTitle(item.title);
+    setWorkflowTitleSuffix(extractTitleSuffix(item.title || '', matchingDef?.name));
+    setPaymentDetails(item.description || '');
     setShowCreateModal(true);
   };
 
@@ -2561,6 +3587,13 @@ export default function Approvals() {
 
   const formatBadge = (status: string) => {
     const s = status ? status.toLowerCase() : 'pending';
+    if (s === 'draft') {
+      return (
+        <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.16)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>
+          <Bookmark size={10} /> {t('Bản nháp')}
+        </span>
+      );
+    }
     if (s === 'approved' || s === 'confirmed') {
       return (
         <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
@@ -2570,8 +3603,8 @@ export default function Approvals() {
     }
     if (s === 'level1_approved') {
       return (
-        <span className="badge info" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-          <CheckCircle2 size={10} /> {t('Đã duyệt Cấp 1')}
+        <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
+          <Clock size={10} /> {t('Chờ duyệt Cấp 2')}
         </span>
       );
     }
@@ -2602,29 +3635,145 @@ export default function Approvals() {
 
   const renderCurrentApprover = useCallback((item: ApprovalItem) => {
     let approverUser: any = null;
+    let stepLabel = '';
+    let badgeClass = 'badge warning';
+    let icon = <Clock size={10} />;
 
     const status1 = (item as any).status_level_1 || 'pending';
     const status2 = (item as any).status_level_2 || 'none';
     const status3 = (item as any).status_level_3 || 'none';
+    const overallStatus = (item.status || 'pending').toLowerCase();
 
-    let targetApproverId = (item as any).approver_id;
-    if (status1 === 'approved' && status2 === 'pending' && (item as any).approver_id_2) {
-      targetApproverId = (item as any).approver_id_2;
-    } else if (status1 === 'approved' && status2 === 'approved' && status3 === 'pending' && (item as any).approver_id_3) {
-      targetApproverId = (item as any).approver_id_3;
+    // 00. If draft:
+    if (overallStatus === 'draft') {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="badge" style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.12)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Bookmark size={10} />
+            <span>{t('Chưa gửi duyệt')}</span>
+          </span>
+        </div>
+      );
     }
 
-    if (!targetApproverId && (item as any).manager_id) {
-      targetApproverId = (item as any).manager_id;
+    // 0. If overall status is rejected:
+    if (overallStatus === 'rejected') {
+      const rejectorName = (item as any).rejected_by_name || (item as any).approver_name;
+      const userObj = rejectorName ? usersByNameMap.get(String(rejectorName).toLowerCase().trim()) : null;
+      const avatarUrl = userObj?.avatar_url || userObj?.avatar;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Avatar src={avatarUrl} name={rejectorName || 'Từ chối'} size={24} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
+              {rejectorName || t('Người duyệt')}
+            </span>
+            <span className="badge danger" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
+              <XCircle size={10} />
+              <span>{t('Đã từ chối')}</span>
+            </span>
+          </div>
+        </div>
+      );
     }
 
-    if (targetApproverId && Number(targetApproverId) > 0) {
-      approverUser = usersMap.get(Number(targetApproverId));
+    // 1. If overall status is approved:
+    if (overallStatus === 'approved' || overallStatus === 'confirmed') {
+      let finalUser: any = null;
+      let finalApproverId = 0;
+      if (Number((item as any).approved_by) > 0) {
+        finalApproverId = Number((item as any).approved_by);
+      } else if (Number((item as any).approver_id_3) > 0) {
+        finalApproverId = Number((item as any).approver_id_3);
+      } else if (Number((item as any).approver_id_2) > 0) {
+        finalApproverId = Number((item as any).approver_id_2);
+      } else if (Number((item as any).hr_id) > 0) {
+        finalApproverId = Number((item as any).hr_id);
+      } else if (Number((item as any).approver_id) > 0) {
+        finalApproverId = Number((item as any).approver_id);
+      } else if (Number((item as any).manager_id) > 0) {
+        finalApproverId = Number((item as any).manager_id);
+      }
+
+      if (finalApproverId > 0) {
+        finalUser = usersMap.get(finalApproverId);
+      }
+
+      let finalApproverName = '';
+      if ((item as any).approved_by_name) {
+        finalApproverName = (item as any).approved_by_name;
+      } else if ((item as any).approver_name_3) {
+        finalApproverName = (item as any).approver_name_3;
+      } else if ((item as any).approver_name_2) {
+        finalApproverName = (item as any).approver_name_2;
+      } else if ((item as any).approver_name) {
+        finalApproverName = (item as any).approver_name;
+      }
+
+      if (!finalUser && finalApproverName) {
+        finalUser = usersByNameMap.get(String(finalApproverName).toLowerCase().trim());
+      }
+
+      if (!finalUser) {
+        if (item.type === 'checkin' || item.type === 'attendance_bulk' || item.type === 'leave') {
+          finalUser = usersByNameMap.get('phuongntd') || usersByNameMap.get('nguyễn thị duy phương');
+        }
+      }
+
+      const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Đã phê duyệt');
+      const avatarUrl = finalUser?.avatar_url || finalUser?.avatar;
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Avatar src={avatarUrl} name={displayName} size={24} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
+              {displayName}
+            </span>
+            <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
+              <CheckCircle2 size={10} />
+              <span>{t('Đã duyệt đủ cấp')}</span>
+            </span>
+          </div>
+        </div>
+      );
     }
 
-    if (!approverUser && (item as any).approver_name) {
-      const nameKey = String((item as any).approver_name).toLowerCase().trim();
-      approverUser = usersByNameMap.get(nameKey);
+    // 2. Identify current pending level
+    let targetApproverId = 0;
+    let targetApproverName = '';
+
+    if (status1 === 'pending') {
+      targetApproverId = Number((item as any).approver_id || (item as any).manager_id || 0);
+      targetApproverName = (item as any).approver_name || '';
+      stepLabel = (item as any).approver_id_2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else if (status1 === 'approved' && status2 === 'pending') {
+      targetApproverId = Number((item as any).approver_id_2 || 0);
+      targetApproverName = (item as any).approver_name_2 || '';
+      stepLabel = t('Chờ duyệt Cấp 2');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else if (status1 === 'approved' && status2 === 'approved' && status3 === 'pending') {
+      targetApproverId = Number((item as any).approver_id_3 || 0);
+      targetApproverName = (item as any).approver_name_3 || '';
+      stepLabel = t('Chờ duyệt Cấp 3');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else {
+      targetApproverId = Number((item as any).approver_id || 0);
+      targetApproverName = (item as any).approver_name || '';
+      stepLabel = t('Chờ duyệt');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    }
+
+    if (targetApproverId > 0) {
+      approverUser = usersMap.get(targetApproverId);
+    }
+    if (!approverUser && targetApproverName) {
+      approverUser = usersByNameMap.get(targetApproverName.toLowerCase().trim());
     }
 
     if (!approverUser) {
@@ -2635,37 +3784,246 @@ export default function Approvals() {
       }
     }
 
-    if (!approverUser) {
-      return (
-        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-          {t('Chờ duyệt')}
-        </span>
-      );
-    }
-
+    const displayName = approverUser?.full_name || approverUser?.name || targetApproverName || t('Chờ phân công');
     const avatarUrl = approverUser?.avatar_url || approverUser?.avatar;
-    const displayName = approverUser?.full_name || approverUser?.name;
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Avatar src={avatarUrl} name={displayName} size={24} />
-        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
-          {displayName}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            {displayName}
+          </span>
+          {stepLabel && (
+            <span className={badgeClass} style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
+              {icon}
+              <span>{stepLabel}</span>
+            </span>
+          )}
+        </div>
       </div>
     );
   }, [usersMap, usersByNameMap, t]);
+
+  const renderWorkflowStepsAndWatchers = useCallback((item: ApprovalItem) => {
+    interface StepInfo {
+      stepIndex: number;
+      title: string;
+      userId?: number;
+      userName?: string;
+      status: 'approved' | 'rejected' | 'pending' | 'waiting';
+    }
+
+    const steps: StepInfo[] = [];
+    const overall = (item.status || 'pending').toLowerCase();
+    const s1 = (item as any).status_level_1 || (overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending');
+    const s2 = (item as any).status_level_2 || 'none';
+    const s3 = (item as any).status_level_3 || 'none';
+
+    // Step 1
+    const app1Id = Number((item as any).approver_id || (item as any).manager_id || 0);
+    const app1Name = (item as any).approver_name || '';
+    if (app1Id > 0 || app1Name || (item as any).approver_id_2) {
+      let stepStatus: StepInfo['status'] = 'pending';
+      if (s1 === 'approved') stepStatus = 'approved';
+      else if (s1 === 'rejected' || (overall === 'rejected' && s1 !== 'approved')) stepStatus = 'rejected';
+      else stepStatus = 'pending';
+
+      steps.push({
+        stepIndex: 1,
+        title: 'Cấp 1',
+        userId: app1Id,
+        userName: app1Name,
+        status: stepStatus
+      });
+    }
+
+    // Step 2
+    const app2Id = Number((item as any).approver_id_2 || 0);
+    const app2Name = (item as any).approver_name_2 || '';
+    if (app2Id > 0 || app2Name || s2 !== 'none') {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (s2 === 'approved') stepStatus = 'approved';
+      else if (s2 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && s2 === 'pending') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 2,
+        title: 'Cấp 2',
+        userId: app2Id,
+        userName: app2Name,
+        status: stepStatus
+      });
+    }
+
+    // Step 3
+    const app3Id = Number((item as any).approver_id_3 || 0);
+    const app3Name = (item as any).approver_name_3 || '';
+    if (app3Id > 0 || app3Name || s3 !== 'none') {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (s3 === 'approved') stepStatus = 'approved';
+      else if (s3 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && s2 === 'approved' && s3 === 'pending') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 3,
+        title: 'Cấp 3',
+        userId: app3Id,
+        userName: app3Name,
+        status: stepStatus
+      });
+    }
+
+    if (steps.length === 0) {
+      steps.push({
+        stepIndex: 1,
+        title: 'Duyệt',
+        userId: Number((item as any).approver_id || 0),
+        userName: (item as any).approver_name || '',
+        status: overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending'
+      });
+    }
+
+    // Related Watchers
+    let relIds: number[] = [];
+    const rawWatchers = (item as any).related_user_ids || (item as any).related_users;
+    if (Array.isArray(rawWatchers)) {
+      relIds = rawWatchers.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+    } else if (typeof rawWatchers === 'string') {
+      const trimmed = rawWatchers.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            relIds = parsed.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+          }
+        } catch {
+          relIds = trimmed.slice(1, -1).split(',').map((id: string) => Number(id.trim().replace(/^['"]|['"]$/g, ''))).filter((id: number) => id > 0);
+        }
+      } else {
+        relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+      }
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        {/* Step Approvers Chain */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          {steps.map((st, idx) => {
+            let uObj = st.userId ? usersMap.get(st.userId) : null;
+            if (!uObj && st.userName) {
+              uObj = usersByNameMap.get(st.userName.toLowerCase().trim());
+            }
+            const displayName = uObj?.full_name || uObj?.name || st.userName || st.title;
+            const avatarUrl = uObj?.avatar_url || uObj?.avatar;
+
+            const isApproved = st.status === 'approved';
+            const isRejected = st.status === 'rejected';
+            const isPending = st.status === 'pending';
+
+            const borderColor = isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : 'var(--color-border)';
+            const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : 'Chưa đến lượt';
+
+            return (
+              <React.Fragment key={`step-${st.stepIndex}`}>
+                {idx > 0 && (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: '0 1px' }}>➔</span>
+                )}
+                <div 
+                  title={`${st.title}: ${displayName} (${statusText})`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{
+                    borderRadius: '50%',
+                    padding: '1.5px',
+                    border: `2px solid ${borderColor}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'var(--color-surface, #ffffff)',
+                    opacity: st.status === 'waiting' ? 0.6 : 1
+                  }}>
+                    <Avatar src={avatarUrl} name={displayName} size={24} />
+                  </div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-2px',
+                    right: '-2px',
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : '#8E8E93',
+                    border: '1.5px solid #ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '8px',
+                    fontWeight: 800
+                  }}>
+                    {isApproved ? '✓' : isRejected ? '✕' : isPending ? '•' : st.stepIndex}
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Related Watchers Avatars */}
+        {relIds.length > 0 && (
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              marginLeft: '4px',
+              paddingLeft: '6px',
+              borderLeft: '1px solid var(--color-border)'
+            }}
+            title={`Người liên quan (${relIds.length}): ${relIds.map(id => usersMap.get(id)?.name || id).join(', ')}`}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', marginRight: '1px' }}>
+              <Eye size={12} />
+            </div>
+            {relIds.slice(0, 3).map(id => {
+              const relU = usersMap.get(id);
+              return (
+                <Avatar
+                  key={`rel-${id}`}
+                  src={relU?.avatar_url || relU?.avatar}
+                  name={relU?.full_name || relU?.name || `ID ${id}`}
+                  size={22}
+                />
+              );
+            })}
+            {relIds.length > 3 && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                +{relIds.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }, [usersMap, usersByNameMap]);
 
   // Filter logic for main lists (memoized)
   const currentRawList = useMemo(() => {
     switch (activeTab) {
       case 'pending': return pendingList;
-      case 'my_requests': return myRequestsList;
+      case 'my_requests': return [...draftApprovalItems, ...myRequestsList];
       case 'following': return followingList;
-      case 'all': return allList;
+      case 'all': return [...draftApprovalItems, ...allList];
       default: return pendingList;
     }
-  }, [activeTab, pendingList, myRequestsList, followingList, allList]);
+  }, [activeTab, pendingList, myRequestsList, followingList, allList, draftApprovalItems]);
 
   const currentList = useMemo(() => {
     return currentRawList.filter(item => {
@@ -2673,21 +4031,16 @@ export default function Approvals() {
         (item.title && item.title.toLowerCase().includes(listSearchText.toLowerCase())) ||
         (item.description && item.description.toLowerCase().includes(listSearchText.toLowerCase()));
       
-      const matchingDef = getWorkflowDefFromItem(item);
-      const itemCategory = matchingDef ? matchingDef.category : (
-        ['leave', 'checkin', 'attendance_bulk', 'late_early', 'overtime', 'remote_work'].includes(item.type) ? 'hr' :
-        ['advance', 'expense'].includes(item.type) ? 'finance' : 'admin'
-      );
-      const matchesCategory = listCategoryFilter === 'all' || itemCategory === listCategoryFilter;
-      
       const rawStatus = (item.status || 'pending').toLowerCase();
-      const isItemPending = ['pending', 'pending_manager', 'pending_hr', 'pending_approval', 'level1_approved'].includes(rawStatus);
+      const isItemDraft = rawStatus === 'draft' || !!item.is_draft;
+      const isItemPending = !isItemDraft && ['pending', 'pending_manager', 'pending_hr', 'pending_approval', 'level1_approved'].includes(rawStatus);
       const isItemApproved = ['approved', 'confirmed'].includes(rawStatus);
       const isItemRejected = ['rejected', 'failed'].includes(rawStatus);
 
       let matchesStatus = listStatusFilter === 'all';
       if (!matchesStatus) {
-        if (listStatusFilter === 'pending') matchesStatus = isItemPending;
+        if (listStatusFilter === 'draft') matchesStatus = isItemDraft;
+        else if (listStatusFilter === 'pending') matchesStatus = isItemPending;
         else if (listStatusFilter === 'approved') matchesStatus = isItemApproved;
         else if (listStatusFilter === 'rejected') matchesStatus = isItemRejected;
         else matchesStatus = rawStatus === listStatusFilter.toLowerCase();
@@ -2699,10 +4052,10 @@ export default function Approvals() {
         if (dateRange.from && dateStr < dateRange.from) matchesDate = false;
         if (dateRange.to && dateStr > dateRange.to) matchesDate = false;
       }
-      
-      return matchesSearch && matchesCategory && matchesStatus && matchesDate;
+
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [currentRawList, listSearchText, listCategoryFilter, listStatusFilter, dateRange]);
+  }, [currentRawList, listSearchText, listStatusFilter, dateRange]);
 
   return (
     <div>
@@ -2780,249 +4133,272 @@ export default function Approvals() {
         </div>
       </div>
 
-      {/* Tabs (Desktop View) */}
-      {!isMobile && (
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '1.5rem',
-          background: 'var(--color-bg)',
-          padding: '3px',
-          borderRadius: '10px',
-          width: 'fit-content'
-        }}>
-          {/* Tab 1: All Requests / Processed (Tất cả đề xuất - đem ra bên trái) */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('all')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '0.5rem 1.125rem',
-              borderRadius: '7px',
-              fontWeight: activeTab === 'all' ? 700 : 600,
-              fontSize: '0.875rem',
-              background: activeTab === 'all' ? 'var(--color-surface)' : 'transparent',
-              color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-light)',
-              boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <FileText size={15} />
-            {t('Tất cả đề xuất')}
-            {allList.length > 0 && (
-              <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                {allList.length}
-              </span>
-            )}
-          </button>
-
-          {/* Tab 2: Pending Requests */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('pending')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '0.5rem 1.125rem',
-              borderRadius: '7px',
-              fontWeight: activeTab === 'pending' ? 700 : 600,
-              fontSize: '0.875rem',
-              background: activeTab === 'pending' ? 'var(--color-surface)' : 'transparent',
-              color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-light)',
-              boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Activity size={15} />
-            {t('Yêu cầu chờ duyệt')}
-            {pendingList.length > 0 && (
-              <span style={{ fontSize: '0.7rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                {pendingList.length}
-              </span>
-            )}
-          </button>
-
-          {/* Tab 3: My Requests */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('my_requests')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '0.5rem 1.125rem',
-              borderRadius: '7px',
-              fontWeight: activeTab === 'my_requests' ? 700 : 600,
-              fontSize: '0.875rem',
-              background: activeTab === 'my_requests' ? 'var(--color-surface)' : 'transparent',
-              color: activeTab === 'my_requests' ? 'var(--color-text)' : 'var(--color-text-light)',
-              boxShadow: activeTab === 'my_requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <User size={15} />
-            {t('Yêu cầu của tôi')}
-            {myRequestsList.length > 0 && (
-              <span style={{ fontSize: '0.7rem', background: 'var(--color-bg-secondary)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                {myRequestsList.length}
-              </span>
-            )}
-          </button>
-
-          {/* Tab 4: Following / Watcher Requests */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('following')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '0.5rem 1.125rem',
-              borderRadius: '7px',
-              fontWeight: activeTab === 'following' ? 700 : 600,
-              fontSize: '0.875rem',
-              background: activeTab === 'following' ? 'var(--color-surface)' : 'transparent',
-              color: activeTab === 'following' ? 'var(--color-text)' : 'var(--color-text-light)',
-              boxShadow: activeTab === 'following' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Eye size={15} />
-            {t('Được gắn theo dõi')}
-            {followingList.length > 0 && (
-              <span style={{ fontSize: '0.7rem', background: '#3b82f6', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700, marginLeft: 2 }}>
-                {followingList.length}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Search and Filters Bar */}
+      {/* Search and Filters Bar with Integrated Tabs */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: isMobile ? '8px' : '1rem',
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border-light)',
-        borderRadius: isMobile ? '12px' : '16px',
-        padding: isMobile ? '8px 10px' : '1rem 1.25rem',
-        marginBottom: isMobile ? '0.75rem' : '1.5rem',
-        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
-        position: 'relative'
+        gap: isMobile ? '8px' : '12px',
+        background: 'var(--color-surface, #ffffff)',
+        border: '1px solid var(--color-border)',
+        borderRadius: isMobile ? '12px' : '14px',
+        padding: isMobile ? '8px 10px' : '8px 12px',
+        marginBottom: isMobile ? '0.75rem' : '1.25rem',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+        position: 'relative',
+        flexWrap: 'wrap'
       }}>
-        {/* Search Field */}
+        {/* Left: View Mode Tabs (Desktop) */}
+        {!isMobile && (
+          <div style={{
+            display: 'flex',
+            gap: '3px',
+            background: 'var(--color-bg-secondary, #f1f5f9)',
+            padding: '3px',
+            borderRadius: '9px'
+          }}>
+            {/* Tab 1: All Requests */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '7px',
+                fontWeight: activeTab === 'all' ? 700 : 500,
+                fontSize: '0.8125rem',
+                background: activeTab === 'all' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <FileText size={14} />
+              <span>{t('Tất cả đề xuất')}</span>
+              {allList.length > 0 && (
+                <span style={{ fontSize: '0.68rem', background: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
+                  {allList.length}
+                </span>
+              )}
+            </button>
+
+            {/* Tab 2: Pending Requests */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('pending')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '7px',
+                fontWeight: activeTab === 'pending' ? 700 : 500,
+                fontSize: '0.8125rem',
+                background: activeTab === 'pending' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Activity size={14} />
+              <span>{t('Chờ tôi duyệt')}</span>
+              {pendingList.length > 0 && (
+                <span style={{ fontSize: '0.68rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
+                  {pendingList.length}
+                </span>
+              )}
+            </button>
+
+            {/* Tab 3: My Requests */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('my_requests')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '7px',
+                fontWeight: activeTab === 'my_requests' ? 700 : 500,
+                fontSize: '0.8125rem',
+                background: activeTab === 'my_requests' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                color: activeTab === 'my_requests' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                boxShadow: activeTab === 'my_requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <User size={14} />
+              <span>{t('Yêu cầu của tôi')}</span>
+              {(myRequestsList.length + draftApprovalItems.length) > 0 && (
+                <span style={{ fontSize: '0.68rem', background: activeTab === 'my_requests' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
+                  {myRequestsList.length + draftApprovalItems.length}
+                </span>
+              )}
+            </button>
+
+            {/* Tab 4: Following */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('following')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '7px',
+                fontWeight: activeTab === 'following' ? 700 : 500,
+                fontSize: '0.8125rem',
+                background: activeTab === 'following' ? 'var(--color-surface, #ffffff)' : 'transparent',
+                color: activeTab === 'following' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                boxShadow: activeTab === 'following' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Eye size={14} />
+              <span>{t('Được gắn theo dõi')}</span>
+              {followingList.length > 0 && (
+                <span style={{ fontSize: '0.68rem', background: '#3b82f6', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
+                  {followingList.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Right: Search Field & Status Filter */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--color-border)',
-          borderRadius: '8px',
-          padding: '0 10px',
-          height: isMobile ? '36px' : '36px',
           flex: isMobile ? 1 : 'none',
-          width: isMobile ? 'auto' : '300px',
-          minWidth: 0
+          justifyContent: isMobile ? 'stretch' : 'flex-end',
+          width: isMobile ? '100%' : 'auto'
         }}>
-          <Search size={isMobile ? 14 : 16} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          <input
-            type="text"
-            placeholder={t('Tìm kiếm đề xuất...')}
-            value={listSearchText}
-            onChange={e => setListSearchText(e.target.value)}
-            style={{ border: 'none', background: 'transparent', width: '100%', fontSize: isMobile ? '0.82rem' : '0.85rem', outline: 'none', color: 'var(--color-text)', minWidth: 0 }}
-          />
-          {listSearchText && (
-            <button onClick={() => setListSearchText('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={14} style={{ color: 'var(--color-text-muted)' }} />
-            </button>
+          {/* Search Field */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--color-bg-secondary, #f1f5f9)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '0 10px',
+            height: '36px',
+            flex: isMobile ? 1 : 'none',
+            width: isMobile ? 'auto' : '260px',
+            minWidth: 0
+          }}>
+            <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder={t('Tìm kiếm đề xuất...')}
+              value={listSearchText}
+              onChange={e => setListSearchText(e.target.value)}
+              style={{ border: 'none', background: 'transparent', width: '100%', fontSize: isMobile ? '0.82rem' : '0.825rem', outline: 'none', color: 'var(--color-text)', minWidth: 0 }}
+            />
+            {listSearchText && (
+              <button onClick={() => setListSearchText('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                <X size={14} style={{ color: 'var(--color-text-muted)' }} />
+              </button>
+            )}
+          </div>
+
+          {/* Desktop Status Dropdown */}
+          {!isMobile && (
+            <div style={{ width: '160px' }}>
+              <CustomSelect
+                value={listStatusFilter}
+                onChange={val => setListStatusFilter(val)}
+                options={[
+                  { value: 'all', label: t('Trạng thái: Tất cả') },
+                  { value: 'draft', label: t('Bản nháp') },
+                  { value: 'pending', label: t('Đang chờ duyệt') },
+                  { value: 'approved', label: t('Đã duyệt') },
+                  { value: 'rejected', label: t('Từ chối') }
+                ]}
+                size="sm"
+                width="100%"
+              />
+            </div>
           )}
-        </div>
 
-        {/* Mobile [...] Filter & Actions Button */}
-        {isMobile && (
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              style={{
-                width: '36px',
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                border: '1px solid var(--color-border)',
-                borderRadius: '8px',
-                background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
-                color: (listCategoryFilter !== 'all' || listStatusFilter !== 'all') ? 'var(--color-primary)' : 'var(--color-text)',
-                outline: 'none',
-                boxShadow: 'var(--shadow-sm)',
-                flexShrink: 0,
-                position: 'relative'
-              }}
-              title={t('Bộ lọc & Tùy chọn')}
-            >
-              <MoreHorizontal size={18} />
-              {(listCategoryFilter !== 'all' || listStatusFilter !== 'all') && (
-                <span style={{
-                  position: 'absolute',
-                  top: '6px',
-                  right: '6px',
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'var(--color-primary)'
-                }} />
-              )}
-            </button>
+          {/* Mobile [...] Filter & Actions Button */}
+          {isMobile && (
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
+                  color: listStatusFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-text)',
+                  outline: 'none',
+                  boxShadow: 'var(--shadow-sm)',
+                  flexShrink: 0,
+                  position: 'relative'
+                }}
+                title={t('Bộ lọc & Tùy chọn')}
+              >
+                <MoreHorizontal size={18} />
+                {listStatusFilter !== 'all' && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '6px',
+                    right: '6px',
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: 'var(--color-primary)'
+                  }} />
+                )}
+              </button>
 
-            {/* Mobile Filters Dropdown Popover */}
-            <AnimatePresence>
-              {showMobileFilters && (
-                <>
-                  <div 
-                    onClick={() => setShowMobileFilters(false)} 
-                    style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                    transition={{ duration: 0.15 }}
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: '42px',
-                      width: '250px',
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '12px',
-                      boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
-                      padding: '12px',
-                      zIndex: 999,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px'
-                    }}
-                  >
+              {/* Mobile Filters Dropdown Popover */}
+              <AnimatePresence>
+                {showMobileFilters && (
+                  <>
+                    <div 
+                      onClick={() => setShowMobileFilters(false)} 
+                      style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: '42px',
+                        width: '250px',
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                        padding: '12px',
+                        zIndex: 999,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
                       <div>
                         <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                           {t('Chế độ xem')}
@@ -3058,7 +4434,7 @@ export default function Approvals() {
                               cursor: 'pointer'
                             }}
                           >
-                            {t('Chờ duyệt')} ({pendingList.length})
+                            {t('Chờ tôi duyệt')} ({pendingList.length})
                           </button>
                           <button
                             type="button"
@@ -3074,7 +4450,7 @@ export default function Approvals() {
                               cursor: 'pointer'
                             }}
                           >
-                            {t('Của tôi')} ({myRequestsList.length})
+                            {t('Của tôi')} ({myRequestsList.length + draftApprovalItems.length})
                           </button>
                           <button
                             type="button"
@@ -3095,135 +4471,52 @@ export default function Approvals() {
                         </div>
                       </div>
 
-                    <div>
-                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
-                        {t('Trạng thái')}
-                      </label>
-                      <CustomSelect
-                        value={listStatusFilter}
-                        onChange={val => { setListStatusFilter(val); setShowMobileFilters(false); }}
-                        options={[
-                          { value: 'all', label: t('Tất cả trạng thái') },
-                          { value: 'pending', label: t('Đang chờ duyệt') },
-                          { value: 'approved', label: t('Đã duyệt') },
-                          { value: 'rejected', label: t('Từ chối') }
-                        ]}
-                        size="xs"
-                        width="100%"
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
-                        {t('Danh mục')}
-                      </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-                        {[
-                          { id: 'all', label: t('Tất cả') },
-                          { id: 'finance', label: t('Tài chính') },
-                          { id: 'hr', label: t('Nhân sự') },
-                          { id: 'admin', label: t('Hành chính') }
-                        ].map(cat => (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => { setListCategoryFilter(cat.id); setShowMobileFilters(false); }}
-                            style={{
-                              padding: '5px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--color-border)',
-                              background: listCategoryFilter === cat.id ? 'var(--color-primary)' : 'var(--color-bg-secondary)',
-                              color: listCategoryFilter === cat.id ? 'white' : 'var(--color-text)',
-                              fontSize: '0.72rem',
-                              fontWeight: listCategoryFilter === cat.id ? 700 : 500,
-                              cursor: 'pointer',
-                              textAlign: 'center'
-                            }}
-                          >
-                            {cat.label}
-                          </button>
-                        ))}
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                          {t('Trạng thái')}
+                        </label>
+                        <CustomSelect
+                          value={listStatusFilter}
+                          onChange={val => { setListStatusFilter(val); setShowMobileFilters(false); }}
+                          options={[
+                            { value: 'all', label: t('Tất cả trạng thái') },
+                            { value: 'draft', label: t('Bản nháp') },
+                            { value: 'pending', label: t('Đang chờ duyệt') },
+                            { value: 'approved', label: t('Đã duyệt') },
+                            { value: 'rejected', label: t('Từ chối') }
+                          ]}
+                          size="xs"
+                          width="100%"
+                        />
                       </div>
-                    </div>
 
-                    {(listCategoryFilter !== 'all' || listStatusFilter !== 'all') && (
-                      <button
-                        type="button"
-                        onClick={() => { setListCategoryFilter('all'); setListStatusFilter('all'); setShowMobileFilters(false); }}
-                        style={{
-                          marginTop: '4px',
-                          padding: '6px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          color: '#ef4444',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          textAlign: 'center'
-                        }}
-                      >
-                        {t('Đặt lại bộ lọc')}
-                      </button>
-                    )}
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
-        {/* Filters Group (Desktop Only Category Pills & Status) */}
-        {!isMobile && (
-          <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: '1rem', width: 'auto' }}>
-            {/* Category Pills */}
-            <div style={{ display: 'flex', gap: '3px', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px' }}>
-              {[
-                { id: 'all', label: t('Tất cả') },
-                { id: 'finance', label: t('Tài chính') },
-                { id: 'hr', label: t('Nhân sự') },
-                { id: 'admin', label: t('Hành chính') }
-              ].map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setListCategoryFilter(cat.id)}
-                  style={{
-                    border: 'none',
-                    background: listCategoryFilter === cat.id ? 'var(--color-surface)' : 'transparent',
-                    color: listCategoryFilter === cat.id ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    fontSize: '0.8rem',
-                    fontWeight: listCategoryFilter === cat.id ? 700 : 500,
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    whiteSpace: 'nowrap',
-                    boxShadow: listCategoryFilter === cat.id ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {cat.label}
-                </button>
-              ))}
+                      {listStatusFilter !== 'all' && (
+                        <button
+                          type="button"
+                          onClick={() => { setListStatusFilter('all'); setShowMobileFilters(false); }}
+                          style={{
+                            marginTop: '4px',
+                            padding: '6px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            textAlign: 'center'
+                          }}
+                        >
+                          {t('Đặt lại bộ lọc')}
+                        </button>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
-
-            {/* Status Dropdown */}
-            <div style={{ width: '150px' }}>
-              <CustomSelect
-                value={listStatusFilter}
-                onChange={val => setListStatusFilter(val)}
-                options={[
-                  { value: 'all', label: t('Trạng thái: Tất cả') },
-                  { value: 'pending', label: t('Đang chờ duyệt') },
-                  { value: 'approved', label: t('Đã duyệt') },
-                  { value: 'rejected', label: t('Từ chối') }
-                ]}
-                size="sm"
-                width="100%"
-              />
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -3264,23 +4557,7 @@ export default function Approvals() {
                 const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                 const isCreator = creatorId > 0 && creatorId === userId;
 
-                let canApproveThisItem = false;
-                if (!isCreator) {
-                  const targetApproverId = Number((item as any)?.approver_id || (item as any)?.manager_id || 0);
-                  if (targetApproverId > 0) {
-                    if (targetApproverId === userId) {
-                      canApproveThisItem = true;
-                    } else if (['superadmin', 'super_admin'].includes(role)) {
-                      canApproveThisItem = true;
-                    }
-                  } else {
-                    if (isSuperAdmin || role === 'hr') {
-                      canApproveThisItem = true;
-                    }
-                  }
-                }
-
-                const isPendingAction = activeTab === 'pending' && canApproveThisItem;
+                const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
                 const creatorKey = String(item.employee_name || user?.name || '').toLowerCase().trim();
                 const creatorUser = (item.user_id ? usersMap.get(Number(item.user_id)) : null) || usersByNameMap.get(creatorKey);
                 const avatarUrl = creatorUser?.avatar_url || creatorUser?.avatar;
@@ -3288,7 +4565,13 @@ export default function Approvals() {
                 return (
                   <div
                     key={`${item.type}-${item.id}`}
-                    onClick={() => setSelectedTimelineItem(item)}
+                    onClick={() => {
+                      if (item.is_draft || item.status === 'draft') {
+                        const d = draftsList.find(x => x.id === item.draft_id || String(x.id) === String(item.id));
+                        if (d) { handleResumeDraft(d); return; }
+                      }
+                      setSelectedTimelineItem(item);
+                    }}
                     style={{
                       background: 'var(--color-surface)',
                       borderRadius: '14px',
@@ -3333,7 +4616,7 @@ export default function Approvals() {
                         lineHeight: 1.35,
                         WebkitTextSizeAdjust: '100%'
                       }}>
-                        {item.title}
+                        {getApprovalDisplayTitle(item)}
                       </div>
                       {item.description && (
                         <div style={{
@@ -3349,6 +4632,11 @@ export default function Approvals() {
                           {item.description}
                         </div>
                       )}
+                    </div>
+
+                    {/* Steps & Watchers in mobile card */}
+                    <div style={{ paddingTop: '4px' }}>
+                      {renderWorkflowStepsAndWatchers(item)}
                     </div>
 
                     {/* Footer: Date, Approver, and Actions */}
@@ -3409,26 +4697,59 @@ export default function Approvals() {
                               {t('Duyệt')}
                             </button>
                           </>
-                        ) : activeTab === 'my_requests' ? (
+                        ) : activeTab === 'my_requests' || item.is_draft ? (
                           <>
-                            {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
-                              <button
-                                onClick={() => handleEditRequest(item)}
-                                className="btn secondary"
-                                style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
-                                title={t('Sửa')}
-                              >
-                                <Edit size={12} />
-                              </button>
+                            {item.is_draft ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const d = draftsList.find(x => x.id === item.draft_id);
+                                    if (d) handleResumeDraft(d);
+                                  }}
+                                  className="btn primary"
+                                  style={{ height: '26px', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600 }}
+                                  title={t('Tiếp tục')}
+                                >
+                                  <Edit3 size={11} />
+                                  <span>{t('Tiếp tục')}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (item.draft_id) handleDeleteDraft(item.draft_id);
+                                  }}
+                                  className="btn secondary"
+                                  style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                  title={t('Xóa')}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                                  <button
+                                    onClick={() => handleEditRequest(item)}
+                                    className="btn secondary"
+                                    style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                    title={t('Sửa')}
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteRequest(item)}
+                                  className="btn secondary"
+                                  style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                  title={t('Xóa')}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </>
                             )}
-                            <button
-                              onClick={() => handleDeleteRequest(item)}
-                              className="btn secondary"
-                              style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                              title={t('Xóa')}
-                            >
-                              <Trash2 size={12} />
-                            </button>
                           </>
                         ) : null}
                       </div>
@@ -3441,15 +4762,25 @@ export default function Approvals() {
         }
 
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="responsive-table-wrap" style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', overflowX: 'auto', WebkitTextSizeAdjust: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="responsive-table-wrap" style={{
+              background: 'var(--color-surface)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--color-border)',
+              overflowX: 'auto',
+              maxHeight: 'calc(100vh - 365px)',
+              overflowY: 'auto',
+              WebkitTextSizeAdjust: '100%',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left', WebkitTextSizeAdjust: '100%' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '450px' }}>{t('Yêu cầu & Nội dung')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '220px' }}>{t('Người tạo & Thời gian')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '180px' }}>{t('Người duyệt')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '150px' }}>{t('Thao tác')}</th>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 15, background: '#ffffff' }}>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '380px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Yêu cầu & Nội dung')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '190px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Người tạo & Thời gian')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '220px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Các bước & Người liên quan')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '170px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Người duyệt')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '130px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Thao tác')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3461,28 +4792,21 @@ export default function Approvals() {
                     const creatorId = Number(item.user_id || (item as any)?.created_by || 0);
                     const isCreator = creatorId > 0 && creatorId === userId;
 
-                    let canApproveThisItem = false;
-                    if (!isCreator) {
-                      const targetApproverId = Number((item as any)?.approver_id || (item as any)?.manager_id || 0);
-                      if (targetApproverId > 0) {
-                        if (targetApproverId === userId) {
-                          canApproveThisItem = true;
-                        } else if (['superadmin', 'super_admin'].includes(role)) {
-                          canApproveThisItem = true;
-                        }
-                      } else {
-                        if (isSuperAdmin || role === 'hr') {
-                          canApproveThisItem = true;
-                        }
-                      }
-                    }
-
-                    const isPendingAction = activeTab === 'pending' && canApproveThisItem;
+                    const isPendingAction = activeTab === 'pending' && isItemAtMyStepToApprove(item);
 
                     return (
                       <tr 
                         key={`${item.type}-${item.id}`} 
-                        onClick={() => setSelectedTimelineItem(item)}
+                        onClick={() => {
+                          if (item.is_draft || item.status === 'draft') {
+                            const d = draftsList.find(x => x.id === item.draft_id || String(x.id) === String(item.id));
+                            if (d) {
+                              handleResumeDraft(d);
+                              return;
+                            }
+                          }
+                          setSelectedTimelineItem(item);
+                        }}
                         style={{ borderBottom: '1px solid var(--color-border-light)', cursor: 'pointer', transition: 'background 0.2s' }}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -3497,7 +4821,7 @@ export default function Approvals() {
                               {getTypeIcon(item.type)}
                             </div>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', WebkitTextSizeAdjust: '100%' }}>{item.title}</div>
+                              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', WebkitTextSizeAdjust: '100%' }}>{getApprovalDisplayTitle(item)}</div>
                               <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px', WebkitTextSizeAdjust: '100%' }}>{item.description}</div>
                             </div>
                           </div>
@@ -3521,9 +4845,11 @@ export default function Approvals() {
                           })()}
                         </td>
                         <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                          {renderWorkflowStepsAndWatchers(item)}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                             {renderCurrentApprover(item)}
-                            {formatBadge(item.status || 'pending')}
                           </div>
                         </td>
                         <td style={{ padding: '14px 16px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
@@ -3589,42 +4915,75 @@ export default function Approvals() {
                                   </button>
                                 )}
                               </>
-                            ) : activeTab === 'my_requests' ? (
+                            ) : activeTab === 'my_requests' || item.is_draft ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
-                                  <button
-                                    onClick={() => handleEditRequest(item)}
-                                    className="btn secondary"
-                                    style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
-                                    title={t('Sửa')}
-                                  >
-                                    <Edit size={12} />
-                                  </button>
+                                {item.is_draft ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const d = draftsList.find(x => x.id === item.draft_id);
+                                        if (d) handleResumeDraft(d);
+                                      }}
+                                      className="btn primary"
+                                      style={{ height: '28px', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}
+                                      title={t('Tiếp tục chỉnh sửa')}
+                                    >
+                                      <Edit3 size={12} />
+                                      <span>{t('Tiếp tục')}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (item.draft_id) handleDeleteDraft(item.draft_id);
+                                      }}
+                                      className="btn secondary"
+                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                      title={t('Xóa bản nháp')}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                                      <button
+                                        onClick={() => handleEditRequest(item)}
+                                        className="btn secondary"
+                                        style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+                                        title={t('Sửa')}
+                                      >
+                                        <Edit size={12} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteRequest(item)}
+                                      className="btn secondary"
+                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                      title={t('Xóa')}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDuplicate(item)}
+                                      className="btn secondary"
+                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
+                                      title={t('Nhân bản')}
+                                    >
+                                      <Copy size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedTimelineItem(item)}
+                                      className="btn secondary"
+                                      style={{ height: '28px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
+                                      title={t('Chi tiết')}
+                                    >
+                                      <Eye size={12} />
+                                    </button>
+                                  </>
                                 )}
-                                <button
-                                  onClick={() => handleDeleteRequest(item)}
-                                  className="btn secondary"
-                                  style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                  title={t('Xóa')}
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleDuplicate(item)}
-                                  className="btn secondary"
-                                  style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
-                                  title={t('Nhân bản')}
-                                >
-                                  <Copy size={12} />
-                                </button>
-                                <button
-                                  onClick={() => setSelectedTimelineItem(item)}
-                                  className="btn secondary"
-                                  style={{ height: '28px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
-                                  title={t('Chi tiết')}
-                                >
-                                  <Eye size={12} />
-                                </button>
                               </div>
                             ) : activeTab === 'following' ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -4526,10 +5885,7 @@ export default function Approvals() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.25 }}
                   onClick={() => {
-                    setShowCreateModal(false);
-                    setSelectedWorkflowDef(null);
-                    setEditingItemId(null);
-                    setEditingItemType(null);
+                    handleRequestExit('close');
                   }}
                   style={{
                     position: 'fixed',
@@ -4581,7 +5937,7 @@ export default function Approvals() {
                       {isMobile && (
                         <button
                           type="button"
-                          onClick={() => setSelectedWorkflowDef(null)}
+                          onClick={() => handleRequestExit('back')}
                           style={{
                             background: 'none',
                             border: 'none',
@@ -4610,26 +5966,68 @@ export default function Approvals() {
                       }}>
                         <FileSignature size={isMobile ? 18 : 20} />
                       </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedWorkflowDef.name}</span>
-                          <span className="badge warning" style={{ fontSize: '0.6rem', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', flexShrink: 0 }}>
-                            {t('MỚI')}
+                      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <span style={{ fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: 800, color: 'var(--color-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {selectedWorkflowDef.name}
                           </span>
-                        </h3>
+                          <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, flexShrink: 0 }}>—</span>
+                          
+                          {/* Directly editable title suffix in Header */}
+                          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', flex: 1, minWidth: isMobile ? '160px' : '260px', maxWidth: '520px' }}>
+                            <input
+                              type="text"
+                              value={workflowTitleSuffix}
+                              onChange={e => {
+                                setWorkflowTitleSuffix(e.target.value);
+                                setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                              }}
+                              placeholder={t('Nhập nội dung đề xuất (VD: In ấn, thi công Lễ tốt nghiệp...)')}
+                              style={{
+                                width: '100%',
+                                height: '34px',
+                                padding: '2px 12px',
+                                fontSize: isMobile ? '0.85rem' : '0.92rem',
+                                fontWeight: 700,
+                                color: 'var(--color-primary)',
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                border: '1.5px solid var(--color-border)',
+                                borderRadius: '8px',
+                                outline: 'none',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onFocus={e => {
+                                e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(163, 20, 34, 0.12)';
+                              }}
+                              onBlur={e => {
+                                e.currentTarget.style.borderColor = 'var(--color-border)';
+                                e.currentTarget.style.boxShadow = 'none';
+                              }}
+                            />
+                          </div>
+
+                          <span className={editingItemId ? "badge info" : "badge warning"} style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase', flexShrink: 0 }}>
+                            {editingItemId ? t('CHỈNH SỬA') : t('MỚI')}
+                          </span>
+                        </div>
                         {!isMobile && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                            <span>{t('Thiết lập quy trình đề xuất vận hành mới')}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
+                            <span>{editingItemId ? t('Cập nhật nội dung chi tiết của quy trình đề xuất') : t('Thiết lập quy trình đề xuất vận hành mới')}</span>
+                            <span>•</span>
+                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+                              {t('Nội dung PO:')} {getFullWorkflowTitle(selectedWorkflowDef, workflowTitleSuffix)}
+                            </span>
                           </div>
                         )}
                       </div>
                     </div>
 
                     {!isMobile ? (
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
                         <button 
                           type="button" 
-                          onClick={() => setSelectedWorkflowDef(null)}
+                          onClick={() => handleRequestExit('back')}
                           className="hover-lift"
                           style={{
                             background: 'var(--color-bg)',
@@ -4648,6 +6046,29 @@ export default function Approvals() {
                         >
                           <ArrowLeft size={16} />
                           <span>{t('Quay lại')}</span>
+                        </button>
+
+                        <button 
+                          type="button" 
+                          onClick={() => handleSaveCurrentDraft(false)}
+                          className="hover-lift"
+                          style={{
+                            background: 'var(--color-bg)',
+                            border: '1px solid var(--color-border)',
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            alignItems: 'center',
+                            gap: '6px',
+                            height: '36px',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            boxShadow: 'var(--shadow-sm)'
+                          }}
+                          title={t('Lưu lại bản nháp hiện tại để làm việc tiếp sau')}
+                        >
+                          <Bookmark size={15} />
+                          <span>{t('Lưu nháp')}</span>
                         </button>
 
                         <button 
@@ -4674,16 +6095,11 @@ export default function Approvals() {
                           }}
                         >
                           <Save size={16} />
-                          <span>{submitting ? t('Đang gửi...') : t('Gửi đề xuất')}</span>
+                          <span>{submitting ? (editingItemId ? t('Đang lưu...') : t('Đang gửi...')) : (editingItemId ? t('Cập nhật đề xuất') : t('Gửi đề xuất'))}</span>
                         </button>
 
                         <button 
-                          onClick={() => {
-                            setShowCreateModal(false);
-                            setSelectedWorkflowDef(null);
-                            setEditingItemId(null);
-                            setEditingItemType(null);
-                          }} 
+                          onClick={() => handleRequestExit('close')} 
                           className="hover-lift"
                           style={{
                             background: 'var(--color-bg)',
@@ -4704,12 +6120,7 @@ export default function Approvals() {
                       </div>
                     ) : (
                       <button 
-                        onClick={() => {
-                          setShowCreateModal(false);
-                          setSelectedWorkflowDef(null);
-                          setEditingItemId(null);
-                          setEditingItemType(null);
-                        }} 
+                        onClick={() => handleRequestExit('close')} 
                         style={{
                           background: 'none',
                           border: 'none',
@@ -4730,7 +6141,7 @@ export default function Approvals() {
                   <div className="custom-scrollbar" style={{
                     flex: 1,
                     overflowY: 'auto',
-                    padding: isMobile ? '12px 10px 24px 10px' : '1.5rem',
+                    padding: isMobile ? '12px 10px 140px 10px' : '1.5rem 1.5rem 180px 1.5rem',
                     display: 'flex',
                     flexDirection: isMobile ? 'column' : 'row',
                     gap: isMobile ? '1rem' : '1.5rem'
@@ -4739,6 +6150,43 @@ export default function Approvals() {
                     {/* LEFT COLUMN: Form Elements (70%) */}
                     <div style={{ flex: isMobile ? 'none' : 7, display: 'flex', flexDirection: 'column', gap: isMobile ? '1rem' : '1.25rem', minWidth: 0, width: '100%' }}>
                       
+                      {/* Active Draft Banner if exists for this workflow */}
+                      {activeDraftForWf && (
+                        <div style={{
+                          background: 'rgba(59, 130, 246, 0.08)',
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          borderRadius: '12px',
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                          flexWrap: 'wrap'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', color: '#1d4ed8', fontWeight: 600 }}>
+                            <Bookmark size={17} />
+                            <span>{t('Bạn có một bản nháp chưa gửi của quy trình này.')}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleResumeDraft(activeDraftForWf)}
+                              className="btn primary sm"
+                              style={{ fontSize: '0.78rem', padding: '5px 12px', height: 'auto', fontWeight: 700 }}
+                            >
+                              {t('Mở bản nháp')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDraft(activeDraftForWf.id)}
+                              className="btn outline sm"
+                              style={{ fontSize: '0.78rem', padding: '5px 10px', height: 'auto', color: 'var(--color-danger)' }}
+                            >
+                              {t('Bỏ qua')}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Card 2: Specialized fields details based on workflow type */}
                       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
@@ -5625,6 +7073,76 @@ export default function Approvals() {
                         ) : formType === 'advance' ? (
                           /* SALARY ADVANCE FORM FIELDS */
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {/* Tiêu đề quy trình / Nội dung chi (Fix cứng khúc đầu, cho sửa khúc sau) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>{t('Tiêu đề đề xuất / Nội dung tạm ứng')}</span>
+                                  <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                </label>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                  {t('Tên loại quy trình cố định khúc đầu, nhập nội dung chi tiết ở khúc sau')}
+                                </span>
+                              </div>
+                              
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'stretch',
+                                borderRadius: '10px',
+                                border: '1.5px solid var(--color-border)',
+                                background: 'var(--color-surface)',
+                                overflow: 'hidden',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                              }}>
+                                <div style={{
+                                  padding: '0 14px',
+                                  background: 'var(--color-bg-secondary, #f1f5f9)',
+                                  borderRight: '1.5px solid var(--color-border)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text)',
+                                  whiteSpace: 'nowrap',
+                                  userSelect: 'none',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{ color: '#3b82f6', fontSize: '0.9rem' }}>●</span>
+                                  <span>{selectedWorkflowDef?.name || t('Đề nghị tạm ứng')}</span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                </div>
+
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={workflowTitleSuffix}
+                                  onChange={e => {
+                                    setWorkflowTitleSuffix(e.target.value);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                  }}
+                                  placeholder={t('Nhập mục đích tạm ứng (VD: Công tác Hà Nội 3 ngày, Mua vật tư khẩn cấp...) *')}
+                                  style={{
+                                    flex: 1,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    height: '40px',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 600,
+                                    background: 'transparent',
+                                    padding: '0 14px'
+                                  }}
+                                  required
+                                />
+                              </div>
+
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>{t('Hiển thị trên phiếu:')}</span>
+                                <strong style={{ color: 'var(--color-primary)' }}>
+                                  {getFullWorkflowTitle(selectedWorkflowDef, workflowTitleSuffix)}
+                                </strong>
+                              </div>
+                            </div>
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền tạm ứng')}</label>
@@ -5923,18 +7441,61 @@ export default function Approvals() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-                                    {selectedWorkflowDef?.id === 'document_approval' ? t('Tên văn bản / Quyết định') : t('Tiêu đề đề xuất')}
-                                  </label>
-                                  <input
-                                    type="text"
-                                    className="form-input"
-                                    value={expenseTitle}
-                                    onChange={e => setExpenseTitle(e.target.value)}
-                                    placeholder={selectedWorkflowDef?.id === 'document_approval' ? t('Ví dụ: Quy chế hoạt động phòng kinh doanh') : t('Ví dụ: Giải trình chấm công ngày 25/07')}
-                                    style={{ height: '36px', fontSize: '0.8rem' }}
-                                    required
-                                  />
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>{selectedWorkflowDef?.id === 'document_approval' ? t('Tên văn bản / Quyết định') : t('Tiêu đề đề xuất')}</span>
+                                      <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                    </label>
+                                  </div>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'stretch',
+                                    borderRadius: '10px',
+                                    border: '1.5px solid var(--color-border)',
+                                    background: 'var(--color-surface)',
+                                    overflow: 'hidden',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                  }}>
+                                    <div style={{
+                                      padding: '0 12px',
+                                      background: 'var(--color-bg-secondary, #f1f5f9)',
+                                      borderRight: '1.5px solid var(--color-border)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      fontSize: '0.82rem',
+                                      fontWeight: 700,
+                                      color: 'var(--color-text)',
+                                      whiteSpace: 'nowrap',
+                                      userSelect: 'none',
+                                      flexShrink: 0
+                                    }}>
+                                      <span style={{ color: selectedWorkflowDef?.color || 'var(--color-primary)' }}>●</span>
+                                      <span>{selectedWorkflowDef?.name || t('Đề xuất')}</span>
+                                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={workflowTitleSuffix}
+                                      onChange={e => {
+                                        setWorkflowTitleSuffix(e.target.value);
+                                        setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                      }}
+                                      placeholder={selectedWorkflowDef?.id === 'document_approval' ? t('Ví dụ: Quy chế hoạt động phòng kinh doanh...') : t('Ví dụ: Mua văn phòng phẩm tháng 9...')}
+                                      style={{
+                                        flex: 1,
+                                        border: 'none',
+                                        borderRadius: 0,
+                                        height: '36px',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 600,
+                                        background: 'transparent',
+                                        padding: '0 10px'
+                                      }}
+                                      required
+                                    />
+                                  </div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Bộ phận / Phòng ban')}</label>
@@ -6454,6 +8015,91 @@ export default function Approvals() {
                                 </div>
                               </div>
                             )}
+
+                            {/* Tiêu đề quy trình / Nội dung chi (Fix cứng khúc đầu, cho sửa khúc sau) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>{t('Tiêu đề đề xuất / Nội dung chi')}</span>
+                                  <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                </label>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                  {t('Tên loại quy trình cố định khúc đầu, nhập nội dung chi tiết ở khúc sau')}
+                                </span>
+                              </div>
+                              
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'stretch',
+                                borderRadius: '10px',
+                                border: '1.5px solid var(--color-border)',
+                                background: 'var(--color-surface)',
+                                overflow: 'hidden',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                              }}>
+                                {/* Fixed Prefix Box (Cố định tên loại quy trình) */}
+                                <div style={{
+                                  padding: '0 14px',
+                                  background: 'var(--color-bg-secondary, #f1f5f9)',
+                                  borderRight: '1.5px solid var(--color-border)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text)',
+                                  whiteSpace: 'nowrap',
+                                  userSelect: 'none',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{ color: selectedWorkflowDef?.color || '#10b981', fontSize: '0.9rem' }}>●</span>
+                                  <span>{selectedWorkflowDef?.name || t('Đề nghị thanh toán')}</span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                </div>
+
+                                {/* Suffix Input (Cho phép sửa / nhập nội dung chi tiết) */}
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={workflowTitleSuffix}
+                                  onChange={e => {
+                                    setWorkflowTitleSuffix(e.target.value);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                  }}
+                                  placeholder={
+                                    selectedWorkflowDef?.id === 'payment'
+                                      ? t('Nhập nội dung chi cụ thể (VD: In ấn, thi công Lễ tốt nghiệp, Tiền điện nước tháng 9...) *')
+                                      : selectedWorkflowDef?.id === 'client_meeting'
+                                      ? t('Nhập tên sự kiện / đối tác tiếp khách (VD: Tiếp đoàn đối tác FPT Software...) *')
+                                      : selectedWorkflowDef?.id === 'recurring_payment'
+                                      ? t('Nhập chi phí định kỳ cụ thể (VD: Tiền thuê văn phòng Tân Bình...) *')
+                                      : selectedWorkflowDef?.id === 'phased_payment'
+                                      ? t('Nhập dự án / hợp đồng thanh toán theo đợt (VD: Thiết kế website MYERP...) *')
+                                      : selectedWorkflowDef?.id === 'advance_money'
+                                      ? t('Nhập mục đích tạm ứng (VD: Công tác Hà Nội 3 ngày...) *')
+                                      : t('Nhập nội dung / mục đích cụ thể của khoản chi... *')
+                                  }
+                                  style={{
+                                    flex: 1,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    height: '40px',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 600,
+                                    background: 'transparent',
+                                    padding: '0 14px'
+                                  }}
+                                  required
+                                />
+                              </div>
+
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>{t('Hiển thị trên phiếu chi & quy trình:')}</span>
+                                <strong style={{ color: 'var(--color-primary)' }}>
+                                  {getFullWorkflowTitle(selectedWorkflowDef, workflowTitleSuffix)}
+                                </strong>
+                              </div>
+                            </div>
 
                             {/* DEDICATED BLOCK 1: ĐỀ XUẤT TIẾP KHÁCH (client_meeting) */}
                             {selectedWorkflowDef?.id === 'client_meeting' && (
@@ -7129,8 +8775,8 @@ export default function Approvals() {
                               </div>
                             )}
 
-                            {/* DEDICATED BLOCK 5: ĐỀ XUẤT CHI PHÍ / HOÀN ỨNG (expense_claim) */}
-                            {selectedWorkflowDef?.id === 'expense_claim' && (
+                            {/* DEDICATED BLOCK 5: ĐỀ XUẤT CHI PHÍ / HOÀN ỨNG / THANH TOÁN */}
+                            {(selectedWorkflowDef?.id === 'expense_claim' || selectedWorkflowDef?.id === 'payment' || formType === 'expense') && (
                               <div style={{
                                 background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.05), rgba(8, 145, 178, 0.02))',
                                 border: '1px solid rgba(6, 182, 212, 0.25)',
@@ -7172,10 +8818,18 @@ export default function Approvals() {
                                     </label>
                                     <CustomSelect
                                       value={invoiceType}
-                                      onChange={val => setInvoiceType(val)}
+                                      onChange={val => {
+                                        setInvoiceType(val as any);
+                                        const vatNum = val === 'vat_10' ? 10 : val === 'vat_8' ? 8 : val === 'vat_5' ? 5 : val === 'vat_0' ? 0 : null;
+                                        if (vatNum !== null) {
+                                          setExpenseItems(prev => prev.map(it => ({ ...it, vat: vatNum })));
+                                        }
+                                      }}
                                       options={[
                                         { value: 'vat_10', label: t('Hóa đơn điện tử VAT 10%') },
                                         { value: 'vat_8', label: t('Hóa đơn điện tử VAT 8%') },
+                                        { value: 'vat_5', label: t('Hóa đơn điện tử VAT 5%') },
+                                        { value: 'vat_0', label: t('Hóa đơn điện tử VAT 0% / Không chịu thuế') },
                                         { value: 'retail', label: t('Hóa đơn bán lẻ / Biên lai thu tiền') },
                                         { value: 'none', label: t('Không có hóa đơn (Giải trình nội bộ)') }
                                       ]}
@@ -7716,14 +9370,11 @@ export default function Approvals() {
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('Tên ngân hàng')} <span style={{ color: 'var(--color-danger)' }}>*</span>
                                     </label>
-                                    <input
-                                      type="text"
-                                      className="form-input"
+                                    <BankSelect
                                       value={paymentBankName}
-                                      onChange={e => setPaymentBankName(e.target.value)}
-                                      placeholder={t('Nhập tên ngân hàng...')}
-                                      style={{ height: '36px', fontSize: '0.8rem' }}
-                                      required
+                                      onChange={val => setPaymentBankName(val)}
+                                      placeholder={t('Chọn ngân hàng...')}
+                                      size="sm"
                                     />
                                   </div>
 
@@ -7736,7 +9387,7 @@ export default function Approvals() {
                                       className="form-input"
                                       value={paymentBankAccount}
                                       onChange={e => setPaymentBankAccount(e.target.value.replace(/\s+/g, ''))}
-                                      placeholder={t('Nhập số tài khoản ngân hàng...')}
+                                      placeholder={t('Số tài khoản')}
                                       style={{ height: '36px', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.5px' }}
                                       required
                                     />
@@ -7772,42 +9423,195 @@ export default function Approvals() {
                                   </div>
                                 </div>
 
-                                {paymentBankAccount && paymentBankName && (
-                                  <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    background: 'rgba(37, 99, 235, 0.05)',
-                                    border: '1px dashed rgba(37, 99, 235, 0.25)',
-                                    padding: '6px 12px',
-                                    borderRadius: '8px',
-                                    fontSize: '0.75rem'
-                                  }}>
-                                    <span style={{ color: '#1d4ed8', fontWeight: 600 }}>
-                                      🏦 {paymentBankName} • STK: <strong>{paymentBankAccount}</strong> • Chủ TK: <strong>{paymentAccountName || 'CHƯA ĐIỀN'}</strong>
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(`${paymentBankName} - ${paymentBankAccount} - ${paymentAccountName}`);
-                                        toast.success(t('Đã sao chép thông tin STK'));
-                                      }}
-                                      style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: '#1d4ed8',
-                                        fontWeight: 700,
-                                        cursor: 'pointer',
-                                        fontSize: '0.72rem',
+                                {paymentBankAccount && paymentBankName && (() => {
+                                  const vietQrUrl = getVietQrUrl({
+                                    bankBinOrCode: paymentBankName,
+                                    accountNumber: paymentBankAccount,
+                                    accountName: paymentAccountName,
+                                    amount: itemsGrandTotal > 0 ? itemsGrandTotal : undefined,
+                                    memo: expenseTitle || selectedWorkflowDef?.name || 'Thanh toan'
+                                  });
+
+                                  return (
+                                    <div style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 155px',
+                                      gap: '12px',
+                                      marginTop: '6px',
+                                      alignItems: 'stretch'
+                                    }}>
+                                      {/* Executive Brand Light Bank Card */}
+                                      <div style={{
+                                        background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
+                                        border: '1px solid #fecaca',
+                                        borderRadius: '14px',
+                                        padding: '12px 14px',
                                         display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                      }}
-                                    >
-                                      <Copy size={13} /> {t('Sao chép')}
-                                    </button>
-                                  </div>
-                                )}
+                                        flexDirection: 'column',
+                                        justifyContent: 'space-between',
+                                        gap: '10px',
+                                        boxShadow: '0 4px 16px rgba(220, 38, 38, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                      }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                            <div style={{
+                                              width: '26px',
+                                              height: '26px',
+                                              borderRadius: '6px',
+                                              background: '#ffffff',
+                                              border: '1px solid #fecaca',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              flexShrink: 0
+                                            }}>
+                                              {findBank(paymentBankName)?.logo ? (
+                                                <img
+                                                  src={findBank(paymentBankName)!.logo}
+                                                  alt=""
+                                                  style={{ width: '18px', height: '18px', objectFit: 'contain' }}
+                                                />
+                                              ) : (
+                                                <Landmark size={14} style={{ color: '#dc2626' }} />
+                                              )}
+                                            </div>
+                                            <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={paymentBankName}>
+                                              {paymentBankName}
+                                            </span>
+                                          </div>
+                                          <span style={{
+                                            fontSize: '0.6rem',
+                                            fontWeight: 700,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.04em',
+                                            padding: '2px 6px',
+                                            borderRadius: '5px',
+                                            background: '#ffffff',
+                                            color: '#dc2626',
+                                            border: '1px solid #fecaca',
+                                            flexShrink: 0
+                                          }}>
+                                            Napas 247
+                                          </span>
+                                        </div>
+
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          background: '#ffffff',
+                                          padding: '7px 10px',
+                                          borderRadius: '8px',
+                                          border: '1px solid #fecaca',
+                                          boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                                        }}>
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                            <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                                              Số tài khoản (STK)
+                                            </span>
+                                            <span style={{
+                                              fontSize: '1.05rem',
+                                              fontWeight: 800,
+                                              fontFamily: 'monospace',
+                                              letterSpacing: '0.06em',
+                                              color: '#dc2626'
+                                            }}>
+                                              {paymentBankAccount}
+                                            </span>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(paymentBankAccount);
+                                              toast.success(t('Đã sao chép số tài khoản!'));
+                                            }}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              padding: '5px 9px',
+                                              borderRadius: '6px',
+                                              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                              color: '#ffffff',
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              fontWeight: 700,
+                                              fontSize: '0.7rem',
+                                              boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                                              flexShrink: 0
+                                            }}
+                                          >
+                                            <Copy size={12} />
+                                            <span>Sao chép</span>
+                                          </button>
+                                        </div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '4px' }}>
+                                          <div style={{ minWidth: 0, flex: 1 }}>
+                                            <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                                              Chủ tài khoản
+                                            </span>
+                                            <div style={{ fontSize: '0.78rem', fontWeight: 750, letterSpacing: '0.01em', color: '#0f172a', marginTop: '1px', textTransform: 'uppercase', lineHeight: 1.25 }}>
+                                              {paymentAccountName || 'CHƯA ĐIỀN'}
+                                            </div>
+                                          </div>
+                                          {paymentBankBranch && (
+                                            <div style={{ fontSize: '0.65rem', color: '#64748b', textAlign: 'right', flexShrink: 0 }}>
+                                              CN: <span style={{ color: '#1e293b', fontWeight: 600 }}>{paymentBankBranch}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* VietQR Card: Click to zoom in */}
+                                      <div
+                                        onClick={() => vietQrUrl && setPreviewQrModalUrl(vietQrUrl)}
+                                        title={vietQrUrl ? t('Bấm để phóng to mã QR') : undefined}
+                                        style={{
+                                          background: '#ffffff',
+                                          border: '1px solid #fecaca',
+                                          borderRadius: '14px',
+                                          padding: '8px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                          cursor: vietQrUrl ? 'pointer' : 'default',
+                                          transition: 'all 0.2s ease'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (vietQrUrl) {
+                                            e.currentTarget.style.transform = 'translateY(-1px)';
+                                            e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 38, 38, 0.12)';
+                                          }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (vietQrUrl) {
+                                            e.currentTarget.style.transform = 'translateY(0)';
+                                            e.currentTarget.style.boxShadow = '0 4px 16px rgba(220, 38, 38, 0.04)';
+                                          }
+                                        }}
+                                      >
+                                        {vietQrUrl ? (
+                                          <img
+                                            src={vietQrUrl}
+                                            alt="Mã VietQR"
+                                            style={{
+                                              width: '100%',
+                                              maxWidth: '140px',
+                                              maxHeight: '140px',
+                                              objectFit: 'contain'
+                                            }}
+                                          />
+                                        ) : (
+                                          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Chưa có mã QR</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             )}
 
@@ -8012,7 +9816,7 @@ export default function Approvals() {
                                   <th style={{ padding: '8px', width: '45px', minWidth: '45px', textAlign: 'center', fontWeight: 700 }}>STT</th>
                                   <th style={{ padding: '8px', minWidth: '200px', fontWeight: 700 }}>{t('Nội dung chi')}</th>
                                   <th style={{ padding: '8px', width: '95px', minWidth: '95px', textAlign: 'center', fontWeight: 700 }}>{t('SL')}</th>
-                                  <th style={{ padding: '8px', width: '130px', minWidth: '130px', fontWeight: 700 }}>{t('Đơn giá')}</th>
+                                  <th style={{ padding: '8px', width: '160px', minWidth: '160px', fontWeight: 700 }}>{t('Đơn giá')}</th>
                                   <th style={{ padding: '8px', width: '120px', minWidth: '120px', fontWeight: 700 }}>{t('Thành tiền')}</th>
                                   <th style={{ padding: '8px', width: '95px', minWidth: '95px', fontWeight: 700 }}>VAT (%)</th>
                                   <th style={{ padding: '8px', width: '36px', minWidth: '36px' }} />
@@ -8054,7 +9858,7 @@ export default function Approvals() {
                                           required
                                         />
                                       </td>
-                                      <td style={{ padding: '8px', width: '130px', minWidth: '130px' }}>
+                                      <td style={{ padding: '8px', width: '160px', minWidth: '160px' }}>
                                         <input
                                           type="text"
                                           className="form-input"
@@ -8070,28 +9874,51 @@ export default function Approvals() {
                                           required
                                         />
                                         {item.price > 0 && (
-                                          <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, marginTop: '2px', fontStyle: 'italic', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={docSoTiengViet(item.price)}>
+                                          <div 
+                                            style={{ 
+                                              fontSize: '0.7rem', 
+                                              color: 'var(--color-primary)', 
+                                              fontWeight: 600, 
+                                              marginTop: '3px', 
+                                              fontStyle: 'italic', 
+                                              whiteSpace: 'normal', 
+                                              wordBreak: 'break-word', 
+                                              lineHeight: 1.35 
+                                            }} 
+                                            title={docSoTiengViet(item.price)}
+                                          >
                                             {docSoTiengViet(item.price)}
                                           </div>
                                         )}
                                       </td>
                                       <td style={{ padding: '8px', fontWeight: 600, width: '120px', minWidth: '120px' }}>{formatApprovalCurrency(lineTotal, currencyType)}</td>
                                       <td style={{ padding: '8px', width: '95px', minWidth: '95px' }}>
-                                        <CustomSelect
+                                        <select
+                                          className="form-input"
                                           value={item.vat}
-                                          onChange={val => {
+                                          onChange={e => {
                                             const updated = [...expenseItems];
-                                            updated[idx].vat = Number(val);
+                                            updated[idx].vat = Number(e.target.value);
                                             setExpenseItems(updated);
                                           }}
-                                          options={[
-                                            { value: 0, label: '0%' },
-                                            { value: 5, label: '5%' },
-                                            { value: 8, label: '8%' },
-                                            { value: 10, label: '10%' }
-                                          ]}
-                                          width={85}
-                                        />
+                                          style={{
+                                            padding: '4px 8px',
+                                            height: '28px',
+                                            fontSize: '0.8rem',
+                                            width: '85px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            background: 'var(--color-bg-primary, #ffffff)',
+                                            color: 'var(--color-text-primary, #1e293b)',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: '6px'
+                                          }}
+                                        >
+                                          <option value={0}>0%</option>
+                                          <option value={5}>5%</option>
+                                          <option value={8}>8%</option>
+                                          <option value={10}>10%</option>
+                                        </select>
                                       </td>
                                       <td style={{ padding: '8px', textAlign: 'center', width: '36px', minWidth: '36px' }}>
                                         {expenseItems.length > 1 && (
@@ -8114,7 +9941,7 @@ export default function Approvals() {
                           </div>
 
                           {/* Totals Summary */}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignSelf: 'flex-end', width: '260px', marginTop: '4px', fontSize: '0.8rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignSelf: 'flex-end', width: '280px', marginTop: '4px', fontSize: '0.8rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                               <span style={{ color: 'var(--color-text-muted)' }}>{t('Tổng tiền chưa thuế:')}</span>
                               <strong style={{ color: 'var(--color-text)' }}>{formatApprovalCurrency(itemsTotalBeforeTax, currencyType)}</strong>
@@ -8127,6 +9954,11 @@ export default function Approvals() {
                               <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{t('Tổng thanh toán:')}</span>
                               <strong style={{ color: 'var(--color-primary)' }}>{formatApprovalCurrency(itemsGrandTotal, currencyType)}</strong>
                             </div>
+                            {itemsGrandTotal > 0 && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic', textAlign: 'right', marginTop: '2px', lineHeight: 1.35 }}>
+                                ({docSoTiengViet(itemsGrandTotal)})
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -8613,7 +10445,7 @@ export default function Approvals() {
                                   </div>
                                   <div style={{ width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                      <strong style={{ fontSize: '0.8rem', color: app1User ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt (Trưởng nhóm / Quản lý)')}</strong>
+                                      <strong style={{ fontSize: '0.8rem', color: app1User ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t(`Bước ${stepIndex2 || 2}: Phê duyệt (Cấp 1)`)}</strong>
                                       <button
                                         type="button"
                                         onClick={() => setShowStepManager(false)}
@@ -8665,7 +10497,7 @@ export default function Approvals() {
                                   </div>
                                   <div style={{ width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                      <strong style={{ fontSize: '0.8rem', color: directorUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t('Phê duyệt (Ban Giám đốc)')}</strong>
+                                      <strong style={{ fontSize: '0.8rem', color: directorUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{t(`Bước ${stepIndex3 || 3}: Phê duyệt (Cấp 2)`)}</strong>
                                       <button
                                         type="button"
                                         onClick={() => setShowStepDirector(false)}
@@ -8683,7 +10515,7 @@ export default function Approvals() {
                                           const u = users.find(x => String(x.id) === String(val));
                                           if (u) setCustomApprover3(u);
                                         }}
-                                        placeholder={t('Chọn ban giám đốc (Phạm Quang Vinh)...')}
+                                        placeholder={t('Chọn người phê duyệt...')}
                                         searchable
                                         showAvatars
                                         width="100%"
@@ -8718,10 +10550,7 @@ export default function Approvals() {
                                   <div style={{ width: '100%' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                       <strong style={{ fontSize: '0.8rem', color: accountantUser ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                                        {(() => {
-                                          const isHrStep = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'remote_work'].includes(formType) || (formType === 'overtime' && otType === 'compensatory');
-                                          return isHrStep ? t('Phê duyệt (HR Duy Phương / Nhân sự)') : t('Phê duyệt (Kế toán)');
-                                        })()}
+                                        {t(`Bước ${stepIndex4 || 4}: Phê duyệt (Cấp ${stepIndex4 ? stepIndex4 - 1 : 3})`)}
                                       </strong>
                                       <button
                                         type="button"
@@ -8740,10 +10569,7 @@ export default function Approvals() {
                                           const u = users.find(x => String(x.id) === String(val));
                                           if (u) setCustomApprover2(u);
                                         }}
-                                        placeholder={(() => {
-                                          const isHrStep = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'remote_work'].includes(formType) || (formType === 'overtime' && otType === 'compensatory');
-                                          return isHrStep ? t('Chọn nhân sự (Duy Phương)...') : t('Chọn kế toán...');
-                                        })()}
+                                        placeholder={t('Chọn người phê duyệt...')}
                                         searchable
                                         showAvatars
                                         width="100%"
@@ -8778,7 +10604,7 @@ export default function Approvals() {
                                   onClick={() => setShowStepManager(true)}
                                   style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
                                 >
-                                  <Plus size={12} /> {t('Phê duyệt (Trưởng nhóm / Quản lý)')}
+                                  <Plus size={12} /> {t('Phê duyệt (Cấp 1)')}
                                 </button>
                               )}
                               {!showStepDirector && (
@@ -8788,7 +10614,7 @@ export default function Approvals() {
                                   onClick={() => setShowStepDirector(true)}
                                   style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
                                 >
-                                  <Plus size={12} /> {t('Phê duyệt (Ban Giám đốc)')}
+                                  <Plus size={12} /> {t('Phê duyệt (Cấp 2)')}
                                 </button>
                               )}
                               {!showStepAccountant && (
@@ -8798,7 +10624,7 @@ export default function Approvals() {
                                   onClick={() => setShowStepAccountant(true)}
                                   style={{ fontSize: '0.675rem', padding: '4px 10px', height: 'auto', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
                                 >
-                                  <Plus size={12} /> {t('Phê duyệt (Kế toán)')}
+                                  <Plus size={12} /> {t('Phê duyệt (Cấp 3)')}
                                 </button>
                               )}
                             </div>
@@ -9056,7 +10882,7 @@ export default function Approvals() {
                     }}>
                       <button 
                         type="button" 
-                        onClick={() => setSelectedWorkflowDef(null)}
+                        onClick={() => handleRequestExit('back')}
                         style={{
                           background: 'var(--color-bg)',
                           border: '1px solid var(--color-border)',
@@ -9076,6 +10902,33 @@ export default function Approvals() {
                       >
                         <ArrowLeft size={16} />
                         <span>{t('Quay lại')}</span>
+                      </button>
+
+                      <button 
+                        type="button" 
+                        onClick={() => handleSaveCurrentDraft(false)}
+                        disabled={submitting}
+                        className="hover-lift"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '0 14px',
+                          borderRadius: '10px',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          height: '42px',
+                          background: 'var(--color-bg)',
+                          border: '1px solid var(--color-border)',
+                          color: 'var(--color-text)',
+                          cursor: 'pointer',
+                          boxShadow: 'var(--shadow-sm)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <Bookmark size={16} />
+                        <span>{t('Lưu nháp')}</span>
                       </button>
 
                       <button 
@@ -9101,7 +10954,7 @@ export default function Approvals() {
                         }}
                       >
                         <Save size={16} />
-                        <span>{submitting ? t('Đang gửi...') : t('Gửi đề xuất')}</span>
+                        <span>{submitting ? (editingItemId ? t('Đang lưu...') : t('Đang gửi...')) : (editingItemId ? t('Cập nhật đề xuất') : t('Gửi đề xuất'))}</span>
                       </button>
                     </div>
                   )}
@@ -9109,9 +10962,40 @@ export default function Approvals() {
                 </motion.div>
               </>
             )}
+
+            <DraftExitConfirmModal
+              isOpen={showExitConfirmModal}
+              onSaveDraft={() => handleSaveCurrentDraft(true)}
+              onDiscard={handleDiscardExit}
+              onContinue={() => setShowExitConfirmModal(false)}
+              zIndex={99999999}
+            />
           </>
         );
       })(), document.body)}
+
+      <QrImageModal
+        isOpen={!!previewQrModalUrl}
+        qrUrl={previewQrModalUrl}
+        onClose={() => setPreviewQrModalUrl(null)}
+      />
+
+      <ExpenseCreateDrawer
+        isOpen={isExpenseDrawerOpen}
+        onClose={() => {
+          setIsExpenseDrawerOpen(false);
+          setEditingExpenseItem(null);
+        }}
+        editItem={editingExpenseItem}
+        onSaveSuccess={() => {
+          setIsExpenseDrawerOpen(false);
+          setEditingExpenseItem(null);
+          loadData();
+        }}
+        user={user}
+        users={users}
+        zIndex={2000000000}
+      />
     </div>
   );
 }
@@ -9132,10 +11016,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [detail, setDetail] = useState<any>(null);
   const [senderLeaveBalance, setSenderLeaveBalance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ isOpen: boolean; items: AttachmentItem[]; initialIndex: number }>({
+    isOpen: false,
+    items: [],
+    initialIndex: 0
+  });
   const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
 
   const handleCopyText = (text: string, label: string) => {
     if (!text) return;
@@ -9162,7 +11051,17 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const userId = Number(user?.id || 0);
     const isSuperAdmin = isExecutive(user);
     const isHrAdmin = isHR(user, true);
+    const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
 
+    const isUserMatch = (appId: any, appName: any) => {
+      const numId = Number(appId || 0);
+      if (numId > 0 && numId === userId) return true;
+      if (appName) {
+        const cleanName = String(appName).toLowerCase().trim();
+        if (cleanName && (cleanName === currentUserName || currentUserName.includes(cleanName) || cleanName.includes(currentUserName))) return true;
+      }
+      return false;
+    };
 
     if (item.type === 'expense') {
       const s1 = String(detail?.status_level_1 || (item as any)?.status_level_1 || 'pending').toLowerCase();
@@ -9172,6 +11071,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       const app1 = Number(detail?.approver_id || (item as any)?.approver_id || 0);
       const app2 = Number(detail?.approver_id_2 || (item as any)?.approver_id_2 || 0);
       const app3 = Number(detail?.approver_id_3 || (item as any)?.approver_id_3 || 0);
+      const appName1 = detail?.approver_name || (item as any)?.approver_name;
+      const appName2 = detail?.approver_name_2 || (item as any)?.approver_name_2;
+      const appName3 = detail?.approver_name_3 || (item as any)?.approver_name_3;
 
       let currentLevel = 1;
       if (s1 === 'approved' && app2 && s2 === 'pending') {
@@ -9183,24 +11085,24 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
 
       if (currentLevel === 1) {
-        if (app1 > 0) {
-          if (app1 === userId) return true;
+        if (app1 > 0 || appName1) {
+          if (isUserMatch(app1, appName1)) return true;
           if (['superadmin', 'super_admin'].includes(role)) return true;
           return false;
         }
         return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
-        if (app2 > 0) {
-          if (app2 === userId) return true;
+        if (app2 > 0 || appName2) {
+          if (isUserMatch(app2, appName2)) return true;
           if (['superadmin', 'super_admin'].includes(role)) return true;
           return false;
         }
         return isSuperAdmin;
       }
       if (currentLevel === 3) {
-        if (app3 > 0) {
-          if (app3 === userId) return true;
+        if (app3 > 0 || appName3) {
+          if (isUserMatch(app3, appName3)) return true;
           if (['superadmin', 'super_admin'].includes(role)) return true;
           return false;
         }
@@ -9215,6 +11117,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
       const app1 = Number(detail?.approver_id || (item as any)?.approver_id || 0);
       const app2 = Number(detail?.approver_id_2 || (item as any)?.approver_id_2 || 0);
+      const appName1 = detail?.approver_name || (item as any)?.approver_name;
+      const appName2 = detail?.approver_name_2 || (item as any)?.approver_name_2;
 
       let currentLevel = 1;
       if (s1 === 'approved' && app2 && s2 === 'pending') {
@@ -9224,16 +11128,16 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
 
       if (currentLevel === 1) {
-        if (app1 > 0) {
-          if (app1 === userId) return true;
+        if (app1 > 0 || appName1) {
+          if (isUserMatch(app1, appName1)) return true;
           if (['superadmin', 'super_admin'].includes(role)) return true;
           return false;
         }
         return role === 'manager' || isSuperAdmin;
       }
       if (currentLevel === 2) {
-        if (app2 > 0) {
-          if (app2 === userId) return true;
+        if (app2 > 0 || appName2) {
+          if (isUserMatch(app2, appName2)) return true;
           if (['superadmin', 'super_admin'].includes(role)) return true;
           return false;
         }
@@ -9716,7 +11620,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     // Step 1: Submitter
     steps.push({
       stepNumber: 1,
-      title: isPrintStampSend ? t('Thông tin hồ sơ') : t('Lập đề xuất & gửi'),
+      title: isPrintStampSend ? t('Bước 1: Thông tin hồ sơ') : t('Bước 1: Lập đề xuất & gửi'),
       roleTitle: t('Người lập đề xuất'),
       user: creatorUser,
       status: 'approved',
@@ -9730,34 +11634,25 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     steps.push({
       stepNumber: steps.length + 1,
-      title: isPrintStampSend ? t('Xác nhận hoàn thành') : (item.type === 'expense' ? t('Quản lý trực tiếp duyệt') : t('Phê duyệt (Cấp 1)')),
-      roleTitle: managerUser?.role ? (managerUser.role.charAt(0).toUpperCase() + managerUser.role.slice(1)) : t('Quản lý'),
+      title: isPrintStampSend ? t('Bước 2: Xác nhận hoàn thành') : t('Bước 2: Phê duyệt (Cấp 1)'),
+      roleTitle: t('Người duyệt Cấp 1'),
       user: managerUser,
       status: s1Status,
       approvedAt: formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at),
       showBell: s1Status === 'pending'
     });
 
-    // Step 3: Level 2 Approver (HR or Accountant) if exists
+    // Step 3: Level 2 Approver if exists
     if (hasLevel2) {
       let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
       if (s2 === 'approved' || overallStatus === 'approved') s2Status = 'approved';
       else if (s1 !== 'approved' && overallStatus !== 'approved') s2Status = 'not_reached';
       else if (s2 === 'rejected' || overallStatus === 'rejected') s2Status = 'rejected';
 
-      const isOTCompensatory = detail?.ot_type === 'compensatory' || rawDesc.includes('Lấy OT bù');
-      const isOTSalary = detail?.ot_type === 'salary' || rawDesc.includes('lương OT');
-      const step2Title = isOTCompensatory 
-        ? t('Nhân sự duyệt (Cấp 2)') 
-        : (isOTSalary ? t('Kế toán / Quản lý duyệt lương OT (Cấp 2)') : (isHrItem ? t('Người duyệt Cấp 2') : t('Kế toán duyệt (Cấp 2)')));
-      const step2RoleTitle = accountantUser?.role 
-        ? (accountantUser.role.charAt(0).toUpperCase() + accountantUser.role.slice(1)) 
-        : (isOTCompensatory ? t('Nhân sự') : t('Kế toán'));
-
       steps.push({
         stepNumber: steps.length + 1,
-        title: step2Title,
-        roleTitle: step2RoleTitle,
+        title: t('Bước 3: Phê duyệt (Cấp 2)'),
+        roleTitle: t('Người duyệt Cấp 2'),
         user: accountantUser,
         status: s2Status,
         approvedAt: formatApprovalTime(detail?.approved_at_2 || detail?.updated_at),
@@ -9765,7 +11660,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       });
     }
 
-    // Step 4: Level 3 Approver (Director) if exists
+    // Step 4: Level 3 Approver if exists
     if (hasLevel3) {
       let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
       if (overallStatus === 'approved') s3Status = 'approved';
@@ -9774,8 +11669,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
       steps.push({
         stepNumber: steps.length + 1,
-        title: t('Ban Giám đốc duyệt (Cấp 3)'),
-        roleTitle: t('Ban Giám đốc'),
+        title: t('Bước 4: Phê duyệt (Cấp 3)'),
+        roleTitle: t('Người duyệt Cấp 3'),
         user: directorUser,
         status: s3Status,
         approvedAt: formatApprovalTime(detail?.approved_at_3 || detail?.updated_at),
@@ -10215,9 +12110,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           };
         }
       }
+      const deptMatch = text.match(/Phòng ban:\s*([^\n]+)/i);
+      const profileMatch = text.match(/\[Hồ sơ chi phí\]:\s*([^\n]+)/i);
+      const detailsMatch = text.match(/Chi tiết:\s*([\s\S]+?)(?=\n\n|\n\[|$)/i);
+      const dept = deptMatch ? deptMatch[1].trim() : '';
+      const profileInfo = profileMatch ? profileMatch[1].trim() : '';
+      const paymentDetails = detailsMatch ? detailsMatch[1].trim() : '';
 
-      if (!beneficiaryName && !bankInfo && !otherMethodInfo) return null;
-      return { beneficiaryTarget, beneficiaryName, beneficiaryPhone, taxCode, bankInfo, otherMethodInfo };
+      if (!beneficiaryName && !bankInfo && !otherMethodInfo && !dept && !profileInfo) return null;
+      return { beneficiaryTarget, beneficiaryName, beneficiaryPhone, taxCode, dept, profileInfo, paymentDetails, bankInfo, otherMethodInfo };
     };
 
     const cleanResidualText = (text: string) => {
@@ -10312,7 +12213,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         
         {/* Proposal Title Header */}
         <div style={{ padding: isMobile ? '0.25rem 0' : '0.5rem 0.25rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <h2 style={{ fontSize: isMobile ? '1.05rem' : '1.35rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', lineHeight: isMobile ? 1.35 : 1.3 }}>
+          <h2 style={{ fontSize: isMobile ? '0.95rem' : '1.15rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', lineHeight: isMobile ? 1.35 : 1.3 }}>
             {cleanHeaderTitle}
           </h2>
           <div style={{ display: 'flex', gap: isMobile ? '8px' : '12px', alignItems: 'center', fontSize: isMobile ? '0.725rem' : '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
@@ -10587,7 +12488,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   <input
                     type="text"
                     className="form-input"
-                    value={isOT ? `${Number((detail?.total_days * 8).toFixed(1))} giờ (${detail?.total_days} ngày công OT)` : `${detail?.total_days || 1} ngày`}
+                    value={isOT ? `${Number(((detail?.total_days ?? (item as any)?.total_days ?? 0) * 8).toFixed(1))} giờ (${detail?.total_days ?? (item as any)?.total_days ?? 0} ngày công OT)` : `${detail?.total_days ?? (item as any)?.total_days ?? 1} ngày`}
                     disabled
                     style={{ width: '100%', fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                   />
@@ -10622,7 +12523,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     <input
                       type="text"
                       className="form-input"
-                      value={detail?.start_date ? (isOT ? formatDateTimeVi(detail.start_date) : new Date(detail.start_date).toLocaleDateString('vi-VN')) : ''}
+                      value={detail?.start_date ? (isOT ? formatDateTimeVi(detail.start_date) : new Date(detail.start_date).toLocaleDateString('vi-VN')) : (item as any)?.start_date ? (isOT ? formatDateTimeVi((item as any).start_date) : new Date((item as any).start_date).toLocaleDateString('vi-VN')) : ''}
                       disabled
                       style={{ flex: 1, fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                     />
@@ -10630,7 +12531,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     <input
                       type="text"
                       className="form-input"
-                      value={detail?.end_date ? (isOT ? formatDateTimeVi(detail.end_date) : new Date(detail.end_date).toLocaleDateString('vi-VN')) : ''}
+                      value={detail?.end_date ? (isOT ? formatDateTimeVi(detail.end_date) : new Date(detail.end_date).toLocaleDateString('vi-VN')) : (item as any)?.end_date ? (isOT ? formatDateTimeVi((item as any).end_date) : new Date((item as any).end_date).toLocaleDateString('vi-VN')) : ''}
                       disabled
                       style={{ flex: 1, fontSize: isMobile ? '0.8125rem' : '0.875rem' }}
                     />
@@ -10727,10 +12628,62 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             ) : (() => {
               const expAmount = Number(detail?.amount ?? (item as any)?.amount ?? 0);
               const expCurr = detail?.currency || (item as any)?.currency || 'VND';
+              const rawNotes = String(detail?.notes || detail?.description || (item as any)?.notes || item.description || '');
+
+              const vAmt = Number(detail?.vat_amount || (item as any)?.vat_amount || 0);
+              let vatRate = 0;
+              let vatLabel = '';
+              let amountBeforeVat = 0;
+              let vatAmount = 0;
+
+              if (vAmt > 0 && expAmount > vAmt) {
+                const netAmt = expAmount - vAmt;
+                vatRate = Math.round((vAmt / netAmt) * 100);
+                vatLabel = `${vatRate}%`;
+                amountBeforeVat = netAmt;
+                vatAmount = vAmt;
+              } else if (rawNotes.includes('VAT 8%') || rawNotes.includes('vat_8')) {
+                vatRate = 8;
+                vatLabel = '8%';
+                amountBeforeVat = Math.round(expAmount / 1.08);
+                vatAmount = expAmount - amountBeforeVat;
+              } else if (rawNotes.includes('VAT 5%') || rawNotes.includes('vat_5')) {
+                vatRate = 5;
+                vatLabel = '5%';
+                amountBeforeVat = Math.round(expAmount / 1.05);
+                vatAmount = expAmount - amountBeforeVat;
+              } else if (rawNotes.includes('VAT 10%') || rawNotes.includes('vat_10')) {
+                vatRate = 10;
+                vatLabel = '10%';
+                amountBeforeVat = Math.round(expAmount / 1.10);
+                vatAmount = expAmount - amountBeforeVat;
+              } else if (vAmt > 0) {
+                vatRate = 10;
+                vatLabel = '10%';
+                amountBeforeVat = Math.max(0, expAmount - vAmt);
+                vatAmount = vAmt;
+              }
+
+              let docLabel = vatRate > 0 ? `Hóa đơn điện tử VAT ${vatLabel}` : 'Không có hóa đơn';
+              if (rawNotes.includes('Hóa đơn bán lẻ')) {
+                docLabel = 'Hóa đơn bán lẻ / Biên lai thu tiền';
+              } else if (rawNotes.includes('Không có hóa đơn')) {
+                docLabel = 'Không có hóa đơn (Giải trình nội bộ)';
+              } else if (vatRate > 0) {
+                docLabel = `Hóa đơn điện tử VAT ${vatLabel}`;
+              }
+
               return (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
+                      {vatRate > 0 && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
+                          ✓ {t('Đã gồm VAT')} {vatLabel}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
                       className="form-input"
@@ -10754,6 +12707,42 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         paddingLeft: '2px' 
                       }}>
                         {t('Bằng chữ:')} {numberToVietnameseText(expAmount, expCurr)}
+                      </div>
+                    )}
+
+                    {vatRate > 0 && (
+                      <div style={{
+                        marginTop: '6px',
+                        padding: '10px 14px',
+                        background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03), rgba(59, 130, 246, 0.06))',
+                        border: '1px solid rgba(37, 99, 235, 0.18)',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Receipt size={14} /> {t('Chi tiết thuế VAT')} ({vatLabel})
+                          </span>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                            {t('Chứng từ')}: {docLabel}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '8px', paddingTop: '4px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tiền trước VAT (Tiền hàng)')}:</span>
+                            <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>{formatApprovalCurrency(amountBeforeVat, expCurr)}</strong>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tiền thuế VAT')} ({vatLabel}):</span>
+                            <strong style={{ fontSize: '0.85rem', color: '#2563eb' }}>{formatApprovalCurrency(vatAmount, expCurr)}</strong>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tổng thanh toán (sau VAT)')}:</span>
+                            <strong style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 800 }}>{formatApprovalCurrency(expAmount, expCurr)}</strong>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -11477,20 +13466,60 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       )}
                     </div>
                   </div>
-                  {paymentData.taxCode && (
-                    <span style={{
-                      fontSize: '0.75rem',
-                      padding: '4px 10px',
-                      borderRadius: '8px',
-                      background: 'rgba(37, 99, 235, 0.08)',
-                      color: '#1d4ed8',
-                      fontWeight: 700,
-                      fontFamily: 'monospace'
-                    }}>
-                      MST: {paymentData.taxCode}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {paymentData.dept && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        color: '#2563eb',
+                        fontWeight: 700
+                      }}>
+                        Phòng ban: {paymentData.dept}
+                      </span>
+                    )}
+                    {paymentData.taxCode && (
+                      <span style={{
+                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(37, 99, 235, 0.08)',
+                        color: '#1d4ed8',
+                        fontWeight: 700,
+                        fontFamily: 'monospace'
+                      }}>
+                        MST: {paymentData.taxCode}
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {/* Profile info or Payment Details */}
+                {(paymentData.profileInfo || paymentData.paymentDetails) && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    padding: '10px 14px',
+                    background: 'var(--color-bg-secondary)',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)'
+                  }}>
+                    {paymentData.profileInfo && (
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', marginRight: '6px' }}>Hồ sơ:</span>
+                        {paymentData.profileInfo}
+                      </div>
+                    )}
+                    {paymentData.paymentDetails && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--color-text)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', marginRight: '6px' }}>Chi tiết:</span>
+                        {paymentData.paymentDetails}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Beneficiary Name & Phone */}
                 {paymentData.beneficiaryName && (
@@ -11520,122 +13549,205 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   </div>
                 )}
 
-                {/* Modern Bank Transfer Box with 1-Click Copy */}
-                {paymentData.bankInfo && (
-                  <div style={{
-                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                    color: '#ffffff',
-                    borderRadius: '14px',
-                    padding: '16px 18px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.25)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: '-40px',
-                      right: '-40px',
-                      width: '130px',
-                      height: '130px',
-                      borderRadius: '50%',
-                      background: 'radial-gradient(circle, rgba(59, 130, 246, 0.25) 0%, transparent 70%)',
-                      pointerEvents: 'none'
-                    }} />
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Landmark size={18} style={{ color: '#60a5fa', flexShrink: 0 }} />
-                        <span style={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '0.02em', color: '#f8fafc' }}>
-                          {paymentData.bankInfo.bankName || t('Chuyển khoản Ngân hàng')}
-                        </span>
-                      </div>
-                      <span style={{
-                        fontSize: '0.68rem',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.08em',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        color: '#93c5fd'
+                {/* Modern Bank Transfer Box with VietQR Code & 1-Click Copy */}
+                {paymentData.bankInfo && (() => {
+                  const bInfo = paymentData.bankInfo;
+                  if (!bInfo.accountNumber) {
+                    return (
+                      <div style={{
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        borderRadius: '12px',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px'
                       }}>
-                        {t('Chuyển khoản 24/7')}
-                      </span>
-                    </div>
-
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.12)'
-                    }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {t('Số tài khoản')}
-                        </span>
-                        <span style={{
-                          fontSize: isMobile ? '1.1rem' : '1.3rem',
-                          fontWeight: 800,
-                          fontFamily: 'monospace',
-                          letterSpacing: '0.08em',
-                          color: '#38bdf8'
-                        }}>
-                          {paymentData.bankInfo.accountNumber || '—'}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Landmark size={18} style={{ color: '#d97706' }} />
+                          <span style={{ fontSize: '0.825rem', fontWeight: 700, color: '#b45309' }}>
+                            {bInfo.bankName || t('Chuyển khoản')}: {t('Chưa cập nhật số tài khoản nhận tiền')}
+                          </span>
+                        </div>
+                        {(bInfo.accountName || paymentData.beneficiaryName) && (
+                          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e' }}>
+                            {t('Người nhận')}: {bInfo.accountName || paymentData.beneficiaryName}
+                          </span>
+                        )}
                       </div>
-                      {paymentData.bankInfo.accountNumber && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopyText(paymentData.bankInfo.accountNumber, t('Số tài khoản'))}
+                    );
+                  }
+
+                  const qrAmount = Number(detail?.amount || (item as any)?.amount || 0);
+                  const qrMemo = detail?.expense_code || (item as any)?.code || (item.title ? String(item.title).slice(0, 25) : 'Thanh toan');
+                  const vietQrUrl = getVietQrUrl({
+                    bankBinOrCode: bInfo.bankName || 'VCB',
+                    accountNumber: bInfo.accountNumber,
+                    accountName: bInfo.accountName || paymentData.beneficiaryName,
+                    amount: qrAmount,
+                    memo: qrMemo
+                  });
+
+                  return (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile || !vietQrUrl ? '1fr' : 'minmax(0, 1fr) 155px',
+                      gap: '12px',
+                      alignItems: 'stretch'
+                    }}>
+                      {/* Executive Brand Light Bank Card */}
+                      <div style={{
+                        background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
+                        border: '1px solid #fecaca',
+                        borderRadius: '14px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                            <BankLogo
+                              bank={bInfo.bankName}
+                              width={38}
+                              height={26}
+                              style={{ borderRadius: '6px', border: '1px solid #fecaca', background: '#ffffff', padding: '2px 4px' }}
+                            />
+                            <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={bInfo.bankName || t('Chuyển khoản Ngân hàng')}>
+                              {bInfo.bankName || t('Chuyển khoản Ngân hàng')}
+                            </span>
+                          </div>
+                          <span style={{
+                            fontSize: '0.6rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                            padding: '2px 6px',
+                            borderRadius: '5px',
+                            background: '#ffffff',
+                            color: '#dc2626',
+                            border: '1px solid #fecaca',
+                            flexShrink: 0
+                          }}>
+                            {t('Chuyển khoản 24/7')}
+                          </span>
+                        </div>
+
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: '#ffffff',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid #fecaca',
+                          boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                        }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                            <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                              {t('Số tài khoản')}
+                            </span>
+                            <span style={{
+                              fontSize: '1.05rem',
+                              fontWeight: 800,
+                              fontFamily: 'monospace',
+                              letterSpacing: '0.06em',
+                              color: '#dc2626'
+                            }}>
+                              {bInfo.accountNumber || '—'}
+                            </span>
+                          </div>
+                          {bInfo.accountNumber && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(bInfo.accountNumber, t('Số tài khoản'))}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 9px',
+                                borderRadius: '6px',
+                                background: copiedField === t('Số tài khoản') ? '#059669' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                color: '#ffffff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '0.7rem',
+                                boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                                transition: 'all 0.2s ease',
+                                flexShrink: 0
+                              }}
+                            >
+                              {copiedField === t('Số tài khoản') ? <Check size={12} /> : <Copy size={12} />}
+                              <span>{copiedField === t('Số tài khoản') ? t('Đã chép') : t('Sao chép')}</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '4px' }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                              {t('Chủ tài khoản')}
+                            </span>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 750, letterSpacing: '0.01em', color: '#0f172a', marginTop: '1px', textTransform: 'uppercase', lineHeight: 1.25 }}>
+                              {bInfo.accountName || paymentData.beneficiaryName || '—'}
+                            </div>
+                          </div>
+                          {bInfo.branch && (
+                            <div style={{ fontSize: '0.65rem', color: '#64748b', textAlign: 'right', flexShrink: 0 }}>
+                              {t('Chi nhánh')}: <span style={{ color: '#1e293b', fontWeight: 600 }}>{bInfo.branch}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* VietQR Card: Bigger QR, No title, No subtitle, Click to zoom */}
+                      {vietQrUrl && (
+                        <div
+                          onClick={() => setPreviewQrModalUrl(vietQrUrl)}
+                          title={t('Bấm để phóng to mã QR')}
                           style={{
+                            background: '#ffffff',
+                            border: '1px solid #fecaca',
+                            borderRadius: '14px',
+                            padding: '6px',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '6px',
-                            padding: '7px 12px',
-                            borderRadius: '8px',
-                            background: copiedField === t('Số tài khoản') ? '#059669' : 'rgba(255, 255, 255, 0.15)',
-                            color: '#ffffff',
-                            border: 'none',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
                             cursor: 'pointer',
-                            fontWeight: 700,
-                            fontSize: '0.78rem',
-                            transition: 'all 0.2s ease'
+                            transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.02)';
+                            e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 38, 38, 0.15)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.boxShadow = '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)';
                           }}
                         >
-                          {copiedField === t('Số tài khoản') ? <Check size={14} /> : <Copy size={14} />}
-                          <span>{copiedField === t('Số tài khoản') ? t('Đã chép') : t('Sao chép')}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '6px' }}>
-                      <div>
-                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {t('Chủ tài khoản')}
-                        </span>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 800, color: '#f1f5f9', letterSpacing: '0.04em' }}>
-                          {paymentData.bankInfo.accountName || paymentData.beneficiaryName || '—'}
-                        </div>
-                      </div>
-                      {paymentData.bankInfo.branch && (
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            {t('Chi nhánh')}
-                          </span>
-                          <div style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600 }}>
-                            {paymentData.bankInfo.branch}
-                          </div>
+                          <img
+                            src={vietQrUrl}
+                            alt="VietQR Chuyển khoản"
+                            style={{
+                              width: '100%',
+                              maxWidth: '140px',
+                              maxHeight: '140px',
+                              objectFit: 'contain'
+                            }}
+                            loading="lazy"
+                          />
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Other Payment Methods (Cash, Wallet, Card) */}
                 {paymentData.otherMethodInfo && (
@@ -11819,6 +13931,16 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             return /\.(jpg|jpeg|png|webp|gif|svg|bmp|avif)(\?.*)?$/i.test(f.url) || /\.(jpg|jpeg|png|webp|gif|svg|bmp|avif)$/i.test(f.name);
           };
 
+          const isPdfFile = (f: { name: string; url: string }) => {
+            return /\.pdf(\?.*)?$/i.test(f.url) || /\.pdf$/i.test(f.name);
+          };
+
+          const allAttachmentItems: AttachmentItem[] = extractedFiles.map((f) => ({
+            url: f.url,
+            name: f.name,
+            type: isPdfFile(f) ? 'pdf' : isImageFile(f) ? 'image' : 'other'
+          }));
+
           const imageFiles = extractedFiles.filter(isImageFile);
           const docFiles = extractedFiles.filter(f => !isImageFile(f));
 
@@ -11843,89 +13965,96 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     gridTemplateColumns: imageFiles.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))',
                     gap: '12px'
                   }}>
-                    {imageFiles.map((file, fIdx) => (
-                      <div
-                        key={`img-${fIdx}`}
-                        className="hover-lift group"
-                        onClick={() => setLightboxImage({ url: file.url, name: file.name })}
-                        style={{
-                          position: 'relative',
-                          borderRadius: '12px',
-                          overflow: 'hidden',
-                          border: '1.5px solid var(--color-border-light)',
-                          background: 'var(--color-bg)',
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
-                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                          display: 'flex',
-                          flexDirection: 'column'
-                        }}
-                      >
-                        <div style={{
-                          position: 'relative',
-                          height: imageFiles.length === 1 ? '320px' : '160px',
-                          background: 'rgba(0, 0, 0, 0.02)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden'
-                        }}>
-                          <img
-                            src={file.url}
-                            alt={file.name}
-                            loading="lazy"
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: imageFiles.length === 1 ? 'contain' : 'cover',
-                              transition: 'transform 0.3s ease'
-                            }}
-                          />
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: '8px',
-                              right: '8px',
-                              background: 'rgba(0,0,0,0.68)',
-                              backdropFilter: 'blur(6px)',
-                              color: '#ffffff',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.675rem',
-                              fontWeight: 700,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <Eye size={12} />
-                            <span>{t('Phóng to')}</span>
+                    {imageFiles.map((file, fIdx) => {
+                      const globalIdx = extractedFiles.findIndex(f => f.url === file.url);
+                      return (
+                        <div
+                          key={`img-${fIdx}`}
+                          className="hover-lift group"
+                          onClick={() => setLightboxState({
+                            isOpen: true,
+                            items: allAttachmentItems,
+                            initialIndex: globalIdx >= 0 ? globalIdx : fIdx
+                          })}
+                          style={{
+                            position: 'relative',
+                            borderRadius: '12px',
+                            overflow: 'hidden',
+                            border: '1.5px solid var(--color-border-light)',
+                            background: 'var(--color-bg)',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}
+                        >
+                          <div style={{
+                            position: 'relative',
+                            height: imageFiles.length === 1 ? '320px' : '160px',
+                            background: 'rgba(0, 0, 0, 0.02)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden'
+                          }}>
+                            <img
+                              src={file.url}
+                              alt={file.name}
+                              loading="lazy"
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: imageFiles.length === 1 ? 'contain' : 'cover',
+                                transition: 'transform 0.3s ease'
+                              }}
+                            />
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                background: 'rgba(0,0,0,0.68)',
+                                backdropFilter: 'blur(6px)',
+                                color: '#ffffff',
+                                borderRadius: '6px',
+                                padding: '4px 8px',
+                                fontSize: '0.675rem',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Eye size={12} />
+                              <span>{t('Phóng to')}</span>
+                            </div>
+                          </div>
+                          <div style={{
+                            padding: '8px 12px',
+                            background: 'var(--color-surface)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            borderTop: '1px solid var(--color-border-light)'
+                          }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '82%' }} title={file.name}>
+                              {file.name}
+                            </span>
+                            <a
+                              href={file.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
+                              title={t('Mở trong tab mới')}
+                            >
+                              <ArrowRight size={13} style={{ transform: 'rotate(-45deg)' }} />
+                            </a>
                           </div>
                         </div>
-                        <div style={{
-                          padding: '8px 12px',
-                          background: 'var(--color-surface)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          borderTop: '1px solid var(--color-border-light)'
-                        }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '82%' }} title={file.name}>
-                            {file.name}
-                          </span>
-                          <a
-                            href={file.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: 'var(--color-primary)', display: 'flex', alignItems: 'center' }}
-                            title={t('Mở trong tab mới')}
-                          >
-                            <ArrowRight size={13} style={{ transform: 'rotate(-45deg)' }} />
-                          </a>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -11933,37 +14062,52 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               {/* NON-IMAGE DOCUMENTS */}
               {docFiles.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {docFiles.map((file, fIdx) => (
-                    <a
-                      key={`doc-${fIdx}`}
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        background: 'var(--color-bg-secondary)',
-                        borderRadius: '10px',
-                        border: '1px solid var(--color-border-light)',
-                        textDecoration: 'none',
-                        color: 'var(--color-text)',
-                        transition: 'all 0.2s ease'
-                      }}
-                      className="hover-lift"
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        <FileText size={16} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {file.name}
-                        </span>
+                  {docFiles.map((file, fIdx) => {
+                    const isPdf = isPdfFile(file);
+                    const globalIdx = extractedFiles.findIndex(f => f.url === file.url);
+
+                    return (
+                      <div
+                        key={`doc-${fIdx}`}
+                        onClick={() => {
+                          if (isPdf) {
+                            setLightboxState({
+                              isOpen: true,
+                              items: allAttachmentItems,
+                              initialIndex: globalIdx >= 0 ? globalIdx : fIdx
+                            });
+                          } else {
+                            window.open(file.url, '_blank');
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          background: 'var(--color-bg-secondary)',
+                          borderRadius: '10px',
+                          border: '1px solid var(--color-border-light)',
+                          cursor: 'pointer',
+                          color: 'var(--color-text)',
+                          transition: 'all 0.2s ease'
+                        }}
+                        className="hover-lift"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                          <FileText size={16} style={{ color: isPdf ? '#ef4444' : 'var(--color-primary)', flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {file.name}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700 }}>
+                            {isPdf ? t('Xem PDF') : t('Mở xem')} ↗
+                          </span>
+                        </div>
                       </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0, marginLeft: '12px' }}>
-                        {t('Mở xem')} ↗
-                      </span>
-                    </a>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -12026,7 +14170,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         }
       `}</style>
 
-      {reminderTargetUser && (
+      {reminderTargetUser && createPortal(
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
@@ -12035,7 +14179,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 20000,
+          zIndex: 2000000,
           padding: '1rem'
         }} onClick={() => setReminderTargetUser(null)}>
           <div style={{
@@ -12125,7 +14269,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Backdrop overlay utilizing the CSS-based backdrop classes */}
       <motion.div 
@@ -12413,20 +14557,36 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
               {/* Related Persons in View Drawer */}
               {(() => {
-                const relIdsRaw = detail?.related_user_ids || (item as any)?.related_user_ids;
+                const relIdsRaw = detail?.related_user_ids || (item as any)?.related_user_ids || (detail as any)?.related_users || (item as any)?.related_users;
                 if (!relIdsRaw) return null;
-                let relIds: number[] = [];
-                if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
-                else if (typeof relIdsRaw === 'string') {
-                  try {
-                    const parsed = JSON.parse(relIdsRaw);
-                    if (Array.isArray(parsed)) relIds = parsed.map(Number);
-                    else relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
-                  } catch {
-                    relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
+                let rawList: any[] = [];
+                if (Array.isArray(relIdsRaw)) {
+                  rawList = relIdsRaw;
+                } else if (typeof relIdsRaw === 'string') {
+                  const trimmed = relIdsRaw.trim();
+                  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                    try {
+                      const parsed = JSON.parse(trimmed);
+                      if (Array.isArray(parsed)) rawList = parsed;
+                      else rawList = [parsed];
+                    } catch {
+                      rawList = trimmed.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+                    }
+                  } else {
+                    rawList = trimmed.split(',').map(s => s.trim()).filter(Boolean);
                   }
                 }
-                const relUsers = users.filter(u => relIds.includes(Number(u.id)));
+                const relUsers = rawList.map((entry: any) => {
+                  if (!entry) return null;
+                  const entryId = typeof entry === 'object' ? (entry.id || entry.user_id) : entry;
+                  const numId = Number(entryId);
+                  const found = users.find((u: any) => Number(u.id) === numId || String(u.id) === String(entryId));
+                  if (found) return found;
+                  if (typeof entry === 'object' && (entry.full_name || entry.name)) return entry;
+                  if (numId > 0) return { id: numId, full_name: `User #${numId}`, name: `User #${numId}` };
+                  return null;
+                }).filter(Boolean);
+
                 if (relUsers.length === 0) return null;
                 return (
                   <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
@@ -12434,8 +14594,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       {t('NGƯỜI LIÊN QUAN (THEO DÕI)')} ({relUsers.length})
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {relUsers.map(u => (
-                        <div key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
+                      {relUsers.map((u: any, idx: number) => (
+                        <div key={u.id || idx} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border-light)', borderRadius: '12px' }}>
                           <Avatar src={u.avatar || u.avatar_url} name={u.full_name || u.name} size={20} />
                           <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
                         </div>
@@ -12497,106 +14657,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         </div>
 
 
-      {/* Lightbox Modal for full size image viewing */}
-      {lightboxImage && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 2147483647,
-            background: 'rgba(0, 0, 0, 0.88)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem'
-          }}
-          onClick={() => setLightboxImage(null)}
-        >
-          <div
-            style={{
-              position: 'relative',
-              maxWidth: '92vw',
-              maxHeight: '88vh',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{
-              position: 'absolute',
-              top: '-48px',
-              left: 0,
-              right: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              color: '#ffffff',
-              padding: '0 4px'
-            }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
-                {lightboxImage.name}
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <a
-                  href={lightboxImage.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  style={{
-                    color: '#ffffff',
-                    background: 'rgba(255,255,255,0.15)',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    textDecoration: 'none',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Download size={14} /> Tải về
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setLightboxImage(null)}
-                  style={{
-                    background: 'rgba(255,255,255,0.2)',
-                    border: 'none',
-                    color: '#ffffff',
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <img
-              src={lightboxImage.url}
-              alt={lightboxImage.name}
-              style={{
-                maxWidth: '90vw',
-                maxHeight: '82vh',
-                objectFit: 'contain',
-                borderRadius: '12px',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                border: '1px solid rgba(255,255,255,0.1)'
-              }}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* Lightbox Modal for attachments (images & PDF) */}
+      <AttachmentLightboxModal
+        isOpen={lightboxState.isOpen}
+        onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
+        items={lightboxState.items}
+        initialIndex={lightboxState.initialIndex}
+      />
 
       <NoteDetailModal
         isOpen={!!activeNoteModal}
@@ -12604,6 +14671,12 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         title={activeNoteModal?.title || t('Ghi chú / Mục đích sử dụng')}
         itemName={activeNoteModal?.itemName}
         notes={activeNoteModal?.notes || ''}
+      />
+
+      <QrImageModal
+        isOpen={!!previewQrModalUrl}
+        qrUrl={previewQrModalUrl}
+        onClose={() => setPreviewQrModalUrl(null)}
       />
       </motion.div>
     </>,

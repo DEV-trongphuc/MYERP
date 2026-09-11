@@ -20,6 +20,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { detectCountryFromPhone } from '../utils/phoneHelper';
 import { NotificationPreviewModal } from '../components/ui/NotificationPreviewModal';
+import { isMarketing } from '../utils/roleUtils';
 import { useNavigate } from 'react-router-dom';
 
 type Lead = {
@@ -411,7 +412,7 @@ const TicketsInner = ({ isActive, searchParams, setSearchParams }: { isActive: b
   const [ruleKeywords, setRuleKeywords] = useState('');
 
   const { user } = useAuth();
-  const isUserAdmin = user && ['admin', 'superadmin', 'super_admin', 'manager', 'director'].includes(user.role);
+  const isUserAdmin = user && (['admin', 'superadmin', 'super_admin', 'manager', 'director'].includes(user.role) || isMarketing(user));
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<any>(null);
   const [notifLoading, setNotifLoading] = useState(false);

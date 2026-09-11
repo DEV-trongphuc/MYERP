@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
+import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
@@ -2959,14 +2959,25 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             />
                           </td>
                         )}
-                        {columns.find(col => col.id === 'name')?.visible && (
+                        {columns.find(col => col.id === 'name')?.visible && (() => {
+                          const refName = c.referrer_name 
+                            || (c.company_tier === 'referrer' ? c.company_name : '')
+                            || ((c.source === 'gioi_thieu' || c.source === 'ref' || c.source === 'referral') ? c.company_name : '')
+                            || c.partner_name 
+                            || '';
+                          const isReferred = Boolean(c.partner_id || c.referrer_name || c.referrer_id || c.source === 'ref' || c.source === 'referral' || c.source === 'gioi_thieu' || refName);
+                          return (
                           <td style={{ width: isSale ? '230px' : '170px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <Avatar name={fullName} size={32} />
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
                                 <p style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={fullName}>{fullName}</span>
-                                  {c.dl_status === 'databank_claim' || c.source === 'databank' ? (
+                                  {isReferred ? (
+                                    <span title={refName ? `Khách hàng giới thiệu bởi: ${refName}` : 'Khách hàng được giới thiệu (Ref)'} style={{ display: 'inline-flex', marginLeft: '5px', color: 'var(--color-primary, #BD1D2D)', flexShrink: 0 }}>
+                                      <UserPlus size={13} />
+                                    </span>
+                                  ) : c.dl_status === 'databank_claim' || c.source === 'databank' ? (
                                     <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '4px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
                                       <Layers size={12} />
                                     </span>
@@ -3007,7 +3018,8 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               </div>
                             </div>
                           </td>
-                        )}
+                          );
+                        })()}
                         {(columns.find(col => col.id === 'email')?.visible || columns.find(col => col.id === 'phone')?.visible) && (
                           <td style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>

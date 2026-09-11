@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText } from 'lucide-react';
+import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText, Bookmark } from 'lucide-react';
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +10,7 @@ import { CustomSelect } from './ui/CustomSelect';
 import { CurrencyInput } from './ui/CurrencyInput';
 import { PasteDropzoneArea } from './ui/PasteDropzoneArea';
 import { Avatar } from './ui/Avatar';
+import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 import api from '../api/axios';
 
 interface DepositCreateDrawerProps {
@@ -52,6 +53,126 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const [milestonesInput, setMilestonesInput] = useState<{ name: string; amount: string; expected_pay_date: string }[]>([
     { name: 'Đợt 1 - Thanh toán cọc', amount: '', expected_pay_date: new Date().toLocaleDateString('sv-SE') }
   ]);
+
+  const DEPOSIT_DRAFT_KEY = 'myerp_deposit_create_draft';
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [existingDraft, setExistingDraft] = useState<any>(null);
+
+  // Check for saved draft when opening
+  useEffect(() => {
+    if (isOpen) {
+      try {
+        const saved = localStorage.getItem(DEPOSIT_DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.selectedContactId || parsed.selectedProjectId || parsed.unitCode || parsed.price || parsed.notes)) {
+            setExistingDraft(parsed);
+          } else {
+            setExistingDraft(null);
+          }
+        } else {
+          setExistingDraft(null);
+        }
+      } catch {
+        setExistingDraft(null);
+      }
+    } else {
+      setShowExitConfirm(false);
+    }
+  }, [isOpen]);
+
+  const isFormDirty = () => {
+    return Boolean(
+      selectedContactId ||
+      selectedProjectId ||
+      unitCode?.trim() ||
+      (parseFloat(price) || 0) > 0 ||
+      (parseFloat(expectedCommission) || 0) > 0 ||
+      notes?.trim() ||
+      (milestonesInput.length > 1 || (milestonesInput[0]?.amount && parseFloat(milestonesInput[0].amount) > 0))
+    );
+  };
+
+  const saveDraftToStorage = () => {
+    const payload = {
+      entitySubtab,
+      selectedContactId,
+      selectedProjectId,
+      unitCode,
+      price,
+      expectedCommission,
+      notes,
+      currency,
+      exchangeRate,
+      milestonesInput,
+      commissionType,
+      commissionPercent,
+      participantIds,
+      savedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(DEPOSIT_DRAFT_KEY, JSON.stringify(payload));
+      setExistingDraft(payload);
+    } catch (e) {
+      console.error('Failed to save deposit draft', e);
+    }
+  };
+
+  const handleSaveDraftAndExit = () => {
+    saveDraftToStorage();
+    addToast('Đã lưu bản nháp phiếu thanh toán thành công!', 'success');
+    setShowExitConfirm(false);
+    onClose();
+  };
+
+  const handleExplicitSaveDraft = () => {
+    saveDraftToStorage();
+    addToast('Đã lưu bản nháp phiếu thanh toán thành công!', 'success');
+  };
+
+  const handleDiscardAndExit = () => {
+    try {
+      localStorage.removeItem(DEPOSIT_DRAFT_KEY);
+    } catch {}
+    setExistingDraft(null);
+    setShowExitConfirm(false);
+    onClose();
+  };
+
+  const handleRequestClose = () => {
+    if (isFormDirty()) {
+      setShowExitConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleRestoreDraft = () => {
+    if (!existingDraft) return;
+    if (existingDraft.entitySubtab) setEntitySubtab(existingDraft.entitySubtab);
+    if (existingDraft.selectedContactId) setSelectedContactId(existingDraft.selectedContactId);
+    if (existingDraft.selectedProjectId) setSelectedProjectId(existingDraft.selectedProjectId);
+    if (existingDraft.unitCode) setUnitCode(existingDraft.unitCode);
+    if (existingDraft.price) setPrice(existingDraft.price);
+    if (existingDraft.expectedCommission) setExpectedCommission(existingDraft.expectedCommission);
+    if (existingDraft.notes) setNotes(existingDraft.notes);
+    if (existingDraft.currency) setCurrency(existingDraft.currency);
+    if (existingDraft.exchangeRate) setExchangeRate(existingDraft.exchangeRate);
+    if (Array.isArray(existingDraft.milestonesInput)) setMilestonesInput(existingDraft.milestonesInput);
+    if (existingDraft.commissionType) setCommissionType(existingDraft.commissionType);
+    if (existingDraft.commissionPercent) setCommissionPercent(existingDraft.commissionPercent);
+    if (Array.isArray(existingDraft.participantIds)) setParticipantIds(existingDraft.participantIds);
+    addToast('Đã khôi phục dữ liệu bản nháp', 'info');
+    setExistingDraft(null);
+  };
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem(DEPOSIT_DRAFT_KEY);
+    } catch {}
+    setExistingDraft(null);
+    addToast('Đã xóa bản nháp', 'info');
+  };
 
   // Automatically calculate Doanh thu dự kiến (price) as sum of milestones converted to VND
   useEffect(() => {
@@ -445,6 +566,10 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
         window.dispatchEvent(new CustomEvent('refresh-deposits'));
         window.dispatchEvent(new CustomEvent('refresh-page', { detail: { path: '/deposits' } }));
         window.dispatchEvent(new CustomEvent('refresh-page', { detail: { path: '/data' } }));
+        try {
+          localStorage.removeItem(DEPOSIT_DRAFT_KEY);
+        } catch {}
+        setExistingDraft(null);
         onClose();
         if (onSaveSuccess) onSaveSuccess();
       } else {
@@ -469,7 +594,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={handleRequestClose}
             style={{
               position: 'fixed',
               inset: 0,
@@ -514,7 +639,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   style={{
                     padding: '8px',
                     borderRadius: '8px',
@@ -542,22 +667,40 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                 <button
                   type="button"
                   className="btn outline"
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   disabled={isSaving}
-                  style={{ height: '38px', minWidth: '90px', fontSize: '0.85rem', fontWeight: 700 }}
+                  style={{ height: '38px', minWidth: '70px', fontSize: '0.85rem', fontWeight: 700 }}
                 >
                   Hủy
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={handleExplicitSaveDraft}
+                  disabled={isSaving}
+                  style={{
+                    height: '38px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Lưu bản nháp để tiếp tục sửa sau"
+                >
+                  <Bookmark size={15} />
+                  <span>Lưu nháp</span>
                 </button>
                 <button
                   type="submit"
                   form="create-deposit-form-drawer"
                   className="btn primary"
                   disabled={isSaving}
-                  style={{ height: '38px', minWidth: '180px', fontSize: '0.85rem', fontWeight: 700 }}
+                  style={{ height: '38px', minWidth: '160px', fontSize: '0.85rem', fontWeight: 700 }}
                 >
                   {isSaving ? 'Đang tạo...' : 'Tạo phiếu Thanh toán'}
                 </button>
@@ -567,6 +710,65 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             {/* Body */}
             <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
               <form id="create-deposit-form-drawer" onSubmit={handleCreateDeposit} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                
+                {/* Draft Notification Banner */}
+                {existingDraft && (
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    borderRadius: '12px',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.28)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    marginBottom: '1rem',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--color-text)' }}>
+                      <Bookmark size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
+                      <span>
+                        Có 1 bản nháp đã lưu lúc <strong>{existingDraft.savedAt ? new Date(existingDraft.savedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}</strong>
+                        {existingDraft.unitCode ? ` - Mã căn: "${existingDraft.unitCode}"` : ''}.
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleRestoreDraft}
+                        style={{
+                          padding: '5px 12px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          background: 'var(--color-primary)',
+                          color: '#fff',
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 6px rgba(163, 20, 34, 0.2)'
+                        }}
+                      >
+                        Khôi phục bản nháp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearDraft}
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          background: 'transparent',
+                          color: 'var(--color-text-muted)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--color-border)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Xóa nháp
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div style={{
                   display: 'flex',
                   flexDirection: isMobile ? 'column' : 'row',
@@ -1303,11 +1505,21 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                 <button
                   type="button"
                   className="btn outline"
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   disabled={isSaving}
                   style={{ flex: 1, height: '42px', fontWeight: 700 }}
                 >
                   Hủy
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={handleExplicitSaveDraft}
+                  disabled={isSaving}
+                  style={{ flex: 1, height: '42px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                >
+                  <Bookmark size={15} />
+                  <span>Nháp</span>
                 </button>
                 <button
                   type="submit"
@@ -1316,10 +1528,21 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                   disabled={isSaving}
                   style={{ flex: 2, height: '42px', fontWeight: 700 }}
                 >
-                  {isSaving ? 'Đang tạo...' : 'Tạo phiếu Thanh toán'}
+                  {isSaving ? 'Đang tạo...' : 'Tạo phiếu'}
                 </button>
               </div>
             )}
+
+            {/* Draft Exit Confirmation Modal */}
+            <DraftExitConfirmModal
+              isOpen={showExitConfirm}
+              onSaveDraft={handleSaveDraftAndExit}
+              onDiscard={handleDiscardAndExit}
+              onContinue={() => setShowExitConfirm(false)}
+              title="Lưu bản nháp phiếu thanh toán?"
+              message="Bạn có các thông tin phiếu thanh toán đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
+              zIndex={baseZIndex + 50}
+            />
           </motion.div>
         </div>
       )}

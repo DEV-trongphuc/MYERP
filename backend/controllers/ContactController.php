@@ -562,8 +562,19 @@ class ContactController {
             $kanbanSql = "
                 SELECT t.* FROM (
                     SELECT c.*,
-                           comp.name as company_name,
-                           u.full_name as owner_name,
+                            comp.name as company_name,
+                            comp.tier as company_tier,
+                            CASE 
+                                WHEN comp.tier = 'referrer' THEN comp.name
+                                WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.name IS NOT NULL THEN comp.name
+                                ELSE NULL
+                            END as referrer_name,
+                            CASE 
+                                WHEN comp.tier = 'referrer' THEN comp.logo_url
+                                WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.logo_url IS NOT NULL THEN comp.logo_url
+                                ELSE NULL
+                            END as referrer_avatar,
+                            u.full_name as owner_name,
                            u.avatar_url as owner_avatar,
                            COALESCE(ps.name, ps_fb.name) as stage_name, 
                            COALESCE(ps.color, ps_fb.color) as stage_color,
@@ -636,6 +647,17 @@ class ContactController {
                        WHEN comp.deleted_at IS NOT NULL THEN CONCAT(comp.name, ' (Đã xóa)')
                        ELSE comp.name 
                    END as company_name,
+                   comp.tier as company_tier,
+                   CASE 
+                       WHEN comp.tier = 'referrer' THEN comp.name
+                       WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.name IS NOT NULL THEN comp.name
+                       ELSE NULL
+                   END as referrer_name,
+                   CASE 
+                       WHEN comp.tier = 'referrer' THEN comp.logo_url
+                       WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.logo_url IS NOT NULL THEN comp.logo_url
+                       ELSE NULL
+                   END as referrer_avatar,
                    u.full_name as owner_name,
                    u.avatar_url as owner_avatar,
                    COALESCE(ps.name, ps_fb.name) as stage_name, COALESCE(ps.color, ps_fb.color) as stage_color,
@@ -1085,8 +1107,19 @@ class ContactController {
                             OR (c.phone != '' AND c.phone IS NOT NULL AND (c2.phone = c.phone OR c2.mobile = c.phone))
                             OR (c.mobile != '' AND c.mobile IS NOT NULL AND (c2.phone = c.mobile OR c2.mobile = c.mobile))
                         )
-                    ) as linked_profiles_count
-            FROM contacts c
+                    ) as linked_profiles_count,
+                    comp.tier as company_tier,
+                    CASE 
+                        WHEN comp.tier = 'referrer' THEN comp.name
+                        WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.name IS NOT NULL THEN comp.name
+                        ELSE NULL
+                    END as referrer_name,
+                    CASE 
+                        WHEN comp.tier = 'referrer' THEN comp.logo_url
+                        WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.logo_url IS NOT NULL THEN comp.logo_url
+                        ELSE NULL
+                    END as referrer_avatar
+             FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id
             LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND c.pipeline_status = ps.id) OR (c.stage_id IS NULL AND c.pipeline_status = ps.system_slug))
@@ -1652,7 +1685,18 @@ class ContactController {
                             UNION ALL
                             SELECT ee.entity_id as cid, e.approved_at as dt FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND e.status = 'approved' AND e.deleted_at IS NULL
                         ) as t WHERE t.cid = c.id
-                    ) as last_order_at
+                    ) as last_order_at,
+                    comp.tier as company_tier,
+                    CASE 
+                        WHEN comp.tier = 'referrer' THEN comp.name
+                        WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.name IS NOT NULL THEN comp.name
+                        ELSE NULL
+                    END as referrer_name,
+                    CASE 
+                        WHEN comp.tier = 'referrer' THEN comp.logo_url
+                        WHEN c.source IN ('gioi_thieu', 'ref', 'referral') AND comp.logo_url IS NOT NULL THEN comp.logo_url
+                        ELSE NULL
+                    END as referrer_avatar
             FROM contacts c
             LEFT JOIN companies comp ON c.company_id = comp.id
             LEFT JOIN users u ON c.owner_id = u.id

@@ -4,7 +4,7 @@ import {
   DollarSign, Plus, Search, Download, Truck, Coffee, Home,
   Briefcase, CreditCard, Tag, Eye, Pencil, Trash2, Loader2,
   CheckCircle2, Clock, Activity, TrendingDown, X, ArrowUpRight, ArrowDownRight, ChevronDown, Building2, Wallet, User, Package,
-  Upload, Paperclip, XCircle, Send, MessageSquare, Copy, Calendar, Bell, Info, MoreHorizontal, Filter, FileText, Landmark
+  Upload, Paperclip, XCircle, Send, MessageSquare, Copy, Calendar, Bell, Info, MoreHorizontal, Filter, FileText, Landmark, Receipt
 } from 'lucide-react';
 import { compressToWebP } from '../utils/imageCompress';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,6 +24,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { MentionInput } from '../components/ui/MentionInput';
 import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
 import { NoteDetailModal, NoteCell, renderLinkifiedText } from '../components/ui/NoteDetailModal';
+import { QrImageModal } from '../components/ui/QrImageModal';
+import { getVietQrUrl } from '../utils/vietnamBanks';
+import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 
 const PAGE_SIZE = 10;
 
@@ -122,6 +125,12 @@ export const ExpensesPage: React.FC = () => {
   // Unified delete confirmation under showConfirm store state
   const [viewItem, setViewItem] = useState<any>(null);
   const [activeNoteModal, setActiveNoteModal] = useState<{ notes: string; itemName?: string; title?: string } | null>(null);
+  const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ isOpen: boolean; items: AttachmentItem[]; initialIndex: number }>({
+    isOpen: false,
+    items: [],
+    initialIndex: 0
+  });
   const [rejectingItem, setRejectingItem] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [submittingReject, setSubmittingReject] = useState(false);
@@ -287,7 +296,6 @@ export const ExpensesPage: React.FC = () => {
 
   useEffect(() => {
     api.get('/users').then(r => { const d = r.data.data; setUsers(Array.isArray(d) ? d : (d?.items || [])); }).catch(() => {});
-    api.get('/contacts?limit=1000').then(r => setContacts(r.data.data?.items || r.data.data || [])).catch(() => {});
     api.get('/suppliers').then(r => { const d = r.data.data; setSuppliers(Array.isArray(d) ? d : (d?.items || [])); }).catch(() => {});
   }, []);
 
@@ -601,7 +609,7 @@ export const ExpensesPage: React.FC = () => {
                 {sDetails.iconContent}
               </div>
               <div style={{ width: '100%' }}>
-                <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Lập đề xuất & gửi</strong>
+                <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Bước 1: Lập đề xuất & gửi</strong>
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -661,7 +669,7 @@ export const ExpensesPage: React.FC = () => {
               </div>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Phê duyệt Cấp 1</strong>
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Bước 2: Phê duyệt (Cấp 1)</strong>
                   {sDetails.showBell && approverUser.id && (
                     <button 
                       onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
@@ -743,7 +751,7 @@ export const ExpensesPage: React.FC = () => {
               </div>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Phê duyệt Cấp 2</strong>
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Bước 3: Phê duyệt (Cấp 2)</strong>
                   {sDetails.showBell && approverUser.id && (
                     <button 
                       onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
@@ -825,7 +833,7 @@ export const ExpensesPage: React.FC = () => {
               </div>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Phê duyệt Cấp 3</strong>
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Bước 4: Phê duyệt (Cấp 3)</strong>
                   {sDetails.showBell && approverUser.id && (
                     <button 
                       onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
@@ -976,20 +984,21 @@ export const ExpensesPage: React.FC = () => {
           <h1 className="page-title">Chi phí Vận hành</h1>
           <p className="page-subtitle">Quản lý và theo dõi các khoản chi phí doanh nghiệp</p>
         </div>
-        <div style={{
+        <div className="no-wrap-mobile" style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
           width: isMobile ? '100%' : 'auto',
-          flexWrap: isMobile ? 'wrap' : 'nowrap'
+          flexWrap: 'nowrap'
         }}>
-          <div style={{ flex: isMobile ? '1 1 100%' : 'none', width: isMobile ? '100%' : 'auto' }}>
+          <div style={{ flex: isMobile ? 1 : 'none', minWidth: 0 }}>
             <PeriodFilter
               value={period}
               onChange={(p, r) => { setPeriod(p); setDateRange(r); setPage(1); }}
+              buttonStyle={{ minWidth: isMobile ? '0' : '160px', width: '100%', height: '40px', borderRadius: '10px' }}
             />
           </div>
-          <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto', alignItems: 'center' }}>
+          {!isMobile && (
             <button 
               className="btn secondary" 
               onClick={() => addToast('Đang xuất bảng kê...', 'info')} 
@@ -998,16 +1007,29 @@ export const ExpensesPage: React.FC = () => {
             >
               <Download size={16} />
             </button>
-            <button 
-              className="btn primary" 
-              onClick={openCreate} 
-              title="Nhập chi phí"
-              style={{ flex: isMobile ? 1 : 'none', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 700, padding: '0 16px' }}
-            >
-              <Plus size={16} />
-              <span>Nhập chi phí</span>
-            </button>
-          </div>
+          )}
+          <button 
+            className="btn primary" 
+            onClick={openCreate} 
+            title="Nhập chi phí"
+            style={{ 
+              flex: isMobile ? 1 : 'none', 
+              height: '40px', 
+              borderRadius: '10px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '6px', 
+              fontWeight: 700, 
+              padding: isMobile ? '0 12px' : '0 16px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              minWidth: 0
+            }}
+          >
+            <Plus size={16} />
+            <span>Nhập chi phí</span>
+          </button>
         </div>
       </div>
 
@@ -1889,38 +1911,127 @@ export const ExpensesPage: React.FC = () => {
                         );
                       }
 
+                      const expAmount = Number(viewItem.amount || 0);
+                      const expCurr = viewItem.currency || 'VND';
+
+                      const vAmt = Number(viewItem.vat_amount || 0);
+                      let vatRate = Number(viewItem.vat_rate || 0);
+                      let vatLabel = vatRate > 0 ? `${vatRate}%` : '';
+                      let amountBeforeVat = 0;
+                      let vatAmount = 0;
+
+                      if (vAmt > 0 && expAmount > vAmt) {
+                        const netAmt = expAmount - vAmt;
+                        vatRate = Math.round((vAmt / netAmt) * 100);
+                        vatLabel = `${vatRate}%`;
+                        amountBeforeVat = netAmt;
+                        vatAmount = vAmt;
+                      } else if (rawNotes.includes('VAT 8%') || rawNotes.includes('vat_8')) {
+                        vatRate = 8;
+                        vatLabel = '8%';
+                        amountBeforeVat = Math.round(expAmount / 1.08);
+                        vatAmount = expAmount - amountBeforeVat;
+                      } else if (rawNotes.includes('VAT 5%') || rawNotes.includes('vat_5')) {
+                        vatRate = 5;
+                        vatLabel = '5%';
+                        amountBeforeVat = Math.round(expAmount / 1.05);
+                        vatAmount = expAmount - amountBeforeVat;
+                      } else if (rawNotes.includes('VAT 10%') || rawNotes.includes('vat_10')) {
+                        vatRate = 10;
+                        vatLabel = '10%';
+                        amountBeforeVat = Math.round(expAmount / 1.10);
+                        vatAmount = expAmount - amountBeforeVat;
+                      } else if (vAmt > 0) {
+                        vatRate = 10;
+                        vatLabel = '10%';
+                        amountBeforeVat = Math.max(0, expAmount - vAmt);
+                        vatAmount = vAmt;
+                      }
+
+                      let docLabel = vatRate > 0 ? `Hóa đơn điện tử VAT ${vatLabel}` : 'Không có hóa đơn';
+                      if (rawNotes.includes('Hóa đơn bán lẻ')) {
+                        docLabel = 'Hóa đơn bán lẻ / Biên lai thu tiền';
+                      } else if (rawNotes.includes('Không có hóa đơn')) {
+                        docLabel = 'Không có hóa đơn (Giải trình nội bộ)';
+                      } else if (vatRate > 0) {
+                        docLabel = `Hóa đơn điện tử VAT ${vatLabel}`;
+                      }
+
                       return (
-                        <div style={{ 
-                          padding: '1.5rem', 
-                          background: 'linear-gradient(135deg, var(--color-primary-light, #fff5f5) 0%, #ffffff 100%)', 
-                          borderRadius: '16px', 
-                          border: '1px solid rgba(189, 29, 45, 0.12)',
-                          boxShadow: '0 4px 15px rgba(189, 29, 45, 0.02)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '1rem',
-                          flexShrink: 0
-                        }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              Tổng số tiền chi
-                            </span>
-                            <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-text)', margin: 0 }}>
-                              {FMT(viewItem.amount, viewItem.currency)}
-                            </h1>
-                            <p style={{ fontSize: '0.75rem', fontWeight: 600, fontStyle: 'italic', color: 'var(--color-text-muted)', margin: 0, marginTop: '2px' }}>
-                              Bằng chữ: {numberToVietnameseText(Number(viewItem.amount), viewItem.currency)}
-                            </p>
-                          </div>
-                          <div style={{
-                            background: 'rgba(189, 29, 45, 0.08)',
-                            padding: '12px',
-                            borderRadius: '12px',
-                            color: 'var(--color-primary)'
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+                          <div style={{ 
+                            padding: '1.5rem', 
+                            background: 'linear-gradient(135deg, var(--color-primary-light, #fff5f5) 0%, #ffffff 100%)', 
+                            borderRadius: '16px', 
+                            border: '1px solid rgba(189, 29, 45, 0.12)',
+                            boxShadow: '0 4px 15px rgba(189, 29, 45, 0.02)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '1rem'
                           }}>
-                            <Wallet size={24} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Tổng số tiền chi
+                                </span>
+                                {vatRate > 0 && (
+                                  <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
+                                    ✓ Đã gồm VAT {vatLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-text)', margin: 0 }}>
+                                {FMT(viewItem.amount, viewItem.currency)}
+                              </h1>
+                              <p style={{ fontSize: '0.75rem', fontWeight: 600, fontStyle: 'italic', color: 'var(--color-text-muted)', margin: 0, marginTop: '2px' }}>
+                                Bằng chữ: {numberToVietnameseText(Number(viewItem.amount), viewItem.currency)}
+                              </p>
+                            </div>
+                            <div style={{
+                              background: 'rgba(189, 29, 45, 0.08)',
+                              padding: '12px',
+                              borderRadius: '12px',
+                              color: 'var(--color-primary)'
+                            }}>
+                              <Wallet size={24} />
+                            </div>
                           </div>
+
+                          {vatRate > 0 && (
+                            <div style={{
+                              padding: '12px 16px',
+                              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03), rgba(59, 130, 246, 0.06))',
+                              border: '1px solid rgba(37, 99, 235, 0.18)',
+                              borderRadius: '12px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Receipt size={14} /> Chi tiết thuế VAT ({vatLabel})
+                                </span>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                                  Chứng từ: {docLabel}
+                                </span>
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '8px', paddingTop: '4px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Tiền trước VAT (Tiền hàng):</span>
+                                  <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>{FMT(amountBeforeVat, expCurr)}</strong>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Tiền thuế VAT ({vatLabel}):</span>
+                                  <strong style={{ fontSize: '0.85rem', color: '#2563eb' }}>{FMT(vatAmount, expCurr)}</strong>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Tổng thanh toán (sau VAT):</span>
+                                  <strong style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 800 }}>{FMT(expAmount, expCurr)}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -2187,75 +2298,121 @@ export const ExpensesPage: React.FC = () => {
 
                       if (!bankNum && !bankName) return null;
 
-                      return (
-                        <div style={{
-                          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                          color: '#ffffff',
-                          borderRadius: '16px',
-                          padding: '16px 20px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '12px',
-                          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.2)',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}>
+                      if (!bankNum) {
+                        return (
                           <div style={{
-                            position: 'absolute',
-                            top: '-40px',
-                            right: '-40px',
-                            width: '130px',
-                            height: '130px',
-                            borderRadius: '50%',
-                            background: 'radial-gradient(circle, rgba(59, 130, 246, 0.25) 0%, transparent 70%)',
-                            pointerEvents: 'none'
-                          }} />
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <Landmark size={18} style={{ color: '#60a5fa', flexShrink: 0 }} />
-                              <span style={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '0.02em', color: '#f8fafc' }}>
-                                {bankName || 'Chuyển khoản Ngân hàng'}
-                              </span>
-                            </div>
-                            <span style={{
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.08em',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              background: 'rgba(255, 255, 255, 0.1)',
-                              color: '#93c5fd'
-                            }}>
-                              Chuyển khoản 24/7
-                            </span>
-                          </div>
-
-                          <div style={{
+                            background: 'rgba(245, 158, 11, 0.08)',
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            borderRadius: '12px',
+                            padding: '12px 16px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            background: 'rgba(255, 255, 255, 0.08)',
-                            padding: '10px 14px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(255, 255, 255, 0.12)'
+                            gap: '10px'
                           }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                Số tài khoản (STK)
-                              </span>
-                              <span style={{
-                                fontSize: '1.25rem',
-                                fontWeight: 800,
-                                fontFamily: 'monospace',
-                                letterSpacing: '0.08em',
-                                color: '#38bdf8'
-                              }}>
-                                {bankNum || '—'}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Landmark size={18} style={{ color: '#d97706' }} />
+                              <span style={{ fontSize: '0.825rem', fontWeight: 700, color: '#b45309' }}>
+                                {bankName || 'Chuyển khoản'}: Chưa cập nhật số tài khoản nhận tiền
                               </span>
                             </div>
-                            {bankNum && (
+                            {bankOwner && (
+                              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e' }}>
+                                Người nhận: {bankOwner}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      const vietQrUrl = getVietQrUrl({
+                        bankBinOrCode: bankName || 'VCB',
+                        accountNumber: bankNum,
+                        accountName: bankOwner,
+                        amount: viewItem.amount,
+                        memo: viewItem.title || 'Thanh toan'
+                      });
+
+                      return (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 155px',
+                          gap: '12px',
+                          alignItems: 'stretch'
+                        }}>
+                          {/* Executive Brand Light Bank Card */}
+                          <div style={{
+                            background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
+                            border: '1px solid #fecaca',
+                            borderRadius: '14px',
+                            padding: '12px 14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                <div style={{
+                                  width: '26px',
+                                  height: '26px',
+                                  borderRadius: '6px',
+                                  background: '#ffffff',
+                                  border: '1px solid #fecaca',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0
+                                }}>
+                                  <Landmark size={14} style={{ color: '#dc2626' }} />
+                                </div>
+                                <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={bankName || 'Chuyển khoản Ngân hàng'}>
+                                  {bankName || 'Chuyển khoản Ngân hàng'}
+                                </span>
+                              </div>
+                              <span style={{
+                                fontSize: '0.6rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em',
+                                padding: '2px 6px',
+                                borderRadius: '5px',
+                                background: '#ffffff',
+                                color: '#dc2626',
+                                border: '1px solid #fecaca',
+                                flexShrink: 0
+                              }}>
+                                Chuyển khoản 24/7
+                              </span>
+                            </div>
+
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              background: '#ffffff',
+                              padding: '7px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid #fecaca',
+                              boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                            }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                                  Số tài khoản (STK)
+                                </span>
+                                <span style={{
+                                  fontSize: '1.05rem',
+                                  fontWeight: 800,
+                                  fontFamily: 'monospace',
+                                  letterSpacing: '0.06em',
+                                  color: '#dc2626'
+                                }}>
+                                  {bankNum}
+                                </span>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2265,39 +2422,81 @@ export const ExpensesPage: React.FC = () => {
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '7px 12px',
-                                  borderRadius: '8px',
-                                  background: 'rgba(255, 255, 255, 0.15)',
+                                  gap: '4px',
+                                  padding: '5px 9px',
+                                  borderRadius: '6px',
+                                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                                   color: '#ffffff',
                                   border: 'none',
                                   cursor: 'pointer',
                                   fontWeight: 700,
-                                  fontSize: '0.78rem',
-                                  transition: 'all 0.2s ease'
+                                  fontSize: '0.7rem',
+                                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                                  transition: 'all 0.2s ease',
+                                  flexShrink: 0
                                 }}
                               >
-                                <Copy size={14} />
+                                <Copy size={12} />
                                 <span>Sao chép</span>
                               </button>
-                            )}
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '4px' }}>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                                  Tên người thụ hưởng
+                                </span>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 750, letterSpacing: '0.01em', color: '#0f172a', marginTop: '1px', textTransform: 'uppercase', lineHeight: 1.25 }}>
+                                  {bankOwner || '—'}
+                                </div>
+                              </div>
+                              {bankBranch && (
+                                <div style={{ fontSize: '0.65rem', color: '#64748b', textAlign: 'right', flexShrink: 0 }}>
+                                  Chi nhánh: <span style={{ color: '#1e293b', fontWeight: 600 }}>{bankBranch}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '6px' }}>
-                            <div>
-                              <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                Tên người thụ hưởng
-                              </span>
-                              <div style={{ fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.04em', color: '#f1f5f9', marginTop: '2px', textTransform: 'uppercase' }}>
-                                {bankOwner || '—'}
-                              </div>
+                          {/* VietQR Card: Bigger QR, No title, No subtitle, Click to zoom */}
+                          {vietQrUrl && (
+                            <div
+                              onClick={() => setPreviewQrModalUrl(vietQrUrl)}
+                              title="Bấm để phóng to mã QR"
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #fecaca',
+                                borderRadius: '14px',
+                                padding: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                cursor: 'pointer',
+                                transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.02)';
+                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 38, 38, 0.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'none';
+                                e.currentTarget.style.boxShadow = '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)';
+                              }}
+                            >
+                              <img
+                                src={vietQrUrl}
+                                alt="VietQR Chuyển khoản"
+                                style={{
+                                  width: '100%',
+                                  maxWidth: '140px',
+                                  maxHeight: '140px',
+                                  objectFit: 'contain'
+                                }}
+                                loading="lazy"
+                              />
                             </div>
-                            {bankBranch && (
-                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-                                Chi nhánh: <span style={{ color: '#f1f5f9', fontWeight: 600 }}>{bankBranch}</span>
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -2493,16 +2692,94 @@ export const ExpensesPage: React.FC = () => {
                       }
 
                       if (cleanNotes) {
+                        const profileMatch = cleanNotes.match(/\[Hồ sơ chi phí\]:\s*([^\n]+)/i);
+                        const deptMatch = cleanNotes.match(/Phòng ban:\s*([^\n]+)/i);
+                        const targetMatch = cleanNotes.match(/Đối tượng:\s*([^\n]+)/i);
+                        const beneficiaryMatch = cleanNotes.match(/Thụ hưởng[^:]*:\s*([^\n]+)/i);
+                        const methodMatch = cleanNotes.match(/Hình thức:\s*([^\n]+)/i);
+                        const detailsMatch = cleanNotes.match(/Chi tiết:\s*([\s\S]+?)(?=\n\n|\n\[|$)/i);
+
+                        const hasStructuredFields = !!(profileMatch || deptMatch || targetMatch || beneficiaryMatch || methodMatch || detailsMatch);
+
+                        let remainingNotes = cleanNotes
+                          .replace(/\[Hồ sơ chi phí\]:[^\n]*/gi, '')
+                          .replace(/Phòng ban:[^\n]*/gi, '')
+                          .replace(/Đối tượng:[^\n]*/gi, '')
+                          .replace(/Thụ hưởng[^:]*:[^\n]*/gi, '')
+                          .replace(/Hình thức:[^\n]*/gi, '')
+                          .replace(/Chi tiết:[\s\S]+?(?=\n\n|\n\[|$)/gi, '')
+                          .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*?(?=\n\n|$)/gi, '')
+                          .trim();
+
+                        if (hasStructuredFields) {
+                          return (
+                            <div className="card" style={{
+                              background: 'var(--color-surface)',
+                              border: '1px solid var(--color-border-light)',
+                              borderRadius: '16px',
+                              padding: '1.5rem',
+                              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '12px'
+                            }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>{profileMatch ? profileMatch[1].trim() : 'Thông tin hồ sơ chi phí'}</span>
+                                {methodMatch && (
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 700, background: 'var(--color-bg-secondary)', padding: '2px 8px', borderRadius: '6px' }}>
+                                    {methodMatch[1].trim()}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '12px' }}>
+                                {deptMatch && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Phòng ban</span>
+                                    <div style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--color-text)' }}>{deptMatch[1].trim()}</div>
+                                  </div>
+                                )}
+                                {targetMatch && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Đối tượng thanh toán</span>
+                                    <div style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--color-text)' }}>{targetMatch[1].trim()}</div>
+                                  </div>
+                                )}
+                                {beneficiaryMatch && (
+                                  <div style={{ gridColumn: isMobile ? '1' : 'span 2', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Đối tượng thụ hưởng</span>
+                                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '6px 10px', borderRadius: '6px' }}>{beneficiaryMatch[1].trim()}</div>
+                                  </div>
+                                )}
+                                {detailsMatch && (
+                                  <div style={{ gridColumn: isMobile ? '1' : 'span 2', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Chi tiết đề xuất</span>
+                                    <div style={{ fontSize: '0.825rem', color: 'var(--color-text)', background: 'var(--color-bg-secondary)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{detailsMatch[1].trim()}</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {remainingNotes && (
+                                <div style={{ marginTop: '6px', paddingTop: '8px', borderTop: '1px dashed var(--color-border-light)', fontSize: '0.8rem', color: 'var(--color-text-muted)', whiteSpace: 'pre-wrap' }}>
+                                  <span style={{ fontWeight: 700, display: 'block', marginBottom: '2px', fontSize: '0.7rem', textTransform: 'uppercase' }}>Ghi chú thêm:</span>
+                                  {remainingNotes}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
                         return (
                           <div style={{ 
                             padding: '1.25rem', 
                             background: 'rgba(245, 158, 11, 0.05)', 
                             border: '1px solid rgba(245, 158, 11, 0.15)',
                             borderLeft: '4px solid #f59e0b', 
-                            borderRadius: '0px', 
+                            borderRadius: '8px', 
                             fontSize: '0.825rem', 
                             color: 'var(--color-warning-dark)',
-                            lineHeight: 1.45
+                            lineHeight: 1.45,
+                            whiteSpace: 'pre-wrap'
                           }}>
                             <span style={{ fontWeight: 800, display: 'block', marginBottom: '4px', fontSize: '0.72rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Ghi chú / Thông tin thêm</span>
                             {cleanNotes}
@@ -2619,6 +2896,22 @@ export const ExpensesPage: React.FC = () => {
 
                       if (extractedImgs.length === 0 && !viewItem.refund_image_url) return null;
 
+                      const allGalleryItems: AttachmentItem[] = [
+                        ...extractedImgs.map((imgSrc, i) => {
+                          const isPdf = /\.pdf($|\?)/i.test(imgSrc);
+                          return {
+                            url: formatImgUrl(imgSrc),
+                            name: imgSrc.split('/').pop()?.split('?')[0] || `Chứng từ #${i + 1}`,
+                            type: (isPdf ? 'pdf' : 'image') as 'pdf' | 'image'
+                          };
+                        }),
+                        ...(viewItem.refund_image_url ? [{
+                          url: formatImgUrl(viewItem.refund_image_url),
+                          name: viewItem.refund_image_url.split('/').pop()?.split('?')[0] || 'Ủy nhiệm chi / Chuyển khoản',
+                          type: (/\.pdf($|\?)/i.test(viewItem.refund_image_url) ? 'pdf' : 'image') as 'pdf' | 'image'
+                        }] : [])
+                      ];
+
                       return (
                         <div style={{ 
                           display: 'flex', 
@@ -2641,36 +2934,108 @@ export const ExpensesPage: React.FC = () => {
                           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
                             {extractedImgs.map((imgSrc, idx) => {
                               const fullImg = formatImgUrl(imgSrc);
+                              const isPdf = /\.pdf($|\?)/i.test(imgSrc);
+                              const fileName = imgSrc.split('/').pop()?.split('?')[0] || `Chứng từ #${idx + 1}`;
+
                               return (
                                 <div key={`page-exp-img-${idx}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-                                    Ảnh hóa đơn {extractedImgs.length > 1 ? `#${idx + 1}` : 'đề xuất'}:
+                                    {isPdf ? 'Tệp PDF đính kèm:' : `Ảnh hóa đơn ${extractedImgs.length > 1 ? `#${idx + 1}` : 'đề xuất'}:`}
                                   </span>
-                                  <div 
-                                    onClick={() => window.open(fullImg, '_blank')}
-                                    style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.opacity = '0.9';
-                                      e.currentTarget.style.transform = 'translateY(-2px)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.opacity = '1';
-                                      e.currentTarget.style.transform = 'translateY(0)';
-                                    }}
-                                  >
-                                    <img 
-                                      src={fullImg} 
-                                      alt={`Hóa đơn ${idx + 1}`} 
-                                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-                                      onError={(e) => {
-                                        const target = e.currentTarget;
-                                        if (!target.dataset.tried) {
-                                          target.dataset.tried = '1';
-                                          target.src = `/backend/${imgSrc.replace(/^\/?(backend\/)?/, '')}`;
-                                        }
+                                  {isPdf ? (
+                                    <div
+                                      onClick={() => setLightboxState({
+                                        isOpen: true,
+                                        items: allGalleryItems,
+                                        initialIndex: idx
+                                      })}
+                                      style={{
+                                        border: '1px solid var(--color-border-light)',
+                                        borderRadius: '12px',
+                                        padding: '16px',
+                                        height: '140px',
+                                        background: 'var(--color-bg-secondary)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: 'var(--shadow-sm)',
+                                        textAlign: 'center'
                                       }}
-                                    />
-                                  </div>
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.opacity = '0.92';
+                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                        e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.opacity = '1';
+                                        e.currentTarget.style.transform = 'translateY(0)';
+                                        e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                                      }}
+                                    >
+                                      <div style={{
+                                        width: '40px',
+                                        height: '40px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(239, 68, 68, 0.12)',
+                                        color: '#ef4444',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                      }}>
+                                        <FileText size={22} />
+                                      </div>
+                                      <div style={{
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        color: 'var(--color-text)',
+                                        maxWidth: '100%',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        padding: '0 4px'
+                                      }} title={fileName}>
+                                        {fileName}
+                                      </div>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                                        Nhấn để xem PDF ↗
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div 
+                                      onClick={() => setLightboxState({
+                                        isOpen: true,
+                                        items: allGalleryItems,
+                                        initialIndex: idx
+                                      })}
+                                      title="Nhấp để mở xem ảnh kích thước đầy đủ"
+                                      style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)', position: 'relative' }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.transform = 'scale(1.02)';
+                                        e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.transform = 'none';
+                                        e.currentTarget.style.borderColor = 'var(--color-border-light)';
+                                      }}
+                                    >
+                                      <img 
+                                        src={fullImg} 
+                                        alt={`Hóa đơn ${idx + 1}`} 
+                                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                                        onError={(e) => {
+                                          const target = e.currentTarget;
+                                          if (!target.dataset.tried) {
+                                            target.dataset.tried = '1';
+                                            target.src = `/backend/${imgSrc.replace(/^\/?(backend\/)?/, '')}`;
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -2680,17 +3045,21 @@ export const ExpensesPage: React.FC = () => {
                                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>Ủy nhiệm chi / Chuyển khoản:</span>
                                 <div 
                                   onClick={() => {
-                                    const imgLink = formatImgUrl(viewItem.refund_image_url);
-                                    window.open(imgLink, '_blank');
+                                    setLightboxState({
+                                      isOpen: true,
+                                      items: allGalleryItems,
+                                      initialIndex: extractedImgs.length
+                                    });
                                   }}
+                                  title="Nhấp để mở xem ảnh ủy nhiệm chi"
                                   style={{ border: '1px solid var(--color-border-light)', borderRadius: '12px', overflow: 'hidden', height: '140px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'var(--shadow-sm)' }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.opacity = '0.9';
-                                    e.currentTarget.style.transform = 'translateY(-2px)';
+                                    e.currentTarget.style.transform = 'scale(1.02)';
+                                    e.currentTarget.style.borderColor = 'var(--color-primary)';
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.opacity = '1';
-                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.transform = 'none';
+                                    e.currentTarget.style.borderColor = 'var(--color-border-light)';
                                   }}
                                 >
                                   <img 
@@ -3036,7 +3405,7 @@ export const ExpensesPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-                  {reminderTargetUser && (
+                  {reminderTargetUser && createPortal(
                     <div style={{
                       position: 'fixed',
                       top: 0,
@@ -3044,10 +3413,11 @@ export const ExpensesPage: React.FC = () => {
                       right: 0,
                       bottom: 0,
                       background: 'rgba(0, 0, 0, 0.4)',
+                      backdropFilter: 'blur(4px)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      zIndex: 35000
+                      zIndex: 2000000
                     }} onClick={() => setReminderTargetUser(null)}>
                       <div style={{
                         background: 'var(--color-surface)',
@@ -3126,7 +3496,7 @@ export const ExpensesPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                  )}
+                  , document.body)}
               </motion.div>
             </div>
           )}
@@ -3200,6 +3570,19 @@ export const ExpensesPage: React.FC = () => {
         title={activeNoteModal?.title || 'Ghi chú / Mục đích sử dụng'}
         itemName={activeNoteModal?.itemName}
         notes={activeNoteModal?.notes || ''}
+      />
+
+      <QrImageModal
+        isOpen={!!previewQrModalUrl}
+        qrUrl={previewQrModalUrl}
+        onClose={() => setPreviewQrModalUrl(null)}
+      />
+
+      <AttachmentLightboxModal
+        isOpen={lightboxState.isOpen}
+        onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
+        items={lightboxState.items}
+        initialIndex={lightboxState.initialIndex}
       />
     </div>
   );

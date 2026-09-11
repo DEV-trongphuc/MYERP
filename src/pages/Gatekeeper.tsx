@@ -7,6 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { fetchAPI, getDefaultDateFilter } from '../utils/api';
+import { isMarketing } from '../utils/roleUtils';
 import toast from 'react-hot-toast';
 import {
   ShieldAlert, RefreshCw, Filter, Zap, Trash2, Plus,
@@ -517,7 +518,7 @@ const GatekeeperInner = ({ isActive, searchParams, setSearchParams }: { isActive
     }
   };
   const { user } = useAuth();
-  const isUserAdmin = user && ['admin', 'superadmin', 'super_admin'].includes(user.role);
+  const isUserAdmin = user && (['admin', 'superadmin', 'super_admin'].includes(user.role) || isMarketing(user));
   const isReadOnly = user?.role === 'director';
   const navigate = useNavigate();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {

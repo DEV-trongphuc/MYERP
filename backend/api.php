@@ -908,6 +908,64 @@ function isManagerOfConsultant($conn, $managerUserId, $consultantId)
     return $isManaged;
 }
 
+function isMarketingUser($conn, $decodedUser)
+{
+    if (!$decodedUser) return false;
+    $role = $decodedUser['role'] ?? '';
+    if ($role === 'marketing') return true;
+
+    $userId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
+    if ($userId <= 0) return false;
+
+    try {
+        // Check user info in users table
+        $stmt = $conn->prepare("SELECT u.role, u.team_id, u.job_title, u.address, t.name as team_name 
+                               FROM users u 
+                               LEFT JOIN teams t ON u.team_id = t.id 
+                               WHERE u.id = ? LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($row) {
+                if ($row['role'] === 'marketing') return true;
+                if ((int)($row['team_id'] ?? 0) === 3) return true;
+                $erpTitle = '';
+                $erpDept = '';
+                if (!empty($row['address'])) {
+                    $addr = json_decode($row['address'], true);
+                    if (is_array($addr)) {
+                        $erpTitle = $addr['erp_profile']['job_title'] ?? '';
+                        $erpDept = $addr['erp_profile']['department'] ?? '';
+                    }
+                }
+                $combined = mb_strtolower(($row['job_title'] ?? '') . ' ' . $erpTitle . ' ' . $erpDept . ' ' . ($row['team_name'] ?? ''));
+                if (strpos($combined, 'marketing') !== false) return true;
+            }
+        }
+
+        // Also check if user is leader of a marketing team
+        $stmtT = $conn->prepare("SELECT id, name FROM teams WHERE leader_id = ?");
+        if ($stmtT) {
+            $stmtT->bind_param("i", $userId);
+            $stmtT->execute();
+            $resT = $stmtT->get_result();
+            while ($tRow = $resT->fetch_assoc()) {
+                if ((int)$tRow['id'] === 3 || stripos($tRow['name'], 'marketing') !== false) {
+                    $stmtT->close();
+                    return true;
+                }
+            }
+            $stmtT->close();
+        }
+    } catch (Throwable $e) {
+        error_log("Error in isMarketingUser: " . $e->getMessage());
+    }
+
+    return false;
+}
+
 function notifyLeaveChange($conn, $consultantId, $startDate, $endDate, $type = 'ADD')
 {
     // 1. Get consultant name & team leader info
@@ -3236,137 +3294,147 @@ switch ($action) {
             $stmtContactsCount->close();
         }
 
-        // 1. DATA LỖI & TICKET
-        $stmtErrorTicket = $conn->prepare("
-            SELECT COUNT(DISTINCT c.id) as cnt 
-            FROM contacts c 
-            WHERE $contactsWhereClause 
-              AND (
-                EXISTS (
-                    SELECT 1 FROM data_reports dr 
-                    JOIN leads l2 ON dr.lead_id = l2.id 
-                    WHERE l2.person_id = c.person_id
-                )
-                OR EXISTS (
-                    SELECT 1 FROM leads l2 
-                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                    JOIN users u2 ON u2.id = c.owner_id
-                    JOIN consultants cons2 ON u2.email = cons2.email
-                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                )
-              )
-        ");
+        // Tab counts (Data lỗi, Databank, Được chia, Hợp tác)
         $errorTicketCount = 0;
-        if ($stmtErrorTicket) {
-            $stmtErrorTicket->bind_param($contactsTypes, ...$contactsParams);
-            $stmtErrorTicket->execute();
-            $errorTicketCount = (int) ($stmtErrorTicket->get_result()->fetch_assoc()['cnt'] ?? 0);
-            $stmtErrorTicket->close();
-        }
-
-        // TỪ DATABANK
-        $stmtDatabank = $conn->prepare("
-            SELECT COUNT(DISTINCT c.id) as cnt 
-            FROM contacts c 
-            WHERE $contactsWhereClause 
-              AND NOT (
-                EXISTS (
-                    SELECT 1 FROM data_reports dr 
-                    JOIN leads l2 ON dr.lead_id = l2.id 
-                    WHERE l2.person_id = c.person_id
-                )
-                OR EXISTS (
-                    SELECT 1 FROM leads l2 
-                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                    JOIN users u2 ON u2.id = c.owner_id
-                    JOIN consultants cons2 ON u2.email = cons2.email
-                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                )
-              )
-              AND (c.source = 'databank' OR EXISTS (
-                  SELECT 1 FROM leads l2 
-                  JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                  JOIN users u2 ON u2.id = c.owner_id
-                  JOIN consultants cons2 ON u2.email = cons2.email
-                  WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status = 'databank_claim'
-              ))
-        ");
         $databankCount = 0;
-        if ($stmtDatabank) {
-            $stmtDatabank->bind_param($contactsTypes, ...$contactsParams);
-            $stmtDatabank->execute();
-            $databankCount = (int) ($stmtDatabank->get_result()->fetch_assoc()['cnt'] ?? 0);
-            $stmtDatabank->close();
-        }
-
-        // ĐƯỢC CHIA (Exclude coop contacts)
-        $stmtDistributed = $conn->prepare("
-            SELECT COUNT(DISTINCT c.id) as cnt 
-            FROM contacts c 
-            WHERE $contactsWhereClause 
-              AND NOT (
-                EXISTS (
-                    SELECT 1 FROM data_reports dr 
-                    JOIN leads l2 ON dr.lead_id = l2.id 
-                    WHERE l2.person_id = c.person_id
-                )
-                OR EXISTS (
-                    SELECT 1 FROM leads l2 
-                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                    JOIN users u2 ON u2.id = c.owner_id
-                    JOIN consultants cons2 ON u2.email = cons2.email
-                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                )
-              )
-              AND c.source NOT IN ('databank', 'ca_nhan', 'gioi_thieu')
-              AND (c.collaborator_ids IS NULL OR c.collaborator_ids = '')
-              AND EXISTS (
-                  SELECT 1 FROM leads l2 
-                  JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                  JOIN users u2 ON u2.id = c.owner_id
-                  JOIN consultants cons2 ON u2.email = cons2.email
-                  WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
-              )
-        ");
         $distributedCount = 0;
-        if ($stmtDistributed) {
-            $stmtDistributed->bind_param($contactsTypes, ...$contactsParams);
-            $stmtDistributed->execute();
-            $distributedCount = (int) ($stmtDistributed->get_result()->fetch_assoc()['cnt'] ?? 0);
-            $stmtDistributed->close();
-        }
-
-        // HỢP TÁC (COOP)
-        $stmtCoop = $conn->prepare("
-            SELECT COUNT(DISTINCT c.id) as cnt 
-            FROM contacts c 
-            WHERE $contactsWhereClause 
-              AND NOT (
-                EXISTS (
-                    SELECT 1 FROM data_reports dr 
-                    JOIN leads l2 ON dr.lead_id = l2.id 
-                    WHERE l2.person_id = c.person_id
-                )
-                OR EXISTS (
-                    SELECT 1 FROM leads l2 
-                    JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
-                    JOIN users u2 ON u2.id = c.owner_id
-                    JOIN consultants cons2 ON u2.email = cons2.email
-                    WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
-                )
-              )
-              AND (FIND_IN_SET(?, c.collaborator_ids) OR (c.owner_id = ? AND c.collaborator_ids IS NOT NULL AND c.collaborator_ids != ''))
-        ");
         $coopCount = 0;
-        if ($stmtCoop) {
-            $coopParams = $contactsParams;
-            $coopParams[] = $saleUserId;
-            $coopParams[] = $saleUserId;
-            $coopTypes = $contactsTypes . "ii";
-            $stmtCoop->bind_param($coopTypes, ...$coopParams);
-            $stmtCoop->execute();
-            $coopCount = (int) ($stmtCoop->get_result()->fetch_assoc()['cnt'] ?? 0);
-            $stmtCoop->close();
+
+        // Chỉ tính toán các tab chi tiết khi ở màn hình danh sách liên hệ (limit <= 100 và không bỏ qua counts)
+        $shouldComputeTabCounts = ($limit <= 100) && empty($_GET['skip_counts']);
+        if ($shouldComputeTabCounts) {
+            try {
+                // 1. DATA LỖI & TICKET
+                $stmtErrorTicket = $conn->prepare("
+                    SELECT COUNT(DISTINCT c.id) as cnt 
+                    FROM contacts c 
+                    WHERE $contactsWhereClause 
+                      AND (
+                        EXISTS (
+                            SELECT 1 FROM data_reports dr 
+                            JOIN leads l2 ON dr.lead_id = l2.id 
+                            WHERE l2.person_id = c.person_id
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM leads l2 
+                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                            JOIN users u2 ON u2.id = c.owner_id
+                            JOIN consultants cons2 ON u2.email = cons2.email
+                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                        )
+                      )
+                ");
+                if ($stmtErrorTicket) {
+                    $stmtErrorTicket->bind_param($contactsTypes, ...$contactsParams);
+                    $stmtErrorTicket->execute();
+                    $errorTicketCount = (int) ($stmtErrorTicket->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $stmtErrorTicket->close();
+                }
+
+                // 2. TỪ DATABANK
+                $stmtDatabank = $conn->prepare("
+                    SELECT COUNT(DISTINCT c.id) as cnt 
+                    FROM contacts c 
+                    WHERE $contactsWhereClause 
+                      AND NOT (
+                        EXISTS (
+                            SELECT 1 FROM data_reports dr 
+                            JOIN leads l2 ON dr.lead_id = l2.id 
+                            WHERE l2.person_id = c.person_id
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM leads l2 
+                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                            JOIN users u2 ON u2.id = c.owner_id
+                            JOIN consultants cons2 ON u2.email = cons2.email
+                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                        )
+                      )
+                      AND (c.source = 'databank' OR EXISTS (
+                          SELECT 1 FROM leads l2 
+                          JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                          JOIN users u2 ON u2.id = c.owner_id
+                          JOIN consultants cons2 ON u2.email = cons2.email
+                          WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status = 'databank_claim'
+                      ))
+                ");
+                if ($stmtDatabank) {
+                    $stmtDatabank->bind_param($contactsTypes, ...$contactsParams);
+                    $stmtDatabank->execute();
+                    $databankCount = (int) ($stmtDatabank->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $stmtDatabank->close();
+                }
+
+                // 3. ĐƯỢC CHIA (Exclude coop contacts)
+                $stmtDistributed = $conn->prepare("
+                    SELECT COUNT(DISTINCT c.id) as cnt 
+                    FROM contacts c 
+                    WHERE $contactsWhereClause 
+                      AND NOT (
+                        EXISTS (
+                            SELECT 1 FROM data_reports dr 
+                            JOIN leads l2 ON dr.lead_id = l2.id 
+                            WHERE l2.person_id = c.person_id
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM leads l2 
+                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                            JOIN users u2 ON u2.id = c.owner_id
+                            JOIN consultants cons2 ON u2.email = cons2.email
+                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                        )
+                      )
+                      AND c.source NOT IN ('databank', 'ca_nhan', 'gioi_thieu')
+                      AND (c.collaborator_ids IS NULL OR c.collaborator_ids = '')
+                      AND EXISTS (
+                          SELECT 1 FROM leads l2 
+                          JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                          JOIN users u2 ON u2.id = c.owner_id
+                          JOIN consultants cons2 ON u2.email = cons2.email
+                          WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('assigned', 'compensation', 'rule_6_month', 'pending_work_hours', 'fallback', 'success', 'reminder')
+                      )
+                ");
+                if ($stmtDistributed) {
+                    $stmtDistributed->bind_param($contactsTypes, ...$contactsParams);
+                    $stmtDistributed->execute();
+                    $distributedCount = (int) ($stmtDistributed->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $stmtDistributed->close();
+                }
+
+                // 4. HỢP TÁC (COOP)
+                $stmtCoop = $conn->prepare("
+                    SELECT COUNT(DISTINCT c.id) as cnt 
+                    FROM contacts c 
+                    WHERE $contactsWhereClause 
+                      AND NOT (
+                        EXISTS (
+                            SELECT 1 FROM data_reports dr 
+                            JOIN leads l2 ON dr.lead_id = l2.id 
+                            WHERE l2.person_id = c.person_id
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM leads l2 
+                            JOIN distribution_logs dl2 ON dl2.lead_id = l2.id 
+                            JOIN users u2 ON u2.id = c.owner_id
+                            JOIN consultants cons2 ON u2.email = cons2.email
+                            WHERE l2.person_id = c.person_id AND dl2.assigned_to = cons2.id AND dl2.status IN ('duplicate', 'error', 'blacklisted')
+                        )
+                      )
+                      AND (FIND_IN_SET(?, c.collaborator_ids) OR (c.owner_id = ? AND c.collaborator_ids IS NOT NULL AND c.collaborator_ids != ''))
+                ");
+                if ($stmtCoop) {
+                    $coopParams = $contactsParams;
+                    $coopParams[] = $saleUserId;
+                    $coopParams[] = $saleUserId;
+                    $coopTypes = $contactsTypes . "ii";
+                    $stmtCoop->bind_param($coopTypes, ...$coopParams);
+                    $stmtCoop->execute();
+                    $coopCount = (int) ($stmtCoop->get_result()->fetch_assoc()['cnt'] ?? 0);
+                    $stmtCoop->close();
+                }
+            } catch (\Throwable $countEx) {
+                error_log("Error computing contacts tab counts: " . $countEx->getMessage());
+            }
         }
 
         // TỰ NHẬP
@@ -6091,6 +6159,7 @@ switch ($action) {
                 c.role, 
                 c.team_id, 
                 c.avatar_url AS avatar, 
+                c.signature_url,
                 c.zalo_chat_id, 
                 c.telegram_chat_id, 
                 c.job_title, 
@@ -9287,18 +9356,20 @@ switch ($action) {
         $expensesCount = 0;
         $salesPendingSignCount = 0;
 
+        $isMarketing = isMarketingUser($conn, $decodedUser);
         $isGlobalAdmin = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
         $isHR = ($role === 'hr');
         $isAccountant = ($role === 'accountant');
         $isManager = ($role === 'manager');
-        $isAdminOrManager = $isGlobalAdmin || $isManager || $isHR || $isAccountant;
+        $isAdminOrManager = $isGlobalAdmin || $isManager || $isHR || $isAccountant || $isMarketing;
 
         if ($isAdminOrManager) {
             // 1. Tickets (Reports) count (Accountant does not manage data error tickets)
             if (!$isAccountant) {
                 $isManager = ($role === 'manager');
                 $managedConsultantIds = [];
-                if ($isManager) {
+                // Sales managers are scoped by consultants in their team. Marketing users oversee all marketing leads.
+                if ($isManager && !$isMarketing) {
                     $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
                     $stmtM->bind_param("i", $userId);
                     $stmtM->execute();
@@ -9309,14 +9380,14 @@ switch ($action) {
                     $stmtM->close();
                 }
 
-                if (!$isManager || !empty($managedConsultantIds)) {
+                if ($isMarketing || !$isManager || !empty($managedConsultantIds)) {
                     $sqlRep = "SELECT COUNT(*) FROM data_reports r WHERE r.status = 'pending'";
-                    if ($isManager) {
+                    if ($isManager && !$isMarketing) {
                         $placeholders = implode(',', array_fill(0, count($managedConsultantIds), '?'));
                         $sqlRep .= " AND r.consultant_id IN ($placeholders)";
                     }
                     $stmtRep = $conn->prepare($sqlRep);
-                    if ($isManager) {
+                    if ($isManager && !$isMarketing) {
                         $stmtRep->bind_param(str_repeat("i", count($managedConsultantIds)), ...$managedConsultantIds);
                     }
                     $stmtRep->execute();
@@ -9528,8 +9599,9 @@ switch ($action) {
         }
 
         $managedConsultantIds = [];
+        $isMarketing = isMarketingUser($conn, $decodedUser);
         $isManager = (isset($decodedUser['role']) && $decodedUser['role'] === 'manager');
-        if ($isManager) {
+        if ($isManager && !$isMarketing) {
             $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
             $stmtM = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
             $stmtM->bind_param("i", $currentUserId);
@@ -9625,7 +9697,7 @@ switch ($action) {
             $types .= "s";
         }
 
-        if ($isManager && $consultantId <= 0 && ($consultant === '' || $consultant === 'all')) {
+        if ($isManager && !$isMarketing && $consultantId <= 0 && ($consultant === '' || $consultant === 'all')) {
             $placeholders = implode(',', array_fill(0, count($managedConsultantIds), '?'));
             $conds[] = "r.consultant_id IN ($placeholders)";
             foreach ($managedConsultantIds as $mId) {
@@ -9893,7 +9965,7 @@ switch ($action) {
                 throw new Exception("Báo cáo không tồn tại hoặc đã được xử lý.");
             }
 
-            if ($decodedUser['role'] === 'manager') {
+            if ($decodedUser['role'] === 'manager' && !isMarketingUser($conn, $decodedUser)) {
                 $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
                 if (!isManagerOfConsultant($conn, $currentUserId, $report['consultant_id'])) {
                     throw new Exception("Bạn không có quyền duyệt báo cáo này.");
@@ -10396,7 +10468,7 @@ switch ($action) {
                 throw new Exception("Báo cáo không tồn tại hoặc đã được xử lý rồi.");
             }
 
-            if ($decodedUser['role'] === 'manager') {
+            if ($decodedUser['role'] === 'manager' && !isMarketingUser($conn, $decodedUser)) {
                 $currentUserId = (int)($decodedUser['user_id'] ?? $decodedUser['id'] ?? 0);
                 if (!isManagerOfConsultant($conn, $currentUserId, $report['consultant_id'])) {
                     throw new Exception("Bạn không có quyền từ chối báo cáo này.");
@@ -10573,11 +10645,12 @@ switch ($action) {
         $commonConds = [];
 
         // Scoping for GĐKD Dự án
+        $isMarketing = isMarketingUser($conn, $decodedUser);
         $isManager = (isset($decodedUser['role']) && $decodedUser['role'] === 'manager');
         $isDirector = (isset($decodedUser['role']) && $decodedUser['role'] === 'director');
         $isProjManager = false;
         $projIds = [];
-        if ($isManager) {
+        if ($isManager && !$isMarketing) {
             $pRes = $conn->query("SELECT id, manager_ids FROM projects");
             if ($pRes) {
                 while ($pRow = $pRes->fetch_assoc()) {
@@ -12724,7 +12797,7 @@ switch ($action) {
 
 
     case 'get_accounts':
-        $res = $conn->query("SELECT id, username, name, email, role, created_at, zalo_chat_id, telegram_chat_id, is_confirmed, last_login, avatar, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active, team_id FROM accounts ORDER BY created_at DESC");
+        $res = $conn->query("SELECT id, username, name, email, role, created_at, zalo_chat_id, telegram_chat_id, is_confirmed, last_login, avatar, signature_url, dob, gender, citizen_id, address, bank_name, bank_account, phone, is_active, team_id FROM accounts ORDER BY created_at DESC");
         $data = [];
         while ($row = $res->fetch_assoc()) {
             if (isset($row['role']) && $row['role'] === 'sales') {

@@ -5,7 +5,7 @@ import {
   ShoppingCart, Plus, Search, Filter, Calendar, 
   ChevronRight, ArrowUpRight, CheckCircle2, Clock, XCircle, Loader2,
   Truck, Package, Trash2, PlusCircle, MinusCircle, AlertCircle,
-  DollarSign, Building2, Users, User
+  DollarSign, Building2, Users, User, Bookmark
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -15,6 +15,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from './ui/Avatar';
 import { resolveTeamLeaderId } from '../utils/teamLeader';
+import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 
 interface Props {
   showModal: boolean;
@@ -52,6 +53,102 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
     approver_id_2: '',
     approver_id_3: ''
   });
+
+  const PO_DRAFT_KEY = 'myerp_po_create_draft';
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [existingDraft, setExistingDraft] = useState<any>(null);
+
+  // Check for saved draft when opening
+  useEffect(() => {
+    if (showModal) {
+      try {
+        const saved = localStorage.getItem(PO_DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && ((parsed.formData?.items && parsed.formData.items.length > 0) || parsed.formData?.notes || parsed.formData?.supplier_id)) {
+            setExistingDraft(parsed);
+          } else {
+            setExistingDraft(null);
+          }
+        } else {
+          setExistingDraft(null);
+        }
+      } catch {
+        setExistingDraft(null);
+      }
+    } else {
+      setShowExitConfirm(false);
+    }
+  }, [showModal]);
+
+  const isFormDirty = () => {
+    return Boolean(
+      (formData.items && formData.items.length > 0) ||
+      formData.notes?.trim() ||
+      (formData.supplier_id && formData.supplier_id !== defaultSupplierId)
+    );
+  };
+
+  const saveDraftToStorage = () => {
+    const payload = {
+      formData,
+      beneficiaryType,
+      selectedEmployeeId,
+      savedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(PO_DRAFT_KEY, JSON.stringify(payload));
+      setExistingDraft(payload);
+    } catch (e) {
+      console.error('Failed to save PO draft', e);
+    }
+  };
+
+  const handleSaveDraftAndExit = () => {
+    saveDraftToStorage();
+    addToast('Đã lưu bản nháp đơn nhập hàng PO thành công!', 'success');
+    setShowExitConfirm(false);
+    setShowModal(false);
+  };
+
+  const handleExplicitSaveDraft = () => {
+    saveDraftToStorage();
+    addToast('Đã lưu bản nháp đơn nhập hàng PO thành công!', 'success');
+  };
+
+  const handleDiscardAndExit = () => {
+    try {
+      localStorage.removeItem(PO_DRAFT_KEY);
+    } catch {}
+    setExistingDraft(null);
+    setShowExitConfirm(false);
+    setShowModal(false);
+  };
+
+  const handleRequestClose = () => {
+    if (isFormDirty()) {
+      setShowExitConfirm(true);
+    } else {
+      setShowModal(false);
+    }
+  };
+
+  const handleRestoreDraft = () => {
+    if (!existingDraft) return;
+    if (existingDraft.formData) setFormData(existingDraft.formData);
+    if (existingDraft.beneficiaryType) setBeneficiaryType(existingDraft.beneficiaryType);
+    if (existingDraft.selectedEmployeeId) setSelectedEmployeeId(existingDraft.selectedEmployeeId);
+    addToast('Đã khôi phục dữ liệu bản nháp đơn PO', 'info');
+    setExistingDraft(null);
+  };
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem(PO_DRAFT_KEY);
+    } catch {}
+    setExistingDraft(null);
+    addToast('Đã xóa bản nháp PO', 'info');
+  };
 
   // Default Director (Phạm Quang Vinh) and default Accountant for PO routing
   const defaultDirector = useMemo(() => {
@@ -267,6 +364,10 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
         approver_id_3: formData.approver_id_3 ? Number(formData.approver_id_3) : null
       });
       addToast('Đã tạo đơn nhập hàng mới', 'success');
+      try {
+        localStorage.removeItem(PO_DRAFT_KEY);
+      } catch {}
+      setExistingDraft(null);
       setShowModal(false);
       setBeneficiaryType('supplier');
       setSelectedEmployeeId('');
@@ -499,7 +600,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
       </div>
 
       {showModal && ReactDOM.createPortal(
-        <div className="overlay-backdrop" onClick={() => setShowModal(false)} style={{ zIndex: 9999 }}>
+        <div className="overlay-backdrop" onClick={handleRequestClose} style={{ zIndex: 9999 }}>
             <motion.div 
               className="modal-sheet modal-xl shadow-2xl"
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ duration: 0.2 }}
@@ -507,7 +608,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="modal-header" style={{ padding: '1.5rem 2rem', borderBottom: '1px solid var(--color-border-light)' }}>
+              <div className="modal-header" style={{ padding: '1.25rem 2rem', borderBottom: '1px solid var(--color-border-light)' }}>
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                     <ShoppingCart size={24} />
@@ -519,9 +620,29 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                     </p>
                   </div>
                 </div>
-                <button className="btn-icon" onClick={() => setShowModal(false)} style={{ width: '40px', height: '40px', borderRadius: '12px' }}>
-                  <XCircle size={22} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={handleExplicitSaveDraft}
+                    style={{
+                      height: '36px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      borderRadius: '10px'
+                    }}
+                    title="Lưu bản nháp đơn hàng"
+                  >
+                    <Bookmark size={15} />
+                    <span>Lưu nháp</span>
+                  </button>
+                  <button className="btn-icon" onClick={handleRequestClose} style={{ width: '40px', height: '40px', borderRadius: '12px' }}>
+                    <XCircle size={22} />
+                  </button>
+                </div>
               </div>
 
               {/* Body: 2 Columns */}
@@ -530,6 +651,64 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                 {/* Left Column: Form & Selected Items */}
                 <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', borderRight: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
                   <div style={{ padding: '1.25rem 1.5rem 80px 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    
+                    {/* Draft Notification Banner */}
+                    {existingDraft && (
+                      <div style={{
+                        padding: '0.75rem 1rem',
+                        borderRadius: '12px',
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        border: '1px solid rgba(245, 158, 11, 0.28)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--color-text)' }}>
+                          <Bookmark size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
+                          <span>
+                            Có 1 bản nháp đơn nhập hàng đã lưu lúc <strong>{existingDraft.savedAt ? new Date(existingDraft.savedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}</strong>
+                            {existingDraft.formData?.items?.length ? ` (${existingDraft.formData.items.length} sản phẩm)` : ''}.
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={handleRestoreDraft}
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              background: 'var(--color-primary)',
+                              color: '#fff',
+                              borderRadius: '8px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 6px rgba(163, 20, 34, 0.2)'
+                            }}
+                          >
+                            Khôi phục bản nháp
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearDraft}
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              background: 'transparent',
+                              color: 'var(--color-text-muted)',
+                              borderRadius: '8px',
+                              border: '1px solid var(--color-border)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Xóa nháp
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Settings Form */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1007,7 +1186,18 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                   </div>
                 ) : (
                   <>
-                    <button className="btn secondary" onClick={() => setShowModal(false)} disabled={isSubmitting}>Hủy bỏ</button>
+                    <button className="btn secondary" onClick={handleRequestClose} disabled={isSubmitting}>Hủy bỏ</button>
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      onClick={handleExplicitSaveDraft}
+                      disabled={isSubmitting}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      title="Lưu bản nháp đơn nhập hàng"
+                    >
+                      <Bookmark size={15} />
+                      <span>Lưu nháp</span>
+                    </button>
                     <button className="btn primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 2rem' }} onClick={handleSubmit} disabled={isSubmitting}>
                       {isSubmitting ? <Loader2 size={18} className="spin" /> : 'Xác nhận nhập hàng'}
                       {!isSubmitting && <ArrowUpRight size={18} />}
@@ -1019,6 +1209,17 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
           </div>,
           document.body
         )}
+
+      {/* Draft Exit Confirmation Modal */}
+      <DraftExitConfirmModal
+        isOpen={showExitConfirm}
+        onSaveDraft={handleSaveDraftAndExit}
+        onDiscard={handleDiscardAndExit}
+        onContinue={() => setShowExitConfirm(false)}
+        title="Lưu bản nháp đơn nhập hàng PO?"
+        message="Bạn có các thông tin đơn hàng đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
+        zIndex={10000050}
+      />
     </>
   );
 };

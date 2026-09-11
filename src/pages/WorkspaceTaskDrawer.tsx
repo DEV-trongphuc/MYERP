@@ -18,6 +18,7 @@ import styles from './EntityDrawer.module.css';
 import { Skeleton, StatRowSkeleton } from '../components/ui/Skeleton';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getUserDisplayRoleOrTitle } from '../utils/roleUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
 import { useUploadProgress } from '../contexts/UploadProgressContext';
@@ -42,23 +43,7 @@ interface WorkspaceTaskDrawerProps {
 
 const getRoleDisplayName = (user: any) => {
   if (!user) return '';
-  if (user.job_title) return user.job_title;
-  const roleMap: Record<string, string> = {
-    super_admin: 'Super Admin',
-    superadmin: 'Super Admin',
-    admin: 'Admin',
-    director: 'Giám đốc',
-    manager: 'Quản lý',
-    sales: 'Kinh doanh',
-    sale: 'Kinh doanh',
-    accountant: 'Kế toán',
-    hr: 'Nhân sự',
-    sale_admin: 'Sale Admin',
-    saleadmin: 'Sale Admin',
-    marketing: 'Marketing',
-    viewer: 'Viewer'
-  };
-  return roleMap[user.role?.toLowerCase()] || user.role || '';
+  return getUserDisplayRoleOrTitle(user);
 };
 
 // Module-level metadata cache to eliminate redundant network requests on every drawer open
@@ -2197,7 +2182,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         borderRadius: 0,
         overflow: 'hidden',
         boxShadow: isMobileOrTablet ? 'none' : '-10px 0 30px rgba(0,0,0,0.15)',
-        zIndex: zIndex || 1000200,
+        zIndex: zIndex || 2147483630,
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
@@ -4707,6 +4692,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   </div>
                   <CustomSelect
                     searchable
+                    showAvatars
                     options={contactOptions}
                     value={formData.contact_id ? String(formData.contact_id) : (formData.related_type === 'contact' && formData.related_id ? String(formData.related_id) : '')}
                     onChange={async val => {
@@ -6118,7 +6104,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 position: 'fixed',
                 inset: 0,
                 background: 'rgba(0,0,0,0.45)',
-                zIndex: zIndex ? zIndex - 100 : 1000100,
+                zIndex: zIndex ? zIndex - 1 : 2147483629,
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)'
               }}
@@ -6131,7 +6117,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           {/* Validation Warning Modal */}
           <AnimatePresence>
             {showValidationModal && (
-              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000400 }} onClick={() => setShowValidationModal(false)}>
+              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zIndex ? Math.min(zIndex + 5, 2147483647) : 2147483640 }} onClick={() => setShowValidationModal(false)}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
@@ -6185,7 +6171,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             {showUnsavedNewTaskPrompt && (
               <div 
                 className="overlay-backdrop" 
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000500 }} 
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640 }} 
                 onClick={() => setShowUnsavedNewTaskPrompt(false)}
               >
                 <motion.div 
@@ -6318,7 +6304,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           {/* Approval Success Modal */}
           <AnimatePresence>
             {showApprovalSuccessModal && (
-              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000400 }} onClick={() => setShowApprovalSuccessModal(null)}>
+              <div className="overlay-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640 }} onClick={() => setShowApprovalSuccessModal(null)}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                   onClick={e => e.stopPropagation()}
@@ -6385,7 +6371,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.65)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: 1000500,
+                  zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -6543,7 +6529,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.65)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: 1000500,
+                  zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -6636,7 +6622,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   inset: 0,
                   backgroundColor: 'rgba(0, 0, 0, 0.5)',
                   backdropFilter: 'blur(4px)',
-                  zIndex: 1000500,
+                  zIndex: zIndex ? Math.min(zIndex + 10, 2147483647) : 2147483640,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

@@ -921,18 +921,32 @@ class NotificationService {
                 $amt = (float)($payload['amount'] ?? 0);
                 $hasCost = $amt > 0;
                 $amountText = $hasCost ? number_format($amt, 0, ',', '.') . 'đ' : '';
-                $statusText = $isApproved ? 'ĐÃ DUYỆT' : 'TỪ CHỐI';
-                $statusTextLower = $isApproved ? 'chấp thuận' : 'từ chối';
+                $currentLvl = (int)($payload['level'] ?? 0);
+                $isComplete = !empty($payload['is_complete']);
+                $lvlSuffix = ($currentLvl > 0 && !$isComplete) ? " (Cấp $currentLvl)" : "";
+                
+                $statusText = $isApproved ? ($isComplete ? 'ĐÃ DUYỆT ĐỦ CẤP' : "ĐÃ DUYỆT$lvlSuffix") : "TỪ CHỐI$lvlSuffix";
+                $statusTextLower = $isApproved ? ($isComplete ? 'phê duyệt hoàn tất (đủ các cấp)' : "phê duyệt Cấp $currentLvl") : "từ chối" . ($currentLvl > 0 ? " ở Cấp $currentLvl" : "");
                 $rejectReason = $payload['reject_reason'] ?? $payload['reason'] ?? '';
                 $approverName = !empty($payload['approver_name']) ? trim($payload['approver_name']) : 'Người phê duyệt';
                 $refId = $payload['ref_id'] ?? $payload['id'] ?? '';
                 $procCode = !empty($payload['code']) ? $payload['code'] : (!empty($refId) ? "#EXP-" . $refId : '');
                 $codePrefix = !empty($procCode) ? "[$procCode] " : "";
 
+                $notifTitle = $isApproved 
+                    ? ($isComplete ? "{$codePrefix}Đề xuất đã được phê duyệt đủ các cấp: $titleText" : "{$codePrefix}Đề xuất đã được duyệt{$lvlSuffix}: $titleText")
+                    : "{$codePrefix}Đề xuất bị từ chối{$lvlSuffix}: $titleText";
+
+                $notifBody = $isApproved
+                    ? ($isComplete 
+                        ? "{$codePrefix}$approverName đã phê duyệt hoàn tất đề xuất \"$titleText\" của bạn (Đủ các cấp)."
+                        : "{$codePrefix}$approverName đã phê duyệt đề xuất \"$titleText\" của bạn ở Cấp $currentLvl. Đang chờ cấp tiếp theo duyệt.")
+                    : "{$codePrefix}$approverName đã từ chối đề xuất \"$titleText\" của bạn" . ($currentLvl > 0 ? " ở Cấp $currentLvl." : ".") . (!empty($rejectReason) ? " Lý do: $rejectReason" : "");
+
                 return [
                     'recipients' => $recipients,
-                    'title' => "{$codePrefix}" . ($isApproved ? "Đề xuất đã được duyệt: $titleText" : "Đề xuất bị từ chối: $titleText"),
-                    'body' => "{$codePrefix}$approverName đã $statusTextLower đề xuất \"$titleText\" của bạn." . (!empty($rejectReason) ? " Lý do: $rejectReason" : ""),
+                    'title' => $notifTitle,
+                    'body' => $notifBody,
                     'type' => "expense",
                     'link' => "/approvals?open_id=" . $refId . "&open_type=expense",
                     'zalo_msg' => ($isApproved ? "✅" : "❌") . " [ ĐỀ XUẤT $statusText ]\n\n"
