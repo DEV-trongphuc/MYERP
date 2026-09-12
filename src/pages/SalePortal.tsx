@@ -1611,7 +1611,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [calendarUserId, setCalendarUserId] = useState<string | number>('');
   const [schedulerModalOpen, setSchedulerModalOpen] = useState(false);
   const [selectedSchedulerDate, setSelectedSchedulerDate] = useState<string | null>(null);
-  const [schedulerModalTab, setSchedulerModalTab] = useState<'diary' | 'tasks'>('diary');
+  const [schedulerModalTab, setSchedulerModalTab] = useState<'leads' | 'diary' | 'tasks' | 'tickets'>('diary');
   const [diaryPage, setDiaryPage] = useState(1);
   const [tasksPage, setTasksPage] = useState(1);
   const [diaryNoteText, setDiaryNoteText] = useState('');
@@ -4472,7 +4472,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     if (currentUser?.id && !calendarUserId) {
-      setCalendarUserId(currentUser.id);
+      if (['sale_admin', 'saleadmin', 'admin', 'superadmin', 'super_admin'].includes(String(currentUser.role).toLowerCase())) {
+        setCalendarUserId('all');
+      } else {
+        setCalendarUserId(currentUser.id);
+      }
     }
   }, [currentUser]);
 
@@ -10312,7 +10316,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     for (let d = 1; d <= totalDays; d++) {
       const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayData = calendarData[dateStr] || { distributed: 0, blacklist: 0, reminder: 0, error: 0, ticket_total: 0 };
-      const dayNotesCount = calendarActivities.filter(a => a.due_date && a.due_date.startsWith(dateStr) && a.type === 'note').length;
+      const dayNotesCount = calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(dateStr) && a.type === 'note').length;
+      const dayTasksCount = calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(dateStr) && a.type === 'task').length;
       const isToday = new Date().toDateString() === new Date(y, m, d).toDateString();
       const dayOfWeek = (startOffset + d - 1) % 7;
       const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
@@ -10322,9 +10327,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           key={d}
           onClick={() => {
             setSelectedSchedulerDate(dateStr);
-            setSchedulerModalTab('diary');
+            const hasLeads = (dayData.distributed || 0) > 0;
+            setSchedulerModalTab(hasLeads ? 'leads' : 'diary');
             setDiaryPage(1);
             setTasksPage(1);
+            handleDateClick(dateStr);
             setSchedulerModalOpen(true);
           }}
           style={{
@@ -10364,9 +10371,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedSchedulerDate(dateStr);
-                setSchedulerModalTab('diary');
+                setSchedulerModalTab('tasks');
+                setShowTaskForm(true);
                 setDiaryPage(1);
                 setTasksPage(1);
+                handleDateClick(dateStr);
                 setSchedulerModalOpen(true);
               }}
               className="quick-add-btn btn primary sm icon-only"
@@ -10393,12 +10402,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
           {/* Render Scheduler Activities */}
           {(() => {
-            const dayActivities = calendarActivities.filter(a => a.due_date && a.due_date.startsWith(dateStr) && a.type === 'meeting');
+            const dayActivities = calendarActivities.filter(a => {
+              const dStr = (a.due_date || a.date || a.created_at || '').substring(0, 10);
+              return dStr === dateStr && (a.type === 'task' || a.type === 'meeting' || a.type === 'call' || a.type === 'note');
+            });
             if (dayActivities.length === 0) return null;
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', width: '100%', marginBottom: '4px' }}>
                 {dayActivities.slice(0, 3).map((a: any) => {
-                  const isDone = a.status === 'done';
+                  const isDone = a.status === 'done' || a.status === 'completed';
+                  const isTask = a.type === 'task';
                   const isMeeting = a.type === 'meeting';
                   const isNote = a.type === 'note';
                   const isCall = a.type === 'call';
@@ -10408,21 +10421,26 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   let color = 'var(--color-text)';
                   let icon = '📝';
                   
-                  if (isMeeting) {
-                    bg = 'rgba(59, 130, 246, 0.08)';
-                    border = 'rgba(59, 130, 246, 0.2)';
-                    color = '#2563eb';
+                  if (isTask) {
+                    bg = theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff';
+                    border = theme === 'dark' ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe';
+                    color = theme === 'dark' ? '#60a5fa' : '#1d4ed8';
+                    icon = '📌';
+                  } else if (isMeeting) {
+                    bg = theme === 'dark' ? 'rgba(168, 85, 247, 0.15)' : '#faf5ff';
+                    border = theme === 'dark' ? 'rgba(168, 85, 247, 0.3)' : '#e9d5ff';
+                    color = theme === 'dark' ? '#c084fc' : '#7e22ce';
                     icon = '🤝';
-                  } else if (isNote) {
-                    bg = 'rgba(16, 185, 129, 0.08)';
-                    border = 'rgba(16, 185, 129, 0.2)';
-                    color = '#10b981';
-                    icon = '📓';
                   } else if (isCall) {
-                    bg = 'rgba(245, 158, 11, 0.08)';
-                    border = 'rgba(245, 158, 11, 0.2)';
-                    color = '#d97706';
+                    bg = theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb';
+                    border = theme === 'dark' ? 'rgba(245, 158, 11, 0.3)' : '#fde68a';
+                    color = theme === 'dark' ? '#fbbf24' : '#b45309';
                     icon = '📞';
+                  } else if (isNote) {
+                    bg = theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5';
+                    border = theme === 'dark' ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0';
+                    color = theme === 'dark' ? '#34d399' : '#047857';
+                    icon = '📓';
                   }
                   
                   return (
@@ -10451,12 +10469,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         width: '100%',
                         overflow: 'hidden'
                       }}
-                      className="calendar-activity-item"
-                      title={`${a.subject}: ${a.body || ''}`}
+                      className="calendar-activity-item hover-lift"
+                      title={`${a.subject || a.title || ''}: ${a.body || a.description || ''}`}
                     >
                       <span style={{ fontSize: '0.7rem', flexShrink: 0 }}>{icon}</span>
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.subject}
+                        {a.subject || a.title || t('Hoạt động')}
                       </span>
                       {a.contact_id && (
                         <div 
@@ -10483,7 +10501,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 })}
                 {dayActivities.length > 3 && (
                   <div style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', fontWeight: 700, textAlign: 'center' }}>
-                    +{dayActivities.length - 3} {t('nhiệm vụ khác')}
+                    +{dayActivities.length - 3} {t('hoạt động khác')}
                   </div>
                 )}
               </div>
@@ -10539,6 +10557,23 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               }} title={t("Nhắc lại")}>
                 <span>{t('Nhắc')}:</span>
                 <strong>{dayData.reminder}</strong>
+              </div>
+            )}
+            {dayTasksCount > 0 && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '2px 4px',
+                borderRadius: '4px',
+                background: theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+                color: theme === 'dark' ? '#60a5fa' : '#1d4ed8',
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                border: theme === 'dark' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid #bfdbfe'
+              }} title={t("Công việc quan trọng")}>
+                <span>{t('Việc')}:</span>
+                <strong>{dayTasksCount}</strong>
               </div>
             )}
             {dayNotesCount > 0 && (
@@ -10630,8 +10665,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               {t('Hôm nay')}
             </button>
 
-            {/* Bộ lọc user dành cho Admin/Director/Manager */}
-            {['admin', 'superadmin', 'super_admin', 'director', 'manager'].includes(String(currentUser?.role || user?.role).toLowerCase()) && (() => {
+            {/* Bộ lọc user dành cho Admin/Director/Manager/Sale Admin */}
+            {['admin', 'superadmin', 'super_admin', 'director', 'manager', 'sale_admin', 'saleadmin'].includes(String(currentUser?.role || user?.role).toLowerCase()) && (() => {
               const userRole = String(currentUser?.role || user?.role).toLowerCase();
               
               // Lọc danh sách nhân viên hiển thị trong dropdown
@@ -10654,10 +10689,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                            (managerTeamId && String(u.team_id) === String(managerTeamId));
                   });
                 }
+              } else if (userRole === 'sale_admin' || userRole === 'saleadmin') {
+                filteredUsers = users.filter((u: any) => {
+                  const r = String(u.role || '').toLowerCase();
+                  return ['sale', 'sales', 'telesale', 'consultant', 'sale_admin', 'saleadmin'].includes(r) ||
+                         Number(u.id) === Number(currentUser?.id || user?.id);
+                });
               }
               
               return (
-                <div style={{ minWidth: '200px' }}>
+                <div style={{ minWidth: '220px' }}>
                   <CustomSelect
                     options={[
                       { value: 'all', label: t('Tất cả nhân viên') },
@@ -10667,7 +10708,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         avatar: resolveAttachmentUrl(u.avatar_url || u.avatar)
                       }))
                     ]}
-                    value={String(calendarUserId || currentUser?.id || '')}
+                    value={String(calendarUserId || 'all')}
                     onChange={(val) => setCalendarUserId(String(val))}
                     width="100%"
                     searchable={true}
@@ -17368,7 +17409,39 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         >
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : '550px' }}>
             {/* Modal Sub-tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border-light)', marginBottom: '1.25rem', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border-light)', marginBottom: '1.25rem', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setSchedulerModalTab('leads')}
+                style={{
+                  padding: '8px 4px 12px 4px',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  color: schedulerModalTab === 'leads' ? 'var(--color-primary)' : 'var(--color-text-light)',
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom: schedulerModalTab === 'leads' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Users size={16} />
+                {t('Data được chia')}
+                <span style={{
+                  fontSize: '0.625rem',
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  background: schedulerModalTab === 'leads' ? 'var(--color-primary-light)' : 'var(--color-bg)',
+                  color: schedulerModalTab === 'leads' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  fontWeight: 600
+                }}>
+                  {dayDetails?.sales?.length || 0}
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setSchedulerModalTab('diary')}
@@ -17388,7 +17461,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 }}
               >
                 <FileText size={16} />
-                {t('Báo cáo & Nhật ký')}
+                {t('Báo cáo & Ghi chú')}
                 <span style={{
                   fontSize: '0.625rem',
                   padding: '2px 6px',
@@ -17397,7 +17470,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   color: schedulerModalTab === 'diary' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   fontWeight: 600
                 }}>
-                  {calendarActivities.filter(a => a.due_date && a.due_date.startsWith(selectedSchedulerDate) && a.type === 'note').length}
+                  {calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(selectedSchedulerDate) && a.type === 'note').length}
                 </span>
               </button>
 
@@ -17429,15 +17502,121 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   color: schedulerModalTab === 'tasks' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   fontWeight: 600
                 }}>
-                  {calendarActivities.filter(a => a.due_date && a.due_date.startsWith(selectedSchedulerDate) && a.type !== 'note').length}
+                  {calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(selectedSchedulerDate) && a.type !== 'note').length}
                 </span>
               </button>
+
+              {dayDetails?.tickets && dayDetails.tickets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSchedulerModalTab('tickets')}
+                  style={{
+                    padding: '8px 4px 12px 4px',
+                    fontSize: '0.875rem',
+                    fontWeight: 700,
+                    color: schedulerModalTab === 'tickets' ? 'var(--color-danger)' : 'var(--color-text-light)',
+                    border: 'none',
+                    background: 'transparent',
+                    borderBottom: schedulerModalTab === 'tickets' ? '2px solid var(--color-danger)' : '2px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <AlertTriangle size={16} color="var(--color-danger)" />
+                  {t('Ticket lỗi')}
+                  <span style={{
+                    fontSize: '0.625rem',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    background: 'var(--color-danger-light)',
+                    color: 'var(--color-danger)',
+                    fontWeight: 600
+                  }}>
+                    {dayDetails.tickets.length}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Modal Body content */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              {schedulerModalTab === 'diary' ? (
-                /* Tab 1: Notes & Diary */
+              {/* Tab: Data được chia */}
+              {schedulerModalTab === 'leads' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {dayDetailsLoading ? (
+                    <div style={{ padding: '1rem' }}>
+                      <TableSkeleton rows={4} cols={3} />
+                    </div>
+                  ) : dayDetails?.sales && dayDetails.sales.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {dayDetails.sales.map((item: any, idx: number) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (item.lead_id) {
+                              setProfileContact({ id: item.lead_id });
+                            }
+                          }}
+                          style={{
+                            padding: '12px 16px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border-light)',
+                            borderRadius: '12px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          className="hover-lift"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <Avatar name={item.lead_name} size={36} />
+                            <div>
+                              <div style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {item.lead_name || t('Ẩn danh')}
+                                <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '1px 6px', borderRadius: '4px', background: 'var(--color-border-light)', color: 'var(--color-text-muted)' }}>
+                                  ID: {item.lead_id}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 600 }}>{item.phone || t('SĐT đã ẩn')}</span>
+                                <span>•</span>
+                                <span>{t('Nguồn')}: <strong>{item.source || t('Chưa rõ')}</strong></span>
+                                <span>•</span>
+                                <span>{t('Vòng')}: <strong style={{ color: 'var(--color-primary)' }}>{item.round_name || t('Ngoài vòng')}</strong></span>
+                                {item.type && (
+                                  <>
+                                    <span>•</span>
+                                    <span style={{ padding: '0 4px', background: 'rgba(37, 99, 235, 0.06)', color: '#2563eb', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>{item.type}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', fontWeight: 600 }}>
+                              {item.received_at ? parseServerDate(item.received_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                            {getStatusBadge(item.status, item.report_status)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--color-text-muted)' }}>
+                      <Users size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                      <p style={{ margin: 0, fontSize: '0.875rem' }}>{t('Không có dữ liệu phân bổ nào trong ngày này.')}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab: Báo cáo & Ghi chú */}
+              {schedulerModalTab === 'diary' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                   {/* Diary Toggle Form */}
                   {!showDiaryForm ? (
@@ -17699,8 +17878,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     })()}
                   </div>
                 </div>
-              ) : (
-                /* Tab 2: Tasks & Appointments */
+              )}
+
+              {/* Tab: Công việc & Lịch hẹn */}
+              {schedulerModalTab === 'tasks' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                   {/* Task Toggle Form */}
                   {!showTaskForm ? (
@@ -17999,6 +18180,65 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       return renderPagination(tasksPage, dayTasks.length, 5, setTasksPage);
                     })()}
                   </div>
+                </div>
+              )}
+
+              {/* Tab: Ticket dữ liệu lỗi */}
+              {schedulerModalTab === 'tickets' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {dayDetailsLoading ? (
+                    <div style={{ padding: '1rem' }}>
+                      <TableSkeleton rows={4} cols={3} />
+                    </div>
+                  ) : dayDetails?.tickets && dayDetails.tickets.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {dayDetails.tickets.map((item: any, idx: number) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '12px 14px',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border-light)',
+                            borderRadius: '10px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Avatar name={item.lead_name} size={28} />
+                              <div>
+                                <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.85rem' }}>
+                                  {item.lead_name || t('Ẩn danh')}
+                                </span>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: 8 }}>
+                                  {item.lead_phone}
+                                </span>
+                              </div>
+                            </div>
+                            <span style={{
+                              padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 700,
+                              background: item.status === 'approved' ? 'var(--color-success-light)' : item.status === 'approved_no_comp' ? '#dbeafe' : item.status === 'pending' ? '#fef3c7' : 'var(--color-danger-light)',
+                              color: item.status === 'approved' ? 'var(--color-success)' : item.status === 'approved_no_comp' ? '#2563eb' : item.status === 'pending' ? '#d97706' : 'var(--color-danger)'
+                            }}>
+                              {item.status === 'approved' ? t('Đã bù') : item.status === 'approved_no_comp' ? t('Không bù') : item.status === 'pending' ? t('Chờ duyệt') : t('Từ chối')}
+                            </span>
+                          </div>
+                          {item.reason && (
+                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text)', background: 'var(--color-bg-light)', padding: '6px 10px', borderRadius: '6px' }}>
+                              <strong>{t('Lý do lỗi')}:</strong> {item.reason}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--color-text-muted)' }}>
+                      <AlertTriangle size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                      <p style={{ margin: 0, fontSize: '0.875rem' }}>{t('Không có ticket lỗi nào trong ngày này.')}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -378,9 +378,16 @@ class ActivityController {
         $userRole = strtolower($auth['role'] ?? '');
         // "chỉ admin đổ lên mới thấy các task thôi. Còn lại sửa lại quyền director trở xuống chỉ thấy các thứ mình tạo, tag, metion, liên quan và thực hiện thôi."
         $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin'], true);
+        $isSaleAdmin = in_array($userRole, ['sale_admin', 'saleadmin'], true);
 
         if ($hasBroadOversight) {
             // Super Admin / Admin: broad oversight across company tasks, can filter by team_id or user_id
+        } elseif ($isSaleAdmin) {
+            // Sale Admin: oversight across sales team activities (sales, telesales, consultant, sale_admin)
+            $where[] = '(a.user_id IN (SELECT id FROM users WHERE tenant_id = ? AND LOWER(role) IN (\'sale\', \'sales\', \'telesale\', \'consultant\', \'sale_admin\', \'saleadmin\')) OR a.user_id = ? OR a.created_by = ?)';
+            $params[] = $tid;
+            $params[] = (int)$auth['user_id'];
+            $params[] = (int)$auth['user_id'];
         } else {
             // ALL roles from director down (director, manager, sales, sale_admin, accountant, academic, teacher, staff, etc.)
             // Only see tasks: created, assigned, approved, participant (liên quan), mentioned/tagged in body/tags, or mentioned/commented in comments

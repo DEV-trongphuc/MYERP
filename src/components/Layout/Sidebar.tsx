@@ -558,10 +558,11 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       items = newItems;
     }
 
-    if (group.title === 'TỔNG QUAN' && user?.role === 'sale') {
+    if (group.title === 'TỔNG QUAN' && (user?.role === 'sale' || (user?.role as any) === 'sales')) {
       items = [
         { name: 'Tổng quan', href: '/', icon: LayoutDashboard, end: true },
-        { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' }
+        { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
+        { name: 'Lịch trình', href: '/calendar', icon: Calendar }
       ];
     }
     const getModuleKeyForHref = (href: string): string | null => {
