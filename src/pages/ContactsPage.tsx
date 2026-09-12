@@ -2874,7 +2874,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                       </th>
                     )}
                     {columns.find(c => c.id === 'name')?.visible && (
-                      <th style={{ width: isSale ? '230px' : '170px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
+                      <th style={{ width: isSale ? '280px' : '250px', maxWidth: isSale ? '340px' : '300px', padding: '0.85rem 0.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)' }}>
                         Họ tên
                       </th>
                     )}
@@ -2886,7 +2886,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                     )}
                     {/* For Tiềm năng: Tags column */}
                     {segment !== 'customer' && columns.find(c => c.id === 'tags')?.visible && (
-                      <th style={{ width: '230px', maxWidth: '290px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                      <th style={{ width: '150px', maxWidth: '175px', padding: '0.85rem 0.6rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
                         Tags
                       </th>
                     )}
@@ -2969,7 +2969,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                             || '';
                           const isReferred = Boolean(c.partner_id || c.referrer_name || c.referrer_id || c.source === 'ref' || c.source === 'referral' || c.source === 'gioi_thieu' || refName);
                           return (
-                          <td style={{ width: isSale ? '230px' : '170px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: isSale ? '280px' : '250px', maxWidth: isSale ? '340px' : '300px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <Avatar name={fullName} src={c.avatar_url || c.avatar || c.photo} size={32} />
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
@@ -3133,7 +3133,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
 
                         {/* Tags column for non-student pages */}
                         {segment !== 'customer' && columns.find(col => col.id === 'tags')?.visible && (
-                          <td style={{ width: '230px', maxWidth: '290px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ width: '150px', maxWidth: '175px', padding: '0.85rem 0.6rem', borderBottom: '1px solid var(--color-border)' }}>
                             {(() => {
                               const rawTagList = typeof c.tags === 'string' 
                                 ? c.tags.split(',').map((t: string) => t.trim()).filter(Boolean) 
@@ -3149,7 +3149,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               if (uniqueTags.length === 0) return <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>;
                               
                               return (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '290px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '175px' }}>
                                   {uniqueTags.map((tag: string, idx: number) => {
                                     const lowerTag = tag.toLowerCase();
                                     const isProgramTag = lowerTag.includes('mba') || 
