@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 266;
+$targetVersion = 267;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3098,8 +3098,24 @@ try {
         $logMsg("Nâng cấp lên phiên bản 266 hoàn tất.", "success");
     }
 
+    // 73. Upgrade to 267: Clear obsolete test purchase_orders and purchase_order_items created by superadmin
+    if ($currentVersion < 267) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 267: Xóa toàn bộ đơn hàng test cũ (purchase_orders & purchase_order_items)...", "info");
+        try {
+            $conn->query("SET FOREIGN_KEY_CHECKS = 0");
+            $conn->query("TRUNCATE TABLE purchase_order_items");
+            $conn->query("TRUNCATE TABLE purchase_orders");
+            $conn->query("SET FOREIGN_KEY_CHECKS = 1");
+            $logMsg("Đã xóa sạch 100% dữ liệu đơn hàng test cũ của superadmin trong bảng purchase_orders và purchase_order_items.", "success");
+        } catch (Throwable $ex) {
+            $logMsg("Lỗi khi xóa đơn hàng test: " . $ex->getMessage(), "error");
+        }
+
+        $logMsg("Nâng cấp lên phiên bản 267 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '266') ON DUPLICATE KEY UPDATE setting_value = '266'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '267') ON DUPLICATE KEY UPDATE setting_value = '267'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

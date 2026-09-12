@@ -393,19 +393,21 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           .then(res => { if (res.success) setPendingExpensesCount(res.data?.total ?? 0); })
           .catch(e => console.error(e));
 
-        if (currentViewRole === 'accountant') {
+        if (currentViewRole === 'accountant' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
           Promise.all([
-            fetchAPI('purchase-orders').catch(() => ({ data: [] })),
-            fetchAPI('deposits').catch(() => ({ data: [] }))
-          ]).then(([poRes, soRes]) => {
-            const rawPos = poRes?.data || poRes || [];
+            api.get('/expenses', { params: { limit: 15 } }).catch(() => ({ data: { data: { items: [] } } })),
+            fetchAPI('deposits').catch(() => ({ data: [] })),
+            api.get('/users').catch(() => ({ data: { data: [] } }))
+          ]).then(([expRes, soRes, usersRes]) => {
+            const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
+            const pos = Array.isArray(rawPos) ? rawPos : [];
             const rawSos = soRes?.data || soRes || [];
-            const pos = Array.isArray(rawPos) ? rawPos : (Array.isArray(rawPos?.orders) ? rawPos.orders : []);
             const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
             setPoList(pos);
             setSoList(sos);
+            const uData = usersRes?.data?.data || usersRes?.data || [];
+            if (Array.isArray(uData)) setUsersList(uData);
 
-            // Tab nó có thì active tab đó, nếu cả 2 có thì active PO
             if (pos.length > 0 && sos.length > 0) {
               setActiveOrderType('po');
             } else if (pos.length > 0) {
@@ -2200,11 +2202,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       { label: 'Marketing', icon: Briefcase, color: '#ef4444' },
       { label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
       { label: 'Nhân sự', icon: Tag, color: '#06b6d4' },
+      { label: 'Khác', icon: Package, color: '#8b5cf6' },
     ];
 
     const getPoCatInfo = (cat: string) => {
-      const found = PO_CATEGORIES.find(c => c.label.toLowerCase() === String(cat || '').toLowerCase());
-      return found || { label: cat || 'Vận hành', icon: Home, color: '#10b981' };
+      let normalized = String(cat || '').trim();
+      if (normalized === 'Di chuyển' || normalized === 'Vận chuyển') normalized = 'Vận Chuyển';
+      if (normalized === 'Công cụ' || normalized === 'công cụ') normalized = 'Văn phòng phẩm';
+      const found = PO_CATEGORIES.find(c => c.label.toLowerCase() === normalized.toLowerCase());
+      return found || { label: cat || 'Khác', icon: Package, color: '#8b5cf6' };
     };
 
     const renderPoWorkflowSteps = (po: any) => {
@@ -2784,7 +2790,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                       >
                         <td style={{ padding: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{po.title}</span>
+                            <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{po.title || po.description || t('Đề nghị thanh toán')}</span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ 
                                 display: 'inline-flex', 
@@ -2797,7 +2803,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                                 fontSize: '0.7rem', 
                                 fontWeight: 600 
                               }}>
-                                <CatIcon size={10} color={catInfo.color} /> {po.category || 'Vận hành'}
+                                <CatIcon size={10} color={catInfo.color} /> {po.category || 'Khác'}
                               </span>
                               <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>#EXP-{po.id}</span>
                             </div>
@@ -2808,6 +2814,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                             <Avatar src={po.creator_avatar || po.avatar} name={po.creator_name || '—'} size={24} />
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>{po.creator_name || '—'}</span>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                                {po.created_at ? `${new Date(po.created_at).toLocaleDateString('vi-VN')} ${new Date(po.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : (po.order_date || '—')}
+                              </span>
                             </div>
                           </div>
                         </td>
