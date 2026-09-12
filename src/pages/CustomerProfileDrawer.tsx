@@ -7421,24 +7421,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             </button>
                           )}
                         </div>
-                        {formData.address && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: 280 }} title={formData.address}>
-                            <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <MapPin size={12} className="text-muted" />
-                            </div>
-                            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {formData.address}
-                            </span>
-                            <button
-                              className="btn-icon xs"
-                              style={{ color: 'var(--color-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '-2px', flexShrink: 0 }}
-                              onClick={() => copyToClipboard(formData.address, 'address')}
-                              title="Sao chép địa chỉ"
-                            >
-                              {copiedField === 'address' ? <Check size={12} className="text-success" /> : <Copy size={12} />}
-                            </button>
-                          </div>
-                        )}
                         {coopSlip ? (
                           <div
                             style={{ 
@@ -17880,6 +17862,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           docs={docs}
           contactId={effectiveContactId || contact?.id}
           effectiveZIndex={effectiveZIndex}
+          currentAddress={formData.address}
           onApplyData={async (extracted) => {
             const updatePayload: any = {};
             if (extracted.full_name) updatePayload.full_name = extracted.full_name;
@@ -17887,7 +17870,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             if (extracted.passport) updatePayload.passport = extracted.passport;
             if (extracted.birthday) updatePayload.birthday = extracted.birthday;
             if (extracted.gender) updatePayload.gender = extracted.gender;
-            if (extracted.address) updatePayload.address = extracted.address;
+            // Nếu đã có địa chỉ thì giữ nguyên, chỉ điền khi chưa có địa chỉ
+            if (extracted.address && !formData?.address?.trim()) {
+              updatePayload.address = extracted.address;
+            }
             if (extracted.nationality) updatePayload.nationality = extracted.nationality;
 
             setFormData((prev: any) => ({

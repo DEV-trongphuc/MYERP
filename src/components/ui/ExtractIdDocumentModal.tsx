@@ -25,6 +25,7 @@ interface ExtractIdDocumentModalProps {
     issue_place?: string;
   }) => void;
   effectiveZIndex?: number;
+  currentAddress?: string;
 }
 
 const resolveAttachmentUrl = (url: string | null | undefined): string => {
@@ -116,7 +117,8 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
   docs,
   contactId,
   onApplyData,
-  effectiveZIndex = 2147483600
+  effectiveZIndex = 2147483600,
+  currentAddress
 }) => {
   const [step, setStep] = useState<'select' | 'scanning' | 'review' | 'error'>('select');
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
@@ -299,10 +301,22 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
       if (res.data?.success && res.data?.data?.is_valid) {
         const d = res.data.data.data;
         const bday = formatDateToVi(d.birthday || '');
-        const addr = (d.address || '').trim() || (d.place_of_birth || '').trim() || (d.place_of_origin || '').trim();
+
+        // BẮT BUỘC Họ đứng trước theo chuẩn tiếng Việt
+        let fullName = (d.full_name || '').trim();
+        const surname = (d.surname || '').trim();
+        const givenNames = (d.given_names || '').trim();
+        if (surname && givenNames) {
+          fullName = `${surname} ${givenNames}`.trim();
+        }
+
+        // Nếu khách hàng đã có địa chỉ thì giữ nguyên địa chỉ hiện có, chỉ điền khi chưa có địa chỉ
+        const extractedAddr = (d.address || '').trim() || (d.place_of_birth || '').trim() || (d.place_of_origin || '').trim();
+        const finalAddr = (currentAddress && currentAddress.trim()) ? currentAddress.trim() : extractedAddr;
+
         setExtractedData({
           document_type: res.data.data.document_type || 'passport',
-          full_name: d.full_name || '',
+          full_name: fullName,
           citizen_id: d.citizen_id || '',
           passport: d.passport || '',
           birthday: bday,
@@ -310,7 +324,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
           nationality: d.nationality || 'Việt Nam',
           place_of_birth: d.place_of_birth || '',
           place_of_origin: d.place_of_origin || '',
-          address: addr,
+          address: finalAddr,
           issue_date: formatDateToVi(d.issue_date || ''),
           expiry_date: formatDateToVi(d.expiry_date || ''),
           issue_place: d.issue_place || ''
@@ -864,7 +878,15 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                 <RefreshCw size={18} className="animate-spin" />
                 <span>{scanStages[loadingTextIndex]}</span>
               </div>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+              <p style={{
+                margin: 0,
+                fontSize: '0.8rem',
+                color: 'var(--color-text-muted)',
+                maxWidth: '460px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }} title={selectedDoc?.name}>
                 Đang xử lý tệp: <strong>{selectedDoc?.name}</strong>
               </p>
             </div>
@@ -1064,8 +1086,13 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
 
                   {/* Nơi thường trú / Địa chỉ */}
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
-                      Nơi thường trú / Địa chỉ
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
+                      <span>Nơi thường trú / Địa chỉ</span>
+                      {currentAddress && currentAddress.trim() && (
+                        <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.73rem' }}>
+                          ✓ Giữ nguyên theo địa chỉ hiện có của khách hàng
+                        </span>
+                      )}
                     </label>
                     <textarea 
                       className="form-input"
@@ -1155,9 +1182,28 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
         }}>
           {step === 'select' && (
             <>
-              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+              <div style={{
+                fontSize: '0.8rem',
+                color: 'var(--color-text-muted)',
+                minWidth: 0,
+                flex: 1,
+                marginRight: '16px',
+                overflow: 'hidden'
+              }}>
                 {selectedDoc ? (
-                  <span>Đã chọn: <strong style={{ color: '#4f46e5' }}>{selectedDoc.name}</strong></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }} title={selectedDoc.name}>
+                    <span style={{ flexShrink: 0 }}>Đã chọn:</span>
+                    <strong style={{
+                      color: '#4f46e5',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-block',
+                      maxWidth: '380px'
+                    }}>
+                      {selectedDoc.name}
+                    </strong>
+                  </div>
                 ) : (
                   <span>Vui lòng chọn 1 tài liệu CCCD/Passport để tiếp tục</span>
                 )}

@@ -741,7 +741,9 @@ Nhiệm vụ của bạn:
   {
     "is_valid": true,
     "document_type": "passport" HOẶC "cccd",
-    "full_name": "Họ và tên viết IN HOA có dấu (ví dụ: LÊ THỊ BÍCH VÂN)",
+    "surname": "Họ / Surname ghi trên tài liệu (ví dụ: NGUYỄN)",
+    "given_names": "Chữ đệm và tên / Given names ghi trên tài liệu (ví dụ: THỊ DUYÊN ANH)",
+    "full_name": "Họ và tên viết IN HOA theo chuẩn Việt Nam: BẮT BUỘC HỌ ĐỨNG TRƯỚC (Ví dụ: Họ là NGUYỄN, Chữ đệm và tên là THỊ DUYÊN ANH thì full_name BẮT BUỘC PHẢI LÀ 'NGUYỄN THỊ DUYÊN ANH', TUYỆT ĐỐI KHÔNG ĐƯỢC đảo họ ra sau thành 'THỊ DUYÊN ANH NGUYỄN')",
     "citizen_id": "Số định danh cá nhân / Số CCCD / Số CMND (chỉ số, nếu có)",
     "passport": "Số hộ chiếu / Passport No (ví dụ: C1234567, nếu là passport hoặc có ghi trên tài liệu)",
     "birthday": "Ngày sinh định dạng chuẩn DD/MM/YYYY (ví dụ: 03/08/1980)",
@@ -827,6 +829,13 @@ EOT;
                 'invalid_reason' => $reason,
                 'raw_text' => $rawText
             ], $reason, false);
+        }
+
+        // Chuẩn hóa Họ và Tên: BẮT BUỘC HỌ đứng trước theo chuẩn tiếng Việt
+        $surname = trim($parsedData['surname'] ?? '');
+        $givenNames = trim($parsedData['given_names'] ?? '');
+        if (!empty($surname) && !empty($givenNames)) {
+            $parsedData['full_name'] = trim($surname . ' ' . $givenNames);
         }
 
         // Chuẩn hóa ngày sinh thành DD/MM/YYYY
