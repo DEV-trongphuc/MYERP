@@ -692,6 +692,669 @@ export const DocumentationPage: React.FC = () => {
               </div>
             </div>
           )
+        },
+        {
+          id: 'arch-db-dictionary',
+          title: 'Từ Điển Cơ Sở Dữ Liệu 91 Bảng Chuẩn Hóa (Core Database Schema)',
+          description: 'Tra cứu toàn diện 91 bảng quan hệ InnoDB theo 9 cụm chức năng: Khóa ngoại, vai trò nghiệp vụ và cơ chế bảo toàn dữ liệu.',
+          headings: [
+            { id: 'db-clusters', text: 'Phân Nhóm 9 Cụm Nghiệp Vụ Cơ Sở Dữ Liệu' },
+            { id: 'db-table-dictionary', text: 'Bảng Tra Cứu Chi Tiết 91 Bảng Dữ Liệu Thực Tế' },
+            { id: 'db-integrity-rules', text: 'Quy Tắc Ràng Buộc Khóa Ngoại & Tự Động Hóa Migrations' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="db-clusters">Phân Nhóm 9 Cụm Nghiệp Vụ Cơ Sở Dữ Liệu</h2>
+              <p>
+                Cơ sở dữ liệu <strong>IDEAS MYERP</strong> được xây dựng trên nền tảng MySQL 8.0 / MariaDB 10.6+ InnoDB chuẩn hóa 3NF gồm <strong>91 bảng quan hệ</strong> phân chia theo 9 phân hệ chức năng:
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', margin: '14px 0' }}>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>1. Tổ chức &amp; Bảo mật (11 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Quản lý đa doanh nghiệp, tài khoản, token xác thực, phân quyền và nhật ký kiểm toán.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>2. CRM &amp; Khách Hàng (12 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Nhân khẩu học (persons), liên hệ, lịch sử phễu 14 bước tuyển sinh, form thu thập.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>3. Phân Phối Lead &amp; Fair-Share (8 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Vòng xoay Round-Robin, trọng số, đền bù lượt thiếu (Starvation) và quy tắc định tuyến.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>4. Bán Hàng &amp; Doanh Thu (9 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Báo giá (Quotes), hóa đơn (Invoices), tiền cọc giữ chỗ (Deposits), phiếu hợp tác.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>5. Chấm Công &amp; Tiền Lương (8 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Check-in GPS/Selfie, ca trực đêm/lễ/cuối tuần, nghỉ phép và phiếu lương ký số.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>6. Tài Chính &amp; Mua Sắm (5 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Đề xuất thanh toán chi phí, tạm ứng, đơn mua sắm vật tư (PO) và nhà cung cấp.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>7. Đào Tạo &amp; Học Vụ (5 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Chương trình đào tạo, khóa tuyển sinh, biểu phí học phần và bảng xếp ca giảng viên.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>8. Dự Án &amp; Công Việc (6 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Dự án, quy trình mẫu (Workflows), checklist đầu việc và tài liệu kho đám mây.</p>
+                </div>
+                <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
+                  <strong style={{ color: 'var(--color-primary)' }}>9. Tự Động Hóa &amp; Tích Hợp (17 bảng)</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Hàng đợi mail/Zalo/Sync, kết nối Google Sheets, Meta CAPI, AI Vector RAG và Cấu hình.</p>
+                </div>
+              </div>
+
+              <h2 id="db-table-dictionary">Bảng Tra Cứu Chi Tiết 91 Bảng Dữ Liệu Thực Tế</h2>
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.78rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+                      <th style={{ width: '180px' }}>Tên bảng (Table Name)</th>
+                      <th style={{ width: '150px' }}>Phân nhóm nghiệp vụ</th>
+                      <th>Mô tả chức năng &amp; Ràng buộc dữ liệu cốt lõi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td style={{ textAlign: 'center' }}>1</td><td><code>tenants</code></td><td>Tổ chức &amp; Bảo mật</td><td>Phân lập đa doanh nghiệp (Tenant ID, Domain, mã công ty, trạng thái kích hoạt).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>2</td><td><code>users</code></td><td>Tổ chức &amp; Bảo mật</td><td>Hồ sơ tài khoản, chức vụ, mật khẩu mã hóa bcrypt, permissions_json, giờ làm riêng.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>3</td><td><code>teams</code></td><td>Tổ chức &amp; Bảo mật</td><td>Đội nhóm kinh doanh / nghiệp vụ, liên kết leader_id và co_leader_ids.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>4</td><td><code>accounts</code></td><td>Tổ chức &amp; Bảo mật</td><td>Danh mục tài khoản ngân hàng và sổ quỹ tiền mặt nội bộ của từng tenant.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>5</td><td><code>quyen_truy_cap</code></td><td>Tổ chức &amp; Bảo mật</td><td>Danh mục quyền hạn hạt nhân tĩnh của hệ thống.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>6</td><td><code>refresh_tokens</code></td><td>Tổ chức &amp; Bảo mật</td><td>Lưu trữ Refresh Token JWT xoay vòng, hỗ trợ xác thực bảo mật và thu hồi phiên đăng nhập.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>7</td><td><code>login_attempts</code></td><td>Tổ chức &amp; Bảo mật</td><td>Bộ đệm giới hạn đăng nhập chống Brute-Force (tự động khóa sau 5 lần thử sai).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>8</td><td><code>admin_logs</code></td><td>Tổ chức &amp; Bảo mật</td><td>Nhật ký kiểm toán thao tác quản trị viên bất biến (IP, User, Action, Timestamp).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>9</td><td><code>audit_logs</code></td><td>Tổ chức &amp; Bảo mật</td><td>Nhật ký ghi vết biến động dữ liệu chi tiết (Diff Before/After giá trị các trường).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>10</td><td><code>capi_logs</code></td><td>Tổ chức &amp; Bảo mật</td><td>Nhật ký sự kiện chuyển đổi bắn về Meta Conversion API (CAPI).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>11</td><td><code>schema_migrations</code></td><td>Tổ chức &amp; Bảo mật</td><td>Lịch sử các phiên bản migration cơ sở dữ liệu đã thực thi tự động.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>12</td><td><code>persons</code></td><td>CRM &amp; Khách Hàng</td><td>Thực thể nhân khẩu học chuẩn hóa duy nhất (Họ tên, CCCD/CMND, ngày sinh, giới tính).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>13</td><td><code>contacts</code></td><td>CRM &amp; Khách Hàng</td><td>Hồ sơ liên hệ khách hàng gắn liền với từng tổ chức tenant (khóa ngoại person_id).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>14</td><td><code>contact_phones</code></td><td>CRM &amp; Khách Hàng</td><td>Lưu trữ đa số điện thoại của một khách hàng, hỗ trợ thuật toán chống trùng đa kênh.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>15</td><td><code>contact_emails</code></td><td>CRM &amp; Khách Hàng</td><td>Danh sách email của khách hàng phục vụ gửi tài liệu và chăm sóc tự động.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>16</td><td><code>leads</code></td><td>CRM &amp; Khách Hàng</td><td>Phiên tuyển sinh/bán hàng của khách hàng theo từng nguồn tiếp thị và chiến dịch.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>17</td><td><code>pipeline_stages</code></td><td>CRM &amp; Khách Hàng</td><td>Cấu hình danh mục 14 bước chuyển đổi phễu tuyển sinh chuẩn.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>18</td><td><code>deal_stage_history</code></td><td>CRM &amp; Khách Hàng</td><td>Nhật ký lịch sử và thời gian khách hàng dừng tại từng bước phễu tuyển sinh.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>19</td><td><code>deals</code></td><td>CRM &amp; Khách Hàng</td><td>Hợp đồng bán hàng, cơ hội đặt cọc học bổng, giá trị dự kiến và tiến độ chốt đơn.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>20</td><td><code>lead_offers</code></td><td>CRM &amp; Khách Hàng</td><td>Các gói ưu đãi, voucher, chính sách học bổng áp dụng cho từng khách hàng.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>21</td><td><code>forms</code></td><td>CRM &amp; Khách Hàng</td><td>Cấu hình form thu thập lead nhúng trên website, landing page hoặc mạng xã hội.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>22</td><td><code>form_submissions</code></td><td>CRM &amp; Khách Hàng</td><td>Dữ liệu thô khách hàng điền form gửi về máy chủ trước khi qua AI Gatekeeper.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>23</td><td><code>blocked_leads</code></td><td>CRM &amp; Khách Hàng</td><td>Danh sách đen (Blacklist) chặn số điện thoại rác, spam và đối thủ quấy rối.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>24</td><td><code>duplicate_log</code></td><td>Phân Phối &amp; Fair-Share</td><td>Nhật ký ghi nhận các trường hợp khách hàng trùng lặp và cảnh báo xung đột dữ liệu.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>25</td><td><code>distribution_rounds</code></td><td>Phân Phối &amp; Fair-Share</td><td>Cấu hình các vòng xoay chia data (Round-Robin, chia theo phần trăm, ca trực).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>26</td><td><code>round_consultants</code></td><td>Phân Phối &amp; Fair-Share</td><td>Danh sách tư vấn viên tham gia trong vòng và trọng số chia số (weight).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>27</td><td><code>distribution_logs</code></td><td>Phân Phối &amp; Fair-Share</td><td>Nhật ký chi tiết từng lượt chia lead (phân bổ thành công, đền bù, nhắc nhở).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>28</td><td><code>active_compensation_logs</code></td><td>Phân Phối &amp; Fair-Share</td><td>Lịch sử đền bù lượt thiếu (Starvation Prevention) cho TVV bị thu hồi do nghỉ phép.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>29</td><td><code>consultants</code></td><td>Phân Phối &amp; Fair-Share</td><td>Quản lý năng lực và trạng thái sẵn sàng tiếp nhận data của từng tư vấn viên.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>30</td><td><code>consultant_leaves</code></td><td>Phân Phối &amp; Fair-Share</td><td>Lịch xin tạm dừng nhận data của TVV (khi nghỉ phép hoặc đi công tác ngoài văn phòng).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>31</td><td><code>routing_rules</code></td><td>Phân Phối &amp; Fair-Share</td><td>Quy tắc định tuyến tự động theo nguồn data, chiến dịch và loại chương trình đào tạo.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>32</td><td><code>quotes</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Báo giá chi tiết gửi khách hàng, quản lý tỷ lệ chiết khấu, voucher và thuế VAT.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>33</td><td><code>quote_items</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Chi tiết từng dòng khóa học / sản phẩm dịch vụ trong phiếu báo giá.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>34</td><td><code>invoices</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Hóa đơn điện tử chính thức phát hành cho học viên và khách hàng doanh nghiệp.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>35</td><td><code>invoice_items</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Chi tiết các khoản mục thanh toán trên hóa đơn tài chính.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>36</td><td><code>deposits</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Phiếu đặt cọc giữ chỗ, ảnh ủy nhiệm chi ngân hàng và xác nhận thực thu của kế toán.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>37</td><td><code>deposit_milestones</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Các đợt thanh toán trả góp học phí theo mốc thời gian thỏa thuận.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>38</td><td><code>cooperation_slips</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Phiếu hợp tác tuyển sinh chia sẻ hoa hồng với đại lý và trường liên kết.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>39</td><td><code>companies</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Hồ sơ doanh nghiệp đối tác, đại lý tuyển sinh và viện đào tạo liên kết.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>40</td><td><code>segments</code></td><td>Bán Hàng &amp; Doanh Thu</td><td>Phân khúc đối tượng khách hàng phục vụ chiến dịch truyền thông và tiếp thị lại.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>41</td><td><code>check_ins</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Nhật ký chấm công (GPS, Wi-Fi BSSID, ảnh selfie, phút trễ, phút về sớm, công bù).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>42</td><td><code>shifts</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Danh mục ca làm việc (ca hành chính, ca tối, ca trực thứ Bảy, ca trực lớp học).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>43</td><td><code>leaves</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Đơn từ điện tử (nghỉ phép năm, nghỉ ốm, WFH, làm thêm giờ OT, đi muộn bù giờ).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>44</td><td><code>monthly_payslips</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Bảng lương tháng, chữ ký số điện tử Canvas (signature_url), ghi chú khiếu nại (note).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>45</td><td><code>night_shift_registrations</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Đăng ký và phê duyệt trực ca đêm của đội ngũ tư vấn tuyển sinh.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>46</td><td><code>holiday_shift_registrations</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Đăng ký và phê duyệt trực các ngày nghỉ lễ quốc gia hưởng lương đặc thù.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>47</td><td><code>weekend_shift_registrations</code></td><td>Chấm Công &amp; Tiền Lương</td><td>Đăng ký và phê duyệt trực ca thứ Bảy, Chủ Nhật phục vụ tư vấn học viên.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>48</td><td><code>expenses</code></td><td>Tài Chính &amp; Mua Sắm</td><td>Đơn đề xuất thanh toán, tạm ứng chi tiêu nội bộ có phê duyệt đa cấp.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>49</td><td><code>expense_entities</code></td><td>Tài Chính &amp; Mua Sắm</td><td>Đối tượng thụ hưởng chi phí (nhân viên nhận tạm ứng, đối tác cung cấp dịch vụ).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>50</td><td><code>purchase_orders</code></td><td>Tài Chính &amp; Mua Sắm</td><td>Đơn đặt hàng mua sắm vật tư, trang thiết bị văn phòng và công nghệ.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>51</td><td><code>purchase_order_items</code></td><td>Tài Chính &amp; Mua Sắm</td><td>Chi tiết số lượng, đơn giá từng khoản mục trong đơn mua sắm.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>52</td><td><code>suppliers</code></td><td>Tài Chính &amp; Mua Sắm</td><td>Hồ sơ nhà cung cấp dịch vụ, thông tin xuất hóa đơn và tài khoản ngân hàng.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>53</td><td><code>products</code></td><td>Đào Tạo &amp; Học Vụ</td><td>Danh mục chương trình đào tạo, khóa học, gói dịch vụ tư vấn du học / thạc sĩ.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>54</td><td><code>product_categories</code></td><td>Đào Tạo &amp; Học Vụ</td><td>Phân loại ngành học, hệ đào tạo (Cử nhân, Thạc sĩ, Tiến sĩ, Chứng chỉ quốc tế).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>55</td><td><code>batches</code></td><td>Đào Tạo &amp; Học Vụ</td><td>Đợt tuyển sinh, khóa khai giảng lớp học và niên khóa đào tạo.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>56</td><td><code>project_roster</code></td><td>Đào Tạo &amp; Học Vụ</td><td>Bảng phân công giảng viên chính, trợ giảng và xếp phòng học cho từng buổi.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>57</td><td><code>inventory_logs</code></td><td>Đào Tạo &amp; Học Vụ</td><td>Nhật ký xuất nhập tồn tài liệu học tập, giáo trình và quà tặng tuyển sinh.</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>58</td><td><code>projects</code></td><td>Dự Án &amp; Công Việc</td><td>Dự án đào tạo tổng thể, quản lý tiến độ, ngân sách và thành viên tham gia.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>59</td><td><code>workflows</code></td><td>Dự Án &amp; Công Việc</td><td>Quy trình nghiệp vụ mẫu áp dụng cho các bộ phận chuyên môn.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>60</td><td><code>workflow_task_templates</code></td><td>Dự Án &amp; Công Việc</td><td>Mẫu danh sách các đầu việc chuẩn cần thực thi khi kích hoạt quy trình mới.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>61</td><td><code>project_documents</code></td><td>Dự Án &amp; Công Việc</td><td>Kho lưu trữ tài liệu, đề cương, quyết định mở lớp liên kết với dự án.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>62</td><td><code>cloud_files</code></td><td>Dự Án &amp; Công Việc</td><td>Quản trị tệp tin tải lên máy chủ cục bộ hoặc dịch vụ lưu trữ đám mây.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>63</td><td><code>file_categories</code></td><td>Dự Án &amp; Công Việc</td><td>Phân cấp thư mục tài liệu lưu trữ khoa học theo phòng ban.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>64</td><td><code>files</code></td><td>Dự Án &amp; Công Việc</td><td>Siêu dữ liệu tệp tin đính kèm (dung lượng, đuôi mở rộng, MIME type).</td></tr>
+
+                    <tr><td style={{ textAlign: 'center' }}>65</td><td><code>notifications</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Bảng thông báo trung tâm lưu trữ thông báo đẩy thời gian thực tới người dùng.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>66</td><td><code>sent_notifications</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Lịch sử các thông báo đã gửi qua Email SES, Zalo Bot và Telegram Webhook.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>67</td><td><code>user_notification_settings</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Cấu hình tùy chọn kênh nhận thông báo cá nhân của từng nhân viên.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>68</td><td><code>task_muted_notifications</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Danh sách các nhiệm vụ/dự án mà người dùng đã chọn tắt chuông thông báo.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>69</td><td><code>mail_queue</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Hàng đợi gửi email tự động bất đồng bộ qua Amazon SES SMTP.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>70</td><td><code>zalo_queue</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Hàng đợi tin nhắn gửi qua Zalo Official Account / Zalo Personal Bot.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>71</td><td><code>sync_queue</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Hàng đợi đồng bộ dữ liệu hai chiều với các trang Google Sheets liên kết.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>72</td><td><code>sheet_connections</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Cấu hình kết nối Google Service Account và Spreadsheet ID của phòng ban.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>73</td><td><code>sheet_sync_records</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Nhật ký đối soát từng dòng dữ liệu đồng bộ giữa hệ thống và Google Sheets.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>74</td><td><code>field_mappings</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Quy tắc ánh xạ tên cột Google Sheets tương ứng với các trường trong database.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>75</td><td><code>system_settings</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Bảng lưu trữ toàn bộ các tham số cấu hình vận hành cốt lõi của toàn hệ sinh thái.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>76</td><td><code>activities</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Dòng thời gian hoạt động chăm sóc khách hàng (cuộc gọi, họp mặt, ghi chú).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>77</td><td><code>activity_comments</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Bình luận và chỉ đạo nghiệp vụ của Trưởng nhóm trong từng hoạt động chăm sóc.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>78</td><td><code>notes</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Ghi chú nội bộ trên hồ sơ khách hàng, đơn hàng và dự án.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>79</td><td><code>note_mentions</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Ghi nhận người dùng được nhắc tên (@mention) để kích hoạt thông báo tức thì.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>80</td><td><code>comments</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Hệ thống tương tác, bình luận trên Bảng tin nội bộ (Enterprise Feed).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>81</td><td><code>communication_logs</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Nhật ký cuộc gọi thoại tổng đài Cloud Call Center (thời lượng, file ghi âm).</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>82</td><td><code>marketing_campaigns</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Quản lý chiến dịch quảng cáo, ngân sách giải ngân và bộ tham số UTM Tracking.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>83</td><td><code>data_reports</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Dữ liệu tổng hợp báo cáo định kỳ kết xuất tự động từ hệ thống.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>84</td><td><code>email_otps</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Mã xác thực một lần (OTP) gửi qua email phục vụ đổi mật khẩu bảo mật cao.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>85</td><td><code>entity_tags</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Bảng liên kết đa-đa giữa các thực thể hệ thống và nhãn gắn thẻ.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>86</td><td><code>tags</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Danh mục nhãn màu sắc phân loại hồ sơ khách hàng và công việc.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>87</td><td><code>ticket_comments</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Trao đổi và cập nhật tiến độ xử lý ticket phản ánh chất lượng Lead.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>88</td><td><code>ticket_notify_settings</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Cấu hình thông báo tự động cho từng loại khiếu nại / ticket nội bộ.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>89</td><td><code>tickets</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Phiếu yêu cầu đền bù lead rác, hỗ trợ kỹ thuật và kiểm tra tài chính.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>90</td><td><code>ai_training_docs</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Tài liệu tri thức nội bộ nạp vào vector database cho trợ lý AI RAG.</td></tr>
+                    <tr><td style={{ textAlign: 'center' }}>91</td><td><code>ai_training_chunks</code></td><td>Tự Động Hóa &amp; Tích Hợp</td><td>Các phân đoạn văn bản vector hóa (embedding) phục vụ truy hồi chính sách tự động.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="db-integrity-rules">Quy Tắc Ràng Buộc Khóa Ngoại &amp; Tự Động Hóa Migrations</h2>
+              <p>
+                Để đảm bảo tính toàn vẹn dữ liệu ở cấp độ phần cứng cơ sở dữ liệu:
+              </p>
+              <ul>
+                <li><strong>Toàn vẹn khóa ngoại (Foreign Key Constraints):</strong> Mọi bảng giao dịch đều liên kết chặt chẽ với bảng cha qua khóa ngoại. Khi một <code>tenant</code> hoặc <code>user</code> bị xóa, hệ thống áp dụng cơ chế <code>ON DELETE CASCADE</code> hoặc <code>ON DELETE SET NULL</code> đối với các bản ghi lịch sử, chống hoàn toàn hiện tượng bản ghi mồ côi (Orphan Records).</li>
+                <li><strong>Tự động nâng cấp cấu trúc (Self-Healing Auto Migrations):</strong> Khi deploy phiên bản mới, tiến trình <code>run_migrations.php</code> tự động đối chiếu schema hiện tại với phiên bản mục tiêu trong bảng <code>schema_migrations</code>. Nếu phát hiện thiếu bảng hoặc thiếu cột mới, hệ thống tự động chạy các câu lệnh <code>ALTER TABLE</code> an toàn mà không làm gián đoạn hệ thống.</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'arch-system-settings',
+          title: 'Ma Trận Tham Số Cấu Hình Nghiệp Vụ Toàn Cục (system_settings)',
+          description: 'Đặc tả các tham số vận hành cốt lõi: Hạn mức kinh doanh, SLA tiếp nhận lead, bù lượt thiếu (Starvation) và cấu hình điều phối Fallback.',
+          headings: [
+            { id: 'settings-business-limits', text: 'Hạn Mức Kinh Doanh & SLA Tiếp Nhận Lead' },
+            { id: 'settings-attendance-schedule', text: 'Lịch Trình Làm Việc, Trực Ca & Chấm Công' },
+            { id: 'settings-starvation-fallback', text: 'Thuật Toán Bù Lượt Thiếu & Xử Lý Fallback' },
+            { id: 'settings-integrations', text: 'Tham Số Tích Hợp Kênh Ngoài (Meta, Zalo, SES, Sheets)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <p>
+                Bảng <code>system_settings</code> lưu trữ toàn bộ các tham số vận hành cốt lõi của doanh nghiệp dưới dạng khóa - giá trị (Key-Value), cho phép Ban Giám Đốc và Quản trị viên tùy chỉnh linh hoạt chính sách kinh doanh mà không cần sửa đổi mã nguồn:
+              </p>
+
+              <h2 id="settings-business-limits">Hạn Mức Kinh Doanh &amp; SLA Tiếp Nhận Lead</h2>
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th style={{ width: '220px' }}>Khóa cấu hình (Setting Key)</th>
+                      <th style={{ width: '120px' }}>Giá trị chuẩn</th>
+                      <th>Đặc tả nghiệp vụ &amp; Cơ chế kiểm soát tự động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>lead_decay_days</code></td>
+                      <td><code>7</code> (ngày)</td>
+                      <td><strong>Số ngày tự động rớt nhiệt (Decay):</strong> Nếu một Lead đã phân bổ cho TVV nhưng không phát sinh bất kỳ cuộc gọi hay cập nhật trạng thái nào trong vòng 7 ngày, hệ thống tự động thu hồi Lead về kho dữ liệu chung (Databank) để tái phân bổ.</td>
+                    </tr>
+                    <tr>
+                      <td><code>first_call_sla_minutes</code></td>
+                      <td><code>30</code> (phút)</td>
+                      <td><strong>Thời hạn cuộc gọi đầu tiên (First Call SLA):</strong> TVV sau khi nhận Lead mới trong giờ hành chính bắt buộc phải thực hiện cuộc gọi đầu tiên trong vòng 30 phút. Quá thời hạn này, hệ thống kích hoạt cảnh báo vi phạm SLA và có thể thu hồi Lead chia cho người khác.</td>
+                    </tr>
+                    <tr>
+                      <td><code>backpressure_limit</code></td>
+                      <td><code>5 - 10</code> (lead)</td>
+                      <td><strong>Hạn mức chống ngậm data (Backpressure):</strong> Giới hạn số lượng Lead ở trạng thái <em>"Chưa Xử Lý"</em> tối đa mà một TVV được phép nắm giữ. Khi vượt ngưỡng, hệ thống tự động loại TVV khỏi vòng quay chia số cho đến khi TVV xử lý xong số lead cũ.</td>
+                    </tr>
+                    <tr>
+                      <td><code>deposit_demote_status</code></td>
+                      <td><code>chua_chot</code></td>
+                      <td><strong>Quy tắc xử lý bỏ cọc:</strong> Khi một hồ sơ khách hàng đã đặt cọc nhưng sau đó hủy cọc hoặc đòi hoàn cọc, hệ thống tự động hạ cấp trạng thái phễu tuyển sinh về bước quy định và trừ doanh số dự kiến.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="settings-attendance-schedule">Lịch Trình Làm Việc, Trực Ca &amp; Chấm Công</h2>
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th style={{ width: '220px' }}>Khóa cấu hình (Setting Key)</th>
+                      <th style={{ width: '120px' }}>Giá trị chuẩn</th>
+                      <th>Đặc tả nghiệp vụ &amp; Cơ chế kiểm soát tự động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>global_work_start_time</code><br /><code>global_work_end_time</code></td>
+                      <td><code>08:00</code><br /><code>17:30</code></td>
+                      <td>Khung giờ làm việc hành chính chuẩn toàn công ty. Áp dụng cho mọi nhân viên không cài đặt khung giờ đặc thù (<code>use_custom_work_hours = 0</code>).</td>
+                    </tr>
+                    <tr>
+                      <td><code>global_work_schedule</code></td>
+                      <td>JSON Schedule</td>
+                      <td>Cấu hình giờ bắt đầu / kết thúc chi tiết từng ngày trong tuần từ Thứ Hai đến Thứ Bảy, bao gồm giờ nghỉ trưa (12:00 - 13:30) và cấu hình làm việc buổi sáng Thứ Bảy.</td>
+                    </tr>
+                    <tr>
+                      <td><code>holiday_schedules</code></td>
+                      <td>JSON Array</td>
+                      <td>Danh mục các kỳ nghỉ lễ tết quốc gia (Tết Nguyên Đán, Giỗ Tổ, 30/4 - 1/5, Quốc Khánh). Hệ thống tự động miễn chấm công và mở đăng ký trực lễ hưởng thù lao đặc biệt.</td>
+                    </tr>
+                    <tr>
+                      <td><code>require_checkout</code></td>
+                      <td><code>1</code> (Bật)</td>
+                      <td>Bắt buộc nhân viên phải bấm Check-out cuối ca trước khi tan làm. Nếu tắt, hệ thống chỉ yêu cầu check-in một lần đầu ngày.</td>
+                    </tr>
+                    <tr>
+                      <td><code>office_latitude</code><br /><code>office_longitude</code><br /><code>office_allowed_radius</code></td>
+                      <td>Tọa độ GPS<br />Bán kính: <code>100m</code></td>
+                      <td>Tọa độ địa lý trụ sở văn phòng và bán kính GPS cho phép chấm công. Mọi tọa độ vượt quá bán kính 100m sẽ bị hệ thống từ chối xác thực check-in.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="settings-starvation-fallback">Thuật Toán Bù Lượt Thiếu &amp; Xử Lý Fallback</h2>
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th style={{ width: '220px' }}>Khóa cấu hình (Setting Key)</th>
+                      <th style={{ width: '120px' }}>Giá trị chuẩn</th>
+                      <th>Đặc tả nghiệp vụ &amp; Cơ chế kiểm soát tự động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>starvation_prevention_enabled</code></td>
+                      <td><code>1</code> (Bật)</td>
+                      <td><strong>Kích hoạt Bù Lượt Thiếu (Starvation Prevention):</strong> Khi một TVV quay trở lại làm việc sau kỳ nghỉ phép hoặc công tác dài ngày, thuật toán tự động tính toán số lượt chia bị thiếu và ưu tiên cấp lượt nhận Data mới liên tục cho đến khi cân bằng với các đồng nghiệp khác.</td>
+                    </tr>
+                    <tr>
+                      <td><code>late_checkin_compensation</code></td>
+                      <td><code>1</code> (Bật)</td>
+                      <td><strong>Đền bù khi giải trình trễ check-in:</strong> Nếu TVV bị hệ thống tạm ngưng chia Lead do chưa check-in đúng giờ nhưng sau đó đã gửi đơn giải trình và được Quản lý duyệt, hệ thống tự động cấp lượt bù tương ứng vào bảng <code>active_compensation_logs</code>.</td>
+                    </tr>
+                    <tr>
+                      <td><code>fallback_round_id</code><br /><code>fallback_admin_id</code></td>
+                      <td>ID Vòng / User ID</td>
+                      <td><strong>Phân bổ dự phòng (Fallback):</strong> Khi một Lead đổ về nhưng không khớp bất kỳ điều kiện định tuyến nào (ví dụ: đăng ký khóa học đặc thù ngoài danh mục, hoặc toàn bộ TVV trong vòng đều đang quá tải Backpressure), Lead được tự động đẩy về Vòng dự phòng hoặc chỉ định Admin trực tiếp thụ lý.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="settings-integrations">Tham Số Tích Hợp Kênh Ngoài (Meta, Zalo, SES, Sheets)</h2>
+              <p>
+                Đảm bảo luồng dữ liệu thông suốt giữa ERP và các nền tảng công nghệ toàn cầu:
+              </p>
+              <ul>
+                <li><strong>Meta Conversion API (<code>meta_pixel_id</code>, <code>meta_access_token</code>):</strong> Tự động đồng bộ ngược các sự kiện chốt đơn (Deal Won, Đặt cọc) về Facebook Ads Manager để thuật toán Meta tối ưu hóa đối tượng Lookalike chính xác.</li>
+                <li><strong>Zalo Official Account (<code>zalo_oa_id</code>, <code>zalo_secret_key</code>):</strong> Kết nối trực tiếp qua Zalo OpenAPI để gửi tin nhắn ZNS xác nhận lịch tư vấn và thông báo nội bộ tới nhân viên.</li>
+                <li><strong>Amazon SES SMTP (<code>email_smtp_host</code>, <code>email_smtp_user</code>):</strong> Cấu hình máy chủ thư điện tử bảo mật cao, đảm bảo tỷ lệ gửi phiếu lương và hợp đồng vào Inbox đạt trên 99.8%.</li>
+                <li><strong>Google Sheets Service Account:</strong> Đồng bộ hai chiều thời gian thực giữa CRM và bảng tính Google Sheets của từng chi nhánh thông qua tiến trình ngầm <code>cron_sync.php</code>.</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'arch-controllers',
+          title: 'Danh Mục 39 Backend Controllers & 11 Tiến Trình Ngầm (Crons)',
+          description: 'Đặc tả toàn diện 39 Controllers PHP 8.1 trong backend/controllers/, phương thức xử lý, bảng dữ liệu liên kết và 11 tiến trình ngầm.',
+          headings: [
+            { id: 'backend-controllers-matrix', text: 'Bảng Đối Soát 39 Backend Controllers Thực Tế' },
+            { id: 'backend-crons-matrix', text: 'Danh Mục 11 Tiến Trình Ngầm & Cron Jobs' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <p>
+                Toàn bộ nghiệp vụ của hệ thống IDEAS MYERP phía máy chủ được thực thi thông qua <strong>39 Controllers chuyên biệt</strong> đặt tại thư mục <code>backend/controllers/</code> kết hợp với <strong>11 tiến trình ngầm (Cron Jobs / Queue Workers)</strong>. 
+                Dưới đây là bảng đối soát chi tiết 100% mã nguồn thực tế:
+              </p>
+
+              <h2 id="backend-controllers-matrix">Bảng Đối Soát 39 Backend Controllers Thực Tế</h2>
+              <div className="table-responsive">
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '4%' }}>#</th>
+                      <th style={{ width: '22%' }}>Tên Controller (File)</th>
+                      <th style={{ width: '20%' }}>Bảng Quản Lý Chính</th>
+                      <th style={{ width: '54%' }}>Chức Năng Nghiệp Vụ & Phương Thức Cốt Lõi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1</td>
+                      <td><code>ActivityController.php</code></td>
+                      <td><code>activity_logs</code>, <code>leads</code></td>
+                      <td>Ghi vết tương tác khách hàng, cuộc gọi tư vấn, nhật ký chăm sóc và đặt lịch nhắc hẹn chăm sóc tiếp theo.</td>
+                    </tr>
+                    <tr>
+                      <td>2</td>
+                      <td><code>AuthController.php</code></td>
+                      <td><code>users</code>, <code>refresh_tokens</code>, <code>login_attempts</code></td>
+                      <td>Xác thực JWT token, làm mới phiên (Refresh Token xoay vòng), đổi mật khẩu mã hóa bcrypt và phòng chống Brute-Force limit.</td>
+                    </tr>
+                    <tr>
+                      <td>3</td>
+                      <td><code>CampaignController.php</code></td>
+                      <td><code>campaigns</code>, <code>leads</code></td>
+                      <td>Quản lý chiến dịch tuyển sinh, theo dõi UTM source/medium/campaign, ngân sách tiếp thị và tỷ lệ hoàn vốn ROI.</td>
+                    </tr>
+                    <tr>
+                      <td>4</td>
+                      <td><code>CapiController.php</code></td>
+                      <td><code>capi_logs</code>, <code>leads</code>, <code>deals</code></td>
+                      <td>Đẩy sự kiện chuyển đổi thời gian thực lên Meta Conversions API (Lead, Purchase, CompleteRegistration) và TikTok Events.</td>
+                    </tr>
+                    <tr>
+                      <td>5</td>
+                      <td><code>CheckInController.php</code></td>
+                      <td><code>check_ins</code>, <code>shifts</code></td>
+                      <td>Xác thực chấm công 3 lớp (GPS Geofencing, Wi-Fi BSSID, Selfie Biometrics), tính phút đi trễ/về sớm và xử lý đơn bù công.</td>
+                    </tr>
+                    <tr>
+                      <td>6</td>
+                      <td><code>CloudFileController.php</code></td>
+                      <td><code>cloud_files</code>, <code>file_categories</code></td>
+                      <td>Quản lý kho lưu trữ tệp tin đám mây, gắn nhãn tài liệu, liên kết tệp vào dự án và hồ sơ khách hàng.</td>
+                    </tr>
+                    <tr>
+                      <td>7</td>
+                      <td><code>CompanyController.php</code></td>
+                      <td><code>companies</code>, <code>cooperation_slips</code></td>
+                      <td>Quản lý hồ sơ đối tác doanh nghiệp, trường đại học liên kết, đại lý tuyển sinh và hợp đồng ghi nhớ MOU.</td>
+                    </tr>
+                    <tr>
+                      <td>8</td>
+                      <td><code>ContactController.php</code></td>
+                      <td><code>contacts</code>, <code>contact_phones</code>, <code>contact_emails</code>, <code>persons</code></td>
+                      <td>Quản trị thực thể khách hàng trung tâm, tách đa số điện thoại/email, giải thuật chống trùng đa kênh và phân bổ lead.</td>
+                    </tr>
+                    <tr>
+                      <td>9</td>
+                      <td><code>CooperationController.php</code></td>
+                      <td><code>cooperation_slips</code>, <code>companies</code></td>
+                      <td>Quản lý phiếu hợp tác tuyển sinh, tỷ lệ chiết khấu, hoa hồng đại lý đối tác và theo dõi tiến độ chi trả.</td>
+                    </tr>
+                    <tr>
+                      <td>10</td>
+                      <td><code>CustomFieldController.php</code></td>
+                      <td><code>custom_fields</code>, <code>custom_field_values</code></td>
+                      <td>Định nghĩa và lưu trữ các trường dữ liệu tùy biến động cho từng module mà không cần thay đổi schema vật lý.</td>
+                    </tr>
+                    <tr>
+                      <td>11</td>
+                      <td><code>DashboardController.php</code></td>
+                      <td>Tổng hợp đa bảng</td>
+                      <td>Tổng hợp số liệu thống kê realtime: doanh thu, công nợ, số lượng lead theo phễu, KPI đội ngũ kinh doanh.</td>
+                    </tr>
+                    <tr>
+                      <td>12</td>
+                      <td><code>DealController.php</code></td>
+                      <td><code>deals</code>, <code>deal_stage_history</code></td>
+                      <td>Quản trị cơ hội bán hàng, phễu tuyển sinh 14 giai đoạn, giá trị hợp đồng và thời gian dừng (dwell time) tại từng bước.</td>
+                    </tr>
+                    <tr>
+                      <td>13</td>
+                      <td><code>DepositController.php</code></td>
+                      <td><code>deposits</code>, <code>deposit_milestones</code></td>
+                      <td>Quản trị tiền cọc giữ chỗ, phân kỳ các đợt đóng tiền cọc, xuất biên lai thu tiền, quy trình hoàn cọc và cấn trừ học phí.</td>
+                    </tr>
+                    <tr>
+                      <td>14</td>
+                      <td><code>ExportController.php</code></td>
+                      <td>CRM, HRM, Kế toán</td>
+                      <td>Xuất khẩu dữ liệu Excel chuẩn hóa tốc độ cao cho danh sách khách hàng, học viên, bảng chấm công và bảng lương tháng.</td>
+                    </tr>
+                    <tr>
+                      <td>15</td>
+                      <td><code>FileCategoryController.php</code></td>
+                      <td><code>file_categories</code></td>
+                      <td>Quản lý danh mục phân loại tài liệu, phân quyền truy cập theo cấp thư mục tệp tin.</td>
+                    </tr>
+                    <tr>
+                      <td>16</td>
+                      <td><code>FinanceController.php</code></td>
+                      <td><code>expenses</code>, <code>accounts</code>, <code>expense_entities</code></td>
+                      <td>Quản lý đơn đề nghị thanh toán, tạm ứng công tác, hoàn ứng chi tiêu, sổ quỹ ngân hàng và dòng tiền ra vào.</td>
+                    </tr>
+                    <tr>
+                      <td>17</td>
+                      <td><code>HRMController.php</code></td>
+                      <td><code>users</code>, <code>shifts</code>, <code>leaves</code>, <code>monthly_payslips</code></td>
+                      <td>Hồ sơ nhân sự, xếp ca làm việc, duyệt đơn xin nghỉ phép, bộ máy tính lương tự động, chữ ký số và giải quyết khiếu nại lương.</td>
+                    </tr>
+                    <tr>
+                      <td>18</td>
+                      <td><code>ImportController.php</code></td>
+                      <td><code>contacts</code>, <code>leads</code>, <code>persons</code></td>
+                      <td>Nhập dữ liệu khách hàng/học viên hàng loạt từ file Excel, tự động chuẩn hóa số điện thoại và chặn trùng lặp.</td>
+                    </tr>
+                    <tr>
+                      <td>19</td>
+                      <td><code>InventoryController.php</code></td>
+                      <td><code>inventory</code>, <code>products</code></td>
+                      <td>Quản trị kho giáo trình, tài liệu học tập, quà tặng tuyển sinh và theo dõi tài sản thiết bị văn phòng bàn giao cho nhân sự.</td>
+                    </tr>
+                    <tr>
+                      <td>20</td>
+                      <td><code>NoteController.php</code></td>
+                      <td><code>notes</code></td>
+                      <td>Quản lý ghi chú nội bộ bảo mật trên từng hồ sơ khách hàng, cơ hội bán hàng và công việc dự án.</td>
+                    </tr>
+                    <tr>
+                      <td>21</td>
+                      <td><code>NotificationController.php</code></td>
+                      <td><code>notifications</code>, <code>sent_notifications</code></td>
+                      <td>Hệ thống thông báo đẩy đa kênh: chuông thông báo In-app, Web Push qua SSE, gửi cảnh báo vi phạm SLA và nhắc nhở công.</td>
+                    </tr>
+                    <tr>
+                      <td>22</td>
+                      <td><code>POSController.php</code></td>
+                      <td><code>pos_orders</code>, <code>pos_order_items</code></td>
+                      <td>Điểm bán lẻ và thu phí trực tiếp tại quầy tuyển sinh, in hóa đơn nhanh và ghi nhận doanh thu tức thì vào sổ quỹ.</td>
+                    </tr>
+                    <tr>
+                      <td>23</td>
+                      <td><code>PostController.php</code></td>
+                      <td><code>posts</code>, <code>comments</code>, <code>likes</code></td>
+                      <td>Bảng tin truyền thông nội bộ doanh nghiệp (Enterprise Feed), đăng thông báo ban giám đốc, tương tác và gắn sao bài viết.</td>
+                    </tr>
+                    <tr>
+                      <td>24</td>
+                      <td><code>ProductController.php</code></td>
+                      <td><code>products</code>, <code>product_categories</code></td>
+                      <td>Danh mục chương trình đào tạo (Cử nhân, Thạc sĩ, Chứng chỉ), cơ cấu tín chỉ học phần và biểu phí tiêu chuẩn.</td>
+                    </tr>
+                    <tr>
+                      <td>25</td>
+                      <td><code>ProjectController.php</code></td>
+                      <td><code>projects</code>, <code>project_roster</code>, <code>batches</code></td>
+                      <td>Quản lý dự án tổng thể, lớp học đào tạo, bảng công việc Kanban, phân công giảng viên và phòng học.</td>
+                    </tr>
+                    <tr>
+                      <td>26</td>
+                      <td><code>PurchaseOrderController.php</code></td>
+                      <td><code>purchase_orders</code>, <code>purchase_order_items</code></td>
+                      <td>Đơn mua sắm vật tư, trang thiết bị (PO), quy trình trình ký phê duyệt 3 cấp và nhập kho hàng hóa.</td>
+                    </tr>
+                    <tr>
+                      <td>27</td>
+                      <td><code>QuoteController.php</code></td>
+                      <td><code>quotes</code>, <code>quote_items</code></td>
+                      <td>Bộ máy tạo báo giá tuyển sinh/dịch vụ, áp dụng chính sách học bổng, chiết khấu, thuế VAT và tự động kết xuất PDF chuẩn.</td>
+                    </tr>
+                    <tr>
+                      <td>28</td>
+                      <td><code>ReportController.php</code></td>
+                      <td>Tổng hợp đa bảng</td>
+                      <td>Xuất các báo cáo chuyên sâu: báo cáo tỷ lệ chuyển đổi sales, phân tích kênh quảng cáo, báo cáo chi phí và công nợ tồn đọng.</td>
+                    </tr>
+                    <tr>
+                      <td>29</td>
+                      <td><code>SalesOrderController.php</code></td>
+                      <td><code>sales_orders</code>, <code>invoices</code>, <code>invoice_items</code></td>
+                      <td>Quản lý đơn đặt hàng bán (SO), kích hoạt hợp đồng học viên và phát hành hóa đơn tài chính.</td>
+                    </tr>
+                    <tr>
+                      <td>30</td>
+                      <td><code>SearchController.php</code></td>
+                      <td>Toàn bộ hệ thống</td>
+                      <td>Tìm kiếm toàn cục siêu tốc trên thanh công cụ: tìm khách hàng, số điện thoại, mã đơn, tên nhân viên và hồ sơ dự án.</td>
+                    </tr>
+                    <tr>
+                      <td>31</td>
+                      <td><code>SupplierController.php</code></td>
+                      <td><code>suppliers</code></td>
+                      <td>Hồ sơ nhà cung cấp dịch vụ, văn phòng phẩm, địa điểm thuê ngoài và lịch sử thanh toán công nợ.</td>
+                    </tr>
+                    <tr>
+                      <td>32</td>
+                      <td><code>TagController.php</code></td>
+                      <td><code>tags</code>, <code>taggables</code></td>
+                      <td>Hệ thống gắn nhãn phân loại đa thực thể (Lead Tags, Deal Tags, Task Tags) hỗ trợ lọc dữ liệu thông minh.</td>
+                    </tr>
+                    <tr>
+                      <td>33</td>
+                      <td><code>TeamController.php</code></td>
+                      <td><code>teams</code>, <code>users</code></td>
+                      <td>Quản trị sơ đồ tổ chức, phòng ban, phân cấp Trưởng nhóm (Leader) và Đồng trưởng nhóm (Co-leaders).</td>
+                    </tr>
+                    <tr>
+                      <td>34</td>
+                      <td><code>TicketController.php</code></td>
+                      <td><code>tickets</code></td>
+                      <td>Trung tâm tiếp nhận yêu cầu hỗ trợ, chia ticket theo phòng ban chuyên trách, giám sát hạn cam kết SLA xử lý.</td>
+                    </tr>
+                    <tr>
+                      <td>35</td>
+                      <td><code>UploadController.php</code></td>
+                      <td><code>uploads</code></td>
+                      <td>Tiếp nhận tệp đính kèm, ảnh selfie chấm công, chứng từ thanh toán, kiểm tra định dạng an toàn MIME type và lưu trữ.</td>
+                    </tr>
+                    <tr>
+                      <td>36</td>
+                      <td><code>UserController.php</code></td>
+                      <td><code>users</code>, <code>quyen_truy_cap</code></td>
+                      <td>Quản lý tài khoản cán bộ nhân viên, phân quyền RBAC chi tiết, thiết lập khung giờ làm việc cá nhân hóa.</td>
+                    </tr>
+                    <tr>
+                      <td>37</td>
+                      <td><code>WorkflowTaskTemplateController.php</code></td>
+                      <td><code>workflows</code>, <code>workflow_task_templates</code></td>
+                      <td>Quản lý quy trình chuẩn (SOP) và bộ checklist công việc mẫu tự động sinh ra khi tạo mới khóa học hoặc dự án.</td>
+                    </tr>
+                    <tr>
+                      <td>38</td>
+                      <td><code>ai_chat_handler.php</code></td>
+                      <td>Vector RAG, LLM API</td>
+                      <td>Tiếp nhận câu hỏi từ nhân viên/tư vấn viên, truy vấn cơ sở tri thức đào tạo nội bộ và trả lời tự động.</td>
+                    </tr>
+                    <tr>
+                      <td>39</td>
+                      <td><code>ai_training_handler.php</code></td>
+                      <td>Vector Embeddings</td>
+                      <td>Nạp tài liệu quy chế, biểu phí, chính sách tuyển sinh vào cơ sở dữ liệu Vector để phục vụ cho trợ lý ảo AI.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="backend-crons-matrix">Danh Mục 11 Tiến Trình Ngầm & Cron Jobs</h2>
+              <div className="table-responsive">
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '4%' }}>#</th>
+                      <th style={{ width: '24%' }}>Tệp Script Cron</th>
+                      <th style={{ width: '18%' }}>Tần Suất / Thời Điểm Chạy</th>
+                      <th style={{ width: '54%' }}>Nhiệm Vụ Thực Thi Phía Máy Chủ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1</td>
+                      <td><code>cron_master.php</code></td>
+                      <td>Mỗi 1 phút (<code>* * * * *</code>)</td>
+                      <td>Nhạc trưởng điều phối: Kiểm tra các tiến trình con còn sống, kích hoạt các cron con theo đúng lịch trình đã định cấu hình.</td>
+                    </tr>
+                    <tr>
+                      <td>2</td>
+                      <td><code>cron_academic_reminders.php</code></td>
+                      <td>Mỗi 15 phút</td>
+                      <td>Quét thời khóa biểu: Gửi thông báo nhắc lịch học cho học viên và lịch dạy cho giảng viên trước 24 giờ và 2 giờ qua App, Email và Zalo.</td>
+                    </tr>
+                    <tr>
+                      <td>3</td>
+                      <td><code>cron_deposit_reminders.php</code></td>
+                      <td>Mỗi 60 phút</td>
+                      <td>Quét bảng <code>deposits</code> và <code>deposit_milestones</code>: Nhắc nhở chuyên viên tuyển sinh và khách hàng về đợt nộp cọc hoặc thanh toán đợt kế tiếp sắp đến hạn.</td>
+                    </tr>
+                    <tr>
+                      <td>4</td>
+                      <td><code>cron_recurring_tasks.php</code></td>
+                      <td>00:05 mỗi ngày</td>
+                      <td>Tự động nhân bản các công việc định kỳ (Daily / Weekly / Monthly tasks) từ các mẫu quy trình công việc chuẩn.</td>
+                    </tr>
+                    <tr>
+                      <td>5</td>
+                      <td><code>cron_queue_worker.php</code></td>
+                      <td>Chạy liên tục (Daemon)</td>
+                      <td>Quét và xử lý hàng đợi tác vụ bất đồng bộ: Xử lý ghi nhận log, cập nhật lượt đền bù Fair-Share, xử lý sự kiện bắn Webhook.</td>
+                    </tr>
+                    <tr>
+                      <td>6</td>
+                      <td><code>cron_mailer.php</code></td>
+                      <td>Mỗi 1 phút</td>
+                      <td>Quét hàng đợi <code>mail_queue</code>: Gửi email hàng loạt thông qua Amazon SES API, kiểm soát rate limit để đảm bảo tỷ lệ vào Inbox cao nhất.</td>
+                    </tr>
+                    <tr>
+                      <td>7</td>
+                      <td><code>cron_ai_worker.php</code></td>
+                      <td>Mỗi 2 phút</td>
+                      <td>Tiến trình thẩm định dữ liệu ngầm: Quét các Lead mới đăng ký để gửi lên LLM chấm điểm tiềm năng (0-100), phân loại Hot/Warm/Cold và tóm tắt nhu cầu.</td>
+                    </tr>
+                    <tr>
+                      <td>8</td>
+                      <td><code>cron_sync.php</code></td>
+                      <td>Mỗi 5 phút</td>
+                      <td>Đồng bộ hai chiều thời gian thực với Google Sheets CRM của từng trung tâm/chi nhánh, đảm bảo dữ liệu luôn nhất quán.</td>
+                    </tr>
+                    <tr>
+                      <td>9</td>
+                      <td><code>cron_daily_report.php</code></td>
+                      <td>22:00 hàng ngày</td>
+                      <td>Tổng hợp số liệu doanh thu, số cọc phát sinh, số lead mới nhận, tỷ lệ xử lý SLA trong ngày và gửi báo cáo tóm tắt qua Telegram / Email quản lý.</td>
+                    </tr>
+                    <tr>
+                      <td>10</td>
+                      <td><code>cron_weekly_report.php</code></td>
+                      <td>08:00 sáng Thứ Hai</td>
+                      <td>Tổng hợp hiệu suất kinh doanh, xếp hạng chuyên viên tuyển sinh xuất sắc trong tuần và gửi báo cáo lên Ban Giám đốc.</td>
+                    </tr>
+                    <tr>
+                      <td>11</td>
+                      <td><code>cron_monthly_report.php</code></td>
+                      <td>01:00 ngày 1 hàng tháng</td>
+                      <td>Tổng kết tài chính tháng, đối soát doanh số chốt deal, tiền cọc thực thu và đối soát bảng chấm công phục vụ chốt kỳ lương.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
         }
       ]
     },
