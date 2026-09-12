@@ -6,7 +6,6 @@ import {
   Search, 
   Copy, 
   Check, 
-  Home, 
   Shield, 
   Server, 
   ChevronRight,
@@ -189,19 +188,11 @@ echo $response;
         <div className="api-header-right">
           <button 
             onClick={() => navigate('/docs')}
-            className="api-nav-btn api-nav-btn-secondary"
+            className="api-nav-btn api-nav-btn-primary"
             title="Xem Tài Liệu Toàn Thể Sản Phẩm"
           >
             <BookOpen size={14} />
             <span className="api-btn-label">Docs</span>
-          </button>
-          <button 
-            onClick={() => navigate('/')}
-            className="api-nav-btn api-nav-btn-primary"
-            title="Vào Hệ Thống MYERP"
-          >
-            <Home size={14} />
-            <span className="api-btn-label">Vào Hệ Thống</span>
           </button>
         </div>
       </header>
@@ -861,6 +852,58 @@ echo $response;
           font-size: 14.5px;
           color: #475569;
           margin: 0;
+        }
+
+        .api-content-article ul {
+          margin: 12px 0 16px 0;
+          padding-left: 24px !important;
+          color: #334155;
+          line-height: 1.7;
+          list-style: disc outside !important;
+          list-style-type: disc !important;
+        }
+
+        .api-content-article ul > li {
+          list-style: disc outside !important;
+          list-style-type: disc !important;
+          display: list-item !important;
+          margin-bottom: 6px;
+        }
+
+        .api-content-article ol {
+          margin: 12px 0 16px 0;
+          padding-left: 24px !important;
+          color: #334155;
+          line-height: 1.7;
+          list-style: decimal outside !important;
+          list-style-type: decimal !important;
+        }
+
+        .api-content-article ol > li {
+          list-style: decimal outside !important;
+          list-style-type: decimal !important;
+          display: list-item !important;
+          margin-bottom: 6px;
+        }
+
+        .api-content-article li {
+          margin-bottom: 6px;
+          display: list-item !important;
+        }
+
+        .api-table ul {
+          margin: 4px 0 !important;
+          padding-left: 18px !important;
+          list-style: disc outside !important;
+          list-style-type: disc !important;
+        }
+
+        .api-table li,
+        .api-table ul > li {
+          margin-bottom: 4px !important;
+          display: list-item !important;
+          list-style: disc outside !important;
+          list-style-type: disc !important;
         }
 
         .api-spec-section {

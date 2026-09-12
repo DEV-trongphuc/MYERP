@@ -4176,19 +4176,11 @@ export const DocumentationPage: React.FC = () => {
         <div className="doc-header-right">
           <button
             onClick={() => navigate('/api-docs')}
-            className="doc-nav-btn doc-nav-btn-secondary"
+            className="doc-nav-btn doc-nav-btn-primary"
             title="Xem Tài Liệu API & SDK Reference"
           >
             <Code size={14} />
             <span className="doc-btn-label">API Docs</span>
-          </button>
-          <button
-            onClick={() => navigate('/')}
-            className="doc-nav-btn doc-nav-btn-primary"
-            title="Trở về Trang Chủ MYERP"
-          >
-            <Home size={14} />
-            <span className="doc-btn-label">Vào Hệ Thống</span>
           </button>
         </div>
       </header>
@@ -4766,15 +4758,62 @@ export const DocumentationPage: React.FC = () => {
           line-height: 1.7;
         }
 
-        .doc-prose ul, .doc-prose ol {
+        .doc-prose ul {
           margin: 0 0 20px 0;
-          padding-left: 24px;
+          padding-left: 24px !important;
           color: #334155;
           line-height: 1.7;
+          list-style: disc outside !important;
+          list-style-type: disc !important;
+        }
+
+        .doc-prose ol {
+          margin: 0 0 20px 0;
+          padding-left: 24px !important;
+          color: #334155;
+          line-height: 1.7;
+          list-style: decimal outside !important;
+          list-style-type: decimal !important;
         }
 
         .doc-prose li {
           margin-bottom: 8px;
+          display: list-item !important;
+        }
+
+        .doc-prose ul > li {
+          list-style: disc outside !important;
+          list-style-type: disc !important;
+          display: list-item !important;
+        }
+
+        .doc-prose ol > li {
+          list-style: decimal outside !important;
+          list-style-type: decimal !important;
+          display: list-item !important;
+        }
+
+        .doc-prose ul ul > li {
+          list-style-type: circle !important;
+        }
+
+        .doc-prose ol ol > li {
+          list-style-type: lower-alpha !important;
+        }
+
+        .doc-table ul {
+          margin: 4px 0 !important;
+          padding-left: 18px !important;
+          list-style: disc outside !important;
+          list-style-type: disc !important;
+        }
+
+        .doc-table li,
+        .doc-table ul > li {
+          margin-bottom: 4px !important;
+          display: list-item !important;
+          list-style: disc outside !important;
+          list-style-type: disc !important;
         }
 
         /* Full content tables with no ellipsis clipping */
