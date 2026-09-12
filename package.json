@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy-myerp.ps1",
     "deploy:backend": "powershell -ExecutionPolicy Bypass -File ./deploy-myerp.ps1 -BackendOnly",
-    "deploy:frontend": "powershell -ExecutionPolicy Bypass -File ./deploy-myerp.ps1 -FrontendOnly"
+    "deploy:frontend": "powershell -ExecutionPolicy Bypass -File ./deploy-myerp.ps1 -FrontendOnly",
+    "backup:db": "node scripts/backup-database.js",
+    "restore:db": "node scripts/restore-database.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
