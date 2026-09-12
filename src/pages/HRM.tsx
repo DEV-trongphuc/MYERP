@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { Avatar } from '../components/ui/Avatar';
+import { Skeleton } from '../components/ui/Skeleton';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -499,6 +500,7 @@ export default function HRM() {
   const [newPeriodMonth, setNewPeriodMonth] = useState(new Date().toISOString().substring(0, 7));
   const [newPeriodWorkDays, setNewPeriodWorkDays] = useState(26);
   const [dashboardMonth, setDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardPayslips, setDashboardPayslips] = useState<any[]>([]);
   const [dashboardCheckIns, setDashboardCheckIns] = useState<any[]>([]);
   const [todayCheckIns, setTodayCheckIns] = useState<any[]>([]);
@@ -629,6 +631,7 @@ export default function HRM() {
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
+      setDashboardLoading(true);
       const parts = dashboardMonth.split('-');
       const y = parts[0];
       const m = parts[1];
@@ -645,7 +648,10 @@ export default function HRM() {
         setDashboardCheckIns(checkInsList);
         setDashboardShifts(shiftsList);
         setDashboardLeaves(leavesList);
-      }).catch(() => {});
+      }).catch(() => {})
+      .finally(() => {
+        setDashboardLoading(false);
+      });
     }
   }, [activeTab, dashboardMonth]);
 
@@ -1452,7 +1458,23 @@ export default function HRM() {
                     </h3>
                   </div>
                   <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
-                    {topLatenessList && topLatenessList.length > 0 ? topLatenessList.map((item, i) => {
+                    {dashboardLoading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Skeleton width={16} height={14} />
+                              <Skeleton width={24} height={24} borderRadius="50%" />
+                              <Skeleton width={110 + (i % 3) * 25} height={14} />
+                            </div>
+                            <Skeleton width={45} height={14} />
+                          </div>
+                          <div style={{ marginLeft: 24 }}>
+                            <Skeleton width="100%" height={6} borderRadius={4} />
+                          </div>
+                        </div>
+                      ))
+                    ) : topLatenessList && topLatenessList.length > 0 ? topLatenessList.map((item, i) => {
                       const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
                       const barColor = colors[i % colors.length];
                       return (
@@ -1491,7 +1513,23 @@ export default function HRM() {
                     </h3>
                   </div>
                   <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
-                    {topOTList && topOTList.length > 0 ? topOTList.map((item, i) => {
+                    {dashboardLoading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Skeleton width={16} height={14} />
+                              <Skeleton width={24} height={24} borderRadius="50%" />
+                              <Skeleton width={110 + (i % 3) * 25} height={14} />
+                            </div>
+                            <Skeleton width={45} height={14} />
+                          </div>
+                          <div style={{ marginLeft: 24 }}>
+                            <Skeleton width="100%" height={6} borderRadius={4} />
+                          </div>
+                        </div>
+                      ))
+                    ) : topOTList && topOTList.length > 0 ? topOTList.map((item, i) => {
                       const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
                       const barColor = colors[i % colors.length];
                       return (

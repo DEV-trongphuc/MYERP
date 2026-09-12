@@ -5,7 +5,7 @@ import {
   GitBranch, UserPlus, Zap, Calendar, BarChart2, Scale,
   FileSpreadsheet, MessageCircle, Database, Server, ExternalLink, Clock, CheckCircle, Cpu,
   ShieldAlert, Filter, Ticket as TicketIcon,
-  FileText, CheckSquare, AlertCircle, CheckCircle2, Settings, DollarSign, Send, CreditCard, TrendingUp, Receipt, Award, ArrowRight,
+  FileText, CheckSquare, AlertCircle, CheckCircle2, Settings, DollarSign, Send, CreditCard, TrendingUp, Receipt, Award, Flame, ArrowRight,
   Package,
   Tag,
   XCircle,
@@ -140,6 +140,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const [hrTeams, setHrTeams] = useState<any[]>([]);
   const [hrTodayCheckIns, setHrTodayCheckIns] = useState<any[]>([]);
   const [hrWeeklyCheckIns, setHrWeeklyCheckIns] = useState<any[]>([]);
+  const [hrMonthCheckIns, setHrMonthCheckIns] = useState<any[]>([]);
+  const [hrShifts, setHrShifts] = useState<any[]>([]);
   const [hrDashboardMonth, setHrDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
   const [hrDashboardPayslips, setHrDashboardPayslips] = useState<any[]>([]);
   const [hrLoading, setHrLoading] = useState(false);
@@ -515,6 +517,10 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       const mondayStr = monday.toISOString().substring(0, 10);
       const saturdayStr = saturday.toISOString().substring(0, 10);
 
+      const parts = parsedMonthStr.split('-');
+      const y = parts[0];
+      const m = parts[1];
+
       Promise.all([
         fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
         fetchAPI('hrm/leaves').catch(() => ({ data: [] })),
@@ -522,8 +528,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         fetchAPI('hrm/teams').catch(() => ({ data: [] })),
         fetchAPI(`check-ins?date=${todayStr}`).catch(() => ({ data: [] })),
         fetchAPI(`check-ins?from=${mondayStr}&to=${saturdayStr}`).catch(() => ({ data: [] })),
+        fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`).catch(() => ({ data: [] })),
         fetchAPI(`hrm/payroll?month_year=${parsedMonthStr}`).catch(() => ({ data: [] }))
-      ]).then(([profRes, leaveRes, advRes, teamRes, todayCheckRes, weekCheckRes, payRes]) => {
+      ]).then(([profRes, leaveRes, advRes, teamRes, todayCheckRes, weekCheckRes, monthCheckRes, payRes]) => {
         setHrProfiles(profRes?.data || profRes || []);
         setHrLeaves(leaveRes?.data || leaveRes || []);
         setHrAdvances(advRes?.data || advRes || []);
@@ -531,6 +538,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         setHrTodayCheckIns(Array.isArray(todayCheckRes) ? todayCheckRes : todayCheckRes?.data || []);
         const weeklyRows = weekCheckRes?.data?.check_ins || weekCheckRes?.check_ins || (Array.isArray(weekCheckRes?.data) ? weekCheckRes.data : (Array.isArray(weekCheckRes) ? weekCheckRes : []));
         setHrWeeklyCheckIns(weeklyRows);
+
+        const checkData = monthCheckRes?.data || monthCheckRes || {};
+        const checkInsList = Array.isArray(checkData) ? checkData : (checkData.check_ins || []);
+        const shiftsList = checkData.shifts || [];
+        setHrMonthCheckIns(checkInsList);
+        setHrShifts(shiftsList);
+
         setHrDashboardPayslips(payRes?.data || payRes || []);
       }).catch(() => {})
       .finally(() => {
@@ -574,7 +588,8 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }, [hrProfiles]);
 
   const hrTopLatenessList = useMemo(() => {
-    const payslipList = [...hrDashboardPayslips]
+    // 1. Tính từ hrDashboardPayslips nếu đã có số phút đi trễ
+    const fromPayslips = [...hrDashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
       .map(p => {
         const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
@@ -587,99 +602,137 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         };
       });
     
-    if (payslipList.length > 0) {
-      payslipList.sort((a, b) => b.value - a.value);
-      const maxVal = Math.max(...payslipList.map(x => x.value));
-      return payslipList.map(item => ({
+    if (fromPayslips.length > 0) {
+      fromPayslips.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...fromPayslips.map(x => x.value)) || 1;
+      return fromPayslips.map(item => ({
         ...item,
         percent: Math.min(100, (item.value / maxVal) * 100)
       })).slice(0, 10);
     }
 
-    // Real fallback from weekly check-ins if payslips not yet generated
-    const userMap: Record<string, { id: any; name: string; avatar?: string; department?: string; value: number }> = {};
-    hrWeeklyCheckIns.forEach((c: any) => {
-      const late = Number(c.lateness_minutes || 0);
-      if (late > 0) {
-        const uid = c.user_id || c.user_name;
-        if (!userMap[uid]) {
-          const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid) || hrProfileMap.get(c.code);
-          userMap[uid] = { 
+    // 2. Tính Realtime từ check-ins tháng (hoặc tuần)
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
+    const checkinSource = hrMonthCheckIns.length > 0 ? hrMonthCheckIns : hrWeeklyCheckIns;
+    checkinSource.forEach((c: any) => {
+      const lateness = Number(c.lateness_minutes || 0);
+      const isLate = c.status === 'late' || lateness > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
+      if (isLate) {
+        const uid = c.user_id;
+        const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
+        if (!map[uid]) {
+          map[uid] = { 
             id: uid, 
-            name: prof?.full_name || prof?.name || c.user_name || `ID #${uid}`, 
-            avatar: prof?.avatar || prof?.avatar_url,
+            name: prof?.full_name || prof?.name || c.user_name || t('Nhân viên'), 
+            avatar: prof?.avatar || prof?.avatar_url || c.user_avatar,
             department: prof?.department_name || prof?.department || '',
+            count: 0,
             value: 0 
           };
         }
-        userMap[uid].value += late;
+        map[uid].count += 1;
+        map[uid].value += lateness > 0 ? lateness : 15;
       }
     });
 
-    const checkinList = Object.values(userMap).sort((a, b) => b.value - a.value);
-    if (checkinList.length === 0) return [];
-    const maxVal = Math.max(...checkinList.map(x => x.value));
-    return checkinList.map(item => ({
+    const list = Object.values(map).sort((a, b) => b.value - a.value || b.count - a.count);
+    if (list.length === 0) return [];
+    const maxVal = Math.max(...list.map(x => x.value)) || 1;
+    return list.map(item => ({
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [hrDashboardPayslips, hrWeeklyCheckIns, hrProfileMap]);
+  }, [hrDashboardPayslips, hrMonthCheckIns, hrWeeklyCheckIns, hrProfileMap, t]);
 
   const hrTopOTList = useMemo(() => {
-    const payslipList = [...hrDashboardPayslips]
+    // 1. Tính Realtime từ hrShifts (overtime) và hrLeaves (overtime)
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; unit: string }> = {};
+    
+    hrShifts.filter((s: any) => s.shift_type === 'overtime' && (Number(s.approved) === 1 || s.status === 'approved')).forEach((s: any) => {
+      const uid = s.user_id;
+      const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
+      if (!map[uid]) {
+        map[uid] = {
+          id: uid,
+          name: s.user_name || prof?.full_name || t('Nhân viên'),
+          avatar: s.user_avatar || prof?.avatar_url || prof?.avatar,
+          department: prof?.department_name || prof?.department || '',
+          count: 0,
+          value: 0,
+          unit: t('giờ')
+        };
+      }
+      map[uid].count += 1;
+      let shiftHours = Number(s.hours || s.total_hours || s.duration_hours || 0);
+      if (shiftHours <= 0 && s.start_time && s.end_time) {
+        const [sh, sm] = String(s.start_time).split(':').map(Number);
+        const [eh, em] = String(s.end_time).split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0) shiftHours = Math.round((diff / 60) * 10) / 10;
+      }
+      if (shiftHours <= 0) shiftHours = 2;
+      map[uid].value = Math.round((map[uid].value + shiftHours) * 10) / 10;
+    });
+
+    hrLeaves.filter((l: any) => l.leave_type === 'overtime' && (Number(l.approved) === 1 || l.status === 'approved')).forEach((l: any) => {
+      const uid = l.user_id;
+      const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
+      if (!map[uid]) {
+        map[uid] = {
+          id: uid,
+          name: l.user_name || prof?.full_name || t('Nhân viên'),
+          avatar: l.user_avatar || prof?.avatar_url || prof?.avatar,
+          department: prof?.department_name || prof?.department || '',
+          count: 0,
+          value: 0,
+          unit: t('giờ')
+        };
+      }
+      const days = Number(l.total_days || 0.25);
+      const hours = Number(l.total_hours || (days * 8) || 2);
+      map[uid].count += 1;
+      map[uid].value = Math.round((map[uid].value + hours) * 10) / 10;
+    });
+
+    const shiftAndLeaveList = Object.values(map);
+    if (shiftAndLeaveList.length > 0) {
+      const sorted = shiftAndLeaveList.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...sorted.map(x => x.value)) || 1;
+      return sorted.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // 2. Fallback từ hrDashboardPayslips nếu không có ca OT realtime
+    const fromPayslips = [...hrDashboardPayslips]
       .filter(p => Number(p.overtime_days || 0) > 0 || Number(p.overtime_hours || 0) > 0)
       .map(p => {
+        const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
         const hours = Number(p.overtime_hours || 0) > 0 
           ? Number(p.overtime_hours) 
           : Math.round(Number(p.overtime_days || 0) * 8 * 10) / 10;
-        const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
         return {
           id: p.id || p.user_id,
           name: prof?.full_name || p.employee_name,
           avatar: prof?.avatar || prof?.avatar_url,
           department: prof?.department_name || prof?.department || '',
-          value: hours
+          value: hours,
+          unit: t('giờ')
         };
       });
 
-    if (payslipList.length > 0) {
-      payslipList.sort((a, b) => b.value - a.value);
-      const maxVal = Math.max(...payslipList.map(x => x.value));
-      return payslipList.map(item => ({
+    if (fromPayslips.length > 0) {
+      fromPayslips.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...fromPayslips.map(x => x.value));
+      return fromPayslips.map(item => ({
         ...item,
         percent: Math.min(100, (item.value / maxVal) * 100)
       })).slice(0, 10);
     }
 
-    // Real fallback from approved overtime requests
-    const otLeaves = hrLeaves.filter((l: any) => l.leave_type === 'overtime' && l.status === 'approved');
-    const userMap: Record<string, { id: any; name: string; avatar?: string; department?: string; value: number }> = {};
-    otLeaves.forEach((l: any) => {
-      const hours = Number(l.total_hours || (Number(l.total_days || 0) * 8) || 0);
-      if (hours > 0) {
-        const uid = l.user_id || l.user_name;
-        if (!userMap[uid]) {
-          const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
-          userMap[uid] = { 
-            id: uid, 
-            name: prof?.full_name || prof?.name || l.user_name || `ID #${uid}`, 
-            avatar: prof?.avatar || prof?.avatar_url,
-            department: prof?.department_name || prof?.department || '',
-            value: 0 
-          };
-        }
-        userMap[uid].value += hours;
-      }
-    });
-
-    const otList = Object.values(userMap).sort((a, b) => b.value - a.value);
-    if (otList.length === 0) return [];
-    const maxVal = Math.max(...otList.map(x => x.value));
-    return otList.map(item => ({
-      ...item,
-      percent: Math.min(100, (item.value / maxVal) * 100)
-    })).slice(0, 10);
-  }, [hrDashboardPayslips, hrLeaves, hrProfileMap]);
+    return [];
+  }, [hrShifts, hrLeaves, hrDashboardPayslips, hrProfileMap, t]);
 
   const syncDateFilterToModal = (filter: string) => {
     let mode = 'this_month';
@@ -2000,36 +2053,56 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           {/* Top Late-comers list */}
           <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
+              <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
                 <Clock size={18} color="#ec4899" /> {t('Top Nhân viên Đi trễ')}
               </h3>
             </div>
-            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
+            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
               {isHrLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
+                Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Skeleton width={`${50 + (i % 2) * 20}%`} height={14} />
-                      <Skeleton width={45} height={12} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Skeleton width={16} height={14} />
+                        <Skeleton width={24} height={24} borderRadius="50%" />
+                        <Skeleton width={110 + (i % 3) * 25} height={14} />
+                      </div>
+                      <Skeleton width={45} height={14} />
                     </div>
-                    <Skeleton width="100%" height={6} borderRadius={4} />
+                    <div style={{ marginLeft: 24 }}>
+                      <Skeleton width="100%" height={6} borderRadius={4} />
+                    </div>
                   </div>
                 ))
-              ) : hrTopLatenessList.length > 0 ? hrTopLatenessList.map((item, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
-                      <span style={{ fontWeight: 600 }}>{item.name}</span>
-                    </span>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('phút')}</span>
-                  </div>
-                  <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#ec4899', borderRadius: 4 }} />
-                  </div>
+              ) : hrTopLatenessList && hrTopLatenessList.length > 0 ? (
+                hrTopLatenessList.map((item, i) => {
+                  const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
+                  const barColor = colors[i % colors.length];
+                  return (
+                    <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
+                          <Avatar src={item.avatar} name={item.name} size={24} />
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text)' }}>
+                            {item.name}
+                            <BarChart2 size={14} style={{ opacity: 0.35, color: barColor }} />
+                          </span>
+                        </span>
+                        <span style={{ color: 'var(--color-text)', fontSize: '0.875rem', fontWeight: 600 }}>
+                          {item.value} {t('phút')}
+                        </span>
+                      </div>
+                      <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 24 }}>
+                        <div style={{ width: `${item.percent}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0', fontSize: '0.85rem' }}>
+                  🎉 {t('Tuyệt vời! Không có nhân viên nào đi trễ trong kỳ.')}
                 </div>
-              )) : (
-                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Không có nhân viên đi trễ')}</div>
               )}
             </div>
           </div>
@@ -2037,36 +2110,56 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           {/* Top OT (Overtime) list */}
           <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                <Award size={18} color="#fbbf24" /> {t('Top Nhân viên tăng ca (OT)')}
+              <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
+                <Flame size={18} color="#f59e0b" /> {t('Top Nhân viên tăng ca (OT)')}
               </h3>
             </div>
-            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
+            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
               {isHrLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
+                Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Skeleton width={`${50 + (i % 2) * 20}%`} height={14} />
-                      <Skeleton width={45} height={12} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Skeleton width={16} height={14} />
+                        <Skeleton width={24} height={24} borderRadius="50%" />
+                        <Skeleton width={110 + (i % 3) * 25} height={14} />
+                      </div>
+                      <Skeleton width={45} height={14} />
                     </div>
-                    <Skeleton width="100%" height={6} borderRadius={4} />
+                    <div style={{ marginLeft: 24 }}>
+                      <Skeleton width="100%" height={6} borderRadius={4} />
+                    </div>
                   </div>
                 ))
-              ) : hrTopOTList.length > 0 ? hrTopOTList.map((item, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
-                      <span style={{ fontWeight: 600 }}>{item.name}</span>
-                    </span>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('giờ OT')}</span>
-                  </div>
-                  <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#fbbf24', borderRadius: 4 }} />
-                  </div>
+              ) : hrTopOTList && hrTopOTList.length > 0 ? (
+                hrTopOTList.map((item, i) => {
+                  const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
+                  const barColor = colors[i % colors.length];
+                  return (
+                    <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
+                          <Avatar src={item.avatar} name={item.name} size={24} />
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text)' }}>
+                            {item.name}
+                            <BarChart2 size={14} style={{ opacity: 0.35, color: barColor }} />
+                          </span>
+                        </span>
+                        <span style={{ color: 'var(--color-text)', fontSize: '0.875rem', fontWeight: 600 }}>
+                          {item.value} {item.unit || t('giờ')}
+                        </span>
+                      </div>
+                      <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 24 }}>
+                        <div style={{ width: `${item.percent}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0', fontSize: '0.85rem' }}>
+                  {t('Chưa có nhân viên nào ghi nhận tăng ca trong kỳ.')}
                 </div>
-              )) : (
-                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Chưa có nhân viên tăng ca')}</div>
               )}
             </div>
           </div>
