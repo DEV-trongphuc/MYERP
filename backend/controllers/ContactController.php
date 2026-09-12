@@ -3211,11 +3211,16 @@ class ContactController {
         }
         $tid = (int)$auth['tenant_id'];
         $b = getBody();
-        $id = (int)($b['id'] ?? $b['contact_id'] ?? 0);
-        $avatarUrl = trim($b['avatar_url'] ?? '');
-        $zaloName = trim($b['zalo_name'] ?? '');
+        $id = (int)($b['id'] ?? $b['contact_id'] ?? $_GET['id'] ?? 0);
+        $avatarUrl = trim($b['avatar_url'] ?? $_GET['avatar_url'] ?? '');
+        $zaloName = trim($b['zalo_name'] ?? $_GET['zalo_name'] ?? '');
 
         if (!$id || empty($avatarUrl)) {
+            if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+                header('Content-Type: image/gif');
+                echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+                exit;
+            }
             respond(400, null, 'Thiếu contact_id hoặc avatar_url', false);
         }
 
@@ -3253,6 +3258,13 @@ class ContactController {
         // Cập nhật âm thầm: updated_at = updated_at
         $stmt = $this->db->prepare("UPDATE contacts SET avatar_url = ?, updated_at = updated_at WHERE id = ? AND tenant_id = ?");
         $stmt->execute([$savedUrl, $id, $tid]);
+
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            header('Content-Type: image/gif');
+            header('Cache-Control: no-cache, no-store, must-revalidate');
+            echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+            exit;
+        }
 
         respond(200, [
             'id' => $id,

@@ -840,7 +840,7 @@ switch ($resource) {
         elseif ($resourceId === 'programs' && $method === 'GET') $ctrl->getPrograms($auth);
         elseif ($resourceId === 'bulk-delete' && $method === 'POST') $ctrl->bulkDelete($auth);
         elseif ($resourceId === 'pipeline-phones' && $method === 'GET') $ctrl->getPipelinePhones($auth);
-        elseif ($resourceId === 'silent-avatar-sync' && $method === 'POST') $ctrl->silentAvatarSync($auth);
+        elseif ($resourceId === 'silent-avatar-sync' && in_array($method, ['POST', 'GET'], true)) $ctrl->silentAvatarSync($auth);
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $subResource === 'clone' && $method === 'POST') $ctrl->cloneContact($auth, (int)$resourceId);
