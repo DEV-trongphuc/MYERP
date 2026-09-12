@@ -11,6 +11,7 @@ import { CurrencyInput } from './ui/CurrencyInput';
 import { PasteDropzoneArea } from './ui/PasteDropzoneArea';
 import { Avatar } from './ui/Avatar';
 import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
+import { VietnameseDateInput } from './ui/VietnameseDateInput';
 import api from '../api/axios';
 
 interface DepositCreateDrawerProps {
@@ -1121,18 +1122,18 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                                 </div>
                               )}
                             </div>
-                            <input
-                              type="date"
-                              required
-                              value={m.expected_pay_date}
-                              onChange={e =>
-                                setMilestonesInput(prev =>
-                                  prev.map((item, i) => (i === idx ? { ...item, expected_pay_date: e.target.value } : item))
-                                )
-                              }
-                              className="form-input"
-                              style={{ height: '38px', padding: '8px 12px', fontSize: '0.85rem', width: '130px', flexShrink: 0 }}
-                            />
+                            <div style={{ width: '135px', flexShrink: 0 }}>
+                              <VietnameseDateInput
+                                required
+                                value={m.expected_pay_date}
+                                onChange={val =>
+                                  setMilestonesInput(prev =>
+                                    prev.map((item, i) => (i === idx ? { ...item, expected_pay_date: val } : item))
+                                  )
+                                }
+                                size="sm"
+                              />
+                            </div>
                             {milestonesInput.length > 1 && (
                               <button
                                 type="button"

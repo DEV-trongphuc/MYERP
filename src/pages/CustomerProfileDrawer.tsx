@@ -7779,26 +7779,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             <Calendar size={13} style={{ color: 'var(--color-primary)' }} />
                             Ngày nhập học:
                           </span>
-                          <input 
-                            type="date"
-                            value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setFormData((prev: any) => ({ ...prev, admission_date: val }));
-                            }}
-                            style={{
-                              height: '28px',
-                              fontSize: '0.78rem',
-                              fontWeight: 650,
-                              padding: '2px 6px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--color-border)',
-                              background: 'var(--color-surface)',
-                              color: 'var(--color-text)',
-                              outline: 'none',
-                              cursor: 'pointer'
-                            }}
-                          />
+                          <div style={{ width: '130px' }}>
+                            <VietnameseDateInput
+                              value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
+                              onChange={val => {
+                                setFormData((prev: any) => ({ ...prev, admission_date: val }));
+                              }}
+                              size="sm"
+                              inputStyle={{
+                                height: '28px',
+                                fontSize: '0.78rem',
+                                fontWeight: 650,
+                                padding: '2px 6px',
+                                borderRadius: '6px'
+                              }}
+                            />
+                          </div>
                         </div>
 
                         <div style={{ width: '1px', height: '18px', background: 'var(--color-border)', flexShrink: 0 }} />
@@ -8178,26 +8174,22 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                     <Calendar size={12} style={{ color: 'var(--color-primary)' }} />
                                     Ngày nhập học:
                                   </span>
-                                  <input 
-                                    type="date"
-                                    value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setFormData((prev: any) => ({ ...prev, admission_date: val }));
-                                    }}
-                                    style={{
-                                      flex: 1,
-                                      height: '30px',
-                                      fontSize: '0.78rem',
-                                      fontWeight: 650,
-                                      padding: '2px 8px',
-                                      borderRadius: '6px',
-                                      border: '1px solid var(--color-border)',
-                                      background: 'var(--color-surface)',
-                                      color: 'var(--color-text)',
-                                      outline: 'none'
-                                    }}
-                                  />
+                                  <div style={{ flex: 1 }}>
+                                    <VietnameseDateInput
+                                      value={formData.admission_date ? String(formData.admission_date).slice(0, 10) : ''}
+                                      onChange={val => {
+                                        setFormData((prev: any) => ({ ...prev, admission_date: val }));
+                                      }}
+                                      size="sm"
+                                      inputStyle={{
+                                        height: '30px',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 650,
+                                        padding: '2px 8px',
+                                        borderRadius: '6px'
+                                      }}
+                                    />
+                                  </div>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>

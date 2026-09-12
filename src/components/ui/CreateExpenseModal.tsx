@@ -11,6 +11,7 @@ import { Avatar } from './Avatar';
 import { numberToVietnameseText } from '../../utils/numberToText';
 import { useAuth } from '../../contexts/AuthContext';
 import { compressToWebP } from '../../utils/imageCompress';
+import { VietnameseDateInput } from './VietnameseDateInput';
 
 interface Props {
   isOpen: boolean;
@@ -317,20 +318,11 @@ export const CreateExpenseModal: React.FC<Props> = ({ isOpen, onClose, initialEn
 
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label">Ngày chi</label>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: '10px',
-                        padding: '0 1rem', height: '44px',
-                        border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)',
-                        background: 'var(--color-surface)',
-                      }}>
-                        <Calendar size={16} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                        <input
-                          type="date"
-                          style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.875rem', color: 'var(--color-text)' }}
-                          value={formData.date}
-                          onChange={e => setFormData({ ...formData, date: e.target.value })}
-                        />
-                      </div>
+                      <VietnameseDateInput
+                        value={formData.date}
+                        onChange={val => setFormData({ ...formData, date: val })}
+                        inputStyle={{ height: '44px', borderRadius: 'var(--radius-lg)' }}
+                      />
                     </div>
                   </div>
 

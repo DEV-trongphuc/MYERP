@@ -17,6 +17,7 @@ export interface VietnameseDateInputProps {
   name?: string;
   autoFocus?: boolean;
   required?: boolean;
+  size?: 'sm' | 'md' | 'lg';
 }
 
 // Check if year, month, day form a valid calendar date
@@ -127,7 +128,8 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
   id,
   name,
   autoFocus = false,
-  required = false
+  required = false,
+  size = 'md'
 }) => {
   const isoValue = value ? String(value).substring(0, 10) : '';
   const [displayText, setDisplayText] = useState(() => isoToVn(isoValue));
@@ -204,6 +206,12 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
 
   // Calendar icon is always on the right. Only show left element if custom leftIcon is explicitly provided.
   const showLeft = Boolean(leftIcon);
+  const isSm = size === 'sm';
+  const isLg = size === 'lg';
+
+  const defaultHeight = isSm ? '28px' : isLg ? '42px' : '36px';
+  const defaultFontSize = isSm ? '0.78rem' : isLg ? '0.95rem' : '0.85rem';
+  const iconSize = isSm ? 13 : isLg ? 17 : 15;
 
   return (
     <div 
@@ -220,7 +228,7 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         <div 
           style={{ 
             position: 'absolute', 
-            left: '12px', 
+            left: '10px', 
             color: 'var(--color-text-muted)', 
             display: 'flex', 
             alignItems: 'center', 
@@ -249,12 +257,12 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         required={required}
         style={{
           width: '100%',
-          paddingLeft: showLeft ? '2.4rem' : '12px',
-          paddingRight: '34px',
-          height: inputStyle?.height || undefined,
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          borderRadius: '8px',
+          paddingLeft: showLeft ? '2.2rem' : (isSm ? '8px' : '12px'),
+          paddingRight: isSm ? '26px' : '34px',
+          height: inputStyle?.height || defaultHeight,
+          fontSize: inputStyle?.fontSize || defaultFontSize,
+          fontWeight: 650,
+          borderRadius: isSm ? '6px' : '8px',
           border: '1px solid var(--color-border)',
           backgroundColor: disabled ? 'var(--color-bg-light)' : 'var(--color-surface)',
           color: 'var(--color-text)',
@@ -275,11 +283,11 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         aria-hidden="true"
         style={{
           position: 'absolute',
-          right: '4px',
+          right: '2px',
           top: '50%',
           transform: 'translateY(-50%)',
-          width: '28px',
-          height: '28px',
+          width: isSm ? '24px' : '28px',
+          height: isSm ? '24px' : '28px',
           opacity: 0,
           cursor: disabled ? 'not-allowed' : 'pointer',
           zIndex: 2
@@ -295,7 +303,7 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
         title="Chọn ngày từ lịch"
         style={{
           position: 'absolute',
-          right: '8px',
+          right: isSm ? '4px' : '8px',
           top: '50%',
           transform: 'translateY(-50%)',
           display: 'flex',
@@ -311,7 +319,7 @@ export const VietnameseDateInput: React.FC<VietnameseDateInputProps> = ({
           transition: 'color 0.15s ease'
         }}
       >
-        <Calendar size={15} />
+        <Calendar size={iconSize} />
       </button>
     </div>
   );

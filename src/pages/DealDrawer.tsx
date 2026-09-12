@@ -14,6 +14,7 @@ import { MentionInput } from '../components/ui/MentionInput';
 import { Avatar } from '../components/ui/Avatar';
 import { numberToText } from '../utils/numberToText';
 import { CustomModal } from '../components/ui/CustomModal';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 interface DealDrawerProps {
   isOpen: boolean;
@@ -527,7 +528,11 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                         </div>
                         <div className="form-group">
                           <label className="form-label">Ngày dự kiến chốt</label>
-                          <input className="form-input" type="date" value={formData?.expected_close_date || ''} onChange={e => setFormData({...formData, expected_close_date: e.target.value})} />
+                          <VietnameseDateInput
+                            value={formData?.expected_close_date || ''}
+                            onChange={val => setFormData({...formData, expected_close_date: val})}
+                            disabled={isViewer}
+                          />
                         </div>
                         <div className="form-group">
                           <label className="form-label">Độ ưu tiên (Priority)</label>
@@ -567,11 +572,15 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                                 }} />
                               )}
                               {field.field_type === 'date' && (
-                                <input type="date" className="form-input" value={field.value || ''} onChange={e => {
-                                  const newFields = [...formData.custom_fields];
-                                  newFields[index].value = e.target.value;
-                                  setFormData({ ...formData, custom_fields: newFields });
-                                }} />
+                                <VietnameseDateInput
+                                  value={field.value || ''}
+                                  onChange={val => {
+                                    const newFields = [...formData.custom_fields];
+                                    newFields[index].value = val;
+                                    setFormData({ ...formData, custom_fields: newFields });
+                                  }}
+                                  disabled={isViewer}
+                                />
                               )}
                               {field.field_type === 'dropdown' && (
                                 <CustomSelect 

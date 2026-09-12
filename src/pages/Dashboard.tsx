@@ -27,6 +27,7 @@ import { withRouterFreezer } from '../components/RouterFreezer';
 import { fetchAPI, getDefaultDateFilter } from '../utils/api';
 import api from '../api/axios';
 import { useLanguage } from '../contexts/LanguageContext';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import toast from 'react-hot-toast';
 import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skeleton';
 
@@ -4948,21 +4949,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 0' }}>
             <div>
               <label className="form-label">{t('Từ ngày')}</label>
-              <input
-                type="date"
-                className="form-input"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-              />
+              <VietnameseDateInput value={startDate} onChange={val => setStartDate(val)} />
             </div>
             <div>
               <label className="form-label">{t('Đến ngày')}</label>
-              <input
-                type="date"
-                className="form-input"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-              />
+              <VietnameseDateInput value={endDate} onChange={val => setEndDate(val)} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
               <button className="btn outline" onClick={() => setShowDateModal(false)}>{t('Hủy')}</button>
@@ -5030,21 +5021,23 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
                 {statsDateMode === 'custom' && (
                   <div className="stats-custom-dates" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', animation: 'slideUp 0.15s ease-out', flexShrink: 0 }}>
-                    <input
-                      type="date"
-                      className="form-input"
-                      style={{ padding: '4px 10px', fontSize: '0.8125rem', height: 32, width: 130 }}
-                      value={statsStartDate}
-                      onChange={e => setStatsStartDate(e.target.value)}
-                    />
+                    <div style={{ width: 130 }}>
+                      <VietnameseDateInput
+                        size="sm"
+                        value={statsStartDate}
+                        onChange={val => setStatsStartDate(val)}
+                        inputStyle={{ height: 32, fontSize: '0.8125rem' }}
+                      />
+                    </div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{t('đến')}</span>
-                    <input
-                      type="date"
-                      className="form-input"
-                      style={{ padding: '4px 10px', fontSize: '0.8125rem', height: 32, width: 130 }}
-                      value={statsEndDate}
-                      onChange={e => setStatsEndDate(e.target.value)}
-                    />
+                    <div style={{ width: 130 }}>
+                      <VietnameseDateInput
+                        size="sm"
+                        value={statsEndDate}
+                        onChange={val => setStatsEndDate(val)}
+                        inputStyle={{ height: 32, fontSize: '0.8125rem' }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

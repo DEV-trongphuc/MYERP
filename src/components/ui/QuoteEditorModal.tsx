@@ -10,6 +10,7 @@ import api from '../../api/axios';
 import { useUIStore } from '../../store/uiStore';
 import { numberToText } from '../../utils/numberToText';
 import { useAuth } from '../../contexts/AuthContext';
+import { VietnameseDateInput } from './VietnameseDateInput';
 
 interface Product {
   id: number;
@@ -355,15 +356,11 @@ export const QuoteEditorModal: React.FC<QuoteEditorProps> = ({
                       </div>
                       <div className="form-group">
                         <label className="form-label">Ngày hết hiệu lực</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 1rem', height: '44px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)' }}>
-                          <Calendar size={16} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                          <input 
-                            type="date"
-                            style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.875rem', color: 'var(--color-text)' }}
-                            value={form.valid_until}
-                            onChange={e => setForm({ ...form, valid_until: e.target.value })}
-                          />
-                        </div>
+                        <VietnameseDateInput
+                          value={form.valid_until}
+                          onChange={val => setForm({ ...form, valid_until: val })}
+                          inputStyle={{ height: '44px', borderRadius: 'var(--radius-lg)' }}
+                        />
                       </div>
                     </div>
                   </div>

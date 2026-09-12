@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { VietnameseDateInput } from './VietnameseDateInput';
+import { formatDateVN } from '../../utils/dateUtils';
 
 export type Period = 'all' | '7d' | '30d' | 'this_month' | 'last_month' | 'this_quarter' | 'last_quarter' | 'this_year' | 'custom';
 
@@ -151,7 +153,7 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({ value, onChange, cus
           <Calendar size={isCompact ? 13 : 16} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {value === 'custom' && customRange 
-              ? `${customRange.from.slice(5)} → ${customRange.to.slice(5)}` 
+              ? `${formatDateVN(customRange.from)} → ${formatDateVN(customRange.to)}` 
               : currentLabel}
           </span>
         </span>
@@ -222,23 +224,19 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({ value, onChange, cus
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: '0.75rem' }}>Từ ngày</label>
-                <input
-                  className="form-input"
-                  type="date"
+                <VietnameseDateInput
                   value={tempFrom}
-                  onChange={e => setTempFrom(e.target.value)}
-                  style={{ fontSize: '0.8rem' }}
+                  onChange={val => setTempFrom(val)}
+                  inputStyle={{ fontSize: '0.8rem', height: '34px' }}
                 />
               </div>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: '0.75rem' }}>Đến ngày</label>
-                <input
-                  className="form-input"
-                  type="date"
+                <VietnameseDateInput
                   value={tempTo}
                   min={tempFrom}
-                  onChange={e => setTempTo(e.target.value)}
-                  style={{ fontSize: '0.8rem' }}
+                  onChange={val => setTempTo(val)}
+                  inputStyle={{ fontSize: '0.8rem', height: '34px' }}
                 />
               </div>
             </div>

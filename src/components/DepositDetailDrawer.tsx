@@ -17,6 +17,7 @@ import { compressToWebP } from '../utils/imageCompress';
 import { fetchAPI } from '../utils/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { numberToVietnameseText } from '../utils/numberToText';
+import { VietnameseDateInput } from './ui/VietnameseDateInput';
 
 interface Deposit {
   id: number;
@@ -1332,13 +1333,12 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
 
                               {/* Expected Pay Date */}
                               <div>
-                                <input
-                                  type="date"
+                                <VietnameseDateInput
                                   value={m.expected_pay_date ? m.expected_pay_date.substring(0, 10) : ''}
                                   disabled={isLocked || !canEditMilestones}
-                                  onChange={e => handleUpdateMilestoneField(idx, 'expected_pay_date', e.target.value)}
-                                  className="form-input"
-                                  style={{ width: '100%', height: '34px', fontSize: '0.725rem', padding: '0 8px', borderRadius: '6px' }}
+                                  onChange={val => handleUpdateMilestoneField(idx, 'expected_pay_date', val)}
+                                  size="sm"
+                                  inputStyle={{ height: '34px', fontSize: '0.725rem', padding: '0 8px', borderRadius: '6px' }}
                                 />
                               </div>
 

@@ -17,6 +17,7 @@ import { Avatar } from './ui/Avatar';
 import { resolveTeamLeaderId } from '../utils/teamLeader';
 import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 import { getSystemTitle } from '../config/env';
+import { VietnameseDateInput } from './ui/VietnameseDateInput';
 
 interface Props {
   showModal: boolean;
@@ -832,12 +833,10 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                             <Calendar size={13} /> Ngày dự kiến
                           </label>
-                          <input 
-                            type="date" 
-                            className="form-input"
-                            style={{ height: '2.5rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '10px' }}
+                          <VietnameseDateInput 
                             value={formData.order_date} 
-                            onChange={e => setFormData({...formData, order_date: e.target.value})} 
+                            onChange={val => setFormData({...formData, order_date: val})} 
+                            inputStyle={{ height: '2.5rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '10px' }}
                           />
                         </div>
                         <div className="form-group" style={{ marginBottom: 0 }}>

@@ -24,6 +24,7 @@ import { isHR } from '../utils/roleUtils';
 import type { ApprovalItem } from './Approvals';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#64748b'];
 
@@ -2313,11 +2314,9 @@ export default function HRM() {
             <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
               <div>
                 <label className="form-label">{t('Ngày vào làm chính thức')}</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <VietnameseDateInput
                   value={joinedDate}
-                  onChange={e => setJoinedDate(e.target.value)}
+                  onChange={val => setJoinedDate(val)}
                 />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

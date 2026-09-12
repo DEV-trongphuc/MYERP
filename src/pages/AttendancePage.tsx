@@ -19,6 +19,9 @@ import { useUIStore } from '../store/uiStore';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { motion } from 'framer-motion';
 import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as checkCanApproveShifts, isRegularEmployee, isHR, isExecutive } from '../utils/roleUtils';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { VietnameseMonthInput } from '../components/ui/VietnameseMonthInput';
+import { formatDateVN, formatDateTimeVN, formatMonthYearVN } from '../utils/dateUtils';
 import * as XLSX from 'xlsx';
 
 const resolveAttachmentUrl = (path: string | null | undefined): string => {
@@ -4043,13 +4046,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                     {leaveSessionField === 'range' ? t('Từ ngày') : t('Ngày xin nghỉ')}
                   </label>
-                  <input
-                    type="date"
+                  <VietnameseDateInput
                     className="leave-modal-input"
                     value={leaveFromField}
-                    onChange={e => {
-                      setLeaveFromField(e.target.value);
-                      if (leaveSessionField !== 'range') setLeaveToField(e.target.value);
+                    onChange={val => {
+                      setLeaveFromField(val);
+                      if (leaveSessionField !== 'range') setLeaveToField(val);
                     }}
                     required
                   />
@@ -4059,11 +4061,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                       {t('Đến ngày')}
                     </label>
-                    <input
-                      type="date"
+                    <VietnameseDateInput
                       className="leave-modal-input"
                       value={leaveToField}
-                      onChange={e => setLeaveToField(e.target.value)}
+                      onChange={val => setLeaveToField(val)}
                       required
                     />
                   </div>
@@ -4193,11 +4194,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                       {t('Ngày đăng ký')}
                     </label>
-                    <input
-                      type="date"
+                    <VietnameseDateInput
                       className="leave-modal-input"
                       value={lateEarlyDateField}
-                      onChange={e => setLateEarlyDateField(e.target.value)}
+                      onChange={val => setLateEarlyDateField(val)}
                       required
                     />
                   </div>
@@ -4323,11 +4323,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                     {t('Ngày tăng ca')}
                   </label>
-                  <input
-                    type="date"
+                  <VietnameseDateInput
                     className="leave-modal-input"
                     value={otDateField}
-                    onChange={e => setOtDateField(e.target.value)}
+                    onChange={val => setOtDateField(val)}
                     required
                   />
                 </div>
@@ -4419,13 +4418,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                     {leaveSessionField === 'range' ? t('Từ ngày') : t('Ngày làm việc từ xa')}
                   </label>
-                  <input
-                    type="date"
+                  <VietnameseDateInput
                     className="leave-modal-input"
                     value={leaveFromField}
-                    onChange={e => {
-                      setLeaveFromField(e.target.value);
-                      if (leaveSessionField !== 'range') setLeaveToField(e.target.value);
+                    onChange={val => {
+                      setLeaveFromField(val);
+                      if (leaveSessionField !== 'range') setLeaveToField(val);
                     }}
                     required
                   />
@@ -4435,11 +4433,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                       {t('Đến ngày')}
                     </label>
-                    <input
-                      type="date"
+                    <VietnameseDateInput
                       className="leave-modal-input"
                       value={leaveToField}
-                      onChange={e => setLeaveToField(e.target.value)}
+                      onChange={val => setLeaveToField(val)}
                       required
                     />
                   </div>
@@ -5223,18 +5220,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
                   {t('Từ ngày')}
                 </label>
-                <input
-                  type="date"
-                  className="input"
+                <VietnameseDateInput
                   value={exportFromDate}
-                  onChange={(e) => setExportFromDate(e.target.value)}
-                  style={{
+                  onChange={val => setExportFromDate(val)}
+                  inputStyle={{
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
                     fontSize: '0.8125rem'
                   }}
                 />
@@ -5244,18 +5236,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
                   {t('Đến ngày')}
                 </label>
-                <input
-                  type="date"
-                  className="input"
+                <VietnameseDateInput
                   value={exportToDate}
-                  onChange={(e) => setExportToDate(e.target.value)}
-                  style={{
+                  onChange={val => setExportToDate(val)}
+                  inputStyle={{
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
                     fontSize: '0.8125rem'
                   }}
                 />
@@ -7770,19 +7757,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                   {t('Tháng:')}
                 </span>
-                <input
-                  type="month"
+                <VietnameseMonthInput
                   value={bulkMonth}
-                  onChange={(e) => setBulkMonth(e.target.value)}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: '0.78rem',
-                    fontWeight: 650
-                  }}
+                  onChange={(val) => setBulkMonth(val)}
+                  size="sm"
                 />
               </div>
 
@@ -7847,7 +7825,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                     <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 12px', width: '130px' }}>{t('Ngày')}</th>
+                      <th style={{ padding: '8px 12px', width: '140px' }}>{t('Ngày')}</th>
                       <th style={{ padding: '8px 12px', width: '90px' }}>{t('Thứ')}</th>
                       <th style={{ padding: '8px 12px', width: '90px' }}>{t('Vào')}</th>
                       <th style={{ padding: '8px 12px', width: '90px' }}>{t('Ra')}</th>
@@ -7868,25 +7846,17 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           }}
                         >
                           <td style={{ padding: '6px 12px', fontWeight: 650 }}>
-                            <input
-                              type="date"
-                              value={day.date}
-                              onChange={(e) => {
-                                const newDate = e.target.value;
-                                const newDays = [...suggestedDays];
-                                newDays[idx].date = newDate;
-                                setSuggestedDays(newDays);
-                              }}
-                              style={{
-                                padding: '4px 6px',
-                                borderRadius: '6px',
-                                border: '1px solid var(--color-border)',
-                                fontSize: '0.78rem',
-                                background: 'var(--color-surface)',
-                                color: 'var(--color-text)',
-                                fontWeight: 650
-                              }}
-                            />
+                            <div style={{ width: '135px' }}>
+                              <VietnameseDateInput
+                                value={day.date}
+                                onChange={(newDate) => {
+                                  const newDays = [...suggestedDays];
+                                  newDays[idx].date = newDate;
+                                  setSuggestedDays(newDays);
+                                }}
+                                size="sm"
+                              />
+                            </div>
                             {day.is_on_leave && (
                               <span style={{ 
                                 display: 'inline-flex', 

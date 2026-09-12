@@ -18,6 +18,7 @@ import { CustomSelect } from '../components/ui/CustomSelect';
 import { CustomCheckbox } from '../components/ui/CustomCheckbox';
 import { useDebounce } from '../hooks/useDebounce';
 import { flexibleMatch } from '../utils/vietnamese';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const FMT = (n: number) => {
   if (!n) return '0 đ';
@@ -1212,9 +1213,13 @@ export const DealsPage: React.FC = () => {
                         />
                         {dateFilterType === 'custom' && (
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', animation: 'fadeIn 0.2s ease-out' }}>
-                            <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: '0.8125rem', flex: 1 }} value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
+                            <div style={{ flex: 1 }}>
+                              <VietnameseDateInput size="sm" value={filterDateFrom} onChange={val => setFilterDateFrom(val)} />
+                            </div>
                             <span style={{ color: 'var(--color-text-muted)' }}>-</span>
-                            <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: '0.8125rem', flex: 1 }} value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
+                            <div style={{ flex: 1 }}>
+                              <VietnameseDateInput size="sm" value={filterDateTo} onChange={val => setFilterDateTo(val)} />
+                            </div>
                           </div>
                         )}
                       </div>

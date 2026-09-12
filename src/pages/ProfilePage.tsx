@@ -13,6 +13,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { StatRowSkeleton } from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const DEFAULT_SCHEDULE = {
   "1": { active: true, start: "08:00", end: "17:00" },
@@ -645,7 +646,7 @@ export const ProfilePage: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày sinh')}</label>
-                    <input type="date" className="form-input" value={dob} onChange={e => setDob(e.target.value)} />
+                    <VietnameseDateInput value={dob} onChange={val => setDob(val)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Giới tính')}</label>
@@ -734,7 +735,7 @@ export const ProfilePage: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày vào làm')}</label>
-                    <input type="date" className="form-input" value={dateJoined} onChange={e => setDateJoined(e.target.value)} />
+                    <VietnameseDateInput value={dateJoined} onChange={val => setDateJoined(val)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Quản lý trực tiếp')}</label>
@@ -1078,22 +1079,18 @@ export const ProfilePage: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.25rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: 600, fontSize: '0.78rem', color: 'var(--color-text-light)', marginBottom: '4px' }}>{t('Từ ngày')}</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <VietnameseDateInput
                   value={leaveStart}
-                  onChange={(e) => setLeaveStart(e.target.value)}
-                  style={{ borderRadius: '10px', height: '38px', fontSize: '0.85rem' }}
+                  onChange={val => setLeaveStart(val)}
+                  inputStyle={{ borderRadius: '10px', height: '38px', fontSize: '0.85rem' }}
                 />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: 600, fontSize: '0.78rem', color: 'var(--color-text-light)', marginBottom: '4px' }}>{t('Đến ngày')}</label>
-                <input
-                  type="date"
-                  className="form-input"
+                <VietnameseDateInput
                   value={leaveEnd}
-                  onChange={(e) => setLeaveEnd(e.target.value)}
-                  style={{ borderRadius: '10px', height: '38px', fontSize: '0.85rem' }}
+                  onChange={val => setLeaveEnd(val)}
+                  inputStyle={{ borderRadius: '10px', height: '38px', fontSize: '0.85rem' }}
                 />
               </div>
             </div>

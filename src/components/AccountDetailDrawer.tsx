@@ -2163,7 +2163,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                       </div>
                       <div className="form-group">
                         <label className="form-label">{t('Ngày vào làm')}</label>
-                        <input type="date" className="form-input" value={dateJoined} onChange={e => setDateJoined(e.target.value)} />
+                        <VietnameseDateInput value={dateJoined} onChange={val => setDateJoined(val)} />
                       </div>
                       <div className="form-group">
                         <label className="form-label">{t('Quản lý trực tiếp')}</label>
@@ -2922,11 +2922,11 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                       <div className="form-group">
                         <label className="form-label">{t('Nghỉ phép từ ngày')}</label>
-                        <input type="date" className="form-input" value={leaveStart} onChange={e => setLeaveStart(e.target.value)} />
+                        <VietnameseDateInput value={leaveStart} onChange={val => setLeaveStart(val)} />
                       </div>
                       <div className="form-group">
                         <label className="form-label">{t('Đến hết ngày')}</label>
-                        <input type="date" className="form-input" value={leaveEnd} onChange={e => setLeaveEnd(e.target.value)} />
+                        <VietnameseDateInput value={leaveEnd} onChange={val => setLeaveEnd(val)} />
                       </div>
                     </div>
 
@@ -3606,26 +3606,22 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                               <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                                 <div className="form-group" style={{ margin: 0 }}>
                                   <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày cấp')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={cert.issuedDate || ''}
-                                    onChange={(e) => {
+                                    onChange={val => {
                                       const updated = [...certificates];
-                                      updated[index] = { ...updated[index], issuedDate: e.target.value };
+                                      updated[index] = { ...updated[index], issuedDate: val };
                                       setCertificates(updated);
                                     }}
                                   />
                                 </div>
                                 <div className="form-group" style={{ margin: 0 }}>
                                   <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày hết hạn')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={cert.expiryDate || ''}
-                                    onChange={(e) => {
+                                    onChange={val => {
                                       const updated = [...certificates];
-                                      updated[index] = { ...updated[index], expiryDate: e.target.value };
+                                      updated[index] = { ...updated[index], expiryDate: val };
                                       setCertificates(updated);
                                     }}
                                   />
@@ -4060,13 +4056,11 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                                 <div style={{ display: 'grid', gridTemplateColumns: isMobileOrTablet ? '1fr' : '1fr 1fr 1.5fr', gap: '1rem' }}>
                                   <div className="form-group" style={{ margin: 0 }}>
                                     <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày quyết định')}</label>
-                                    <input
-                                      type="date"
-                                      className="form-input"
+                                    <VietnameseDateInput
                                       value={record.date || ''}
-                                      onChange={(e) => {
+                                      onChange={val => {
                                         const updated = [...hrRecords];
-                                        updated[originalIndex] = { ...updated[originalIndex], date: e.target.value };
+                                        updated[originalIndex] = { ...updated[originalIndex], date: val };
                                         setHrRecords(updated);
                                       }}
                                     />

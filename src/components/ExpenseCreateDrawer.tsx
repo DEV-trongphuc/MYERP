@@ -40,6 +40,7 @@ import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 import { BankSelect } from './ui/BankSelect';
 import { getVietQrUrl, findBank } from '../utils/vietnamBanks';
 import { getSystemTitle } from '../config/env';
+import { VietnameseDateInput } from './ui/VietnameseDateInput';
 
 const CATEGORIES = [
   { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
@@ -2323,12 +2324,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                       Ngày đề xuất chi *
                     </label>
-                    <input 
-                      className="form-input" 
-                      type="date" 
-                      value={form.date} 
-                      onChange={e => setForm({ ...form, date: e.target.value })} 
-                      style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
+                    <VietnameseDateInput
+                      value={form.date}
+                      onChange={val => setForm({ ...form, date: val })}
+                      inputStyle={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
                       required
                     />
                   </div>

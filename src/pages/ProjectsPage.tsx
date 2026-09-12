@@ -26,6 +26,7 @@ import { CompanyDrawer } from './CompanyDrawer';
 import { FilesPage } from './FilesPage';
 import { useUploadProgress } from '../contexts/UploadProgressContext';
 import { ProjectGanttTab } from '../components/ProjectGanttTab';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 
 const parseSeminarTimeSlot = (timeSlot: string) => {
   const result = {
@@ -3813,14 +3814,15 @@ export default function ProjectsPage() {
                   onChange={e => handleUpdateMilestone(ms.id, { milestone: e.target.value })}
                   style={{ flex: 2, height: '36px', fontSize: '0.85rem' }}
                 />
-                <input
-                  type="date"
-                  className="form-input"
-                  disabled={!canEdit}
-                  value={ms.due_date || ''}
-                  onChange={e => handleUpdateMilestone(ms.id, { due_date: e.target.value })}
-                  style={{ flex: 1, height: '36px', fontSize: '0.85rem' }}
-                />
+                <div style={{ flex: 1 }}>
+                  <VietnameseDateInput
+                    disabled={!canEdit}
+                    value={ms.due_date || ''}
+                    onChange={val => handleUpdateMilestone(ms.id, { due_date: val })}
+                    size="sm"
+                    inputStyle={{ height: '36px', fontSize: '0.85rem' }}
+                  />
+                </div>
                 {canEdit && (
                   <button
                     type="button"
@@ -8659,20 +8661,16 @@ export default function ProjectsPage() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <div className="form-group">
                           <label className="form-label" style={{ fontWeight: 600 }}>Ngày bắt đầu</label>
-                          <input
-                            type="date"
-                            className="form-input"
+                          <VietnameseDateInput
                             value={editingCampaign?.start_date || ''}
-                            onChange={e => setEditingCampaign({ ...editingCampaign, start_date: e.target.value })}
+                            onChange={val => setEditingCampaign({ ...editingCampaign, start_date: val })}
                           />
                         </div>
                         <div className="form-group">
                           <label className="form-label" style={{ fontWeight: 600 }}>Ngày kết thúc</label>
-                          <input
-                            type="date"
-                            className="form-input"
+                          <VietnameseDateInput
                             value={editingCampaign?.end_date || ''}
-                            onChange={e => setEditingCampaign({ ...editingCampaign, end_date: e.target.value })}
+                            onChange={val => setEditingCampaign({ ...editingCampaign, end_date: val })}
                           />
                         </div>
                       </div>
@@ -9684,18 +9682,20 @@ export default function ProjectsPage() {
                                   />
 
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 140px' }}>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-light)' }}>Ngày:</span>
-                                    <input
-                                      type="date"
-                                      disabled={!canEdit}
-                                      value={hs.date || ''}
-                                      onChange={e => {
-                                        const newSessions = [...sub.host_sessions];
-                                        newSessions[hsIdx].date = e.target.value;
-                                        handleUpdateSubjectInModal({ host_sessions: newSessions });
-                                      }}
-                                      style={{ flex: 1, padding: '6px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid var(--color-border-light)', height: '34px' }}
-                                    />
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', whiteSpace: 'nowrap' }}>Ngày:</span>
+                                    <div style={{ flex: 1 }}>
+                                      <VietnameseDateInput
+                                        disabled={!canEdit}
+                                        value={hs.date || ''}
+                                        onChange={val => {
+                                          const newSessions = [...sub.host_sessions];
+                                          newSessions[hsIdx].date = val;
+                                          handleUpdateSubjectInModal({ host_sessions: newSessions });
+                                        }}
+                                        size="sm"
+                                        inputStyle={{ height: '34px', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
                                   </div>
 
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -9804,16 +9804,16 @@ export default function ProjectsPage() {
                                 </div>
                                 <div style={{ flex: '1 1 120px' }}>
                                   <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'block', marginBottom: '3px' }}>Ngày học</label>
-                                  <input
-                                    type="date"
+                                  <VietnameseDateInput
                                     disabled={!canEdit}
                                     value={sem.date || ''}
-                                    onChange={e => {
+                                    onChange={val => {
                                       const newSeminars = [...sub.seminars];
-                                      newSeminars[sIdx].date = e.target.value;
+                                      newSeminars[sIdx].date = val;
                                       handleUpdateSubjectInModal({ seminars: newSeminars });
                                     }}
-                                    style={{ width: '100%', padding: '6px 10px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid var(--color-border-light)', height: '34px' }}
+                                    size="sm"
+                                    inputStyle={{ height: '34px', fontSize: '0.8rem' }}
                                   />
                                 </div>
                                 {(() => {

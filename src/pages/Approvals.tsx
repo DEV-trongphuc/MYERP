@@ -38,6 +38,7 @@ import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
+import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { getSystemTitle } from '../config/env';
 
 const workflowList = [
@@ -6666,22 +6667,21 @@ export default function Approvals() {
                                           }}
                                         >
                                           <td style={{ padding: '6px 10px', fontWeight: 650 }}>
-                                            <input
-                                              type="date"
+                                            <VietnameseDateInput
                                               value={day.date}
                                               max={getTodayDateString()}
-                                              onChange={(e) => {
+                                              onChange={(val) => {
                                                 const newDays = [...suggestedDays];
-                                                newDays[idx].date = e.target.value;
+                                                newDays[idx].date = val;
                                                 setSuggestedDays(newDays);
                                               }}
-                                              style={{
+                                              size="sm"
+                                              inputStyle={{
                                                 padding: '4px 6px',
                                                 borderRadius: '6px',
                                                 border: '1px solid var(--color-border)',
                                                 fontSize: '0.75rem',
                                                 fontWeight: 650,
-                                                width: '100%',
                                                 background: 'var(--color-surface)',
                                                 color: 'var(--color-text)'
                                               }}
@@ -6892,18 +6892,18 @@ export default function Approvals() {
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Chọn các ngày xin nghỉ & Buổi nghỉ')}</label>
                                 {intermittentDates.map((item, idx) => (
                                   <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                    <input
-                                      type="date"
-                                      className="form-input"
-                                      value={item.date}
-                                      onChange={e => {
-                                        const newDates = [...intermittentDates];
-                                        newDates[idx] = { ...newDates[idx], date: e.target.value };
-                                        setIntermittentDates(newDates);
-                                      }}
-                                      style={{ height: '36px', fontSize: '0.8rem', flex: 2 }}
-                                      required
-                                    />
+                                    <div style={{ flex: 2 }}>
+                                      <VietnameseDateInput
+                                        value={item.date}
+                                        onChange={val => {
+                                          const newDates = [...intermittentDates];
+                                          newDates[idx] = { ...newDates[idx], date: val };
+                                          setIntermittentDates(newDates);
+                                        }}
+                                        inputStyle={{ height: '36px', fontSize: '0.8rem' }}
+                                        required
+                                      />
+                                    </div>
                                     <div style={{ flex: 1.5 }}>
                                       <CustomSelect
                                         value={item.session}
@@ -6950,28 +6950,23 @@ export default function Approvals() {
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                     {leaveSession === 'range' ? t('Từ ngày') : t('Ngày xin nghỉ')}
                                   </label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={leaveFrom ? leaveFrom.split('T')[0] : ''}
-                                    onChange={e => {
-                                      const val = e.target.value;
+                                    onChange={val => {
                                       setLeaveFrom(val);
                                       if (leaveSession !== 'range') setLeaveTo(val);
                                     }}
-                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                    inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                     required
                                   />
                                 </div>
                                 {leaveSession === 'range' && (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Đến ngày')}</label>
-                                    <input
-                                      type="date"
-                                      className="form-input"
+                                    <VietnameseDateInput
                                       value={leaveTo ? leaveTo.split('T')[0] : ''}
-                                      onChange={e => setLeaveTo(e.target.value)}
-                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      onChange={val => setLeaveTo(val)}
+                                      inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                       required
                                     />
                                   </div>
@@ -7261,15 +7256,13 @@ export default function Approvals() {
                                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày đăng ký')}</label>
-                                    <input
-                                      type="date"
-                                      className="form-input"
+                                    <VietnameseDateInput
                                       value={leaveFrom ? leaveFrom.split('T')[0] : ''}
-                                      onChange={e => {
-                                        setLeaveFrom(e.target.value);
-                                        setLeaveTo(e.target.value);
+                                      onChange={val => {
+                                        setLeaveFrom(val);
+                                        setLeaveTo(val);
                                       }}
-                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                       required
                                     />
                                   </div>
@@ -7434,12 +7427,10 @@ export default function Approvals() {
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Ngày tăng ca')}</label>
-                                <input
-                                  type="date"
-                                  className="form-input"
+                                <VietnameseDateInput
                                   value={otDate}
-                                  onChange={e => setOtDate(e.target.value)}
-                                  style={{ height: '36px', fontSize: '0.8rem' }}
+                                  onChange={val => setOtDate(val)}
+                                  inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                   required
                                 />
                               </div>
@@ -7591,16 +7582,13 @@ export default function Approvals() {
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                   {leaveSession === 'range' ? t('Từ ngày') : t('Ngày đăng ký')}
                                 </label>
-                                <input
-                                  type="date"
-                                  className="form-input"
+                                <VietnameseDateInput
                                   value={leaveFrom ? leaveFrom.split('T')[0] : ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
+                                  onChange={val => {
                                     setLeaveFrom(val);
                                     if (leaveSession !== 'range') setLeaveTo(val);
                                   }}
-                                  style={{ height: '36px', fontSize: '0.8rem' }}
+                                  inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                   required
                                 />
                               </div>
@@ -7610,12 +7598,10 @@ export default function Approvals() {
                               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Đến ngày')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={leaveTo ? leaveTo.split('T')[0] : ''}
-                                    onChange={e => setLeaveTo(e.target.value)}
-                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                    onChange={val => setLeaveTo(val)}
+                                    inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                     required
                                   />
                                 </div>
@@ -7922,12 +7908,10 @@ export default function Approvals() {
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                     {t('Ngày yêu cầu')} <span style={{ color: 'red' }}>*</span>
                                   </label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={pssReqDate}
-                                    onChange={e => setPssReqDate(e.target.value)}
-                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                    onChange={val => setPssReqDate(val)}
+                                    inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                     required
                                   />
                                 </div>
@@ -8118,12 +8102,10 @@ export default function Approvals() {
                                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                     {t('Ngày cần gửi hồ sơ')} <span style={{ color: 'red' }}>*</span>
                                   </label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={pssRequiredSendDate}
-                                    onChange={e => setPssRequiredSendDate(e.target.value)}
-                                    style={{ height: '36px', fontSize: '0.8rem' }}
+                                    onChange={val => setPssRequiredSendDate(val)}
+                                    inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                     required
                                   />
                                 </div>
@@ -8959,12 +8941,10 @@ export default function Approvals() {
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('Ngày tiếp')}
                                     </label>
-                                    <input
-                                      type="date"
-                                      className="form-input"
+                                    <VietnameseDateInput
                                       value={meetingDate}
-                                      onChange={e => setMeetingDate(e.target.value)}
-                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      onChange={val => setMeetingDate(val)}
+                                      inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                     />
                                   </div>
 
@@ -9246,12 +9226,10 @@ export default function Approvals() {
                                       <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                         {t('Ngày bắt đầu kỳ')}
                                       </label>
-                                      <input
-                                        type="date"
-                                        className="form-input"
+                                      <VietnameseDateInput
                                         value={recurringStartDate}
-                                        onChange={e => setRecurringStartDate(e.target.value)}
-                                        style={{ height: '36px', fontSize: '0.8rem' }}
+                                        onChange={val => setRecurringStartDate(val)}
+                                        inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                       />
                                     </div>
                                     {!recurringUnlimited && (
@@ -9259,12 +9237,10 @@ export default function Approvals() {
                                         <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                           {t('Ngày kết thúc chu kỳ')}
                                         </label>
-                                        <input
-                                          type="date"
-                                          className="form-input"
+                                        <VietnameseDateInput
                                           value={recurringEndDate}
-                                          onChange={e => setRecurringEndDate(e.target.value)}
-                                          style={{ height: '36px', fontSize: '0.8rem' }}
+                                          onChange={val => setRecurringEndDate(val)}
+                                          inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                         />
                                       </div>
                                     )}
@@ -9350,16 +9326,15 @@ export default function Approvals() {
                                           </div>
                                         )}
                                       </div>
-                                      <input
-                                        type="date"
-                                        className="form-input"
+                                      <VietnameseDateInput
                                         value={inst.dueDate}
-                                        onChange={e => {
+                                        onChange={val => {
                                           const list = [...installments];
-                                          list[index].dueDate = e.target.value;
+                                          list[index].dueDate = val;
                                           setInstallments(list);
                                         }}
-                                        style={{ height: '34px', fontSize: '0.78rem' }}
+                                        size="sm"
+                                        inputStyle={{ height: '34px', fontSize: '0.78rem' }}
                                       />
                                       {installments.length > 1 && (
                                         <button
@@ -9435,12 +9410,10 @@ export default function Approvals() {
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('Hạn hoàn ứng / quyết toán chứng từ')} <span style={{ color: 'var(--color-danger)' }}>*</span>
                                     </label>
-                                    <input
-                                      type="date"
-                                      className="form-input"
+                                    <VietnameseDateInput
                                       value={advanceSettlementDate}
-                                      onChange={e => setAdvanceSettlementDate(e.target.value)}
-                                      style={{ height: '36px', fontSize: '0.8rem' }}
+                                      onChange={val => setAdvanceSettlementDate(val)}
+                                      inputStyle={{ height: '36px', fontSize: '0.8rem' }}
                                     />
                                   </div>
                                 </div>

@@ -6226,23 +6226,25 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Từ ngày:')}</span>
-                      <input
-                        type="date"
-                        className="form-input"
-                        value={wsStartDate}
-                        onChange={e => setWsStartDate(e.target.value)}
-                        style={{ height: '36px', width: '140px', padding: '4px 8px', fontSize: '0.8rem' }}
-                      />
+                      <div style={{ width: '150px' }}>
+                        <VietnameseDateInput
+                          value={wsStartDate}
+                          onChange={val => setWsStartDate(val)}
+                          size="sm"
+                          inputStyle={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Đến ngày:')}</span>
-                      <input
-                        type="date"
-                        className="form-input"
-                        value={wsEndDate}
-                        onChange={e => setWsEndDate(e.target.value)}
-                        style={{ height: '36px', width: '140px', padding: '4px 8px', fontSize: '0.8rem' }}
-                      />
+                      <div style={{ width: '150px' }}>
+                        <VietnameseDateInput
+                          value={wsEndDate}
+                          onChange={val => setWsEndDate(val)}
+                          size="sm"
+                          inputStyle={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -8637,27 +8639,25 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Từ ngày')}:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  style={{
-                    padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--color-border)',
-                    fontSize: '0.85rem', outline: 'none', background: 'var(--color-surface)', color: 'var(--color-text)', height: 38
-                  }}
-                />
+                <div style={{ width: '150px' }}>
+                  <VietnameseDateInput
+                    value={startDate}
+                    onChange={val => setStartDate(val)}
+                    size="sm"
+                    inputStyle={{ height: '38px', fontSize: '0.85rem' }}
+                  />
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{t('Đến ngày')}:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  style={{
-                    padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--color-border)',
-                    fontSize: '0.85rem', outline: 'none', background: 'var(--color-surface)', color: 'var(--color-text)', height: 38
-                  }}
-                />
+                <div style={{ width: '150px' }}>
+                  <VietnameseDateInput
+                    value={endDate}
+                    onChange={val => setEndDate(val)}
+                    size="sm"
+                    inputStyle={{ height: '38px', fontSize: '0.85rem' }}
+                  />
+                </div>
               </div>
               <button
                 onClick={() => loadPortalData()}
@@ -12216,13 +12216,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           <span>{t('Ngày vào làm')}</span>
                           {!canEditUserAssets && <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔒 {t('Chỉ Quản lý / HR')}</span>}
                         </label>
-                        <input
-                          type="date"
-                          className="form-input"
+                        <VietnameseDateInput
                           value={editDateJoined}
-                          onChange={(e) => setEditDateJoined(e.target.value)}
+                          onChange={val => setEditDateJoined(val)}
                           disabled={!canEditUserAssets}
-                          style={{ fontSize: isMobile ? '0.8125rem' : '0.875rem', height: isMobile ? '36px' : '40px', opacity: !canEditUserAssets ? 0.7 : 1, cursor: !canEditUserAssets ? 'not-allowed' : 'text', pointerEvents: !canEditUserAssets ? 'none' : 'auto' }}
+                          inputStyle={{ fontSize: isMobile ? '0.8125rem' : '0.875rem', height: isMobile ? '36px' : '40px', opacity: !canEditUserAssets ? 0.7 : 1, cursor: !canEditUserAssets ? 'not-allowed' : 'text' }}
                         />
                       </div>
                       <div className="form-group" onClick={handleManagerOnlyFieldClick} style={{ cursor: !canEditUserAssets ? 'pointer' : 'default' }}>
@@ -12705,26 +12703,22 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div className="form-group" style={{ margin: 0 }}>
                                   <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày cấp')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={cert.issuedDate || ''}
-                                    onChange={(e) => {
+                                    onChange={val => {
                                       const updated = [...profileCertificates];
-                                      updated[index] = { ...updated[index], issuedDate: e.target.value };
+                                      updated[index] = { ...updated[index], issuedDate: val };
                                       setProfileCertificates(updated);
                                     }}
                                   />
                                 </div>
                                 <div className="form-group" style={{ margin: 0 }}>
                                   <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày hết hạn')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={cert.expiryDate || ''}
-                                    onChange={(e) => {
+                                    onChange={val => {
                                       const updated = [...profileCertificates];
-                                      updated[index] = { ...updated[index], expiryDate: e.target.value };
+                                      updated[index] = { ...updated[index], expiryDate: val };
                                       setProfileCertificates(updated);
                                     }}
                                   />
@@ -13187,13 +13181,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1.5fr', gap: '1rem' }}>
                                 <div className="form-group" style={{ margin: 0 }}>
                                   <label className="form-label" style={{ fontWeight: 600 }}>{t('Ngày quyết định')}</label>
-                                  <input
-                                    type="date"
-                                    className="form-input"
+                                  <VietnameseDateInput
                                     value={record.date || ''}
-                                    onChange={(e) => {
+                                    onChange={val => {
                                       const updated = [...profileHRRecords];
-                                      updated[originalIndex] = { ...updated[originalIndex], date: e.target.value };
+                                      updated[originalIndex] = { ...updated[originalIndex], date: val };
                                       setProfileHRRecords(updated);
                                     }}
                                   />
@@ -14604,41 +14596,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: 'var(--color-bg-alt)', padding: '16px', borderRadius: '16px', border: '1px solid var(--color-border-light)' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <label style={{ fontWeight: 750, fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Từ ngày')}</label>
-                              <input
-                                type="date"
-                                className="form-input"
+                              <VietnameseDateInput
                                 value={editLeaveStart}
-                                onChange={(e) => setEditLeaveStart(e.target.value)}
-                                style={{
+                                onChange={val => setEditLeaveStart(val)}
+                                inputStyle={{
                                   width: '100%',
                                   padding: '0 12px',
                                   borderRadius: '10px',
                                   height: '42px',
-                                  fontSize: '0.85rem',
-                                  background: 'var(--color-surface)',
-                                  border: '1px solid var(--color-border-light)',
-                                  boxShadow: 'var(--shadow-sm)',
-                                  transition: 'border-color 0.15s ease'
+                                  fontSize: '0.85rem'
                                 }}
                               />
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <label style={{ fontWeight: 750, fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('Đến ngày')}</label>
-                              <input
-                                type="date"
-                                className="form-input"
+                              <VietnameseDateInput
                                 value={editLeaveEnd}
-                                onChange={(e) => setEditLeaveEnd(e.target.value)}
-                                style={{
+                                onChange={val => setEditLeaveEnd(val)}
+                                inputStyle={{
                                   width: '100%',
                                   padding: '0 12px',
                                   borderRadius: '10px',
                                   height: '42px',
-                                  fontSize: '0.85rem',
-                                  background: 'var(--color-surface)',
-                                  border: '1px solid var(--color-border-light)',
-                                  boxShadow: 'var(--shadow-sm)',
-                                  transition: 'border-color 0.15s ease'
+                                  fontSize: '0.85rem'
                                 }}
                               />
                             </div>
