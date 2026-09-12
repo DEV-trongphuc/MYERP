@@ -902,13 +902,13 @@ export const DocumentationPage: React.FC = () => {
                   <tbody>
                     <tr>
                       <td><code>lead_decay_days</code></td>
-                      <td><code>7</code> (ngày)</td>
-                      <td><strong>Số ngày tự động rớt nhiệt (Decay):</strong> Nếu một Lead đã phân bổ cho TVV nhưng không phát sinh bất kỳ cuộc gọi hay cập nhật trạng thái nào trong vòng 7 ngày, hệ thống tự động thu hồi Lead về kho dữ liệu chung (Databank) để tái phân bổ.</td>
+                      <td><code>5 - 14</code> (ngày)</td>
+                      <td><strong>Số ngày tự động rớt nhiệt (Decay):</strong> Cấu hình số ngày không phát sinh tương tác (cuộc gọi, ghi chú, cập nhật tiến độ) để hệ thống tự động giảm nhiệt độ Lead (Hot → Warm → Cold) và trừ điểm tiềm năng. Quản lý có thể tùy chỉnh linh hoạt để kích hoạt cảnh báo nhắc nhở hoặc điều phối lại lượt chăm sóc theo chính sách riêng của từng phòng ban.</td>
                     </tr>
                     <tr>
                       <td><code>first_call_sla_minutes</code></td>
                       <td><code>30</code> (phút)</td>
-                      <td><strong>Thời hạn cuộc gọi đầu tiên (First Call SLA):</strong> TVV sau khi nhận Lead mới trong giờ hành chính bắt buộc phải thực hiện cuộc gọi đầu tiên trong vòng 30 phút. Quá thời hạn này, hệ thống kích hoạt cảnh báo vi phạm SLA và có thể thu hồi Lead chia cho người khác.</td>
+                      <td><strong>Thời hạn cuộc gọi đầu tiên (First Call SLA):</strong> TVV sau khi nhận Lead mới trong giờ hành chính bắt buộc phải thực hiện cuộc gọi đầu tiên trong vòng 30 phút. Quá thời hạn này, hệ thống kích hoạt cảnh báo vi phạm SLA và có thể điều phối lại Lead chia cho người khác.</td>
                     </tr>
                     <tr>
                       <td><code>backpressure_limit</code></td>
@@ -917,8 +917,8 @@ export const DocumentationPage: React.FC = () => {
                     </tr>
                     <tr>
                       <td><code>deposit_demote_status</code></td>
-                      <td><code>chua_chot</code></td>
-                      <td><strong>Quy tắc xử lý bỏ cọc:</strong> Khi một hồ sơ khách hàng đã đặt cọc nhưng sau đó hủy cọc hoặc đòi hoàn cọc, hệ thống tự động hạ cấp trạng thái phễu tuyển sinh về bước quy định và trừ doanh số dự kiến.</td>
+                      <td><code>chua_chot</code> (hoặc tùy chọn)</td>
+                      <td><strong>Quy tắc xử lý khi hủy/hoàn cọc:</strong> Tùy chỉnh linh hoạt trạng thái phễu tuyển sinh mục tiêu (như Chưa chốt, Đang tư vấn lại, hoặc Chăm sóc sau) khi một hồ sơ cọc bị hủy hoặc yêu cầu hoàn cọc. Hệ thống tự động chuyển trạng thái hợp đồng/deal, khấu trừ doanh số dự kiến tương ứng và ghi nhận lịch sử biến động tài chính.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1804,7 +1804,7 @@ export const DocumentationPage: React.FC = () => {
               <h2 id="sla-lead-recovery">Quy Tắc Thu Hồi &amp; Tái Phân Bổ (Recovery)</h2>
               <ul>
                 <li><strong>Thu hồi theo SLA ngắn (SLA Timeout):</strong> Nếu tư vấn viên không thực hiện cuộc gọi hoặc cập nhật tương tác đầu tiên trong vòng <strong>30 phút</strong>, hệ thống tự động thu hồi lead và đẩy sang tư vấn viên tiếp theo.</li>
-                <li><strong>Tái phân phối dài hạn (Re-assignment 3 - 6 tháng):</strong> Các khách hàng đã liên hệ nhưng không chốt đơn sau 90 ngày (Dead Deals) sẽ tự động được thu hồi về kho dữ liệu chung (Databank) để tái phân bổ cho nhân sự mới khai thác lại.</li>
+                <li><strong>Tái chăm sóc định kỳ (Re-nurturing 3 - 6 tháng):</strong> Các khách hàng đã liên hệ nhưng chưa chốt đơn sau 90 ngày (Dead Deals) có thể được kích hoạt lại quy trình nuôi dưỡng dài hạn, hoặc Trưởng nhóm chủ động phân công lại cho nhân sự khác khai thác theo từng chiến dịch tuyển sinh.</li>
               </ul>
             </div>
           )
@@ -1861,7 +1861,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="ref-protection-rights">Cơ Chế Bảo Vệ Quyền Sở Hữu Lead Tự Khai Thác</h2>
               <p>
-                Để khuyến khích tư vấn viên chủ động tìm kiếm và mở rộng nguồn khách hàng cá nhân ngoài kho dữ liệu chung do Marketing cấp:
+                Để khuyến khích tư vấn viên chủ động tìm kiếm và mở rộng nguồn khách hàng cá nhân ngoài nguồn do Marketing cấp:
               </p>
               <ul>
                 <li><strong>Miễn trừ hạn ngạch Round-Robin:</strong> Khi TVV nhập Lead có nguồn là <code>ca_nhan</code> hoặc <code>gioi_thieu</code>, Lead này <em>không bị tính trừ</em> vào số lượng Lead tối đa trong ngày (Cap Limit) của nhân sự đó.</li>
