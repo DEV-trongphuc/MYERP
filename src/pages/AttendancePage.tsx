@@ -118,7 +118,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   // Form fields states
   const [supplementaryDateField, setSupplementaryDateField] = useState(() => new Date().toISOString().split('T')[0]);
   const [supplementaryInTimeField, setSupplementaryInTimeField] = useState('08:00');
-  const [supplementaryOutTimeField, setSupplementaryOutTimeField] = useState('17:30');
+  const [supplementaryOutTimeField, setSupplementaryOutTimeField] = useState('17:00');
   
   const [leaveTypeField, setLeaveTypeField] = useState('annual'); // 'annual' | 'sick' | 'compensatory' | 'unpaid'
   const [leaveSessionField, setLeaveSessionField] = useState('full'); // 'full' | 'morning' | 'afternoon' | 'range'
@@ -129,7 +129,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const handleOpenSupplementaryForDate = (dateStr: string) => {
     setSupplementaryDateField(dateStr);
     setSupplementaryInTimeField('08:00');
-    setSupplementaryOutTimeField('17:30');
+    setSupplementaryOutTimeField('17:00');
     setLeaveReasonField(t('Quên chấm công ca sáng và ca chiều ngày ') + dateStr);
     setCreateLeaveType('supplementary');
     setShowCreateLeaveModal(true);
@@ -458,7 +458,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         const res = await api.post('/check-ins', {
           check_in_date: supplementaryDateField,
           check_in_time: supplementaryInTimeField ? `${supplementaryInTimeField}:00` : '08:00:00',
-          check_out_time: supplementaryOutTimeField ? `${supplementaryOutTimeField}:00` : '17:30:00',
+          check_out_time: supplementaryOutTimeField ? `${supplementaryOutTimeField}:00` : '17:00:00',
           is_supplementary: 1,
           reason: leaveReasonField,
           approver_id: approverIdField ? Number(approverIdField) : undefined

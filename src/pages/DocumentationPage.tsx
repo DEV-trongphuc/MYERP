@@ -937,13 +937,13 @@ export const DocumentationPage: React.FC = () => {
                   <tbody>
                     <tr>
                       <td><code>global_work_start_time</code><br /><code>global_work_end_time</code></td>
-                      <td><code>08:00</code><br /><code>17:30</code></td>
-                      <td>Khung giờ làm việc hành chính chuẩn toàn công ty. Áp dụng cho mọi nhân viên không cài đặt khung giờ đặc thù (<code>use_custom_work_hours = 0</code>).</td>
+                      <td><code>08:00</code><br /><code>17:00</code></td>
+                      <td>Khung giờ làm việc hành chính chuẩn toàn công ty (Sáng 08:00 - 12:00, Chiều 13:00 - 17:00; chuẩn 8 tiếng làm việc = 480 phút). Áp dụng cho mọi nhân viên không cài đặt khung giờ đặc thù (<code>use_custom_work_hours = 0</code>).</td>
                     </tr>
                     <tr>
                       <td><code>global_work_schedule</code></td>
                       <td>JSON Schedule</td>
-                      <td>Cấu hình giờ bắt đầu / kết thúc chi tiết từng ngày trong tuần từ Thứ Hai đến Thứ Bảy, bao gồm giờ nghỉ trưa (12:00 - 13:30) và cấu hình làm việc buổi sáng Thứ Bảy.</td>
+                      <td>Cấu hình giờ bắt đầu / kết thúc chi tiết từng ngày trong tuần từ Thứ Hai đến Chủ Nhật. Mặc định Thứ Hai - Thứ Sáu bật cả ca sáng (08:00 - 12:00) và ca chiều (13:00 - 17:00); Thứ Bảy &amp; Chủ Nhật tắt (hoặc bật ca sáng Thứ Bảy theo lịch chi nhánh).</td>
                     </tr>
                     <tr>
                       <td><code>holiday_schedules</code></td>
@@ -2051,17 +2051,27 @@ export const DocumentationPage: React.FC = () => {
                     <tr>
                       <td><strong>Ca sáng</strong></td>
                       <td><code>08:00 - 12:00</code></td>
-                      <td>Bắt đầu tính trễ từ <code>08:01</code>. Đi trễ phút nào cộng dồn chính xác từng phút đó vào <code>late_minutes</code>. Nghỉ trưa: <code>12:00 - 13:30</code>.</td>
+                      <td>Bắt đầu tính trễ từ <code>08:01</code>. Đi trễ phút nào cộng dồn chính xác từng phút đó vào <code>late_minutes</code> (4 tiếng làm việc sáng = 240 phút). Giờ nghỉ trưa: <code>12:00 - 13:00</code> (hoặc đến 13:30 theo cấu hình chi nhánh).</td>
                     </tr>
                     <tr>
                       <td><strong>Ca chiều</strong></td>
-                      <td><code>13:30 - 17:00</code></td>
-                      <td>Bắt đầu tính trễ từ <code>13:31</code> nếu check-in ca chiều; tính về sớm (<code>early_minutes</code>) nếu check-out trước <code>17:00</code> (hoặc trước giờ ca riêng). Chuẩn 8 giờ làm việc / ngày = 480 phút.</td>
+                      <td><code>13:00 - 17:00</code><br />(hoặc <code>13:30 - 17:00</code>)</td>
+                      <td>Bắt đầu tính trễ nếu check-in ca chiều sau mốc giờ bắt đầu ca; tính về sớm (<code>early_minutes</code>) nếu check-out trước <code>17:00</code> (hoặc trước giờ ca riêng). Chuẩn 8 giờ làm việc / ngày = 480 phút.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Lịch làm việc chi tiết theo tuần</strong></td>
+                      <td><code>global_work_schedule</code></td>
+                      <td>Cấu hình JSON chi tiết từng thứ trong tuần (Thứ Hai - Thứ Sáu bật đủ ca 8h; Thứ Bảy / Chủ Nhật tắt hoặc chỉ bật nửa ngày ca sáng 08:00 - 12:00. Khi tắt ca chiều, hệ thống tự động gán kết thúc ca lúc 12:00 để nhân viên không bị tính về sớm).</td>
                     </tr>
                     <tr>
                       <td><strong>Khung giờ cá nhân hóa</strong></td>
                       <td><code>work_start_time</code><br /><code>work_end_time</code></td>
                       <td>Áp dụng khi <code>use_custom_work_hours = 1</code> trên hồ sơ nhân sự (dành cho bộ phận trực ca đêm, trực ngày lễ hoặc giảng viên). Với khối Sales, giờ nhận lead mở rộng đến <code>22:00</code> nhưng giờ hành chính tính công vẫn kết thúc lúc <code>17:00</code>.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Chặn sau giờ tan ca</strong></td>
+                      <td>Sau <code>17:00</code></td>
+                      <td>Hệ thống chặn chấm công vào ca trực tiếp khi đã quá giờ tan ca hôm đó nhằm chống gian lận. Nhân viên bắt buộc tạo phiếu "Cập nhật công" để Quản lý phê duyệt.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2141,7 +2151,7 @@ export const DocumentationPage: React.FC = () => {
                 Đảm bảo ghi nhận đầy đủ thời gian cống hiến thực tế và hỗ trợ tính toán làm thêm giờ (OT):
               </p>
               <ul>
-                <li><strong>Nhắc ra ca (<code>CHECKOUT_REMINDER</code>):</strong> Đúng thời điểm kết thúc ca làm việc (ví dụ: 17:30), hệ thống gửi thông báo nhắc nhở nhân viên thực hiện chụp ảnh selfie check-out trước khi rời cơ quan.</li>
+                <li><strong>Nhắc ra ca (<code>CHECKOUT_REMINDER</code>):</strong> Đúng thời điểm kết thúc ca làm việc (ví dụ: 17:00), hệ thống gửi thông báo nhắc nhở nhân viên thực hiện chụp ảnh selfie check-out trước khi rời cơ quan.</li>
                 <li><strong>Cảnh báo quên check-out (<code>CHECKOUT_MISSING_REMINDER</code>):</strong> Sau giờ tan ca từ 30 đến 60 phút, nếu nhân sự đã có bản ghi check-in sáng nhưng chưa có bản ghi check-out chiều, hệ thống gửi thông báo nhắc nhở khẩn cấp để nhân sự kịp thời ghi nhận trước khi phiên làm việc trong ngày bị khóa.</li>
               </ul>
 
@@ -2231,7 +2241,7 @@ export const DocumentationPage: React.FC = () => {
                 Hỗ trợ xếp ca linh hoạt cho các phòng ban đặc thù:
               </p>
               <ul>
-                <li>Ca hành chính (08:00 - 17:30).</li>
+                <li>Ca hành chính chuẩn (08:00 - 12:00 và 13:00 - 17:00 = 8 tiếng chuẩn).</li>
                 <li>Ca trực tư vấn tối và cuối tuần (xoay ca cho đội ngũ Tuyển sinh).</li>
                 <li>Ca trực hỗ trợ lớp học và trợ giảng học vụ.</li>
               </ul>
