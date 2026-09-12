@@ -1785,6 +1785,41 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           }
         `}</style>
         {children}
+
+        {/* Quick View Drawer for Purchase Orders / Expenses */}
+        {selectedExpenseId !== null && (
+          <ExpenseQuickViewDrawer
+            expenseId={selectedExpenseId}
+            onClose={() => setSelectedExpenseId(null)}
+            user={user}
+            onStatusChange={() => {
+              api.get('/expenses', { params: { limit: 50 } })
+                .then(expRes => {
+                  const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
+                  if (Array.isArray(rawPos)) setPoList(rawPos);
+                })
+                .catch(console.error);
+            }}
+          />
+        )}
+
+        {/* Quick View Drawer for Sales Orders / Deposits */}
+        {selectedDeposit && (
+          <DepositDetailDrawer
+            isOpen={!!selectedDeposit}
+            onClose={() => setSelectedDeposit(null)}
+            deposit={selectedDeposit}
+            onSaveSuccess={() => {
+              fetchAPI('deposits')
+                .then(soRes => {
+                  const rawSos = soRes?.data || soRes || [];
+                  const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
+                  setSoList(sos);
+                })
+                .catch(console.error);
+            }}
+          />
+        )}
       </div>
     );
   };
@@ -5859,40 +5894,6 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         />
       )}
 
-      {/* Quick View Drawer for Purchase Orders / Expenses */}
-      {selectedExpenseId !== null && (
-        <ExpenseQuickViewDrawer
-          expenseId={selectedExpenseId}
-          onClose={() => setSelectedExpenseId(null)}
-          user={user}
-          onStatusChange={() => {
-            api.get('/expenses', { params: { limit: 50 } })
-              .then(expRes => {
-                const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
-                if (Array.isArray(rawPos)) setPoList(rawPos);
-              })
-              .catch(console.error);
-          }}
-        />
-      )}
-
-      {/* Quick View Drawer for Sales Orders / Deposits */}
-      {selectedDeposit && (
-        <DepositDetailDrawer
-          isOpen={!!selectedDeposit}
-          onClose={() => setSelectedDeposit(null)}
-          deposit={selectedDeposit}
-          onSaveSuccess={() => {
-            fetchAPI('deposits')
-              .then(soRes => {
-                const rawSos = soRes?.data || soRes || [];
-                const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
-                setSoList(sos);
-              })
-              .catch(console.error);
-          }}
-        />
-      )}
     </div>
   );
 };
