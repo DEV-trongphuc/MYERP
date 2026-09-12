@@ -3372,12 +3372,12 @@ export const DocumentationPage: React.FC = () => {
               </div>
               <div className="doc-copyright-title">TurnioDEV</div>
               <div className="doc-copyright-role">Fullstack Developer</div>
-              <div className="doc-copyright-subtitle">CEO / Founder DOM MARKETING</div>
+              <div className="doc-copyright-subtitle">CEO / Founder DOMATION</div>
               <p className="doc-copyright-statement">
                 Hệ thống xây dựng và phát triển độc quyền. Nghiêm cấm tuyệt đối mọi hành vi sao chép, trích xuất cấu trúc, phân phối lại hoặc đảo ngược mã nguồn (Reverse Engineering) dưới mọi hình thức khi chưa có sự chấp thuận bằng văn bản chính thức từ tác giả. Mọi hành vi xâm phạm sẽ bị truy cứu trách nhiệm pháp lý theo Luật Sở hữu trí tuệ.
               </p>
               <div className="doc-copyright-links">
-                <a href="https://domation.net/" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="Website DOM MARKETING">
+                <a href="https://domation.net/" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="Website DOMATION">
                   <Globe size={12} /> <span>domation.net</span>
                 </a>
                 <a href="https://www.tiktok.com/@turnio.dev" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="TikTok TurnioDEV">
