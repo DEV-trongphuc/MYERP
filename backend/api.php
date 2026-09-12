@@ -16179,6 +16179,108 @@ switch ($action) {
                 error_log("Error fetching marketing stats: " . $e->getMessage());
             }
 
+            // --- BỔ SUNG SỐ LIỆU TÀI CHÍNH KẾ TOÁN (ACCOUNTANT STATS) ---
+            $accountantStats = [];
+            try {
+                $dateCondCreated = str_replace('received_at', 'created_at', $dateCondition);
+                $prevDateCondCreated = str_replace('received_at', 'created_at', $prevDateCondition);
+
+                // 1. Doanh thu thực thu (Approved deposits + Paid invoices)
+                $depRev = (float)$conn->query("SELECT COALESCE(SUM(price), 0) FROM deposits WHERE status IN ('approved', 'completed') AND $dateCondCreated")->fetch_row()[0];
+                $prevDepRev = (float)$conn->query("SELECT COALESCE(SUM(price), 0) FROM deposits WHERE status IN ('approved', 'completed') AND $prevDateCondCreated")->fetch_row()[0];
+
+                $dateCondPaid = str_replace('received_at', 'paid_at', $dateCondition);
+                $prevDateCondPaid = str_replace('received_at', 'paid_at', $prevDateCondition);
+                $invRev = (float)$conn->query("SELECT COALESCE(SUM(total), 0) FROM invoices WHERE status = 'paid' AND deleted_at IS NULL AND $dateCondPaid")->fetch_row()[0];
+                $prevInvRev = (float)$conn->query("SELECT COALESCE(SUM(total), 0) FROM invoices WHERE status = 'paid' AND deleted_at IS NULL AND $prevDateCondPaid")->fetch_row()[0];
+
+                $actRevenue = $depRev + $invRev;
+                $actPrevRevenue = $prevDepRev + $prevInvRev;
+
+                // 2. Doanh thu chờ duyệt / chờ đối soát (Pending deposits + Pending invoices)
+                $pendingDepAmt = (float)$conn->query("SELECT COALESCE(SUM(price), 0) FROM deposits WHERE status = 'pending_admin'")->fetch_row()[0];
+                $pendingDepCount = (int)$conn->query("SELECT COUNT(*) FROM deposits WHERE status = 'pending_admin'")->fetch_row()[0];
+
+                $pendingInvAmt = (float)$conn->query("SELECT COALESCE(SUM(total), 0) FROM invoices WHERE status = 'pending' AND deleted_at IS NULL")->fetch_row()[0];
+                $pendingInvCount = (int)$conn->query("SELECT COUNT(*) FROM invoices WHERE status = 'pending' AND deleted_at IS NULL")->fetch_row()[0];
+
+                $actPendingRevenue = $pendingDepAmt + $pendingInvAmt;
+                $actPendingOrdersCount = $pendingDepCount + $pendingInvCount;
+
+                // 3. Chi phí đã chi (Approved expenses)
+                $dateCondExp = str_replace('received_at', 'created_at', $dateCondition);
+                $prevDateCondExp = str_replace('received_at', 'created_at', $prevDateCondition);
+
+                $actApprovedExpenses = (float)$conn->query("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE status = 'approved' AND deleted_at IS NULL AND $dateCondExp")->fetch_row()[0];
+                $actPrevApprovedExpenses = (float)$conn->query("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE status = 'approved' AND deleted_at IS NULL AND $prevDateCondExp")->fetch_row()[0];
+
+                // Top danh mục chi trong kỳ
+                $topCatsRes = $conn->query("SELECT category, SUM(amount) as cat_amount FROM expenses WHERE deleted_at IS NULL AND $dateCondExp GROUP BY category ORDER BY cat_amount DESC LIMIT 2");
+                $actTopCats = [];
+                if ($topCatsRes) {
+                    while ($r = $topCatsRes->fetch_assoc()) {
+                        $actTopCats[] = [
+                            'name' => $r['category'] ?: 'Khác',
+                            'amount' => (float)$r['cat_amount']
+                        ];
+                    }
+                }
+
+                // 4. Yêu cầu duyệt chi
+                $actPendingExpCount = (int)$conn->query("SELECT COUNT(*) FROM expenses WHERE status = 'pending' AND deleted_at IS NULL")->fetch_row()[0];
+                $actApprovedExpCount = (int)$conn->query("SELECT COUNT(*) FROM expenses WHERE status = 'approved' AND deleted_at IS NULL AND $dateCondExp")->fetch_row()[0];
+                $actPrevPendingExpCount = (int)$conn->query("SELECT COUNT(*) FROM expenses WHERE status = 'pending' AND deleted_at IS NULL AND $prevDateCondExp")->fetch_row()[0];
+
+                // 5. Xu hướng Thu - Chi (5 tháng gần nhất)
+                $actCashFlowTrend = [];
+                for ($i = 4; $i >= 0; $i--) {
+                    $mStart = date('Y-m-01 00:00:00', strtotime("-$i month"));
+                    $mEnd = date('Y-m-t 23:59:59', strtotime("-$i month"));
+                    $mLabel = 'T' . date('n', strtotime("-$i month"));
+
+                    $mDep = (float)$conn->query("SELECT COALESCE(SUM(price), 0) FROM deposits WHERE status IN ('approved', 'completed') AND created_at BETWEEN '$mStart' AND '$mEnd'")->fetch_row()[0];
+                    $mInv = (float)$conn->query("SELECT COALESCE(SUM(total), 0) FROM invoices WHERE status = 'paid' AND deleted_at IS NULL AND paid_at BETWEEN '$mStart' AND '$mEnd'")->fetch_row()[0];
+                    $mExp = (float)$conn->query("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE status = 'approved' AND deleted_at IS NULL AND created_at BETWEEN '$mStart' AND '$mEnd'")->fetch_row()[0];
+
+                    $actCashFlowTrend[] = [
+                        'month' => $mLabel,
+                        'revenue' => round(($mDep + $mInv) / 1000000, 1),
+                        'expenses' => round($mExp / 1000000, 1)
+                    ];
+                }
+
+                // 6. Cơ cấu chi phí theo danh mục (cho biểu đồ tròn)
+                $actCatBreakdown = [];
+                $catRes = $conn->query("SELECT category, SUM(amount) as val FROM expenses WHERE deleted_at IS NULL GROUP BY category ORDER BY val DESC");
+                if ($catRes) {
+                    while ($r = $catRes->fetch_assoc()) {
+                        $actCatBreakdown[] = [
+                            'name' => $r['category'] ?: 'Khác',
+                            'value' => (float)$r['val']
+                        ];
+                    }
+                }
+
+                $accountantStats = [
+                    'revenue' => $actRevenue,
+                    'revenue_change' => $calcChange($actRevenue, $actPrevRevenue),
+                    'profit' => $actRevenue - $actApprovedExpenses,
+                    'pending_revenue' => $actPendingRevenue,
+                    'pending_orders_count' => $actPendingOrdersCount,
+                    'pending_revenue_change' => '0%',
+                    'approved_expenses' => $actApprovedExpenses,
+                    'approved_expenses_change' => $calcChange($actApprovedExpenses, $actPrevApprovedExpenses),
+                    'top_expense_categories' => $actTopCats,
+                    'pending_expenses_count' => $actPendingExpCount,
+                    'approved_expenses_count' => $actApprovedExpCount,
+                    'pending_expenses_change' => $calcChange($actPendingExpCount, $actPrevPendingExpCount),
+                    'cash_flow_trend' => $actCashFlowTrend,
+                    'expense_categories' => $actCatBreakdown
+                ];
+            } catch (\Throwable $e) {
+                error_log("Error fetching accountant stats: " . $e->getMessage());
+            }
+
             echo json_encode([
                 'success' => true,
                 'data' => [
@@ -16223,7 +16325,8 @@ switch ($action) {
                     'mktCohortConversion' => $mktCohortConversion,
                     'mktConversionByLeadMonth' => $mktConversionByLeadMonth,
                     'mktConversionByCloseMonth' => $mktConversionByCloseMonth,
-                    'mktRevenueAndProjection' => $mktRevenueAndProjection
+                    'mktRevenueAndProjection' => $mktRevenueAndProjection,
+                    'accountantStats' => $accountantStats
                 ]
             ]);
         } catch (Throwable $e) {
