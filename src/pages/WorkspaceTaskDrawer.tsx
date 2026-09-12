@@ -5,8 +5,9 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download
 } from 'lucide-react';
+import { downloadFileWithName } from '../utils/fileDownloader';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -3724,7 +3725,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                                   );
                                                 }
                                                 return (
-                                                  <a key={aIdx} href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 6px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.03)', fontSize: '0.68rem', color: 'var(--color-primary)', fontWeight: 600, border: '1px solid var(--color-border-light)' }} className="hover-opacity">
+                                                  <a key={aIdx} href={href} data-file-url={href} data-file-name={name} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 6px', borderRadius: '10px', background: 'rgba(0, 0, 0, 0.03)', fontSize: '0.68rem', color: 'var(--color-primary)', fontWeight: 600, border: '1px solid var(--color-border-light)' }} className="hover-opacity comment-attachment-chip">
                                                     <Paperclip size={9} />
                                                     <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                                                   </a>
@@ -4083,9 +4084,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         transition: 'all 0.2s ease',
                         cursor: 'pointer'
                       }}
-                      className="hover-lift"
+                      className="hover-lift task-attachment-item"
+                      data-file-url={fullUrl}
+                      data-file-name={link.label || link.url}
                       onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('.btn-delete-link') || (e.target as HTMLElement).closest('.btn-external-link')) return;
+                        if ((e.target as HTMLElement).closest('.btn-delete-link') || (e.target as HTMLElement).closest('.btn-external-link') || (e.target as HTMLElement).closest('.btn-download-link')) return;
                         if (isImage || isPdf) {
                           e.preventDefault();
                           const targetIdx = allMediaItems.findIndex(x => x.url === fullUrl);
@@ -4095,7 +4098,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             initialIndex: Math.max(0, targetIdx)
                           });
                         } else {
-                          window.open(fullUrl, '_blank');
+                          e.preventDefault();
+                          downloadFileWithName(fullUrl, link.label || link.url);
                         }
                       }}
                     >
@@ -4218,6 +4222,30 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
                       {/* Right Actions */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="btn-download-link hover-bg-primary-light hover-color-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadFileWithName(fullUrl, link.label || link.url);
+                          }}
+                          style={{
+                            border: 'none',
+                            background: 'var(--color-bg-alt)',
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title={t('Tải xuống')}
+                        >
+                          <Download size={15} />
+                        </button>
                         <a
                           href={fullUrl}
                           target="_blank"
@@ -4507,7 +4535,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                         }
 
                                         return (
-                                          <a key={aIdx} href={href} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', padding: '2px 6px', borderRadius: '4px', textDecoration: 'none', color: 'var(--color-primary)', fontSize: '0.65rem' }}>
+                                          <a key={aIdx} href={href} data-file-url={href} data-file-name={name} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', padding: '2px 6px', borderRadius: '4px', textDecoration: 'none', color: 'var(--color-primary)', fontSize: '0.65rem' }} className="comment-attachment-chip">
                                             <FileText size={10} />
                                             <span>{name}</span>
                                           </a>

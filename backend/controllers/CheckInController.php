@@ -1743,6 +1743,10 @@ class CheckInController {
             respond(404, null, 'Không tìm thấy phiếu đề xuất', false);
         }
 
+        if (in_array($req['status'], ['approved', 'completed'], true)) {
+            respond(400, null, 'Không thể xóa phiếu đề xuất đã được duyệt', false);
+        }
+
         $isPrivileged = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'], true);
         $isCreator = ((int)$req['user_id'] === (int)$auth['user_id']);
         if (!$isPrivileged && !$isCreator) {

@@ -1362,6 +1362,16 @@ class FinanceController
     {
         if ($auth['role'] === 'viewer') respond(403, null, 'Bạn không có quyền xóa chi phí', false);
         
+        $chk = $this->db->prepare("SELECT status FROM expenses WHERE id=? AND tenant_id=? AND deleted_at IS NULL");
+        $chk->execute([$id, $auth['tenant_id']]);
+        $row = $chk->fetch();
+        if (!$row) {
+            respond(404, null, 'Không tìm thấy chi phí hoặc không có quyền xóa', false);
+        }
+        if (in_array($row['status'], ['approved', 'paid', 'completed'], true)) {
+            respond(400, null, 'Không thể xóa yêu cầu đã được duyệt hoặc chi tiền', false);
+        }
+
         $sql = "UPDATE expenses SET deleted_at = NOW() WHERE id=? AND tenant_id=?";
         $p = [$id, $auth['tenant_id']];
         $isPrivileged = in_array($auth['role'], ['admin', 'super_admin', 'superadmin', 'director', 'accountant', 'manager'], true);

@@ -240,12 +240,20 @@ export function initAttachmentDownloadInterceptor(): void {
     const target = e.target as HTMLElement | null;
     if (!target) return;
 
-    // Check if clicked element or parent is a comment attachment chip or has download file attribute
-    const chip = target.closest<HTMLElement>('.comment-attachment-chip, a[data-file-url], a[data-file-name]');
+    // Check if clicked element or parent is an attachment chip, link, or card with file data
+    const chip = target.closest<HTMLElement>('.comment-attachment-chip, a[data-file-url], a[data-file-name], .task-attachment-item, [data-attachment-download], a.attachment-link, a.download-link');
     if (!chip) return;
 
-    // Ignore if clicked on a delete/remove button inside the chip
-    if (target.closest('button, .remove-chip, .btn-remove, [data-remove-attachment]')) return;
+    // Ignore if clicked on a delete/remove button or external link inside the chip
+    if (target.closest('button.btn-delete-link, button.remove-chip, button.btn-remove, [data-remove-attachment], a.btn-external-link')) return;
+
+    // For task-attachment-item, if it's image or pdf and not clicking download button, let drawer/lightbox handle preview
+    if (chip.classList.contains('task-attachment-item') && !target.closest('.btn-download-link, [data-attachment-download]')) {
+      const testUrl = chip.getAttribute('data-file-url') || chip.getAttribute('href') || '';
+      if (/\.(jpg|jpeg|png|gif|webp|svg|pdf)($|\?)/i.test(testUrl)) {
+        return;
+      }
+    }
 
     const fileUrl = chip.getAttribute('data-file-url') || chip.getAttribute('href');
     if (!fileUrl || fileUrl === '#' || fileUrl.startsWith('javascript:')) return;

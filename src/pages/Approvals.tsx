@@ -3193,6 +3193,10 @@ export default function Approvals() {
   };
 
   const handleDeleteRequest = (item: any) => {
+    if (item.status === 'approved' || item.status === 'completed') {
+      toast.error(t('Đơn/đề xuất này đã được duyệt đủ cấp, không thể xóa!'));
+      return;
+    }
     showConfirm({
       title: t('Xác nhận xóa / thu hồi yêu cầu'),
       message: t('Bạn có chắc chắn muốn xóa hoặc thu hồi yêu cầu này không? Hành động này không thể hoàn tác.'),
@@ -5095,14 +5099,16 @@ export default function Approvals() {
                                     <Edit size={12} />
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => handleDeleteRequest(item)}
-                                  className="btn secondary"
-                                  style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                  title={t('Xóa')}
-                                >
-                                  <Trash2 size={12} />
-                                </button>
+                                {item.status !== 'approved' && item.status !== 'completed' && (
+                                  <button
+                                    onClick={() => handleDeleteRequest(item)}
+                                    className="btn secondary"
+                                    style={{ height: '26px', width: '26px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                    title={t('Xóa')}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
                               </>
                             )}
                           </>
@@ -5259,7 +5265,7 @@ export default function Approvals() {
                                   <CheckCircle2 size={12} />
                                   {t('Duyệt')}
                                 </button>
-                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id)) && (
+                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id)) && item.status !== 'approved' && item.status !== 'completed' && (
                                   <button
                                     onClick={() => handleDeleteRequest(item)}
                                     className="btn secondary"
@@ -5313,14 +5319,16 @@ export default function Approvals() {
                                         <Edit size={12} />
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => handleDeleteRequest(item)}
-                                      className="btn secondary"
-                                      style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
-                                      title={t('Xóa')}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
+                                    {item.status !== 'approved' && item.status !== 'completed' && (
+                                      <button
+                                        onClick={() => handleDeleteRequest(item)}
+                                        className="btn secondary"
+                                        style={{ height: '28px', width: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-danger)' }}
+                                        title={t('Xóa')}
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => handleDuplicate(item)}
                                       className="btn secondary"
@@ -5362,7 +5370,7 @@ export default function Approvals() {
                                 >
                                   <Eye size={12} /> {t('Chi tiết')}
                                 </button>
-                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || (isManagement(user) || isHR(user))) && (
+                                {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || (isManagement(user) || isHR(user))) && item.status !== 'approved' && item.status !== 'completed' && (
                                   <button
                                     onClick={() => handleDeleteRequest(item)}
                                     className="btn secondary"
@@ -15282,7 +15290,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <Copy size={isMobile ? 14 : 16} />
               </button>
             )}
-            {onDelete && (Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
+            {onDelete && item.status !== 'approved' && item.status !== 'completed' && (Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
               <button
                 onClick={async () => {
                   await onDelete(item);

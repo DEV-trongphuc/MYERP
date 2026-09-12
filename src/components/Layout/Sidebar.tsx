@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
+import api from '../../api/axios';
 import { hasModuleApprovalAccess, isItemAtMyStepToApprove, isMyRequestPendingApproval } from '../../utils/approvalPermissions';
 import { isMarketing } from '../../utils/roleUtils';
 
@@ -144,8 +145,8 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
     { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
   ],
   accountant: [
-    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap },
-    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap },
+    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
+    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
     { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
     { name: 'Sales Order', href: '/deposits', icon: Receipt, badgeKey: 'pendingDeposits' },
@@ -173,8 +174,8 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
   sale_admin: [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
-    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap },
-    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap },
+    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
+    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
     { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
     { name: 'Ticket data lỗi', href: '/tickets', icon: Ticket, badgeKey: 'tickets' },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
@@ -183,8 +184,8 @@ const QUICK_NAV_BY_ROLE: Record<string, QuickNavItem[]> = {
   saleadmin: [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
-    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap },
-    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap },
+    { name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' },
+    { name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' },
     { name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap },
     { name: 'Ticket data lỗi', href: '/tickets', icon: Ticket, badgeKey: 'tickets' },
     { name: 'Purchase Order', href: '/expenses', icon: CreditCard, badgeKey: 'pendingExpenses' },
@@ -284,6 +285,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   const [pendingCoopCount, setPendingCoopCount] = useState(0);
   const [undoneTasksCount, setUndoneTasksCount] = useState(0);
   const [pendingDepositsCount, setPendingDepositsCount] = useState(0);
+  const [nopHoSoCount, setNopHoSoCount] = useState(0);
+  const [lePhiCount, setLePhiCount] = useState(0);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(() => {
     if (typeof window !== 'undefined') {
       const cached = sessionStorage.getItem('pending_approvals_count') || localStorage.getItem('pending_approvals_count');
@@ -453,6 +456,15 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
 
         }
+
+        // Fetch student counts for Nộp hồ sơ & Lệ phí hồ sơ badges
+        try {
+          const resStudent = await api.get('/contacts/student-counts');
+          if (resStudent.data && resStudent.data.data) {
+            setNopHoSoCount(Number(resStudent.data.data.nop_ho_so || 0));
+            setLePhiCount(Number(resStudent.data.data.le_phi || 0));
+          }
+        } catch { /* silent */ }
       } catch { /* silent */ }
     };
     fetchPending();
@@ -478,6 +490,17 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
     window.addEventListener('approval-created', fetchPending);
     window.addEventListener('refresh-approvals', fetchPending);
     window.addEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
+
+    const handleStudentBadgeUpdated = (e: any) => {
+      if (e.detail) {
+        if (typeof e.detail.nop_ho_so === 'number') setNopHoSoCount(e.detail.nop_ho_so);
+        if (typeof e.detail.le_phi === 'number') setLePhiCount(e.detail.le_phi);
+      }
+    };
+    window.addEventListener('student-badge-updated', handleStudentBadgeUpdated);
+    window.addEventListener('lead-added', fetchPending);
+    window.addEventListener('contact-updated', fetchPending);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('ticket-resolved', fetchPending);
@@ -491,6 +514,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       window.removeEventListener('approval-created', fetchPending);
       window.removeEventListener('refresh-approvals', fetchPending);
       window.removeEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
+      window.removeEventListener('student-badge-updated', handleStudentBadgeUpdated);
+      window.removeEventListener('lead-added', fetchPending);
+      window.removeEventListener('contact-updated', fetchPending);
     };
   }, [user]);
 
@@ -548,8 +574,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       const newItems: typeof items = [];
       items.forEach(item => {
         if (item.name === 'Học viên') {
-          newItems.push({ name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap });
-          newItems.push({ name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap });
+          newItems.push({ name: 'Nộp hồ sơ', href: '/students?tab=nop_ho_so', icon: GraduationCap, badgeKey: 'nopHoSo' });
+          newItems.push({ name: 'Lệ phí hồ sơ', href: '/students?tab=le_phi', icon: GraduationCap, badgeKey: 'lePhi' });
           newItems.push({ name: 'Học viên chính thức', href: '/students?tab=chinh_thuc', icon: GraduationCap });
         } else {
           newItems.push(item);
@@ -844,7 +870,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                   </span>
                 )}
                  {group.items.map(({ name, href, icon: Icon, end, badgeKey }) => {
-                   const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? undoneTasksCount : 0;
+                   const badgeCount = badgeKey === 'tickets' ? pendingTickets : badgeKey === 'supportTickets' ? supportTicketsCount : badgeKey === 'gatekeeper' ? heldLeadsCount : badgeKey === 'coopSlips' ? pendingCoopCount : badgeKey === 'pendingExpenses' ? pendingExpensesCount : badgeKey === 'pendingDeposits' ? pendingDepositsCount : badgeKey === 'pendingApprovals' ? pendingApprovalsCount : badgeKey === 'workspaceTasks' ? undoneTasksCount : badgeKey === 'nopHoSo' ? nopHoSoCount : badgeKey === 'lePhi' ? lePhiCount : 0;
                    const isAccountant = String(user?.role).toLowerCase() === 'accountant';
                    const effectiveHref = (name === 'Lịch trình' && isAccountant) ? '/data?view=calendar' : href;
                    const checkIsActive = (locationPath: string, locationSearch: string, itemHref: string) => {

@@ -1608,7 +1608,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   // Scheduler activities & note states
   const [calendarActivities, setCalendarActivities] = useState<any[]>([]);
-  const [calendarUserId, setCalendarUserId] = useState<string | number>('');
+  const [calendarUserId, setCalendarUserId] = useState<string | number>(() => currentUser?.id ? String(currentUser.id) : '');
   const [schedulerModalOpen, setSchedulerModalOpen] = useState(false);
   const [selectedSchedulerDate, setSelectedSchedulerDate] = useState<string | null>(null);
   const [schedulerModalTab, setSchedulerModalTab] = useState<'leads' | 'diary' | 'tasks' | 'tickets'>('diary');
@@ -4472,11 +4472,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     if (currentUser?.id && !calendarUserId) {
-      if (['sale_admin', 'saleadmin', 'admin', 'superadmin', 'super_admin'].includes(String(currentUser.role).toLowerCase())) {
-        setCalendarUserId('all');
-      } else {
-        setCalendarUserId(currentUser.id);
-      }
+      setCalendarUserId(currentUser.id);
     }
   }, [currentUser]);
 
@@ -10708,7 +10704,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         avatar: resolveAttachmentUrl(u.avatar_url || u.avatar)
                       }))
                     ]}
-                    value={String(calendarUserId || 'all')}
+                    value={String(calendarUserId || currentUser?.id || 'all')}
                     onChange={(val) => setCalendarUserId(String(val))}
                     width="100%"
                     searchable={true}

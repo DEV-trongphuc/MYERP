@@ -430,6 +430,19 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     }
   }, [searchParams]);
 
+  const [studentCounts, setStudentCounts] = useState<{ nop_ho_so?: number; le_phi?: number; chinh_thuc?: number }>({});
+  const fetchStudentCounts = async () => {
+    try {
+      const res = await api.get('/contacts/student-counts');
+      if (res.data?.success && res.data?.data) {
+        setStudentCounts(res.data.data);
+        window.dispatchEvent(new CustomEvent('student-badge-updated', { detail: res.data.data }));
+      }
+    } catch {
+      // silent
+    }
+  };
+
   const [scoringRules, setScoringRules] = useState<any>(null);
   const [decayDays, setDecayDays] = useState<number>(5);
   const [loading, setLoading] = useState(true);
@@ -482,6 +495,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     return () => window.removeEventListener('open-contact-drawer', handleOpenContactDrawer);
   }, []);
   const [segment, setSegment] = useState(defaultSegment);
+
+  useEffect(() => {
+    if (segment === 'customer') {
+      fetchStudentCounts();
+    }
+  }, [segment]);
+
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [page, setPage] = useState(1);
@@ -934,6 +954,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   };
 
   const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    if (segment === 'customer' && !loading) {
+      setStudentCounts(prev => ({
+        ...prev,
+        [studentSubTab]: total
+      }));
+    }
+  }, [total, studentSubTab, loading, segment]);
 
   const fetchData = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -1408,7 +1437,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   padding: '6px 14px'
                 }}
               >
-                Học viên chính thức
+                Học viên chính thức {studentCounts.chinh_thuc !== undefined ? `(${studentCounts.chinh_thuc})` : ''}
               </button>
               <button
                 type="button"
@@ -1424,7 +1453,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   padding: '6px 14px'
                 }}
               >
-                Lệ phí hồ sơ
+                Lệ phí hồ sơ {studentCounts.le_phi !== undefined ? `(${studentCounts.le_phi})` : ''}
               </button>
               <button
                 type="button"
@@ -1440,7 +1469,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                   padding: '6px 14px'
                 }}
               >
-                Nộp hồ sơ
+                Nộp hồ sơ {studentCounts.nop_ho_so !== undefined ? `(${studentCounts.nop_ho_so})` : ''}
               </button>
             </div>
           )}

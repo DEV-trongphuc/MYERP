@@ -27,7 +27,7 @@ export const CalendarPage: React.FC = () => {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string | number>('');
+  const [selectedUserId, setSelectedUserId] = useState<string | number>(() => user?.id || '');
 
   const formatVND = (n: any) => {
     const num = Math.round(Number(n || 0));

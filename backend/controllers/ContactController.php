@@ -2637,6 +2637,130 @@ class ContactController {
         respond(200, $result, 'Lấy danh sách người hỗ trợ thành công');
     }
 
+    public function getStudentCounts(array $auth): void {
+        $tid = (int)$auth['tenant_id'];
+        $where = ['c.tenant_id = ?', 'c.deleted_at IS NULL', 'c.owner_id IS NOT NULL'];
+        $params = [$tid];
+
+        $role = strtolower($auth['role'] ?? '');
+        if ($role === 'sale_admin' || $role === 'saleadmin') {
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('application_started', 'nop_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage->execute([$tid]);
+            $minOrderIndex = $stmtStage->fetchColumn();
+            if ($minOrderIndex === false) {
+                $minOrderIndex = 9;
+            }
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+            } else {
+                $where[] = "1=0";
+            }
+        } elseif ($role === 'accountant') {
+            $stmtStage = $this->db->prepare("SELECT order_index FROM pipeline_stages WHERE tenant_id = ? AND system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') ORDER BY order_index ASC LIMIT 1");
+            $stmtStage->execute([$tid]);
+            $minOrderIndex = $stmtStage->fetchColumn();
+            if ($minOrderIndex === false) {
+                $minOrderIndex = 13;
+            }
+            $stListStmt = $this->db->prepare("SELECT id FROM pipeline_stages WHERE tenant_id = ? AND order_index >= ?");
+            $stListStmt->execute([$tid, (int)$minOrderIndex]);
+            $allowedStageIds = $stListStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            if (!empty($allowedStageIds)) {
+                $where[] = "c.stage_id IN (" . implode(',', array_map('intval', $allowedStageIds)) . ")";
+            } else {
+                $where[] = "1=0";
+            }
+        }
+
+        // Apply role scope
+        $scope = $this->getScope($auth, 'leads', 'read');
+        if ($scope === 'all') {
+            // No additional filter
+        } else if ($scope === 'team' || $scope === 'own') {
+            $teamMemberIds = [$auth['user_id']];
+            if ($scope === 'team') {
+                $stmtTeam = $this->db->prepare("
+                    SELECT id FROM users 
+                    WHERE team_id IN (
+                        SELECT id FROM teams 
+                        WHERE FIND_IN_SET(?, CONCAT(leader_id, CHAR(44), COALESCE(co_leader_ids, leader_id)))
+                    ) OR team_id = (SELECT team_id FROM users WHERE id = ?)
+                ");
+                $stmtTeam->execute([$auth['user_id'], $auth['user_id']]);
+                $fetchedIds = $stmtTeam->fetchAll(PDO::FETCH_COLUMN);
+                if ($fetchedIds) {
+                    foreach ($fetchedIds as $fid) {
+                        $teamMemberIds[] = (int)$fid;
+                    }
+                }
+                $teamMemberIds = array_unique($teamMemberIds);
+            }
+
+            $idsClause = implode(',', array_map('intval', $teamMemberIds));
+            $collabChecks = [];
+            foreach ($teamMemberIds as $id) {
+                $collabChecks[] = "FIND_IN_SET(" . (int)$id . ", c.collaborator_ids)";
+            }
+            $collabClause = implode(' OR ', $collabChecks);
+
+            $coopChecks = [];
+            foreach ($teamMemberIds as $id) {
+                $coopChecks[] = "JSON_CONTAINS(JSON_KEYS(CASE WHEN (shares_json IS NOT NULL AND JSON_VALID(shares_json)) THEN shares_json ELSE '{}' END), JSON_QUOTE(CAST(" . (int)$id . " AS CHAR)))";
+            }
+            $coopClause = implode(' OR ', $coopChecks);
+
+            $where[] = "(c.owner_id IN ($idsClause) OR c.created_by IN ($idsClause) OR ($collabClause) OR c.id IN (
+                SELECT contact_id FROM cooperation_slips WHERE $coopClause
+            ))";
+        } else {
+            $where[] = '1=0';
+        }
+
+        $where[] = "(c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)";
+        $baseWhereStr = implode(' AND ', $where);
+
+        try {
+            // Group 1: Nộp hồ sơ (application_started, application_completed, admission_approved, offer_accepted, nop_ho_so)
+            $nopHoSoSql = "SELECT COUNT(*) FROM contacts c WHERE $baseWhereStr AND (
+                EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so'))
+                OR c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so')
+            )";
+            $nopHoSoStmt = $this->db->prepare($nopHoSoSql);
+            $nopHoSoStmt->execute($params);
+            $nopHoSoCount = (int)$nopHoSoStmt->fetchColumn();
+
+            // Group 2: Lệ phí hồ sơ (deposit_tuition_payment, dong_le_phi_ho_so)
+            $lePhiSql = "SELECT COUNT(*) FROM contacts c WHERE $baseWhereStr AND (
+                EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND ps.system_slug IN ('deposit_tuition_payment', 'dong_le_phi_ho_so'))
+                OR c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so')
+            )";
+            $lePhiStmt = $this->db->prepare($lePhiSql);
+            $lePhiStmt->execute($params);
+            $lePhiCount = (int)$lePhiStmt->fetchColumn();
+
+            // Group 3: Học viên chính thức (enrolled, hoc_vien, is_won = 1, or c.status = 'customer')
+            $chinhThucSql = "SELECT COUNT(*) FROM contacts c WHERE $baseWhereStr AND (
+                EXISTS (SELECT 1 FROM pipeline_stages ps WHERE ps.id = c.stage_id AND (ps.system_slug IN ('enrolled', 'hoc_vien') OR ps.is_won = 1))
+                OR c.pipeline_status IN ('enrolled', 'hoc_vien')
+                OR c.status = 'customer'
+            )";
+            $chinhThucStmt = $this->db->prepare($chinhThucSql);
+            $chinhThucStmt->execute($params);
+            $chinhThucCount = (int)$chinhThucStmt->fetchColumn();
+
+            respond(200, [
+                'nop_ho_so' => $nopHoSoCount,
+                'le_phi' => $lePhiCount,
+                'chinh_thuc' => $chinhThucCount
+            ]);
+        } catch (\Throwable $e) {
+            respond(500, null, 'Lỗi truy vấn số lượng học viên: ' . $e->getMessage(), false);
+        }
+    }
+
     public function getPrograms(array $auth): void {
         try {
             $sql = "

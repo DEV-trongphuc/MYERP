@@ -3446,6 +3446,9 @@ class HRMController {
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu nghỉ phép', false);
         }
+        if (in_array($row['status'], ['approved', 'completed'], true)) {
+            respond(400, null, 'Không thể xóa đơn nghỉ phép đã được duyệt', false);
+        }
         $isPrivileged = $this->isAdmin($auth) || in_array($auth['role'], ['manager', 'director', 'hr'], true);
         $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
         if (!$isCreator && !$isPrivileged) {
@@ -3462,6 +3465,9 @@ class HRMController {
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             respond(404, null, 'Không tìm thấy yêu cầu tạm ứng', false);
+        }
+        if (in_array($row['status'], ['approved', 'paid', 'completed'], true)) {
+            respond(400, null, 'Không thể xóa yêu cầu tạm ứng đã được duyệt hoặc chi tiền', false);
         }
         $isPrivileged = $this->isAdmin($auth) || in_array($auth['role'], ['manager', 'director', 'hr'], true);
         $isCreator = ((int)$row['user_id'] === (int)$auth['user_id']);
