@@ -3367,10 +3367,11 @@ export const DocumentationPage: React.FC = () => {
             {/* Exclusive Intellectual Property & Development Notice */}
             <div className="doc-toc-copyright-box">
               <div className="doc-copyright-badge">
-                <Shield size={12} color="#dc2626" />
+                <Shield size={12} color="#64748b" />
                 <span>BẢN QUYỀN ĐỘC QUYỀN</span>
               </div>
-              <div className="doc-copyright-title">TurnioDEV Fullstack Developer</div>
+              <div className="doc-copyright-title">TurnioDEV</div>
+              <div className="doc-copyright-role">Fullstack Developer</div>
               <div className="doc-copyright-subtitle">CEO / Founder DOM MARKETING</div>
               <p className="doc-copyright-statement">
                 Hệ thống xây dựng và phát triển độc quyền. Nghiêm cấm tuyệt đối mọi hành vi sao chép, trích xuất cấu trúc, phân phối lại hoặc đảo ngược mã nguồn (Reverse Engineering) dưới mọi hình thức khi chưa có sự chấp thuận bằng văn bản chính thức từ tác giả. Mọi hành vi xâm phạm sẽ bị truy cứu trách nhiệm pháp lý theo Luật Sở hữu trí tuệ.
@@ -4047,7 +4048,6 @@ export const DocumentationPage: React.FC = () => {
           margin-top: 14px;
           background: #ffffff;
           border: 1px solid #cbd5e1;
-          border-left: 3px solid #dc2626;
           border-radius: 6px;
           padding: 12px;
         }
@@ -4058,23 +4058,30 @@ export const DocumentationPage: React.FC = () => {
           gap: 5px;
           font-size: 10px;
           font-weight: 800;
-          color: #dc2626;
+          color: #475569;
           text-transform: uppercase;
           letter-spacing: 0.5px;
           margin-bottom: 6px;
         }
 
         .doc-copyright-title {
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 700;
           color: #0f172a;
           line-height: 1.3;
         }
 
+        .doc-copyright-role {
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #334155;
+          line-height: 1.3;
+        }
+
         .doc-copyright-subtitle {
           font-size: 11px;
-          font-weight: 600;
-          color: #475569;
+          font-weight: 500;
+          color: #64748b;
           margin-bottom: 8px;
         }
 
