@@ -241,7 +241,7 @@ class PostController {
         ]);
 
         $postId = (int)$this->db->lastInsertId();
-        $this->processMentionsAndNotify($auth, $content, $postId);
+        $this->processMentionsAndNotify($auth, $content, $postId, null, 'post');
 
         respond(201, ['success' => true, 'id' => $postId]);
     }
@@ -274,6 +274,66 @@ class PostController {
     }
 
     /**
+     * GET /posts/{id}
+     * Get a single post by ID with full hydration.
+     */
+    public function show(array $auth, int $id): void {
+        $tenantId = (int)$auth['tenant_id'];
+        $currentUserId = (int)$auth['user_id'];
+
+        $stmt = $this->db->prepare("
+            SELECT p.*, u.full_name as author_name, u.avatar_url as author_avatar, t.name as team_name
+            FROM enterprise_posts p
+            JOIN users u ON p.user_id = u.id
+            LEFT JOIN teams t ON p.team_id = t.id
+            WHERE p.id = ? AND p.tenant_id = ? AND p.deleted_at IS NULL
+        ");
+        $stmt->execute([$id, $tenantId]);
+        $post = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$post) {
+            respond(404, null, 'Bài viết không tồn tại hoặc đã bị xóa', false);
+        }
+
+        // Hydrate single post
+        $post['attachments'] = json_decode($post['attachments_json'] ?? '[]', true) ?: [];
+        $post['tags'] = json_decode($post['tags_json'] ?? '[]', true) ?: [];
+        $post['link_metadata'] = json_decode($post['link_metadata_json'] ?? 'null', true);
+        unset($post['attachments_json'], $post['tags_json'], $post['link_metadata_json']);
+
+        // Reactions
+        $reactStmt = $this->db->prepare("
+            SELECT reaction_type, COUNT(*) as count 
+            FROM enterprise_reactions 
+            WHERE ref_type = 'post' AND ref_id = ? 
+            GROUP BY reaction_type
+        ");
+        $reactStmt->execute([$id]);
+        $reacts = $reactStmt->fetchAll(PDO::FETCH_ASSOC);
+        $summary = [];
+        $total = 0;
+        foreach ($reacts as $r) {
+            $summary[$r['reaction_type']] = (int)$r['count'];
+            $total += (int)$r['count'];
+        }
+        $post['reactions_summary'] = $summary;
+        $post['reactions_count'] = $total;
+
+        // User reaction
+        $uReactStmt = $this->db->prepare("SELECT reaction_type FROM enterprise_reactions WHERE ref_type = 'post' AND user_id = ? AND ref_id = ?");
+        $uReactStmt->execute([$currentUserId, $id]);
+        $post['user_reaction'] = $uReactStmt->fetchColumn() ?: null;
+
+        // Comments count
+        $cmtCountStmt = $this->db->prepare("SELECT COUNT(*) FROM enterprise_comments WHERE deleted_at IS NULL AND post_id = ?");
+        $cmtCountStmt->execute([$id]);
+        $post['comments_count'] = (int)$cmtCountStmt->fetchColumn();
+        $post['top_comments'] = [];
+
+        respond(200, ['success' => true, 'post' => $post]);
+    }
+
+    /**
      * POST /posts/{id}/react
      * Toggle or update user reaction on a post.
      */
@@ -284,11 +344,13 @@ class PostController {
         $reactionType = isset($b['reaction_type']) ? trim($b['reaction_type']) : 'like';
 
         // Check if post exists
-        $chk = $this->db->prepare("SELECT id FROM enterprise_posts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+        $chk = $this->db->prepare("SELECT id, user_id FROM enterprise_posts WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
         $chk->execute([$id, $tenantId]);
-        if (!$chk->fetchColumn()) {
+        $postRow = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$postRow) {
             respond(404, null, 'Bài viết không tồn tại', false);
         }
+        $postAuthorId = (int)$postRow['user_id'];
 
         // Check existing user reaction
         $chkReact = $this->db->prepare("SELECT reaction_type FROM enterprise_reactions WHERE ref_type = 'post' AND ref_id = ? AND user_id = ?");
@@ -312,6 +374,37 @@ class PostController {
             $ins = $this->db->prepare("INSERT INTO enterprise_reactions (tenant_id, ref_type, ref_id, user_id, reaction_type) VALUES (?, 'post', ?, ?, ?)");
             $ins->execute([$tenantId, $id, $userId, $reactionType]);
             $action = 'added';
+        }
+
+        // Trigger In-App Notification (Chuông web only) for post author when a new reaction is added
+        if ($action === 'added' && $postAuthorId && $postAuthorId !== $userId) {
+            try {
+                $reactLabels = [
+                    'like' => 'thích 👍',
+                    'love' => 'thả tim ❤️',
+                    'haha' => 'thả haha 😂',
+                    'rocket' => 'đẩy tiến độ 🚀',
+                    'clap' => 'vỗ tay 👏',
+                    'flex' => 'tiếp sức 💪'
+                ];
+                $reactText = $reactLabels[$reactionType] ?? 'bày tỏ cảm xúc';
+                $authorName = $auth['full_name'] ?? 'Đồng nghiệp';
+                $title = "{$authorName} đã {$reactText} về bài viết của bạn";
+                $body = "{$authorName} đã bày tỏ cảm xúc về bài viết của bạn trên bảng tin nội bộ.";
+                $notifLink = "/feed?post_id={$id}";
+
+                $notifStmt = $this->db->prepare("
+                    INSERT INTO notifications (user_id, tenant_id, title, body, type, is_read, link)
+                    VALUES (?, ?, ?, ?, 'post_reaction', 0, ?)
+                ");
+                $notifStmt->execute([
+                    $postAuthorId,
+                    $tenantId,
+                    $title,
+                    $body,
+                    $notifLink
+                ]);
+            } catch (Throwable $e) {}
         }
 
         // Get updated stats
@@ -426,30 +519,54 @@ class PostController {
 
         $commentId = (int)$this->db->lastInsertId();
 
-        // Process mentions and notify users first
-        $this->processMentionsAndNotify($auth, $content, $id, $commentId);
+        // Process mentions and notify users first (with context_type = 'comment')
+        $this->processMentionsAndNotify($auth, $content, $id, $commentId, 'comment');
 
-        // Optional: Trigger system notification for post author (if comment was by another user)
-        if ((int)$postAuthorId !== $userId) {
-            try {
-                $notifType = $parentId ? 'comment_reply' : 'post_comment';
-                $title = $auth['full_name'] . ($parentId ? ' đã phản hồi bình luận của bạn' : ' đã bình luận về bài viết của bạn');
-                $link = "/feed?post_id={$id}&open_comment={$commentId}";
-                
-                $notifStmt = $this->db->prepare("
-                    INSERT INTO notifications (user_id, tenant_id, title, body, type, is_read, link)
-                    VALUES (?, ?, ?, ?, ?, 0, ?)
-                ");
-                $notifStmt->execute([
-                    $postAuthorId,
-                    $tenantId,
-                    $title,
-                    mb_strimwidth($content, 0, 100, '...'),
-                    $notifType,
-                    $link
-                ]);
-            } catch (Throwable $e) {
-                // Ignore notification failure
+        // Multi-channel notifications for comment & reply (Mail, Tele, Zalo, In-app)
+        require_once __DIR__ . '/../NotificationService.php';
+        $authorName = $auth['full_name'] ?? 'Đồng nghiệp';
+        $targetLink = "/feed?post_id={$id}&open_comment={$commentId}";
+
+        if ($parentId) {
+            // This is a reply to another comment
+            $pStmt = $this->db->prepare("SELECT user_id FROM enterprise_comments WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL");
+            $pStmt->execute([$parentId, $tenantId]);
+            $parentCommentAuthorId = (int)$pStmt->fetchColumn();
+
+            // 1. Notify the author of the parent comment being replied to
+            if ($parentCommentAuthorId && $parentCommentAuthorId !== $userId) {
+                try {
+                    NotificationService::send($this->db, $tenantId, 'POST_COMMENT_REPLY', [
+                        'user_id' => $parentCommentAuthorId,
+                        'author_name' => $authorName,
+                        'comment' => $content,
+                        'link' => $targetLink
+                    ]);
+                } catch (Throwable $e) {}
+            }
+
+            // 2. Also notify the post author (if different from replier and parent comment author)
+            if ((int)$postAuthorId !== $userId && (int)$postAuthorId !== $parentCommentAuthorId) {
+                try {
+                    NotificationService::send($this->db, $tenantId, 'POST_COMMENT_NEW', [
+                        'user_id' => (int)$postAuthorId,
+                        'author_name' => $authorName,
+                        'comment' => $content,
+                        'link' => $targetLink
+                    ]);
+                } catch (Throwable $e) {}
+            }
+        } else {
+            // Direct comment on post: notify the post author
+            if ((int)$postAuthorId !== $userId) {
+                try {
+                    NotificationService::send($this->db, $tenantId, 'POST_COMMENT_NEW', [
+                        'user_id' => (int)$postAuthorId,
+                        'author_name' => $authorName,
+                        'comment' => $content,
+                        'link' => $targetLink
+                    ]);
+                } catch (Throwable $e) {}
             }
         }
 
@@ -867,7 +984,7 @@ class PostController {
         ], 'Đã thả tim đẩy nhiệt thành công!');
     }
 
-    private function processMentionsAndNotify(array $auth, string $content, int $postId, ?int $commentId = null): void {
+    private function processMentionsAndNotify(array $auth, string $content, int $postId, ?int $commentId = null, string $contextType = 'comment'): void {
         $tenantId = (int)$auth['tenant_id'];
         $currentUserId = (int)$auth['user_id'];
         $authorName = $auth['full_name'] ?? 'Đồng nghiệp';
@@ -915,6 +1032,7 @@ class PostController {
                     'user_id' => $uid,
                     'author_name' => $authorName,
                     'comment' => $content,
+                    'context_type' => $contextType,
                     'link' => $link
                 ]);
             }

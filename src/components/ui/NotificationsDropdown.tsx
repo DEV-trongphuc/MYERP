@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, CheckCheck, X, Info, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { Bell, Check, CheckCheck, X, Info, AlertTriangle, CheckCircle2, XCircle, MessageSquare, MessageCircle, AtSign, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Skeleton } from './Skeleton';
 import api from '../../api/axios';
@@ -17,10 +17,14 @@ interface Notification {
 }
 
 const typeIcon: Record<string, React.ReactNode> = {
-  info:    <Info size={14} color="#3b82f6" />,
-  success: <CheckCircle2 size={14} color="#10b981" />,
-  warning: <AlertTriangle size={14} color="#f59e0b" />,
-  error:   <XCircle size={14} color="#ef4444" />,
+  info:          <Info size={14} color="#3b82f6" />,
+  success:       <CheckCircle2 size={14} color="#10b981" />,
+  warning:       <AlertTriangle size={14} color="#f59e0b" />,
+  error:         <XCircle size={14} color="#ef4444" />,
+  post_comment:  <MessageSquare size={14} color="#0284c7" />,
+  comment_reply: <MessageCircle size={14} color="#8b5cf6" />,
+  mention:       <AtSign size={14} color="#f59e0b" />,
+  post_reaction: <Heart size={14} color="#ec4899" />,
 };
 
 const fmtTime = (d: string) => {

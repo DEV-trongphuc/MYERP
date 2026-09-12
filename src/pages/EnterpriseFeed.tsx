@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { 
   ThumbsUp, Heart, Laugh, Angry, MessageCircle, Share2, 
@@ -69,6 +70,12 @@ export const EnterpriseFeed: React.FC = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { showConfirm } = useUIStore();
+  const [searchParams] = useSearchParams();
+
+  const targetPostId = searchParams.get('post_id');
+  const openCommentId = searchParams.get('open_comment');
+  const [highlightedPostId, setHighlightedPostId] = useState<number | null>(null);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
@@ -334,7 +341,19 @@ export const EnterpriseFeed: React.FC = () => {
         const next = res.data.data.next_cursor;
         const more = res.data.data.has_more;
 
-        setPosts(prev => reset ? fetched : [...prev, ...fetched]);
+        setPosts(prev => {
+          if (reset) {
+            if (targetPostId) {
+              const pId = parseInt(targetPostId, 10);
+              const deepPost = prev.find(p => p.id === pId);
+              if (deepPost && !fetched.some((p: Post) => p.id === pId)) {
+                return [deepPost, ...fetched];
+              }
+            }
+            return fetched;
+          }
+          return [...prev, ...fetched];
+        });
         setCursor(next);
         setHasMore(more);
       }
@@ -345,6 +364,75 @@ export const EnterpriseFeed: React.FC = () => {
       isFetchingRef.current = false;
     }
   };
+
+  // Handle Deep Linking from Notifications (/feed?post_id=X&open_comment=Y)
+  useEffect(() => {
+    if (!targetPostId) return;
+    const postIdNum = parseInt(targetPostId, 10);
+    if (isNaN(postIdNum)) return;
+
+    let isMounted = true;
+
+    const handleDeepLink = async () => {
+      try {
+        // 1. Fetch post directly if not present in current feed list
+        try {
+          const res = await api.get(`/posts/${postIdNum}`);
+          if (isMounted && res.data && res.data.success && res.data.data?.post) {
+            const fetchedPost = res.data.data.post;
+            setPosts(curr => curr.some(p => p.id === fetchedPost.id) ? curr : [fetchedPost, ...curr]);
+          }
+        } catch (fetchErr) {
+          console.error('Error fetching deep linked post', fetchErr);
+        }
+
+        if (!isMounted) return;
+
+        // 2. Open comments drawer and load comments
+        setActiveCommentsPostId(postIdNum);
+        await loadComments(postIdNum);
+
+        // 3. Highlight and scroll
+        if (openCommentId) {
+          const commentIdNum = parseInt(openCommentId, 10);
+          setHighlightedCommentId(commentIdNum);
+          setTimeout(() => {
+            const el = document.getElementById(`comment-${commentIdNum}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+              const postEl = document.getElementById(`post-${postIdNum}`);
+              if (postEl) postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 400);
+
+          setTimeout(() => {
+            if (isMounted) setHighlightedCommentId(null);
+          }, 4000);
+        } else {
+          setHighlightedPostId(postIdNum);
+          setTimeout(() => {
+            const postEl = document.getElementById(`post-${postIdNum}`);
+            if (postEl) {
+              postEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 400);
+
+          setTimeout(() => {
+            if (isMounted) setHighlightedPostId(null);
+          }, 4000);
+        }
+      } catch (e) {
+        console.error('Deep link error', e);
+      }
+    };
+
+    handleDeepLink();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [targetPostId, openCommentId]);
 
   // Reset and reload when filters change
   useEffect(() => {
@@ -1073,11 +1161,13 @@ export const EnterpriseFeed: React.FC = () => {
             return (
               <div 
                 key={post.id} 
+                id={`post-${post.id}`}
                 style={{
                   background: 'var(--color-surface)',
                   borderRadius: '16px',
-                  border: '1px solid var(--color-border-light)',
-                  boxShadow: 'var(--shadow-sm)',
+                  border: highlightedPostId === post.id ? '2px solid var(--color-primary)' : '1px solid var(--color-border-light)',
+                  boxShadow: highlightedPostId === post.id ? '0 0 0 4px rgba(59, 130, 246, 0.15), var(--shadow-md)' : 'var(--shadow-sm)',
+                  transition: 'all 0.3s ease',
                   overflow: 'visible',
                   padding: '1.25rem',
                   display: 'flex',
@@ -1418,7 +1508,20 @@ export const EnterpriseFeed: React.FC = () => {
                         commentsMap[post.id]
                           .filter(c => !c.parent_id || Number(c.parent_id) === 0)
                           .map(comment => (
-                          <div key={comment.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div 
+                            key={comment.id} 
+                            id={`comment-${comment.id}`}
+                            style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '6px',
+                              borderRadius: '12px',
+                              padding: highlightedCommentId === comment.id ? '6px' : '0px',
+                              backgroundColor: highlightedCommentId === comment.id ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                              boxShadow: highlightedCommentId === comment.id ? '0 0 0 2px var(--color-primary)' : 'none',
+                              transition: 'all 0.3s ease'
+                            }}
+                          >
                             {/* Parent Comment */}
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                               <Avatar 
@@ -1465,7 +1568,21 @@ export const EnterpriseFeed: React.FC = () => {
 
                             {/* Nested Replies */}
                             {comment.replies && comment.replies.map(reply => (
-                              <div key={reply.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginLeft: '36px' }}>
+                              <div 
+                                key={reply.id} 
+                                id={`comment-${reply.id}`}
+                                style={{ 
+                                  display: 'flex', 
+                                  gap: '8px', 
+                                  alignItems: 'flex-start', 
+                                  marginLeft: '36px',
+                                  borderRadius: '12px',
+                                  padding: highlightedCommentId === reply.id ? '6px' : '0px',
+                                  backgroundColor: highlightedCommentId === reply.id ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                                  boxShadow: highlightedCommentId === reply.id ? '0 0 0 2px var(--color-primary)' : 'none',
+                                  transition: 'all 0.3s ease'
+                                }}
+                              >
                                 <Avatar 
                                   src={reply.author_avatar} 
                                   name={reply.author_name} 

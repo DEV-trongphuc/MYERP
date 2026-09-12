@@ -1401,11 +1401,85 @@ class NotificationService {
                                     "Hãy cập nhật tương tác để giữ quyền chăm sóc data."
                 ];
 
+            case 'POST_COMMENT_NEW':
+                $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
+                $authorName = $payload['author_name'] ?? 'Đồng nghiệp';
+                $commentText = $payload['comment'] ?? '';
+                $commentTextPlain = self::cleanText($commentText);
+                
+                $targetLink = $payload['link'] ?? '/feed';
+                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "$authorName đã bình luận về bài viết của bạn",
+                    'body' => "$authorName: \"$commentTextPlain\"",
+                    'type' => "post_comment",
+                    'link' => $targetLink,
+                    'zalo_msg' => "💬 [ BÌNH LUẬN MỚI TRÊN BÀI VIẾT ]\n\n"
+                        . "Người bình luận: $authorName\n"
+                        . "Nội dung: \"$commentTextPlain\"\n\n"
+                        . "👉 Xem chi tiết: $fullDirectLink",
+                    'tg_msg' => "💬 <b>[ BÌNH LUẬN MỚI TRÊN BÀI VIẾT ]</b>\n\n"
+                        . "<b>" . htmlspecialchars($authorName) . "</b> vừa bình luận về bài viết của bạn:\n"
+                        . "  • Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
+                        . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
+                    'email_subject' => "[IDEAS ERP] $authorName đã bình luận về bài viết của bạn",
+                    'email_title' => "BÌNH LUẬN MỚI TRÊN BẢNG TIN",
+                    'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                                    "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " đã bình luận về bài viết của bạn</h3>" .
+                                    "  <p style=\"margin: 0; color: #334155;\">\"" . htmlspecialchars($commentTextPlain) . "\"</p>" .
+                                    "</div>" .
+                                    "<p style=\"margin-top: 25px; text-align: center;\">" .
+                                    "  <a href=\"{$fullDirectLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">XEM BÀI VIẾT</a>" .
+                                    "</p>"
+                ];
+
+            case 'POST_COMMENT_REPLY':
+                $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
+                $authorName = $payload['author_name'] ?? 'Đồng nghiệp';
+                $commentText = $payload['comment'] ?? '';
+                $commentTextPlain = self::cleanText($commentText);
+                
+                $targetLink = $payload['link'] ?? '/feed';
+                $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
+                $frontendUrl = $stmtFe ? ($stmtFe->fetchColumn() ?: 'https://myerp.ideas.edu.vn') : 'https://myerp.ideas.edu.vn';
+                $fullDirectLink = rtrim($frontendUrl, '/') . '/' . ltrim($targetLink, '/');
+
+                return [
+                    'recipients' => $recipients,
+                    'title' => "$authorName đã phản hồi bình luận của bạn",
+                    'body' => "$authorName: \"$commentTextPlain\"",
+                    'type' => "comment_reply",
+                    'link' => $targetLink,
+                    'zalo_msg' => "💬 [ PHẢN HỒI BÌNH LUẬN ]\n\n"
+                        . "Người phản hồi: $authorName\n"
+                        . "Nội dung: \"$commentTextPlain\"\n\n"
+                        . "👉 Xem chi tiết: $fullDirectLink",
+                    'tg_msg' => "💬 <b>[ PHẢN HỒI BÌNH LUẬN ]</b>\n\n"
+                        . "<b>" . htmlspecialchars($authorName) . "</b> vừa phản hồi bình luận của bạn:\n"
+                        . "  • Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
+                        . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
+                    'email_subject' => "[IDEAS ERP] $authorName đã phản hồi bình luận của bạn",
+                    'email_title' => "PHẢN HỒI BÌNH LUẬN TRÊN BẢNG TIN",
+                    'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
+                                    "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " đã phản hồi bình luận của bạn</h3>" .
+                                    "  <p style=\"margin: 0; color: #334155;\">\"" . htmlspecialchars($commentTextPlain) . "\"</p>" .
+                                    "</div>" .
+                                    "<p style=\"margin-top: 25px; text-align: center;\">" .
+                                    "  <a href=\"{$fullDirectLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">XEM PHẢN HỒI</a>" .
+                                    "</p>"
+                ];
+
             case 'MENTION_TAGGED':
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
                 $authorName = $payload['author_name'] ?? 'Đồng nghiệp';
                 $commentText = $payload['comment'] ?? 'đã nhắc tên bạn';
                 $commentTextPlain = self::cleanText($commentText); // strip html tags, &nbsp; and decode entities cleanly
+                $contextType = $payload['context_type'] ?? 'comment';
+                $contextText = ($contextType === 'post' || $contextType === 'bài viết') ? 'bài viết' : 'bình luận';
                 
                 $targetLink = $payload['link'] ?? '/';
                 $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");
@@ -1415,22 +1489,22 @@ class NotificationService {
                 return [
                     'recipients' => $recipients,
                     'title' => "$authorName vừa nhắc tên bạn",
-                    'body' => "$authorName đã nhắc tên bạn trong bình luận: \"$commentTextPlain\"",
+                    'body' => "$authorName đã nhắc tên bạn trong $contextText: \"$commentTextPlain\"",
                     'type' => "mention",
                     'link' => $targetLink,
                     'zalo_msg' => "🏷️ [ ĐƯỢC TAG TÊN / MENTION ]\n\n"
-                        . "$authorName vừa nhắc tên bạn trong ghi chú/thảo luận:\n"
+                        . "$authorName vừa nhắc tên bạn trong $contextText:\n"
                         . "  • Nội dung: \"$commentTextPlain\"\n\n"
                         . "👉 Xem chi tiết: $fullDirectLink",
                     'tg_msg' => "🏷️ <b>[ ĐƯỢC TAG TÊN / MENTION ]</b>\n\n"
-                        . "<b>" . htmlspecialchars($authorName) . "</b> vừa nhắc tên bạn trong ghi chú/thảo luận:\n"
+                        . "<b>" . htmlspecialchars($authorName) . "</b> vừa nhắc tên bạn trong $contextText:\n"
                         . "  • Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
                         . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
                     'email_subject' => "[IDEAS ERP] $authorName vừa nhắc tên bạn",
-                    'email_title' => "NHẮC TÊN TRONG THẢO LUẬN",
+                    'email_title' => "NHẮC TÊN TRONG " . mb_strtoupper($contextText, 'UTF-8'),
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " vừa nhắc tên bạn</h3>" .
-                                    "  <p style=\"margin: 0; color: #334155;\">" . htmlspecialchars($authorName) . " đã nhắc tên bạn trong bình luận: \"" . htmlspecialchars($commentTextPlain) . "\"</p>" .
+                                    "  <p style=\"margin: 0; color: #334155;\">" . htmlspecialchars($authorName) . " đã nhắc tên bạn trong $contextText: \"" . htmlspecialchars($commentTextPlain) . "\"</p>" .
                                     "</div>" .
                                     "<p style=\"margin-top: 25px; text-align: center;\">" .
                                     "  <a href=\"{$fullDirectLink}\" target=\"_blank\" style=\"display: inline-block; background-color: #BD1D2D; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 14px; text-transform: uppercase;\">ĐĂNG NHẬP HỆ THỐNG</a>" .
