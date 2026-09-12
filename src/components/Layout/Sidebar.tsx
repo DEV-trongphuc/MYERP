@@ -29,8 +29,9 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: 'Dashboard', href: '/', icon: LayoutDashboard, end: true, hideForRoles: ['academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
       { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
       { name: 'Lịch trình', href: '/calendar', icon: Calendar, hideForRoles: ['hr'] },
-      { name: 'Bảng tin nội bộ', href: '/feed', icon: Globe },
-      { name: 'Báo cáo', href: '/reports-crm', icon: BarChart2, hideForRoles: ['hr', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] }
+      { name: 'Bảng tin nội bộ', href: '/feed', icon: Globe }
+      // Tạm ẩn tab Báo cáo CRM theo yêu cầu
+      // { name: 'Báo cáo', href: '/reports-crm', icon: BarChart2, hideForRoles: ['hr', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] }
     ]
   },
   {

@@ -61,6 +61,8 @@ const EnterpriseFeed = lazy(() => import('./pages/EnterpriseFeed').then(module =
 const PublicSchedulePage = lazy(() => import('./pages/PublicSchedulePage').then(module => ({ default: module.PublicSchedulePage })));
 const InternalSchedulePage = lazy(() => import('./pages/InternalSchedulePage').then(module => ({ default: module.InternalSchedulePage })));
 const SplashPreviewPage = lazy(() => import('./pages/SplashPreviewPage').then(module => ({ default: module.SplashPreviewPage })));
+const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
+const ApiDocumentationPage = lazy(() => import('./pages/ApiDocumentationPage'));
 
 // Lightweight null fallback so each tab/page renders its own dedicated, tailored skeleton
 const PageLoader = () => null;
@@ -602,6 +604,8 @@ export default function App() {
                   <Route path="/public-schedule/course/:campaignId" element={<PublicSchedulePage />} />
                   <Route path="/public-schedule/lecturer/:lecturerId" element={<PublicSchedulePage />} />
                   <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
+                  <Route path="/docs" element={<DocumentationPage />} />
+                  <Route path="/api-docs" element={<ApiDocumentationPage />} />
 
                   {/* All authenticated users (sharing a single persistent AppTabs instance) */}
                   <Route element={<ProtectedRoute />}>

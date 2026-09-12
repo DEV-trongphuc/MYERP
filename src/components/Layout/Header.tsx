@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw } from 'lucide-react';
+import { Search, Command, Activity, Sun, Moon, Keyboard, ChevronDown, User, AlertTriangle, LogOut, Menu, LayoutGrid, LayoutDashboard, Users, Building2, Clock, Truck, Boxes, Receipt, Settings, CheckCircle2, Fingerprint, Bell, MessageSquare, Info, Trash2, Check, Eye, EyeOff, CheckSquare, FileText, ArrowLeft, ShieldAlert, Laptop, RefreshCw, Code } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserDisplayRoleOrTitle } from '../../utils/roleUtils';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
@@ -2151,6 +2151,66 @@ export const Header = ({
                   <AlertTriangle size={14} style={{ color: 'var(--color-danger)' }} />
                   {t('Báo lỗi')}
                 </button>
+
+                <div style={{ borderBottom: '1px solid var(--color-border)', margin: '4px 0' }} />
+
+                <a
+                  href="/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '8px 10px',
+                    border: 'none',
+                    background: 'transparent',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem',
+                    textAlign: 'left',
+                    textDecoration: 'none',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => setIsProfileMenuOpen(false)}
+                >
+                  <FileText size={14} style={{ color: 'var(--color-primary)' }} />
+                  {t('Tài liệu Sản phẩm (/docs)')}
+                </a>
+
+                <a
+                  href="/api-docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '8px 10px',
+                    border: 'none',
+                    background: 'transparent',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem',
+                    textAlign: 'left',
+                    textDecoration: 'none',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => setIsProfileMenuOpen(false)}
+                >
+                  <Code size={14} style={{ color: '#0284c7' }} />
+                  {t('Tài liệu API & SDK (/api-docs)')}
+                </a>
+
+                <div style={{ borderBottom: '1px solid var(--color-border)', margin: '4px 0' }} />
 
                 {/* 
                 <a
