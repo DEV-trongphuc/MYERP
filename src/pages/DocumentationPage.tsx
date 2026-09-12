@@ -1554,7 +1554,9 @@ export const DocumentationPage: React.FC = () => {
           headings: [
             { id: 'fourteen-stages', text: 'Đặc Tả 14 Giai Đoạn Tuyển Sinh Chuẩn' },
             { id: 'crm-state-machine', text: 'Cơ Chế Trạng Thái & Quản Trị Phễu CRM' },
-            { id: 'customer-360', text: 'Hồ Sơ Khách Hàng Toàn Diện (Customer Profile 360)' }
+            { id: 'customer-360-tabs', text: 'Hồ Sơ Khách Hàng 360 & Đặc Tả 10 Tabs Nghiệp Vụ' },
+            { id: 'clone-and-independent', text: 'Cơ Chế Nhân Bản Hồ Sơ & Độc Lập Tư Vấn' },
+            { id: 'handover-matrix', text: 'Ma Trận Bàn Giao Liên Phòng Ban (Sales ➔ Kế Toán ➔ Học Vụ)' }
           ],
           content: (
             <div className="doc-prose">
@@ -1746,15 +1748,183 @@ export const DocumentationPage: React.FC = () => {
                 <li><strong>Báo Cáo Lý Do Rơi Rụng (Lost Reasons):</strong> Khi chuyển trạng thái <code>lost</code>, hệ thống bắt buộc lưu <code>lost_reason</code> và tự động ghi nhận <code>lost_stage_id</code> để thống kê tỷ lệ rơi rụng ở từng nấc thang tuyển sinh.</li>
               </ul>
 
-              <h2 id="customer-360">Hồ Sơ Khách Hàng Toàn Diện (Customer Profile 360)</h2>
+              <h2 id="customer-360-tabs">Hồ Sơ Khách Hàng 360 &amp; Đặc Tả 10 Tabs Nghiệp Vụ</h2>
               <p>
-                Drawer hồ sơ khách hàng (<code>CustomerProfileDrawer.tsx</code>) cung cấp góc nhìn 360 độ:
+                Drawer hồ sơ khách hàng chuyên sâu (<code>CustomerProfileDrawer.tsx</code>) cung cấp không gian quản trị 360 độ toàn diện,
+                được phân chia thành <strong>10 tabs nghiệp vụ độc lập</strong> đáp ứng trọn vẹn chu trình làm việc của chuyên viên:
               </p>
-              <ul>
-                <li><strong>Thông tin định danh:</strong> Họ tên, SĐT, Email, Tỉnh thành, Nguồn chiến dịch, Điểm AI Gatekeeper.</li>
-                <li><strong>Dòng thời gian tương tác (Timeline):</strong> Toàn bộ lịch sử cuộc gọi, tin nhắn, ghi chú, lịch hẹn tư vấn.</li>
-                <li><strong>Lịch sử giao dịch:</strong> Danh sách Báo giá (Quotes), Đơn bán hàng (SO), Biên lai cọc (Deposits) và công nợ hiện tại.</li>
-              </ul>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '130px' }}>Tab Nghiệp Vụ</th>
+                      <th style={{ width: '170px' }}>Icon &amp; Nhận Diện</th>
+                      <th>Chức Năng &amp; Dữ Liệu Quản Lý Chi Tiết</th>
+                      <th style={{ width: '220px' }}>Quy Tắc Tự Động Hóa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>1. Thông Tin Chung</strong></td>
+                      <td><code>info</code> (Màu đỏ)</td>
+                      <td>Định danh khách hàng (Họ tên, SĐT, Email, Giới tính, Ngày sinh, Địa chỉ), Chương trình quan tâm, Chức danh/Công ty hiện tại, Nguồn lead (source), Chiến dịch tiếp thị (campaign), Chuyên viên phụ trách (owner_id), Đơn vị liên kết B2B (partner/company) và Người giới thiệu (REF data).</td>
+                      <td>Tự động kiểm tra trùng lặp qua số điện thoại/email khi thay đổi; cập nhật thời gian <code>updated_at</code> tức thì.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>2. Tương Tác</strong></td>
+                      <td><code>timeline</code> (Màu xám)</td>
+                      <td>Dòng thời gian tương tác đa kênh (Activity Timeline): Lịch sử cuộc gọi viễn thông (call), tin nhắn Zalo/SMS, email gửi đi/nhận về, ghi chú tư vấn (notes), lịch hẹn tư vấn và thảo luận nội bộ (@mention đồng nghiệp).</td>
+                      <td>Mỗi tương tác thành công sẽ tự động cập nhật mốc <code>last_contacted_at</code> và xóa cờ cảnh báo quá hạn liên hệ.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>3. Công Việc Liên Kết</strong></td>
+                      <td><code>tasks</code> (Màu xanh lá)</td>
+                      <td>Quản lý các nhiệm vụ, checklist hành động gắn trực tiếp với khách hàng. Bộ lọc linh hoạt: <em>Tất cả</em>, <em>Tôi thực hiện</em>, <em>Tôi duyệt</em>, <em>Tôi liên quan</em>. Thiết lập Deadline, Mức độ ưu tiên (Urgent / High / Medium) và Trạng thái (Đang làm / Hoàn thành).</td>
+                      <td>Tự động sinh thông báo đẩy khi đến hạn nhắc việc (Reminder push notification) trên Header và Telegram Bot.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>4. Hồ Sơ &amp; Tài Liệu</strong></td>
+                      <td><code>docs</code> (Màu xám kẹp ghim)</td>
+                      <td>Lưu trữ toàn bộ giấy tờ, hồ sơ số hóa của khách hàng: Ảnh chụp CCCD 2 mặt, bằng tốt nghiệp đại học/thạc sĩ scan, bảng điểm tín chỉ, chứng chỉ ngoại ngữ (IELTS/TOEFL), đơn đăng ký nhập học và hợp đồng đào tạo.</td>
+                      <td>Hỗ trợ xem trước trực tiếp (Preview PDF/Image), tải xuống an toàn và lưu vết kiểm toán người tải/xóa tài liệu.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>5. Scoring AI</strong></td>
+                      <td><code>scoring</code> (Màu xanh dương)</td>
+                      <td>Hiển thị điểm tiềm năng 0–100 do AI Gatekeeper chấm điểm tự động; phân tích nhiệt độ Lead (Hot, Warm, Cold); đánh giá mức độ hoàn thiện hồ sơ và mức độ quan tâm đối với chương trình đào tạo.</td>
+                      <td>Tự động kích hoạt cơ chế Fast-Track định tuyến thẳng tới Top TVV khi điểm đạt &ge; 85.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>6. Thanh Toán &amp; SO</strong></td>
+                      <td><code>deals</code> (Màu tím)</td>
+                      <td>Quản lý Báo giá (Quotes), Đơn bán hàng (Sales Order - SO), Phiếu đặt cọc giữ chỗ (Deposits), Hóa đơn tài chính, Lịch thanh toán học phí theo kỳ và theo dõi công nợ thực thu.</td>
+                      <td>Đồng bộ dữ liệu trực tiếp với phân hệ Kế toán; tự động cập nhật công nợ khi có phiếu thực thu được duyệt.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>7. Chi Phí</strong></td>
+                      <td><code>expenses</code> (Màu xanh tiền tệ)</td>
+                      <td>Theo dõi các khoản chi phí phát sinh trực tiếp gắn với khách hàng: Chi phí tiếp khách, quà tặng tuyển sinh, tài liệu hồ sơ đặc thù, hoa hồng giới thiệu đối tác.</td>
+                      <td>Liên kết chặt chẽ với phân hệ Phê duyệt chi tiêu (Approvals &amp; Expenses) để tính toán chính xác ROI từng lead.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>8. Helpdesk &amp; Khiếu Nại</strong></td>
+                      <td><code>tickets</code> (Màu phao cứu sinh)</td>
+                      <td>Tiếp nhận và xử lý các yêu cầu hỗ trợ, thắc mắc về học phí, thủ tục nhập học, chuyển lớp hoặc phản ánh chất lượng tư vấn của khách hàng.</td>
+                      <td>Gán SLA phản hồi theo mức độ nghiêm trọng; tự động leo thang (Escalate) lên Trưởng bộ phận nếu trễ hạn xử lý.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>9. Phân Loại &amp; Nhãn</strong></td>
+                      <td><code>tags</code> (Màu hồng phấn)</td>
+                      <td>Hệ thống nhãn thông minh đa chiều (Multi-tagging); gán cờ trạng thái chăm sóc (Active / Nurture / Lost); phân loại lý do mất deal (Lost Reasons) và lý do đưa vào ươm tạo (Nurture Reasons).</td>
+                      <td>Cho phép lọc nhanh trên danh sách Lead và kích hoạt các kịch bản Email Drip Marketing nuôi dưỡng tự động.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>10. Học Tập &amp; Học Vụ</strong></td>
+                      <td><code>learning</code> (Màu tím đậm)</td>
+                      <td><strong>Chỉ mở khi khách hàng đã chuyển sang giai đoạn Học viên (Enrolled - Stage 14):</strong> Quản lý Mã học viên (Student Code), Lớp học tham gia (Class ID), Lịch sử điểm danh chuyên cần, Bảng điểm tín chỉ, Tiến độ luận văn thạc sĩ.</td>
+                      <td>Cổng kết nối giữa khối Tuyển sinh (Sales) và Khối Quản trị Đào tạo (Academic), đồng bộ dữ liệu học vụ trọn đời.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="clone-and-independent">Cơ Chế Nhân Bản Hồ Sơ &amp; Độc Lập Tư Vấn</h2>
+              <p>
+                Trong mô hình viện đào tạo đa chương trình (Thạc sĩ Quản trị Kinh doanh, Cử nhân quốc tế, Chứng chỉ Giám đốc Tài chính...),
+                một khách hàng quen thuộc thường có nhu cầu học nhiều chương trình nối tiếp hoặc học đồng thời nhiều khóa học.
+                IDEAS MYERP giải quyết bài toán này thông qua <strong>Cơ chế Nhân bản Hồ sơ (Clone Contact) &amp; Độc lập tư vấn</strong>:
+              </p>
+              <div className="doc-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '14px 0' }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#0284c7', fontSize: '14px', fontWeight: 700 }}>1. Nhân Bản Hồ Sơ (Clone Profile)</h4>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    <li><strong>Duy trì danh tính gốc (<code>person_id</code>):</strong> Khi bấm <em>"Nhân bản hồ sơ"</em>, hệ thống liên kết hồ sơ mới với hồ sơ gốc qua khóa danh tính cá nhân. Thông tin cá nhân (CCCD, SĐT, Email) được tái sử dụng chuẩn xác.</li>
+                    <li><strong>Reset Pipeline từ Bước 1:</strong> Hồ sơ mới được gán với Chương trình học mới (Program B) và khởi động độc lập từ Bước <code>01 – New Lead</code> của phễu tuyển sinh chương trình đó.</li>
+                    <li><strong>Chuyển đổi hồ sơ 1-click (Switch Profile):</strong> Ngay trên Drawer khách hàng, thanh chọn chương trình liên kết cho phép người dùng chuyển đổi qua lại giữa các hồ sơ học tập của cùng 1 người mà không cần tìm kiếm lại.</li>
+                  </ul>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#059669', fontSize: '14px', fontWeight: 700 }}>2. Nguyên Tắc Độc Lập Tư Vấn</h4>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    <li><strong>Phân công chuyên viên chuyên biệt:</strong> TVV phụ trách chương trình Thạc sĩ (Sales A) và TVV phụ trách chương trình Cử nhân (Sales B) có thể chăm sóc cùng một khách hàng một cách hoàn toàn độc lập.</li>
+                    <li><strong>Cách ly lịch sử tương tác:</strong> Nhật ký tư vấn, cuộc gọi, ghi chú deal của chương trình nào thuộc quyền sở hữu riêng của chương trình đó, không bị chồng chéo hay rò rỉ chiến lược chốt deal giữa các Sales.</li>
+                    <li><strong>Ghi nhận doanh số &amp; Hoa hồng minh bạch:</strong> Doanh thu cọc và học phí phát sinh theo chương trình nào sẽ tự động tính thưởng KPI cho đúng TVV phụ trách chương trình đó, triệt tiêu tranh chấp nội bộ.</li>
+                  </ul>
+                </div>
+              </div>
+              <p>
+                <strong>Cơ chế Lưu trữ &amp; Bình luận nội bộ:</strong> Mọi ghi chú gắn cờ <em>"Nội bộ"</em> và các bình luận trao đổi giữa Sales, Quản lý và Kế toán đều được mã hóa bảo mật, đảm bảo khách hàng không thể nhìn thấy trong các tài liệu xuất bản hoặc cổng tra cứu công khai.
+              </p>
+
+              <h2 id="handover-matrix">Ma Trận Bàn Giao Liên Phòng Ban (Sales ➔ Kế Toán ➔ Học Vụ)</h2>
+              <p>
+                Hệ thống MYERP thiết lập ranh giới phân quyền và thời điểm hiển thị dữ liệu khách hàng cực kỳ rõ ràng giữa 3 khối phòng ban:
+                <strong>Kinh doanh (Sales)</strong>, <strong>Tài chính Kế toán (Accounting)</strong> và <strong>Quản lý Đào tạo (Academic / Student Affairs)</strong>:
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '180px' }}>Khối Phòng Ban</th>
+                      <th style={{ width: '170px' }}>Mốc Pipeline Tiếp Nhận</th>
+                      <th>Phạm Vi Dữ Liệu &amp; Thao Tác Chuyên Trách</th>
+                      <th style={{ width: '230px' }}>Trách Nhiệm Nghiệp Vụ Đầu Ra</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <strong style={{ color: '#2563eb' }}>Khối Tuyển Sinh (Sales)</strong>
+                      </td>
+                      <td>
+                        <code>Stage 01 ➔ Stage 14</code><br />
+                        <small>(Toàn bộ chu trình bán)</small>
+                      </td>
+                      <td>Toàn quyền tư vấn, liên hệ đa kênh, gửi đề xuất tuyển sinh, thu thập hồ sơ ứng viên, lập báo giá và phiếu cọc.</td>
+                      <td>Đạt chỉ tiêu doanh số tuyển sinh; bàn giao bộ hồ sơ hoàn chỉnh và đầy đủ nghĩa vụ cọc/học phí.</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong style={{ color: '#d97706' }}>Khối Kế Toán (Accounting)</strong>
+                      </td>
+                      <td>
+                        <code>Stage 11</code> (Đặt cọc giữ chỗ)<br />
+                        &amp; <code>Stage 13</code> (Đóng học phí)
+                      </td>
+                      <td>
+                        <strong>Điểm cắt tiếp nhận tài chính:</strong>
+                        <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px', fontSize: '12.5px' }}>
+                          <li>Tiếp nhận Phiếu đặt cọc (<code>deposits</code>) và Đơn bán hàng (<code>sales_orders</code>).</li>
+                          <li>Đối soát sao kê tài khoản ngân hàng của Viện đào tạo.</li>
+                          <li>Bấm <strong>"Xác nhận thực thu"</strong> để ghi nhận tiền vào sổ quỹ/tài khoản ngân hàng.</li>
+                          <li>Xuất hóa đơn tài chính VAT / Hóa đơn điện tử và theo dõi lịch đóng các đợt học phí tiếp theo.</li>
+                        </ul>
+                      </td>
+                      <td>Bảo đảm dòng tiền thực tế 100% khớp với hệ thống CRM; ghi nhận doanh thu kế toán và tính công nợ còn lại.</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong style={{ color: '#7c3aed' }}>Khối Học Vụ (Academic)</strong>
+                      </td>
+                      <td>
+                        <code>Stage 14: Enrolled</code><br />
+                        <small>(Đã nhập học chính thức)</small>
+                      </td>
+                      <td>
+                        <strong>Điểm cắt tiếp nhận học viên:</strong>
+                        <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px', fontSize: '12.5px' }}>
+                          <li>Sau khi Sales và Kế toán hoàn tất xác nhận nhập học, dữ liệu học viên được đẩy sang phân hệ Học vụ.</li>
+                          <li>Hệ thống tự động cấp <strong>Mã Học Viên (Student Code)</strong> chuẩn theo khóa đào tạo.</li>
+                          <li>Kích hoạt <strong>Tab Học tập &amp; Học vụ (<code>learning</code>)</strong> trên hồ sơ khách hàng 360.</li>
+                          <li>Xếp lớp đào tạo, liên kết Thời khóa biểu, phân công giảng viên/trợ giảng phụ trách.</li>
+                          <li>Quản lý điểm danh sinh trắc học, kết quả học phần, theo dõi bảo vệ luận văn và phát bằng.</li>
+                        </ul>
+                      </td>
+                      <td>Đảm bảo trải nghiệm học tập (Student Experience); duy trì tỷ lệ chuyên cần và hỗ trợ học viên tốt nghiệp đúng hạn.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )
         },
@@ -2849,34 +3019,133 @@ export const DocumentationPage: React.FC = () => {
           title: 'Hồ Sơ Nhân Sự, Bảng Xếp Ca (Shifts) & Đơn Từ Điện Tử',
           description: 'Quản lý hợp đồng lao động, ca làm việc linh hoạt và phê duyệt đơn nghỉ phép / WFH / OT trực tuyến.',
           headings: [
-            { id: 'employee-records', text: 'Quản Lý Hồ Sơ & Hợp Đồng Nhân Sự' },
-            { id: 'shift-scheduler', text: 'Bảng Xếp Ca (Shift Scheduler)' },
+            { id: 'employee-records', text: 'Hồ Sơ Nhân Sự Đa Chiều & Lưu Trữ Hợp Đồng, Giấy Tờ Số Hóa' },
+            { id: 'awards-recognition', text: 'Khen Thưởng, Kỷ Luật & Vinh Danh Nhân Viên Xuất Sắc' },
+            { id: 'social-channels', text: 'Mạng Xã Hội, Kênh Liên Lạc & Chữ Ký Số Cá Nhân' },
+            { id: 'bank-auto-populate', text: 'Tự Động Kéo Thông Tin Bank Khi Tạo Phiếu Đề Nghị Tạm Ứng & Chi Phí' },
+            { id: 'shift-scheduler', text: 'Bảng Xếp Ca (Shift Scheduler) & Đăng Ký Trực Cuối Tuần' },
             { id: 'leave-workflow', text: 'Hệ Thống Đơn Từ Điện Tử (Nghỉ Phép / OT / WFH)' }
           ],
           content: (
             <div className="doc-prose">
-              <h2 id="employee-records">Quản Lý Hồ Sơ &amp; Hợp Đồng Nhân Sự</h2>
+              <h2 id="employee-records">Hồ Sơ Nhân Sự Đa Chiều &amp; Lưu Trữ Hợp Đồng, Giấy Tờ Số Hóa</h2>
               <p>
-                Phân hệ HRM lưu trữ thông tin nhân sự toàn diện: Mã nhân viên, Chức vụ, Phòng ban, Cấp bậc, Ngày bắt đầu làm việc, Loại hợp đồng lao động, Số người phụ thuộc giảm trừ gia cảnh và Thông tin tài khoản nhận lương.
+                Phân hệ HRM của MYERP kết hợp cùng Drawer hồ sơ tài khoản (<code>AccountDetailDrawer.tsx</code>)
+                thiết lập một hồ sơ điện tử 360 độ hoàn chỉnh cho từng cán bộ nhân viên trong tổ chức:
               </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '160px' }}>Phóm Dữ Liệu</th>
+                      <th style={{ width: '220px' }}>Trường Thông Tin Lưu Trữ</th>
+                      <th>Ý Nghĩa Nghiệp Vụ &amp; Cơ Chế Tự Động Hóa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>1. Định Danh Pháp Lý</strong></td>
+                      <td>Họ tên, Số CCCD/CMND, Ngày sinh, Giới tính, Quê quán, Địa chỉ thường trú, Nơi ở hiện tại.</td>
+                      <td>Xác thực danh tính pháp lý phục vụ đăng ký bảo hiểm xã hội (BHXH), mã số thuế cá nhân và thủ tục pháp lý nhân sự.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>2. Hợp Đồng Lao Động (Tab <code>documents</code>)</strong></td>
+                      <td>Hợp đồng thử việc, Hợp đồng chính thức xác định/không xác định thời hạn, Phụ lục hợp đồng, Quyết định tiếp nhận/bổ nhiệm.</td>
+                      <td>Lưu trữ tập trung dạng file PDF/hình ảnh scan; theo dõi ngày hiệu lực, ngày hết hạn hợp đồng để tự động nhắc HR tái ký trước 30 ngày.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>3. Giấy Tờ &amp; Bằng Cấp (Tab <code>certificates</code>)</strong></td>
+                      <td>Bằng tốt nghiệp đại học, thạc sĩ, tiến sĩ, chứng chỉ sư phạm, chứng chỉ chuyên môn quốc tế, sơ yếu lý lịch số.</td>
+                      <td>Hồ sơ minh chứng năng lực giảng dạy/chuyên môn; tự động đồng bộ sang hồ sơ Giảng viên khi tham gia giảng dạy học viện.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>4. Tổ Chức &amp; Cấp Bậc (Tab <code>erp</code>)</strong></td>
+                      <td>Mã nhân viên, Phòng ban (team_id), Chức danh (job_title), Cấp quản lý trực tiếp (Manager), Vai trò phân quyền (Role).</td>
+                      <td>Định tuyến tự động luồng phê duyệt đơn từ, định tuyến chia Lead theo phòng ban và kiểm soát phạm vi truy cập dữ liệu (RBAC Scopes).</td>
+                    </tr>
+                    <tr>
+                      <td><strong>5. Tài Sản Cấp Phát (Tab <code>assets</code>)</strong></td>
+                      <td>Laptop, màn hình, tai nghe tổng đài, thẻ nhân viên, chìa khóa phòng làm việc.</td>
+                      <td>Quản lý tài sản công ty giao cho nhân sự; kiểm kê và thu hồi minh bạch khi phát sinh thủ tục chuyển phòng ban hoặc thôi việc.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>6. Liên Hệ Khẩn Cấp (Tab <code>emergency</code>)</strong></td>
+                      <td>Họ tên người thân, Mối quan hệ (Bố/Mẹ/Vợ/Chồng), Số điện thoại, Địa chỉ liên hệ.</td>
+                      <td>Hỗ trợ bộ phận Nhân sự và Ban Giám đốc trong các tình huống khẩn cấp hoặc các chương trình phúc lợi gia đình nhân viên.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-              <h2 id="shift-scheduler">Bảng Xếp Ca (Shift Scheduler)</h2>
+              <h2 id="awards-recognition">Khen Thưởng, Kỷ Luật &amp; Vinh Danh Nhân Viên Xuất Sắc</h2>
               <p>
-                Hỗ trợ xếp ca linh hoạt cho các phòng ban đặc thù:
+                Phân hệ quản lý kỷ luật và vinh danh nhân sự (Tab <code>hr_records</code> trong <code>AccountDetailDrawer.tsx</code>)
+                giúp xây dựng văn hóa doanh nghiệp minh bạch và ghi nhận thành tích kịp thời:
               </p>
               <ul>
-                <li>Ca hành chính chuẩn (08:00 - 12:00 và 13:00 - 17:00 = 8 tiếng chuẩn).</li>
-                <li>Ca trực tư vấn tối và cuối tuần (xoay ca cho đội ngũ Tuyển sinh).</li>
-                <li>Ca trực hỗ trợ lớp học và trợ giảng học vụ.</li>
+                <li><strong>Khen Thưởng &amp; Vinh Danh Thành Tích:</strong> Ghi nhận các quyết định khen thưởng của Ban Giám đốc, giải thưởng <em>"Chuyên viên Tuyển sinh Xuất sắc của Tháng/Quý"</em>, <em>"Chiến binh Sales đột phá doanh số"</em>, danh hiệu thi đua cuối năm.</li>
+                <li><strong>Huy Hiệu &amp; Vinh Danh Nổi Bật (Kudos):</strong> Tự động hiển thị huy hiệu vinh danh trên Bảng tin nội bộ (<code>FeedPage.tsx</code>) và Dashboard vinh danh, tạo động lực cạnh tranh lành mạnh giữa các đội nhóm kinh doanh.</li>
+                <li><strong>Cảnh Cáo &amp; Kỷ Luật Nội Bộ:</strong> Lưu trữ biên bản vi phạm quy chế công ty, vi phạm giờ giấc làm việc hoặc thái độ phục vụ khách hàng. Các dữ liệu này được bảo mật phân quyền chỉ HR và Ban Giám đốc xem được, phục vụ đánh giá năng lực định kỳ (KPI Review).</li>
+              </ul>
+
+              <h2 id="social-channels">Mạng Xã Hội, Kênh Liên Lạc &amp; Chữ Ký Số Cá Nhân</h2>
+              <p>
+                Hệ thống hỗ trợ nhân sự kết nối các kênh truyền thông cá nhân phục vụ công việc và nhận diện thương hiệu:
+              </p>
+              <ul>
+                <li><strong>Liên Kết Mạng Xã Hội:</strong> Cấu hình đường dẫn Facebook, LinkedIn, TikTok, Instagram giúp xây dựng hình ảnh chuyên gia tư vấn giáo dục uy tín trong mắt học viên và đối tác.</li>
+                <li><strong>Định Danh Kênh Realtime:</strong> Lưu trữ <code>zalo_chat_id</code> và <code>telegram_chat_id</code> cá nhân, cho phép Telegram Bot và Zalo Bot tự động gửi tin nhắn thông báo riêng (1-1 notification) về Lead mới được chia, đơn từ được duyệt hoặc nhắc nhở công việc.</li>
+                <li><strong>Mẫu Chữ Ký Cá Nhân (Digital Signature):</strong> Nhân viên vẽ hoặc tải lên chữ ký mẫu trực tiếp trên Modal ký số (<code>SignaturePadModal.tsx</code>). Mẫu chữ ký này được lưu trữ tại <code>signature_url</code> và tự động nhúng vào các biên bản bàn giao, đề xuất tuyển sinh hoặc xác nhận phiếu lương số.</li>
+              </ul>
+
+              <h2 id="bank-auto-populate">Tự Động Kéo Thông Tin Bank Khi Tạo Phiếu Đề Nghị Tạm Ứng &amp; Chi Phí</h2>
+              <p>
+                Một trong những tính năng tự động hóa giảm thiểu 100% thao tác nhập liệu sai sót là <strong>Cơ chế tự động trích xuất thông tin Ngân hàng thụ hưởng (Auto-populate Bank Account)</strong>:
+              </p>
+              <div className="doc-code-box">
+                <code>
+                  // Cấu trúc trích xuất tự động từ bảng users sang các biểu mẫu đề nghị thanh toán<br />
+                  $bank_name = $currentUser-&gt;bank_name;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// Ví dụ: Vietcombank, Techcombank, MB Bank<br />
+                  $bank_account = $currentUser-&gt;bank_account;&nbsp;&nbsp;&nbsp;// Ví dụ: 0011004123456<br />
+                  $bank_owner = $currentUser-&gt;full_name;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;// Tự động in hoa không dấu: NGUYEN VAN A
+                </code>
+              </div>
+              <div className="doc-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '14px 0' }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#0284c7', fontSize: '14px', fontWeight: 700 }}>1. Phiếu Tạm Ứng Lương (HRM Advances)</h4>
+                  <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    Khi nhân sự mở modal xin tạm ứng lương trên <code>HRM.tsx</code>, hệ thống tự động kiểm tra tài khoản ngân hàng đã đăng ký.
+                    Nhân sự chỉ cần nhập số tiền và lý do tạm ứng. Toàn bộ thông tin tài khoản đích được đính kèm sẵn vào phiếu để Kế toán chi tiền nhanh chóng.
+                  </p>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#059669', fontSize: '14px', fontWeight: 700 }}>2. Phiếu Đề Nghị Thanh Toán &amp; Chi Phí</h4>
+                  <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    Trên màn hình tạo chi phí (<code>ExpensesPage.tsx</code>), khi tích chọn <em>"Chuyển khoản ngân hàng"</em>,
+                    hệ thống tự động điền sẵn STK và Tên chủ thẻ của nhân viên tạo phiếu (hoặc của Nhà cung cấp nếu chọn Supplier),
+                    tự động định dạng chuỗi chuyển khoản chuẩn hóa giúp Kế toán quét mã QR VietQR thanh toán 1-click.
+                  </p>
+                </div>
+              </div>
+
+              <h2 id="shift-scheduler">Bảng Xếp Ca (Shift Scheduler) &amp; Đăng Ký Trực Cuối Tuần</h2>
+              <p>
+                Hỗ trợ xếp ca linh hoạt cho các phòng ban đặc thù theo chuẩn thời gian doanh nghiệp:
+              </p>
+              <ul>
+                <li><strong>Ca hành chính chuẩn:</strong> 08:00 – 12:00 và 13:00 – 17:30 (8 tiếng làm việc chuẩn).</li>
+                <li><strong>Ca trực tư vấn tối và cuối tuần:</strong> Xoay ca phân bổ chuyên viên tuyển sinh trực fanpage, tiếp nhận hotline và xử lý Lead đổ về ngoài giờ hành chính.</li>
+                <li><strong>Đăng ký trực ca linh hoạt:</strong> Nhân viên tự đăng ký ca trực cuối tuần (Weekend Shift) trên giao diện cá nhân; Trưởng phòng duyệt trước thứ 6 hàng tuần để kích hoạt cơ chế nhận Data Lead tự động ngoài giờ.</li>
               </ul>
 
               <h2 id="leave-workflow">Hệ Thống Đơn Từ Điện Tử (Nghỉ Phép / OT / WFH)</h2>
               <p>
-                Nhân viên gửi đơn trực tuyến trên hệ thống:
+                Nhân viên gửi đơn trực tuyến trên hệ thống với cơ chế xác thực đa tầng:
               </p>
               <ul>
                 <li>Tự động kiểm tra số ngày phép năm còn lại (Annual Leave Balance).</li>
-                <li>Chuyển thông báo duyệt tới Quản lý trực tiếp. Khi đơn được duyệt, hệ thống tự động gạch công hợp lệ trên bảng chấm công mà không cần HR nhập tay.</li>
+                <li>Chuyển thông báo duyệt tức thì tới Quản lý trực tiếp. Khi đơn được duyệt, hệ thống tự động gạch công hợp lệ trên bảng chấm công mà không cần HR nhập tay.</li>
+                <li>Hỗ trợ các loại đơn đặc thù: Nghỉ phép năm, Nghỉ ốm hưởng BHXH, Nghỉ thai sản, Nghỉ không hưởng lương, Đăng ký làm việc từ xa (WFH) và Đăng ký làm thêm giờ (Overtime - OT).</li>
               </ul>
             </div>
           )
@@ -3126,10 +3395,10 @@ export const DocumentationPage: React.FC = () => {
       ]
     },
 
-    // 11. DỰ ÁN & WORKSPACE TASKS
+    // 11. DỰ ÁN, WORKSPACE TASKS & HỆ THỐNG LỊCH TRÌNH
     {
       id: 'projects-tasks',
-      title: '11. Quản Lý Dự Án & Không Gian Làm Việc (Projects & Tasks)',
+      title: '11. Quản Lý Dự Án, Công Việc & Hệ Thống Lịch Trình Đa Dạng (Projects, Tasks & Calendars)',
       icon: Briefcase,
       items: [
         {
@@ -3138,7 +3407,7 @@ export const DocumentationPage: React.FC = () => {
           description: 'Quản lý các chiến dịch tuyển sinh, sự kiện khai giảng và công việc phòng ban theo phương pháp Agile.',
           headings: [
             { id: 'kanban-board', text: 'Bảng Điều Khiển Kanban & Gantt Timeline' },
-            { id: 'task-details', text: 'Chi Tiết Nhiệm Vụ, Checklist &amp; File Đính Kèm' }
+            { id: 'task-details', text: 'Chi Tiết Nhiệm Vụ, Checklist & File Đính Kèm' }
           ],
           content: (
             <div className="doc-prose">
@@ -3159,6 +3428,154 @@ export const DocumentationPage: React.FC = () => {
                 <li>Giao việc cho người phụ trách chính (Assignee) và các thành viên phối hợp (Co-assignees).</li>
                 <li>Thiết lập ngày bắt đầu, hạn chót (Deadline) và độ ưu tiên (Urgent, High, Medium, Low).</li>
                 <li>Danh mục checklist đầu việc con cần hoàn thành và không gian trao đổi bình luận real-time.</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'calendar-systems',
+          title: 'Hệ Thống 4 Chế Độ Lịch Trình (Calendars) Chuyên Biệt Trong MYERP',
+          description: 'Đặc tả chi tiết Lịch trình công việc chung & Tài chính doanh nghiệp (/calendar), Lịch tuyển sinh Sales (KPIs, 3 màu trạng thái, check-in proof), Lịch chấm công và Lịch đào tạo học vụ.',
+          headings: [
+            { id: 'calendar-overview', text: 'Tổng Quan Kiến Trúc 4 Hệ Thống Lịch Trình' },
+            { id: 'calendar-enterprise', text: '1. Lịch Trình Công Việc Doanh Nghiệp & Tích Hợp Kế Toán (/calendar)' },
+            { id: 'calendar-sales-portal', text: '2. Lịch Trình Tuyển Sinh & Tư Vấn Sales (KPIs, 3 Màu Phân Loại & Check-in Proof)' },
+            { id: 'calendar-smart-attendance', text: '3. Lịch Chấm Công Sinh Trắc Học & Bảng Xếp Ca (Smart Attendance)' },
+            { id: 'calendar-academic-training', text: '4. Lịch Đào Tạo, Thời Khóa Biểu & Lịch Giảng Viên (Academic Schedules)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="calendar-overview">Tổng Quan Kiến Trúc 4 Hệ Thống Lịch Trình</h2>
+              <p>
+                Trong một hệ sinh thái viện đào tạo và doanh nghiệp quy mô, mỗi khối phòng ban có nhu cầu theo dõi thời gian và lịch biểu hoàn toàn khác biệt.
+                MYERP thiết kế <strong>4 hệ thống Calendar chuyên trách</strong>, được đồng bộ dữ liệu thời gian thực và phân quyền chuẩn hóa:
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '170px' }}>Hệ Thống Lịch Trình</th>
+                      <th style={{ width: '150px' }}>Vị Trí / URL</th>
+                      <th style={{ width: '170px' }}>Đối Tượng Sử Dụng</th>
+                      <th>Nguồn Dữ Liệu &amp; Tính Năng Tự Động Hóa Cốt Lõi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>1. Lịch Trình Doanh Nghiệp</strong></td>
+                      <td><code>/calendar</code><br />(Sidebar chính)</td>
+                      <td>Toàn thể nhân sự, Kế toán, Quản lý &amp; Ban Giám đốc</td>
+                      <td>Quản lý tổng hòa Task, Meeting, Call toàn công ty; Tích hợp 2 chế độ xem (Lịch công việc &amp; Lịch chấm công); Tự động kéo Đơn mua hàng <code>[PO]</code> và Đơn bán hàng <code>[SO]</code> cho Kế toán.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>2. Lịch Tuyển Sinh Sales</strong></td>
+                      <td><code>SalePortal.tsx</code><br />(Tab Lịch trình)</td>
+                      <td>Chuyên viên tuyển sinh (TVV), Sale Leader, Sale Admin</td>
+                      <td>4 khối KPI định lượng; 3 chỉ báo phân loại màu sắc (🟢 Đã chia, 🔴 Ticket lỗi, 🟣 Nhắc lại); Cơ chế tải ảnh minh chứng gặp gỡ khách hàng (Check-in proof); Modal nhật ký ngày.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>3. Lịch Chấm Công &amp; Xếp Ca</strong></td>
+                      <td><code>AttendancePage.tsx</code><br />(HRM &amp; Công nhật)</td>
+                      <td>Khối Nhân sự (HR), Quản lý ca &amp; Cán bộ nhân viên</td>
+                      <td>Lịch công nhật đa lớp: GPS Geofencing, Wi-Fi BSSID, Selfie Biometrics; Phân loại Đúng giờ, Đi muộn, Vắng, Nghỉ phép; Lịch xếp ca cố định/xoay ca &amp; Trực cuối tuần.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>4. Lịch Đào Tạo Học Vụ</strong></td>
+                      <td><code>AcademicPortal.tsx</code><br />(Thời khóa biểu)</td>
+                      <td>Phòng Học vụ, Giảng viên, Trợ giảng &amp; Học viên</td>
+                      <td>Thời khóa biểu lớp học tập trung &amp; trực tuyến; Lịch giảng dạy của giảng viên theo module tín chỉ; Link phòng học Zoom/Teams; Cổng tra cứu Public Tokenized cho học viên.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="calendar-enterprise">1. Lịch Trình Công Việc Doanh Nghiệp &amp; Tích Hợp Kế Toán (/calendar)</h2>
+              <p>
+                Màn hình <code>/calendar</code> ([CalendarPage.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/CalendarPage.tsx))
+                là trung tâm điều phối hoạt động thường nhật của toàn bộ doanh nghiệp:
+              </p>
+              <ul>
+                <li><strong>Tích Hợp 2 Chế Độ Xem Song Song:</strong>
+                  <ul>
+                    <li><em>Chế độ Lịch Công Việc (<code>calendar</code>):</em> Hiển thị toàn bộ công việc (tasks), cuộc họp (meetings) theo tháng, kèm bộ lọc theo từng nhân sự hoặc xem toàn thể công ty (<code>all</code>).</li>
+                    <li><em>Chế độ Lịch Chấm Công (<code>attendance</code>):</em> Nhúng trực tiếp phân hệ chấm công cá nhân giúp nhân viên tra cứu ngày công, giờ vào/ra, số phút đi muộn và đơn nghỉ phép ngay trên cùng một trang.</li>
+                  </ul>
+                </li>
+                <li><strong>Cơ Chế Tích Hợp Dòng Tiền Kế Toán Tự Động (Financial Cashflow Events):</strong>
+                  Khi tài khoản đăng nhập có vai trò <code>accountant</code>, <code>admin</code> hoặc <code>director</code>, hệ thống tự động truy vấn và ánh xạ thêm 2 loại sự kiện tài chính quan trọng vào lịch tháng:
+                  <ul>
+                    <li><strong><code>[PO]</code> Đơn Mua Hàng (Purchase Orders):</strong> Hiển thị ngày giao hàng và hạn thanh toán cho Nhà cung cấp, kèm mã đơn và tổng tiền (ví dụ: <em>[PO] PO-2026-089 - NCC Thiết Bị Văn Phòng (45 Tr)</em>). Trạng thái tự động đổi thành <code>done</code> khi đơn đã nhập kho (<code>received</code>).</li>
+                    <li><strong><code>[SO]</code> Đơn Bán Hàng &amp; Tiền Cọc (Sales Orders / Deposits):</strong> Hiển thị ngày học viên phát sinh giao dịch đóng tiền (ví dụ: <em>[SO] MBA-K18 - Nguyễn Văn A (25 Tr)</em>), giúp Kế toán kiểm soát dòng tiền thu thực tế mỗi ngày.</li>
+                  </ul>
+                </li>
+              </ul>
+
+              <h2 id="calendar-sales-portal">2. Lịch Trình Tuyển Sinh &amp; Tư Vấn Sales (KPIs, 3 Màu Phân Loại &amp; Check-in Proof)</h2>
+              <p>
+                Trên không gian làm việc của chuyên viên tuyển sinh ([SalePortal.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/SalePortal.tsx)),
+                Lịch trình được thiết kế như một <strong>Buồng Lái Tác Nghiệp (Sales Cockpit)</strong> tối ưu chuyển đổi:
+              </p>
+              <div className="doc-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '14px 0' }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#0284c7', fontSize: '14px', fontWeight: 700 }}>4 Khối KPI Định Lượng Đầu Tháng</h4>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    <li><strong>Ghi Chú &amp; Nhật Ký:</strong> Tổng số tương tác đã thực hiện trong tháng (ghi nhận nỗ lực tư vấn).</li>
+                    <li><strong>Công Việc Quan Trọng:</strong> Số lượng nhiệm vụ có hạn chót trong tháng cần giải quyết dứt điểm.</li>
+                    <li><strong>Lịch Gặp Gỡ:</strong> Số cuộc hẹn trực tiếp (Offline tại Viện) hoặc qua Zoom/Meet đã lên lịch.</li>
+                    <li><strong>Cuộc Gọi Liên Hệ:</strong> Kế hoạch các cuộc gọi điện thoại kết nối học viên.</li>
+                  </ul>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#059669', fontSize: '14px', fontWeight: 700 }}>3 Chỉ Báo Phân Loại Màu Sắc (Badge Legend)</h4>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    <li>🟢 <strong style={{ color: '#16a34a' }}>Xanh Lá (Đã chia):</strong> Số lượng Lead/Data được hệ thống tự động phân bổ cho TVV trong ngày (theo thuật toán Round-Robin / Fair-Share).</li>
+                    <li>🔴 <strong style={{ color: '#dc2626' }}>Đỏ (Ticket lỗi):</strong> Số khách hàng có phản hồi khiếu nại, sai số điện thoại hoặc cần hỗ trợ khẩn cấp.</li>
+                    <li>🟣 <strong style={{ color: '#9333ea' }}>Tím (Nhắc lại):</strong> Lịch hẹn gọi lại hoặc tái tư vấn do TVV chủ động cài đặt để không bỏ quên khách.</li>
+                  </ul>
+                </div>
+              </div>
+              <ul>
+                <li><strong>Cơ Chế Minh Chứng Gặp Gỡ (Meeting Check-in Proof):</strong>
+                  Khi TVV hoàn thành một buổi gặp trực tiếp với khách hàng hoặc phụ huynh học viên, hệ thống yêu cầu hoặc khuyến khích tải lên <strong>Ảnh minh chứng gặp gỡ</strong> (Ảnh chụp tại cơ sở viện đào tạo, ảnh chụp biên bản tư vấn).
+                  Minh chứng này được lưu vĩnh viễn vào hoạt động tư vấn, phục vụ nghiệm thu hiệu quả công tác và tính điểm chuyên cần cho Sales.
+                </li>
+                <li><strong>Modal Lịch Trình &amp; Báo Cáo Ngày (Day Details Modal):</strong>
+                  Nhấp vào bất kỳ ô ngày nào trên lịch sẽ mở ra bảng điều khiển chi tiết gồm 2 Tabs:
+                  <ul>
+                    <li><em>Tab Báo Cáo &amp; Nhật Ký:</em> Danh sách toàn bộ ghi chú tư vấn đã thực hiện trong ngày, tên khách hàng liên kết và nút <em>"+ Thêm nhật ký mới"</em>.</li>
+                    <li><em>Tab Công Việc &amp; Lịch Hẹn:</em> Danh sách nhiệm vụ cần hoàn thành trong ngày, checkbox đánh dấu hoàn tất và form tạo lịch hẹn gặp mới.</li>
+                  </ul>
+                </li>
+              </ul>
+
+              <h2 id="calendar-smart-attendance">3. Lịch Chấm Công Sinh Trắc Học &amp; Bảng Xếp Ca (Smart Attendance)</h2>
+              <p>
+                Phân hệ Chấm công ([AttendancePage.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/AttendancePage.tsx))
+                cung cấp lịch chấm công sinh trắc học thông minh đa lớp:
+              </p>
+              <ul>
+                <li><strong>Xác Thực 3 Lớp Khi Check-in:</strong> Tọa độ vệ tinh GPS Geofencing (bán kính &le; 100m quanh cơ sở), Địa chỉ MAC Wi-Fi BSSID văn phòng, và Ảnh chụp nhận diện khuôn mặt (Selfie Biometrics).</li>
+                <li><strong>Mã Hóa Màu Sắc Ngày Công Chuẩn Hóa:</strong>
+                  <ul>
+                    <li><strong style={{ color: '#16a34a' }}>Màu Xanh Lá:</strong> Chấm công hợp lệ, đúng giờ chuẩn.</li>
+                    <li><strong style={{ color: '#d97706' }}>Màu Vàng Cam:</strong> Đi muộn hoặc về sớm (tự động tính số phút vi phạm để tính khấu trừ theo quy chế).</li>
+                    <li><strong style={{ color: '#7c3aed' }}>Màu Tím:</strong> Nghỉ phép có đơn phê duyệt trực tuyến (Nghỉ phép năm, Nghỉ lễ, Công tác ngoài).</li>
+                    <li><strong style={{ color: '#dc2626' }}>Màu Đỏ:</strong> Vắng mặt không phép (tự động ghi nhận 0 công ngày đó).</li>
+                  </ul>
+                </li>
+                <li><strong>Lịch Xếp Ca &amp; Trực Cuối Tuần:</strong> Hiển thị phân bổ ca làm việc cố định, ca xoay và ca trực cuối tuần của từng phòng ban, đảm bảo không bỏ trống vị trí trực chiến lược.</li>
+              </ul>
+
+              <h2 id="calendar-academic-training">4. Lịch Đào Tạo, Thời Khóa Biểu &amp; Lịch Giảng Viên (Academic Schedules)</h2>
+              <p>
+                Phân hệ Quản lý Đào tạo ([AcademicPortal.tsx](file:///d:/GITHUB_SPACE/MYERP/src/pages/AcademicPortal.tsx))
+                vận hành lịch biểu đào tạo quy chuẩn học thuật quốc tế:
+              </p>
+              <ul>
+                <li><strong>Lịch Giảng Dạy Của Giảng Viên:</strong> Thống kê số giờ giảng dạy thực tế, giờ chuẩn bị giáo án và thù lao giảng dạy tạm tính theo từng buổi dạy.</li>
+                <li><strong>Thời Khóa Biểu Lớp Học:</strong> Hiển thị ngày học, khung giờ (Sáng / Chiều / Tối), Giảng đường trực tiếp hoặc Đường link phòng học trực tuyến (Zoom / MS Teams / Google Meet kèm mật khẩu truy cập).</li>
+                <li><strong>Quản Trị Biến Động Lịch Học:</strong> Quản lý các trạng thái buổi học: <em>Đã diễn ra</em>, <em>Sắp diễn ra</em>, <em>Lịch học bù (Make-up Class)</em>, <em>Dời lịch do sự cố</em> và <em>Hủy buổi học</em>. Tự động gửi email/Zalo nhắc lịch học cho toàn thể học viên trong lớp trước 24 giờ.</li>
+                <li><strong>Cổng Tra Cứu Công Khai Tokenized:</strong> Học viên có thể tra cứu lịch học cá nhân thông qua đường dẫn bảo mật mã hóa không cần đăng nhập hệ thống, dễ dàng đồng bộ vào Google Calendar hoặc Apple Calendar trên điện thoại.</li>
               </ul>
             </div>
           )
