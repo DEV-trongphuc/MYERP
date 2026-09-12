@@ -28,7 +28,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=login',
+        path: '/api/login',
         title: 'Đăng Nhập Người Dùng (User Login)',
         description: 'Xác thực tài khoản qua username/email và mật khẩu. Trả về JWT Access Token (hạn 2 giờ) và Refresh Token (hạn 7 ngày) kèm thông tin phân quyền RBAC.',
         authRequired: false,
@@ -63,7 +63,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=refresh_token',
+        path: '/api/refresh_token',
         title: 'Làm Mới Token (Refresh Access Token)',
         description: 'Sử dụng Refresh Token còn hiệu lực để cấp phát Access Token mới mà không làm gián đoạn trải nghiệm của người dùng trên giao diện SPA.',
         authRequired: false,
@@ -82,7 +82,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=me',
+        path: '/api/me',
         title: 'Lấy Thông Tin Cá Nhân & Quyền Hạn (Get Current User Profile)',
         description: 'Truy vấn chi tiết hồ sơ tài khoản hiện tại, cấu hình nhận thông báo, ca trực hôm nay và số liệu KPI đang phụ trách.',
         authRequired: true,
@@ -104,7 +104,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=change_password',
+        path: '/api/change_password',
         title: 'Đổi Mật Khẩu (Change Password)',
         description: 'Đổi mật khẩu người dùng, yêu cầu mật khẩu hiện tại và tự động vô hiệu hóa toàn bộ Refresh Token trên các thiết bị khác.',
         authRequired: true,
@@ -123,7 +123,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=users_list',
+        path: '/api/users_list',
         title: 'Danh Sách Nhân Sự & Tài Khoản (List System Users)',
         description: 'Truy vấn danh sách nhân viên trong đơn vị theo quyền quản trị, hỗ trợ lọc theo phòng ban, vai trò và trạng thái hoạt động.',
         authRequired: true,
@@ -150,7 +150,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=update_user_role',
+        path: '/api/update_user_role',
         title: 'Phân Quyền Vai Trò Nhân Sự (Update User Role & Matrix)',
         description: 'Chỉ định vai trò hệ thống và ma trận quyền hạn tùy biến (Custom Permissions) cho một nhân sự.',
         authRequired: true,
@@ -171,7 +171,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=rbac_user_permissions',
+        path: '/api/rbac_user_permissions',
         title: 'Tra Cứu Ma Trận Quyền Hạt Nhân & Scope Dữ Liệu (Get RBAC Permissions)',
         description: 'Truy vấn ma trận quyền chi tiết của người dùng từ permissions_json và tính toán phạm vi dữ liệu Scope (all, team, own, none) cho từng module.',
         authRequired: true,
@@ -200,7 +200,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=update_user_permissions',
+        path: '/api/update_user_permissions',
         title: 'Cập Nhật Ma Trận Quyền Hạt Nhân (Update User Permissions Matrix)',
         description: 'Quản trị viên cấu hình ma trận quyền tùy biến cấp độ hành động và gán phạm vi Scope dữ liệu cho một tài khoản.',
         authRequired: true,
@@ -222,7 +222,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=teams_hierarchy',
+        path: '/api/teams_hierarchy',
         title: 'Cây Tổ Đội & Phân Cấp Quản Lý (Teams Hierarchy & Leaders)',
         description: 'Truy vấn danh sách các tổ đội, Trưởng nhóm (leader_id), Phó nhóm (co_leader_ids) và danh sách thành viên trực thuộc phục vụ phân quyền scope team.',
         authRequired: true,
@@ -251,7 +251,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=contacts',
+        path: '/api/contacts',
         title: 'Danh Sách Học Viên & Khách Hàng (Query Contacts)',
         description: 'Truy vấn danh sách học viên/khách hàng tiềm năng kèm phân trang, tìm kiếm họ tên, số điện thoại, nhãn màu và trạng thái tuyển sinh.',
         authRequired: true,
@@ -285,7 +285,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_contact',
+        path: '/api/create_contact',
         title: 'Thêm Mới Khách Hàng / Học Viên (Create Contact)',
         description: 'Tạo mới bản ghi khách hàng, tự động chuẩn hóa định dạng số điện thoại E.164, kích hoạt thuật toán chống trùng và chấm điểm AI Gatekeeper.',
         authRequired: true,
@@ -316,7 +316,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=contact_detail',
+        path: '/api/contact_detail',
         title: 'Hồ Sơ Khách Hàng 360 Độ (Customer 360 View)',
         description: 'Trả về toàn cảnh thông tin khách hàng: Báo giá (Quotes), Đơn bán hàng (SO), Các mốc tiền cọc (Deposits), Lịch sử cuộc gọi, Email và ghi chú nội bộ.',
         authRequired: true,
@@ -342,7 +342,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=assign_contact',
+        path: '/api/assign_contact',
         title: 'Bàn Giao & Điều Chuyển Lead (Reassign Consultant)',
         description: 'Chuyển giao quyền chăm sóc khách hàng cho Tư vấn viên khác, ghi nhận vào distribution_logs và tự động bắn tin Zalo thông báo cho Sale mới.',
         authRequired: true,
@@ -363,7 +363,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=referrer_lookup',
+        path: '/api/referrer_lookup',
         title: 'Tra Cứu Đối Tác Giới Thiệu (Referrer Partner Lookup)',
         description: 'Tìm kiếm đối tác giới thiệu (Cựu học viên, Giảng viên, Doanh nghiệp B2B, Affiliate) trong bảng companies với bộ lọc tier = "referrer".',
         authRequired: true,
@@ -401,7 +401,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=link_referrer',
+        path: '/api/link_referrer',
         title: 'Gắn Đối Tác Giới Thiệu & Hoa Hồng (Link Referrer to Contact/Deal)',
         description: 'Gắn đối tác giới thiệu REF vào hồ sơ học viên, cập nhật nguồn source = "gioi_thieu", lưu vết mã REF và thiết lập tỷ lệ hoa hồng chi trả.',
         authRequired: true,
@@ -428,7 +428,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=check_lead_protection',
+        path: '/api/check_lead_protection',
         title: 'Kiểm Tra Bảo Hộ 180 Ngày & Trùng Lặp (Check Lead Protection & Deduplication)',
         description: 'Kiểm tra xem số điện thoại hoặc email đã từng tồn tại trong hệ thống chưa, xác định thời hạn bảo hộ 180 ngày và danh tính tư vấn viên đang sở hữu.',
         authRequired: true,
@@ -465,7 +465,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=deals',
+        path: '/api/deals',
         title: 'Truy Vấn Danh Sách Deal Phễu (Query Pipeline Deals)',
         description: 'Lấy dữ liệu phễu bán hàng theo dạng bảng hoặc thẻ Kanban phân bổ qua 14 Stages, tổng giá trị tiềm năng và tỷ lệ chuyển đổi.',
         authRequired: true,
@@ -494,7 +494,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'PUT',
-        path: '/backend/api.php?action=update_deal_stage',
+        path: '/api/update_deal_stage',
         title: 'Chuyển Đổi Giai Đoạn Phễu (Transition Deal Stage)',
         description: 'Chuyển một Deal từ Stage này sang Stage khác. Hệ thống kiểm tra điều kiện tiêu chuẩn đầu ra (Exit Criteria) và kích hoạt automation workflows.',
         authRequired: true,
@@ -518,7 +518,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=mark_deal_lost',
+        path: '/api/mark_deal_lost',
         title: 'Đánh Dấu Cơ Hội Thất Bại (Mark Deal as Lost)',
         description: 'Đánh dấu Deal không thành công. Bắt buộc ghi nhận lý do thất bại (lost_reason) để phân tích tỷ lệ rơi rụng ở từng mắt xích.',
         authRequired: true,
@@ -548,7 +548,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_quote',
+        path: '/api/create_quote',
         title: 'Lập Báo Giá Học Phí Mới (Create Tuition Quote)',
         description: 'Tạo bảng báo giá học phí gồm học phí gốc, các học phần bắt buộc/tự chọn, chiết khấu sớm (Early Bird) và học bổng khuyến học.',
         authRequired: true,
@@ -576,7 +576,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=convert_quote_to_so',
+        path: '/api/convert_quote_to_so',
         title: 'Chuyển Báo Giá Thành Đơn Bán Hàng (Convert Quote to SO)',
         description: 'Khi học viên đồng ý nhập học, chuyển đổi bảng báo giá thành Đơn bán hàng chính thức (Sales Order), ghi nhận doanh số và tạo hợp đồng.',
         authRequired: true,
@@ -600,7 +600,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=sales_orders',
+        path: '/api/sales_orders',
         title: 'Danh Sách Đơn Bán Hàng (Query Sales Orders)',
         description: 'Truy vấn danh sách đơn hàng SO, trạng thái thanh toán, tiến độ hoàn tất hồ sơ và người phụ trách.',
         authRequired: true,
@@ -635,7 +635,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=deposits',
+        path: '/api/deposits',
         title: 'Danh Sách Hợp Đồng Cọc (Query Deposits)',
         description: 'Lấy danh sách các khoản tiền cọc giữ chỗ, phân bổ đợt thanh toán và tỷ lệ hoa hồng của TVV.',
         authRequired: true,
@@ -661,7 +661,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_deposit',
+        path: '/api/create_deposit',
         title: 'Tạo Hợp Đồng Cọc & Sinh Đợt Đóng Học Phí (Create Deposit & Milestones)',
         description: 'Tạo hợp đồng đặt cọc mới và tự động sinh các mốc thanh toán trong bảng deposit_milestones kèm ngày đến hạn.',
         authRequired: true,
@@ -691,7 +691,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=confirm_deposit_payment',
+        path: '/api/confirm_deposit_payment',
         title: 'Xác Nhận Thu Tiền Cọc (Confirm Deposit Payment)',
         description: 'Kế toán xác nhận tiền đã vào tài khoản ngân hàng của Viện, cập nhật trạng thái đã thu và kích hoạt quyền học vụ.',
         authRequired: true,
@@ -721,7 +721,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=products',
+        path: '/api/products',
         title: 'Danh Mục Khóa Học & Ngành Đào Tạo (Get Product Catalog)',
         description: 'Truy vấn toàn bộ chương trình đào tạo đại học, thạc sĩ, chứng chỉ nghề, thời lượng đào tạo và chỉ tiêu tuyển sinh.',
         authRequired: true,
@@ -742,7 +742,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=tuition_fee_structure',
+        path: '/api/tuition_fee_structure',
         title: 'Cấu Trúc Biểu Phí & Học Phần (Tuition Fee Breakdown)',
         description: 'Xem chi tiết đơn giá từng tín chỉ, phí xét tuyển đầu vào, lệ phí bảo vệ luận văn thạc sĩ và các kỳ hạn đóng.',
         authRequired: true,
@@ -769,7 +769,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=checkin',
+        path: '/api/checkin',
         title: 'Chấm Công Vào Ca (Check-In Attendance)',
         description: 'Ghi nhận chấm công vào ca làm việc bằng tọa độ GPS trong bán kính cho phép, đối soát BSSID Wifi văn phòng hoặc quét QR động.',
         authRequired: true,
@@ -796,7 +796,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=checkout',
+        path: '/api/checkout',
         title: 'Chấm Công Ra Ca (Check-Out Attendance)',
         description: 'Ghi nhận chấm công kết thúc ca làm việc, tính toán tổng số giờ làm thực tế và cảnh báo nếu về sớm trước giờ quy định.',
         authRequired: true,
@@ -812,7 +812,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=attendance_today',
+        path: '/api/attendance_today',
         title: 'Tình Hình Điểm Danh Hôm Nay (Today Attendance Dashboard)',
         description: 'Quản lý xem nhanh danh sách nhân sự đã có mặt, đi muộn, vắng mặt hoặc đang nghỉ phép có hưởng lương.',
         authRequired: true,
@@ -834,7 +834,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=submit_leave_request',
+        path: '/api/submit_leave_request',
         title: 'Nộp Đơn Nghỉ Phép (Submit Leave Request)',
         description: 'Tạo đơn xin nghỉ phép (phép năm, ốm đau, việc riêng, thai sản), tự động tính số ngày phép còn lại và gửi thông báo Telegram cho Quản lý.',
         authRequired: true,
@@ -860,7 +860,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=approve_leave',
+        path: '/api/approve_leave',
         title: 'Phê Duyệt Đơn Nghỉ Phép (Approve Leave Request)',
         description: 'Trưởng bộ phận hoặc Ban Giám Đốc phê duyệt hoặc từ chối đơn nghỉ phép, cập nhật công phép vào bảng chấm công tháng.',
         authRequired: true,
@@ -881,7 +881,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=payroll_calculation',
+        path: '/api/payroll_calculation',
         title: 'Tính Toán Bảng Lương Đa Tầng (Calculate Monthly Payroll)',
         description: 'Tính lương tháng tự động theo công thức đa tầng: Lương cứng theo ngày công thực tế + Thưởng KPI đạt chỉ tiêu + Hoa hồng hợp đồng cọc - Các khoản giảm trừ bảo hiểm.',
         authRequired: true,
@@ -909,7 +909,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=cashflow_summary',
+        path: '/api/cashflow_summary',
         title: 'Báo Cáo Dòng Tiền & Quỹ Thực Tế (Cashflow Summary)',
         description: 'Xem số dư thực thời gian thực tại quỹ tiền mặt, các tài khoản ngân hàng thương mại và biểu đồ thu chi trong tháng.',
         authRequired: true,
@@ -926,7 +926,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_expense_request',
+        path: '/api/create_expense_request',
         title: 'Lập Đề Xuất Chi Phí (Create Expense Request)',
         description: 'Tạo phiếu đề nghị chi tiền cho các hoạt động: Quảng cáo, thuê địa điểm, in ấn giáo trình, công tác phí.',
         authRequired: true,
@@ -950,7 +950,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=approve_expense',
+        path: '/api/approve_expense',
         title: 'Phê Duyệt Phiếu Chi (Approve Expense)',
         description: 'Cấp quản lý hoặc Kế toán trưởng phê duyệt phiếu chi và tự động sinh phiếu xuất quỹ tiền mặt hoặc ủy nhiệm chi ngân hàng.',
         authRequired: true,
@@ -973,7 +973,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=suppliers',
+        path: '/api/suppliers',
         title: 'Danh Sách Nhà Cung Cấp (Get Suppliers)',
         description: 'Quản lý danh bạ đối tác cung cấp dịch vụ in ấn, văn phòng phẩm, trang thiết bị phòng học và đơn vị tổ chức sự kiện.',
         authRequired: true,
@@ -993,7 +993,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_po',
+        path: '/api/create_po',
         title: 'Lập Đơn Đặt Mua Hàng (Create Purchase Order)',
         description: 'Tạo đơn đặt mua hàng PO gửi nhà cung cấp, kiểm soát số lượng, đơn giá và quy trình phê duyệt ngân sách.',
         authRequired: true,
@@ -1028,7 +1028,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=inventory_items',
+        path: '/api/inventory_items',
         title: 'Danh Mục Tồn Kho (Get Inventory Items)',
         description: 'Xem số lượng tồn kho thực tế của sách giáo trình, đồng phục, cặp da, kỷ niệm chương và quà tặng tuyển sinh.',
         authRequired: true,
@@ -1048,7 +1048,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=stock_out',
+        path: '/api/stock_out',
         title: 'Xuất Kho Phát Học Liệu (Stock Out for Students)',
         description: 'Xuất kho sách vở, đồng phục bàn giao cho tân học viên khi hoàn tất thủ tục nhập học chính thức.',
         authRequired: true,
@@ -1079,7 +1079,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=project_tasks',
+        path: '/api/project_tasks',
         title: 'Danh Sách Công Việc Dự Án (Get Project Tasks)',
         description: 'Truy vấn các công việc theo dự án tuyển sinh hoặc sự kiện khai giảng, phân loại theo trạng thái Todo, Doing, Review, Done.',
         authRequired: true,
@@ -1102,7 +1102,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_task',
+        path: '/api/create_task',
         title: 'Giao Việc Mới (Create Task)',
         description: 'Tạo nhiệm vụ mới cho cá nhân hoặc nhóm, đính kèm checklist và thông báo tới người được giao việc.',
         authRequired: true,
@@ -1129,7 +1129,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=generate_vietqr',
+        path: '/api/generate_vietqr',
         title: 'Sinh Mã VietQR Động Theo Đơn (Generate Dynamic VietQR)',
         description: 'Sinh mã QR thanh toán chuyển khoản liên ngân hàng NAPAS VietQR tự động điền sẵn số tiền và nội dung chuyển khoản mã đơn.',
         authRequired: true,
@@ -1153,7 +1153,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=pos_checkout',
+        path: '/api/pos_checkout',
         title: 'Thanh Toán Tại Quầy & In Biên Lai (POS Counter Checkout)',
         description: 'Thu tiền mặt hoặc quẹt thẻ POS tại bàn tuyển sinh, in biên lai thu tiền tức thì và đồng bộ doanh số ngày.',
         authRequired: true,
@@ -1178,7 +1178,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=campaigns',
+        path: '/api/campaigns',
         title: 'Danh Sách Chiến Dịch (Get Campaigns)',
         description: 'Truy vấn các chiến dịch tuyển sinh đang hoạt động, ngân sách đã chi, số lượng lead mang về và doanh số thực thu.',
         authRequired: true,
@@ -1202,7 +1202,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_campaign',
+        path: '/api/create_campaign',
         title: 'Tạo Chiến Dịch Tuyển Sinh Mới (Create Campaign)',
         description: 'Khởi tạo chiến dịch marketing mới, cấu hình ngân sách dự toán, gắn mã UTM Source và phân bổ cho đội nhóm tư vấn.',
         authRequired: true,
@@ -1229,7 +1229,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=send_capi_event',
+        path: '/api/send_capi_event',
         title: 'Bắn Sự Kiện Chuyển Đổi Về Pixel (Send Conversions Event)',
         description: 'Truyền tín hiệu chuyển đổi Lead hoặc Purchase (kèm giá trị giao dịch thực tế) về Meta Conversions API và TikTok Events API để tối ưu tệp Lookalike.',
         authRequired: true,
@@ -1255,7 +1255,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=receive_webhook_lead',
+        path: '/api/receive_webhook_lead',
         title: 'Webhook Tiếp Nhận Lead Từ Landing Page (Inbound Lead Webhook)',
         description: 'Cổng tiếp nhận dữ liệu đăng ký tự động từ các trang Landing Page, Google Forms hoặc đối tác tuyển sinh, bảo mật bằng X-Webhook-Secret.',
         authRequired: false,
@@ -1292,7 +1292,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=tickets',
+        path: '/api/tickets',
         title: 'Danh Sách Khiếu Nại Dữ Liệu (Query Quality Tickets)',
         description: 'Xem các ticket báo cáo số điện thoại rác, sai số, không nghe máy do Tư vấn viên nộp.',
         authRequired: true,
@@ -1312,7 +1312,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=approve_ticket',
+        path: '/api/approve_ticket',
         title: 'Phê Duyệt Ticket & Bù Điểm Chia Số (Approve Quality Ticket)',
         description: 'Quản lý duyệt ticket khiếu nại data rác. Hệ thống tự động cộng credit đền bù vào vòng phân bổ tiếp theo cho Tư vấn viên.',
         authRequired: true,
@@ -1335,7 +1335,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=feed_posts',
+        path: '/api/feed_posts',
         title: 'Lấy Bản Tin Nội Bộ (Get Enterprise Feed)',
         description: 'Truy vấn bài đăng thông báo, vinh danh cá nhân xuất sắc, nội quy viện và các bài thảo luận nội bộ.',
         authRequired: true,
@@ -1356,7 +1356,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=create_feed_post',
+        path: '/api/create_feed_post',
         title: 'Đăng Thông Báo Mới (Create Feed Post)',
         description: 'Ban điều hành hoặc quản lý đăng bài thông báo mới lên Enterprise Feed.',
         authRequired: true,
@@ -1380,7 +1380,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=cloud_files',
+        path: '/api/cloud_files',
         title: 'Thư Viện Tệp Tin Đám Mây (Get Cloud Files)',
         description: 'Truy vấn tài liệu học tập, hợp đồng đào tạo scan, biểu mẫu biểu phí và giáo trình điện tử.',
         authRequired: true,
@@ -1402,7 +1402,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=upload_file',
+        path: '/api/upload_file',
         title: 'Tải Lên Tệp Tin An Toàn (Secure File Upload)',
         description: 'Upload file đính kèm với mã hóa tên file an toàn, quét mã độc và nén ảnh tự động.',
         authRequired: true,
@@ -1427,7 +1427,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=dashboard_metrics',
+        path: '/api/dashboard_metrics',
         title: 'Chỉ Số Điều Hành Real-Time (Executive Dashboard KPI)',
         description: 'Xem toàn cảnh doanh số ngày, tháng, tỷ lệ chuyển đổi Lead-to-Won, số lượng cọc mới và tỷ lệ nhân sự có mặt.',
         authRequired: true,
@@ -1445,7 +1445,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=fair_share_distribution_report',
+        path: '/api/fair_share_distribution_report',
         title: 'Báo Cáo Kiểm Toán Chia Số Công Bằng (Fair-Share Distribution Audit)',
         description: 'Báo cáo chi tiết số data được phân bổ cho từng tư vấn viên trong ngày/tuần để giám sát tính công bằng của thuật toán Round-Robin.',
         authRequired: true,
@@ -1467,7 +1467,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=ai_chat',
+        path: '/api/ai_chat',
         title: 'Trợ Lý AI Tư Vấn Bán Hàng (AI Sales Copilot Chat)',
         description: 'Gửi câu hỏi của học viên tới mô hình AI đã được huấn luyện bằng tri thức của Viện, nhận gợi ý kịch bản xử lý từ chối và thông tin khóa học chuẩn xác.',
         authRequired: true,
@@ -1487,7 +1487,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=ai_evaluate_lead',
+        path: '/api/ai_evaluate_lead',
         title: 'AI Chấm Điểm Tiềm Năng Lead (AI Lead Scoring)',
         description: 'Phân tích thông tin đăng ký của khách hàng để chấm điểm từ 0 - 100 và phân loại nhiệt độ (Hot/Warm/Cold).',
         authRequired: true,
@@ -1503,7 +1503,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=ai_train_document',
+        path: '/api/ai_train_document',
         title: 'Nạp Tài Liệu Huấn Luyện AI (Ingest Knowledge Document)',
         description: 'Upload tài liệu quy chế đào tạo, cẩm nang tư vấn tuyển sinh để trích xuất văn bản và nạp vào Vector Database cho AI.',
         authRequired: true,
@@ -1526,7 +1526,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=get_queue_stats',
+        path: '/api/get_queue_stats',
         title: 'Thống Kê Hàng Đợi (Queue Statistics)',
         description: 'Xem trạng thái hoạt động của các hàng đợi ngầm (mail_queue, zalo_queue, telegram_queue), số lượng tác vụ pending, processing, sent và failed.',
         authRequired: true,
@@ -1541,7 +1541,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=queue_email',
+        path: '/api/queue_email',
         title: 'Đưa Email Vào Hàng Đợi Ngầm (Queue Email)',
         description: 'Đẩy email vào bảng mail_queue để worker cron_mailer.php quét gửi qua Amazon SES Port 587 STARTTLS với cơ chế Rate Limit 100ms.',
         authRequired: true,
@@ -1565,7 +1565,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=send_test_email',
+        path: '/api/send_test_email',
         title: 'Kiểm Tra Kết Nối Amazon SES SMTP (Test Email SES)',
         description: 'Gửi thử nghiệm email đồng bộ trực tiếp qua Amazon SES SMTP Port 587 STARTTLS để kiểm tra thông số máy chủ, tính hợp lệ của tài khoản và tốc độ bắt tay TLS.',
         authRequired: true,
@@ -1584,7 +1584,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=queue_zalo_message',
+        path: '/api/queue_zalo_message',
         title: 'Đưa Tin Nhắn Vào Hàng Đợi Zalo (Queue Zalo Message)',
         description: 'Đẩy tin nhắn văn bản vào bảng zalo_queue để worker xử lý ngầm, hỗ trợ định tuyến tới Zalo cá nhân của Tư vấn viên hoặc Group Admin.',
         authRequired: true,
@@ -1601,7 +1601,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=send_telegram_alert',
+        path: '/api/send_telegram_alert',
         title: 'Bắn Cảnh Báo Telegram Theo Kênh (Send Telegram Alert)',
         description: 'Gửi tin nhắn tức thời tới một trong 3 nhóm Telegram chuyên biệt: Sales Channel, Approvals Channel hoặc Daily Reports Channel.',
         authRequired: true,
@@ -1620,7 +1620,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=notifications_bell',
+        path: '/api/notifications_bell',
         title: 'Lấy Thông Báo Chuông In-App (Get In-App Notifications)',
         description: 'Truy vấn danh sách thông báo chuông của người dùng hiện tại, số lượng tin chưa đọc và liên kết chuyển hướng nhanh.',
         authRequired: true,
@@ -1641,7 +1641,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=update_notification_matrix',
+        path: '/api/update_notification_matrix',
         title: 'Cấu Hình Ma Trận Thông Báo Cá Nhân (Update Notification Matrix)',
         description: 'Người dùng tùy chỉnh nhận hay không nhận thông báo qua 4 kênh độc lập (Chuông, Zalo, Telegram, Email) cho từng loại sự kiện.',
         authRequired: true,
@@ -1663,7 +1663,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'POST',
-        path: '/backend/api.php?action=trigger_daily_report',
+        path: '/api/trigger_daily_report',
         title: 'Kích Hoạt Tổng Kết Báo Cáo Ngày (Trigger Daily Report)',
         description: 'Chạy tức thời thuật toán Cửa sổ thời gian trượt (Sliding Time Window) trong cron_daily_report.php, tổng hợp số liệu chia số, AI Pre-Screener, Tickets lỗi và bắn đồng thời tới Zalo Group, Telegram Group và Email Ban Giám Đốc.',
         authRequired: true,
@@ -1692,7 +1692,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=trigger_deposit_reminders',
+        path: '/api/trigger_deposit_reminders',
         title: 'Kích Hoạt Nhắc Tiền Cọc Đến Hạn (Trigger Deposit Reminders)',
         description: 'Quét các mốc deposit_milestones sắp đến hạn theo remind_days_before và tự động gửi email thông báo học phí kèm số tài khoản cho học viên.',
         authRequired: true,
@@ -1704,7 +1704,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=trigger_academic_reminders',
+        path: '/api/trigger_academic_reminders',
         title: 'Kích Hoạt Nhắc Lịch Học Vụ & Luận Văn (Trigger Academic Reminders)',
         description: 'Quét hạn nộp đề cương, luận văn thạc sĩ và lịch các buổi học sắp diễn ra để gửi email nhắc học viên và giảng viên.',
         authRequired: true,
@@ -1724,7 +1724,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=omni_search',
+        path: '/api/omni_search',
         title: 'Tìm Kiếm Toàn Cục (Omni-Search Across ERP)',
         description: 'Tìm kiếm siêu tốc mọi đối tượng trong hệ thống: Họ tên học viên, số điện thoại, địa chỉ email, mã đơn hàng SO, mã hợp đồng cọc và hóa đơn chi phí.',
         authRequired: true,
@@ -1743,7 +1743,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=check_duplicate_lead',
+        path: '/api/check_duplicate_lead',
         title: 'Kiểm Tra Trùng Lặp Khách Hàng (Check Lead Duplication)',
         description: 'So khớp số điện thoại và email với cơ sở dữ liệu để phòng ngừa tạo trùng khách hàng và kiểm tra quy tắc 6 tháng tái phân bổ.',
         authRequired: true,
@@ -1770,7 +1770,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=audit_logs',
+        path: '/api/audit_logs',
         title: 'Truy Vấn Nhật Ký Kiểm Toán Bất Biến (Audit Trail)',
         description: 'Lấy lịch sử mọi hành động nhạy cảm trong hệ thống (phân quyền, xóa dữ liệu, duyệt tiền, đổi sale). Dữ liệu chỉ đọc và không thể can thiệp.',
         authRequired: true,
@@ -1800,7 +1800,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=verify_idempotency',
+        path: '/api/verify_idempotency',
         title: 'Kiểm Tra & Khóa Khóa Trùng Lặp (Idempotency Check)',
         description: 'Kiểm tra xem một mã giao dịch X-Idempotency-Key đã được thực thi hay chưa nhằm phòng ngừa Double-Submit khi thanh toán hoặc tạo đơn hàng.',
         authRequired: true,
@@ -1816,7 +1816,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=active_advisory_locks',
+        path: '/api/active_advisory_locks',
         title: 'Giám Sát Khóa Tranh Chấp Đồng Thời (Active MySQL Advisory Locks)',
         description: 'Xem các khóa phân bổ chia số GET_LOCK và khóa hàng đợi đang được giữ nhằm phòng ngừa Race Condition giữa các tiến trình.',
         authRequired: true,
@@ -1829,7 +1829,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=revoke_token',
+        path: '/api/revoke_token',
         title: 'Vô Hiệu Hóa Token (Token Revocation & Blacklisting)',
         description: 'Đưa Access Token hoặc Refresh Token vào danh sách đen (Blacklist) khi người dùng đổi mật khẩu, đăng xuất hoặc khi phát hiện đăng nhập bất thường.',
         authRequired: true,
@@ -1852,7 +1852,7 @@ export const apiCategories: ApiCategory[] = [
     endpoints: [
       {
         method: 'GET',
-        path: '/backend/api.php?action=public_student_schedule',
+        path: '/api/public_student_schedule',
         title: 'Tra Cứu Lịch Học, Lịch Giảng Dạy & Thời Khóa Biểu (Academic Master Schedule)',
         description: 'Cổng tra cứu thời khóa biểu và lịch giảng tích hợp Zoom, phòng học, giáo trình môn học. Hỗ trợ 3 chế độ: theo học viên (customer_id), theo khóa học (campaign_id) hoặc theo giảng viên (lecturer_id).',
         authRequired: false,
@@ -1905,7 +1905,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=record_teaching_hours',
+        path: '/api/record_teaching_hours',
         title: 'Ghi Nhận Giờ Giảng Dạy & Tính Thù Lao Giảng Viên (Record Teaching Hours)',
         description: 'Ghi nhận số giờ giảng dạy thực tế của giảng viên cơ hữu hoặc thỉnh giảng, đối soát hệ số học hàm, đính kèm biên bản buổi học và tạo phiếu duyệt thù lao chuyển Kế toán.',
         authRequired: true,
@@ -1943,7 +1943,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=sync_subject_grades',
+        path: '/api/sync_subject_grades',
         title: 'Đồng Bộ Bảng Điểm Tín Chỉ Môn Học (Sync Subject Grades & GPA)',
         description: 'Cập nhật điểm thành phần (chuyên cần, giữa kỳ, thi cuối kỳ) vào trường grades_json của học viên, tự động tính điểm tổng kết thang 10, thang 4 và xếp loại tín chỉ.',
         authRequired: true,
@@ -1979,7 +1979,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'GET',
-        path: '/backend/api.php?action=thesis_progress',
+        path: '/api/thesis_progress',
         title: 'Theo Dõi Tiến Độ Luận Văn Thạc Sĩ (Thesis Milestones & Supervision)',
         description: 'Truy vấn tiến độ thực hiện luận văn tốt nghiệp, thông tin giảng viên hướng dẫn (Supervisor), mốc nộp đề cương, kết quả kiểm tra trùng lặp Turnitin và hội đồng bảo vệ.',
         authRequired: true,
@@ -2009,7 +2009,7 @@ export const apiCategories: ApiCategory[] = [
       },
       {
         method: 'POST',
-        path: '/backend/api.php?action=submit_session_attendance',
+        path: '/api/submit_session_attendance',
         title: 'Điểm Danh Buổi Học & Ghi Nhận Hiện Diện (Session Attendance Check-in)',
         description: 'Điểm danh từng học viên theo buổi học, phân loại có mặt / vắng có phép / vắng không phép và tự động phát cảnh báo cấm thi nếu vượt quá 20% số buổi vắng.',
         authRequired: true,

@@ -239,7 +239,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="realtime-sync">Đồng Bộ Real-Time SSE</h2>
               <p>
-                Trình duyệt duy trì kết nối persistent với server qua endpoint <code>/backend/api.php?action=get_sse_updates&amp;token=...</code>:
+                Trình duyệt duy trì kết nối persistent với server qua endpoint <code>/api/get_sse_updates?token=...</code> (hoặc đường dẫn truyền thống <code>/backend/api.php?action=get_sse_updates&amp;token=...</code>):
               </p>
               <ul>
                 <li><strong>Ping Heartbeat:</strong> Gửi sự kiện ping mỗi 15 giây để duy trì kết nối xuyên suốt qua firewall/proxy.</li>
@@ -2326,7 +2326,7 @@ export const DocumentationPage: React.FC = () => {
                   </tr>
                   <tr>
                     <td><strong>RESTful Lead Ingestion API</strong></td>
-                    <td><code>POST /backend/api.php?action=create_lead</code> kèm API Token</td>
+                    <td><code>POST /api/create_lead</code> (hoặc <code>/backend/api.php?action=create_lead</code>) kèm API Token</td>
                     <td>Cổng API mở cho phép Landing Pages, Website tuyển sinh bên ngoài, Chatbot AI hoặc các ứng dụng vệ tinh đẩy dữ liệu về hệ thống tập trung với độ trễ dưới 50ms.</td>
                   </tr>
                 </tbody>

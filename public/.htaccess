@@ -2,15 +2,18 @@
   RewriteEngine On
   RewriteBase /
 
-  # Do not rewrite if the request is for backend directory
+  # 1. RESTful API Routing: /api/<action> -> backend/api.php?action=<action>
+  RewriteRule ^api/(.*)$ backend/api.php?action=$1 [QSA,L]
+
+  # 2. Do not rewrite if the request is for backend directory
   RewriteRule ^backend/ - [L]
 
-  # If request is a physical file or directory, serve directly
+  # 3. If request is a physical file or directory, serve directly
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # Fallback all other routes to index.html for React SPA
+  # 4. Fallback all other routes to index.html for React SPA
   RewriteRule ^ index.html [L]
 </IfModule>
 

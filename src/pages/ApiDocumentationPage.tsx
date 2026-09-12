@@ -262,6 +262,9 @@ echo $response;
                     <Shield size={12} /> Bearer Token Auth
                   </span>
                 )}
+                <span className="api-badge-compat" title="Hệ thống hỗ trợ đồng thời cả chuẩn RESTful ngắn gọn /api/... và định dạng truyền thống /backend/api.php?action=...">
+                  Dual Routing (RESTful &amp; Legacy)
+                </span>
               </div>
 
               <h1 className="api-headline">{currentEndpoint.title}</h1>
@@ -793,6 +796,19 @@ echo $response;
           color: #64748b;
           background: #f8fafc;
           border: 1px solid #e2e8f0;
+          padding: 2px 8px;
+          border-radius: 4px;
+        }
+
+        .api-badge-compat {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #0369a1;
+          background: #f0f9ff;
+          border: 1px solid #bae6fd;
           padding: 2px 8px;
           border-radius: 4px;
         }
