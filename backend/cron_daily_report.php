@@ -5,7 +5,7 @@ require_once 'zalo_bot.php';
 // Đặt thời gian thực thi không giới hạn để tránh timeout
 set_time_limit(0);
 
-function runDailyReportCron($conn)
+function runDailyReportCron($conn, $force = false)
 {
     // --- PREVENT CONCURRENT EXECUTION ---
     $lockFile = sys_get_temp_dir() . '/cron_daily_report_' . md5(__DIR__) . '.lock';
@@ -34,7 +34,7 @@ function runDailyReportCron($conn)
         }
     }
 
-    if (isset($settings['zalo_daily_report_enabled']) && (string)$settings['zalo_daily_report_enabled'] === '0') {
+    if (!$force && isset($settings['zalo_daily_report_enabled']) && (string)$settings['zalo_daily_report_enabled'] === '0') {
         fclose($lockFp);
         return; // Daily report is explicitly disabled
     }
@@ -48,7 +48,7 @@ function runDailyReportCron($conn)
     $today = date('Y-m-d');
     $currentTime = date('H:i');
 
-    if ($lastRunDate !== $today && $currentTime >= $reportTime) {
+    if ($force || ($lastRunDate !== $today && $currentTime >= $reportTime)) {
         $endTimestamp = date('Y-m-d H:i:s');
         $lastReportTimestamp = $settings['last_daily_report_timestamp'] ?? '';
         $startTimestamp = !empty($lastReportTimestamp) ? $lastReportTimestamp : date('Y-m-d H:i:s', strtotime('-24 hours'));
@@ -246,59 +246,48 @@ function runDailyReportCron($conn)
         $adminGroupChatId = $settings['zalo_admin_group_chat_id'] ?? '';
         $onlyGroup = $settings['zalo_notify_only_group'] ?? '0';
 
-        if ($onlyGroup === '1' && !empty($adminGroupChatId)) {
-            if (!empty($adminIds)) {
-                $inPlaceholders = implode(',', array_fill(0, count($adminIds), '?'));
-                $types = str_repeat('i', count($adminIds));
-                $adminStmt = $conn->prepare("SELECT email, name, zalo_chat_id, telegram_chat_id FROM accounts WHERE id IN ($inPlaceholders)");
+        $admins = [];
+        if (!empty($adminIds)) {
+            $inPlaceholders = implode(',', array_fill(0, count($adminIds), '?'));
+            $types = str_repeat('i', count($adminIds));
+            $adminStmt = $conn->prepare("SELECT email, name, zalo_chat_id, telegram_chat_id FROM accounts WHERE id IN ($inPlaceholders)");
+            if ($adminStmt) {
                 $adminStmt->bind_param($types, ...$adminIds);
                 $adminStmt->execute();
                 $adminRes = $adminStmt->get_result();
-            } else {
-                $adminRes = $conn->query("SELECT email, name, zalo_chat_id, telegram_chat_id FROM accounts WHERE role = 'admin' OR role = 'superadmin' OR id = 1");
+                if ($adminRes) {
+                    while ($row = $adminRes->fetch_assoc()) {
+                        if ($onlyGroup === '1') {
+                            $row['zalo_chat_id'] = '';
+                        }
+                        $admins[] = $row;
+                    }
+                }
+                $adminStmt->close();
             }
-            $admins = [];
+        }
+
+        // Nếu adminIds trống hoặc không tìm thấy admin nào, tự động fallback lấy tất cả admin / superadmin / director đang hoạt động
+        if (empty($admins)) {
+            $adminRes = $conn->query("SELECT email, name, zalo_chat_id, telegram_chat_id FROM accounts WHERE (role IN ('admin', 'superadmin', 'director') OR id = 1) AND is_active = 1");
             if ($adminRes) {
                 while ($row = $adminRes->fetch_assoc()) {
-                    $row['zalo_chat_id'] = ''; // Không gửi Zalo cá nhân
+                    if ($onlyGroup === '1') {
+                        $row['zalo_chat_id'] = '';
+                    }
                     $admins[] = $row;
                 }
             }
-            if (isset($adminStmt)) $adminStmt->close();
-            // Thêm Group Zalo
+        }
+
+        // Tích hợp Zalo Admin Group Chat ID nếu cấu hình
+        if (!empty($adminGroupChatId)) {
             $admins[] = [
                 'name' => 'Zalo Admin Group',
                 'email' => '',
                 'zalo_chat_id' => $adminGroupChatId,
                 'telegram_chat_id' => ''
             ];
-        } else {
-            if (!empty($adminIds)) {
-                $inPlaceholders = implode(',', array_fill(0, count($adminIds), '?'));
-                $types = str_repeat('i', count($adminIds));
-                $adminStmt = $conn->prepare("SELECT email, name, zalo_chat_id, telegram_chat_id FROM accounts WHERE id IN ($inPlaceholders)");
-                $adminStmt->bind_param($types, ...$adminIds);
-                $adminStmt->execute();
-                $adminRes = $adminStmt->get_result();
-            } else {
-                $adminRes = $conn->query("SELECT email, name, zalo_chat_id, telegram_chat_id FROM accounts WHERE role = 'admin' OR role = 'superadmin' OR id = 1");
-            }
-            $admins = [];
-            if ($adminRes) {
-                while ($row = $adminRes->fetch_assoc()) {
-                    $admins[] = $row;
-                }
-            }
-            if (isset($adminStmt)) $adminStmt->close();
-            // Tích hợp Zalo Admin Group Chat ID nếu cấu hình
-            if (!empty($adminGroupChatId)) {
-                $admins[] = [
-                    'name' => 'Zalo Admin Group',
-                    'email' => '',
-                    'zalo_chat_id' => $adminGroupChatId,
-                    'telegram_chat_id' => ''
-                ];
-            }
         }
 
         if (count($admins) > 0) {
@@ -407,7 +396,8 @@ function runDailyReportCron($conn)
 
 // Nếu gọi trực tiếp từ CLI
 if (php_sapi_name() === 'cli' && realpath(__FILE__) === realpath($_SERVER['SCRIPT_FILENAME'] ?? '')) {
-    runDailyReportCron($conn);
+    $force = in_array('--force', $argv ?? []);
+    runDailyReportCron($conn, $force);
     $conn->close();
 }
 ?>
