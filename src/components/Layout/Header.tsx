@@ -8,6 +8,7 @@ import { useUIStore } from '../../store/uiStore';
 import { toast } from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { SIDEBAR_GROUPS } from './Sidebar';
+import { AppIcon } from '../common/AppIcons';
 import { Avatar } from '../ui/Avatar';
 import { useNavigate } from 'react-router-dom';
 import { CustomModal } from '../ui/CustomModal';
@@ -2731,15 +2732,12 @@ export const Header = ({
                             <div style={{
                               width: '32px',
                               height: '32px',
-                              borderRadius: '50%',
-                              background: colors.bg,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               flexShrink: 0,
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
                             }}>
-                              <IconComponent size={16} color={colors.color} strokeWidth={2} />
+                              <AppIcon name={item.name} size={32} />
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2809,14 +2807,12 @@ export const Header = ({
                               <div style={{
                                 width: isMobile ? '40px' : '56px',
                                 height: isMobile ? '40px' : '56px',
-                                borderRadius: '16px',
-                                background: colors.bg,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                                flexShrink: 0
                               }}>
-                                <Icon size={isMobile ? 20 : 28} color={colors.color} strokeWidth={2} />
+                                <AppIcon name={item.name} size={isMobile ? 40 : 56} />
                               </div>
                               <span style={{ fontSize: isMobile ? '0.75rem' : '0.85rem', fontWeight: 800, color: 'var(--color-text)', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
                                 {t(item.name)}
@@ -2870,15 +2866,12 @@ export const Header = ({
                                 <div style={{
                                   width: isMobile ? '34px' : '32px',
                                   height: isMobile ? '34px' : '32px',
-                                  borderRadius: '50%',
-                                  background: colors.bg,
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   flexShrink: 0,
-                                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
                                 }}>
-                                  <IconComponent size={isMobile ? 18 : 16} color={colors.color} strokeWidth={2} />
+                                  <AppIcon name={item.name} size={isMobile ? 34 : 32} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                                   <span style={{ fontSize: isMobile ? '0.92rem' : '0.85rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

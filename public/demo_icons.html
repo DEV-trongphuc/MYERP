@@ -1,0 +1,2117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MYERP - Toàn Bộ Biểu Tượng SVG App Launcher (Style 2B & 1B - Đa Dạng Màu Sắc)</title>
+  <style>
+    :root {
+      --bg-body: #0b1120;
+      --bg-card: rgba(15, 23, 42, 0.85);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.2);
+    }
+    body.light-mode {
+      --bg-body: #f1f5f9;
+      --bg-card: #ffffff;
+      --border-card: rgba(0, 0, 0, 0.08);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent: #0284c7;
+      --accent-glow: rgba(2, 132, 199, 0.15);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-body);
+      color: var(--text-main);
+      padding: 30px 20px 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: background 0.3s, color 0.3s;
+    }
+    .header-bar {
+      max-width: 1240px;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-card);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .header-title h1 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #60a5fa, #38bdf8, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header-title p {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .btn-toggle {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-card);
+      padding: 8px 16px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-toggle:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .nav-pills {
+      max-width: 1240px;
+      width: 100%;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      margin-bottom: 30px;
+    }
+    .nav-pill {
+      white-space: nowrap;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .nav-pill:hover, .nav-pill.active {
+      color: #38bdf8;
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+    }
+
+    /* Approved spotlight banner */
+    .spotlight {
+      max-width: 1240px;
+      width: 100%;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 40px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    body.light-mode .spotlight {
+      background: linear-gradient(135deg, #ffffff, #f8fafc);
+      border-color: rgba(2, 132, 199, 0.3);
+    }
+    .spotlight-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .spotlight-badge {
+      background: #0284c7;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .spotlight-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    .spotlight-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .spotlight-info h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+    .spotlight-info p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .status-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+    .status-tag.kept {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+
+    /* Section group */
+    .section-wrapper {
+      max-width: 1240px;
+      width: 100%;
+      margin-bottom: 40px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-card);
+      padding-bottom: 8px;
+    }
+    .section-head h2 {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    .section-head span {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .icons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .icon-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      text-align: center;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .icon-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    }
+    .icon-display {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s;
+    }
+    .icon-card:hover .icon-display {
+      transform: scale(1.05);
+    }
+    .icon-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+    .icon-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .icon-tag-color {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+    }
+    .icon-path {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+    .icon-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .icon-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border-card);
+      width: 100%;
+      justify-content: center;
+    }
+    .mini-preview-tag {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* Interactive Launcher Modal simulation */
+    .launcher-modal-mock {
+      max-width: 1240px;
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 24px;
+      padding: 32px;
+      margin-top: 20px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+    }
+    .mock-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-main);
+    }
+    .mock-recent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .mock-recent-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    body.light-mode .mock-recent-item {
+      background: #f8fafc;
+    }
+    .mock-recent-item:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .mock-recent-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      text-align: center;
+    }
+
+    /* Common Drop Shadow & Glow SVG Filters */
+    svg {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hidden global filters -->
+  <svg width="0" height="0" style="position: absolute;">
+    <defs>
+      <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.25" />
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- Top bar -->
+  <div class="header-bar">
+    <div class="header-title">
+      <h1>BỘ BIỂU TƯỢNG SVG APP LAUNCHER MYERP</h1>
+      <p>3 Tính Năng Giữ Màu Cốt Lõi • 31 Tính Năng Tùy Biến Màu Sắc Đa Dạng Sắc Nét • Chuẩn Style 2B & 1B</p>
+    </div>
+    <div class="controls">
+      <button class="btn-toggle" onclick="document.body.classList.toggle('light-mode')">
+        🌓 Đổi Theme Sáng / Tối
+      </button>
+      <a href="#launcher-preview" class="btn-toggle" style="text-decoration: none; color: inherit;">
+        🚀 Xem Mô Phỏng App Menu
+      </a>
+    </div>
+  </div>
+
+  <!-- Category Nav Pills -->
+  <div class="nav-pills">
+    <a href="#chot" class="nav-pill active">⭐ 3 Mục Giữ Màu</a>
+    <a href="#quy-trinh" class="nav-pill">1. Quy Trình & Phê Duyệt</a>
+    <a href="#tong-quan" class="nav-pill">2. Tổng Quan</a>
+    <a href="#khach-hang" class="nav-pill">3. Khách Hàng</a>
+    <a href="#tai-chinh" class="nav-pill">4. Tài Chính</a>
+    <a href="#chuong-trinh" class="nav-pill">5. Chương Trình</a>
+    <a href="#nhan-su" class="nav-pill">6. Nhân Sự</a>
+    <a href="#cai-dat" class="nav-pill">7. Cài Đặt Hệ Thống</a>
+  </div>
+
+  <!-- Spotlight: 3 Core Items Kept Color -->
+  <div class="spotlight" id="chot">
+    <div class="spotlight-header">
+      <span class="spotlight-badge">Định Hướng Thiết Kế</span>
+      <h2 style="font-size: 18px; font-weight: 800;">3 CHỨC NĂNG CỐT LÕI GIỮ NGUYÊN MÀU ĐÃ DUYỆT</h2>
+    </div>
+    <div class="spotlight-grid">
+      
+      <!-- 1. QUY TRÌNH (ĐỎ RUBY) -->
+      <div class="spotlight-card" style="border-color: rgba(239, 68, 68, 0.3);">
+        <svg width="64" height="64" viewBox="0 0 56 56" fill="none">
+          <defs>
+            <linearGradient id="bg_wf_main" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ef4444" /><stop offset="100%" stop-color="#991b1b" />
+            </linearGradient>
+          </defs>
+          <rect width="56" height="56" rx="16" fill="url(#bg_wf_main)" />
+          <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+          <rect x="15" y="14" width="26" height="30" rx="4" fill="#7f1d1d" />
+          <rect x="17" y="16" width="22" height="26" rx="2.5" fill="#ffffff" filter="url(#softShadow)" />
+          <rect x="23" y="12" width="10" height="5" rx="1.5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.8" />
+          <circle cx="28" cy="14.5" r="1.2" fill="#64748b" />
+          <rect x="21" y="22" width="13" height="2" rx="1" fill="#cbd5e1" />
+          <rect x="21" y="27" width="14" height="2" rx="1" fill="#cbd5e1" />
+          <rect x="21" y="32" width="9" height="2" rx="1" fill="#cbd5e1" />
+          <g transform="rotate(45 37 34)">
+            <rect x="35" y="24" width="4" height="14" rx="1" fill="#fbbf24" stroke="#ffffff" stroke-width="0.8" />
+            <path d="M35 38L37 41L39 38H35Z" fill="#1e293b" />
+          </g>
+        </svg>
+        <div class="spotlight-info">
+          <span class="status-tag kept">🔴 GIỮ MÀU ĐỎ RUBY • STYLE 1B</span>
+          <h3>Quy trình & Phê duyệt</h3>
+          <p>Hồ sơ trình ký & bút ký mạ vàng đặt chéo góc. Chuẩn văn phòng thủ tục.</p>
+        </div>
+      </div>
+
+      <!-- 2. BÀN LÀM VIỆC (XANH EMERALD) -->
+      <div class="spotlight-card" style="border-color: rgba(16, 185, 129, 0.3);">
+        <svg width="64" height="64" viewBox="0 0 56 56" fill="none">
+          <defs>
+            <linearGradient id="bg_ws_main" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#10b981" /><stop offset="100%" stop-color="#047857" />
+            </linearGradient>
+          </defs>
+          <rect width="56" height="56" rx="16" fill="url(#bg_ws_main)" />
+          <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+          <rect x="14" y="14" width="28" height="28" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+          <rect x="18" y="18" width="20" height="6" rx="2" fill="#ecfdf5" />
+          <rect x="18" y="18" width="4" height="6" rx="2" fill="#10b981" />
+          <rect x="24" y="20.5" width="11" height="1.8" rx="0.9" fill="#047857" />
+          <rect x="18" y="26" width="20" height="6" rx="2" fill="#f0fdf4" />
+          <rect x="18" y="26" width="4" height="6" rx="2" fill="#34d399" />
+          <rect x="24" y="28.5" width="8" height="1.8" rx="0.9" fill="#059669" />
+          <rect x="18" y="34" width="20" height="5" rx="2" fill="#f0fdf4" />
+          <rect x="18" y="34" width="4" height="5" rx="2" fill="#6ee7b7" />
+        </svg>
+        <div class="spotlight-info">
+          <span class="status-tag kept">🟢 GIỮ MÀU XANH EMERALD</span>
+          <h3>Bàn làm việc</h3>
+          <p>Khay nhiệm vụ Task Card cá nhân với các ghim phân việc trực quan.</p>
+        </div>
+      </div>
+
+      <!-- 3. QUẢN LÝ CÔNG (CAM HOÀNG HÔN) -->
+      <div class="spotlight-card" style="border-color: rgba(255, 122, 0, 0.3);">
+        <svg width="64" height="64" viewBox="0 0 56 56" fill="none">
+          <defs>
+            <linearGradient id="bg_att_main" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ff7a00" /><stop offset="100%" stop-color="#ea580c" />
+            </linearGradient>
+          </defs>
+          <rect width="56" height="56" rx="16" fill="url(#bg_att_main)" />
+          <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+          <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+          <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#ea580c" />
+          <rect x="20" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+          <rect x="33.2" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+          <circle cx="20" cy="28" r="1.8" fill="#ea580c" />
+          <circle cx="25.3" cy="28" r="1.8" fill="#ea580c" />
+          <circle cx="30.6" cy="28" r="1.8" fill="#ea580c" />
+          <circle cx="36" cy="28" r="1.8" fill="#ea580c" />
+          <circle cx="20" cy="34" r="1.8" fill="#ea580c" />
+          <circle cx="25.3" cy="34" r="1.8" fill="#ea580c" />
+          <circle cx="30.6" cy="34" r="1.8" fill="#cbd5e1" />
+          <circle cx="36" cy="34" r="1.8" fill="#cbd5e1" />
+        </svg>
+        <div class="spotlight-info">
+          <span class="status-tag kept">🟠 GIỮ MÀU CAM HOÀNG HÔN • STYLE 2B</span>
+          <h3>Quản lý công</h3>
+          <p>Cuốn lịch ngày công & ca làm việc điểm danh trong tháng. Không dấu check thừa.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 1: QUY TRÌNH & PHÊ DUYỆT ==================== -->
+  <div class="section-wrapper" id="quy-trinh">
+    <div class="section-head">
+      <h2>📂 Phân Hệ: QUY TRÌNH & PHÊ DUYỆT</h2>
+      <span>(1 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Quy trình -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_wf_main)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="15" y="14" width="26" height="30" rx="4" fill="#7f1d1d" />
+            <rect x="17" y="16" width="22" height="26" rx="2.5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="23" y="12" width="10" height="5" rx="1.5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.8" />
+            <circle cx="28" cy="14.5" r="1.2" fill="#64748b" />
+            <rect x="21" y="22" width="13" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="21" y="27" width="14" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="21" y="32" width="9" height="2" rx="1" fill="#cbd5e1" />
+            <g transform="rotate(45 37 34)">
+              <rect x="35" y="24" width="4" height="14" rx="1" fill="#fbbf24" stroke="#ffffff" stroke-width="0.8" />
+              <path d="M35 38L37 41L39 38H35Z" fill="#1e293b" />
+            </g>
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Quy trình
+            <span class="icon-tag-color" style="color: #ef4444;">Đỏ Ruby</span>
+          </div>
+          <div class="icon-path">/approvals</div>
+          <div class="icon-desc">Hồ sơ trình ký và bút ký duyệt đa cấp</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_wf_main)" />
+            <rect x="15" y="14" width="26" height="30" rx="4" fill="#7f1d1d" />
+            <rect x="17" y="16" width="22" height="26" rx="2.5" fill="#ffffff" />
+            <rect x="23" y="12" width="10" height="5" rx="1.5" fill="#e2e8f0" />
+            <rect x="21" y="23" width="14" height="2.5" rx="1" fill="#cbd5e1" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 2: TỔNG QUAN ==================== -->
+  <div class="section-wrapper" id="tong-quan">
+    <div class="section-head">
+      <h2>📊 Phân Hệ: TỔNG QUAN</h2>
+      <span>(4 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Dashboard (Xanh Royal Blue) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_dash_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#2563eb" /><stop offset="100%" stop-color="#1e40af" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_dash_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="13" y="14" width="30" height="28" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <!-- 2 thẻ KPI -->
+            <rect x="16" y="17" width="11" height="9" rx="2" fill="#dbeafe" />
+            <rect x="18" y="19" width="7" height="2" rx="1" fill="#1d4ed8" />
+            <rect x="18" y="23" width="4" height="1.5" rx="0.75" fill="#93c5fd" />
+            <rect x="29" y="17" width="11" height="9" rx="2" fill="#eff6ff" />
+            <rect x="31" y="19" width="7" height="2" rx="1" fill="#2563eb" />
+            <rect x="31" y="23" width="5" height="1.5" rx="0.75" fill="#bfdbfe" />
+            <!-- Biểu đồ cột -->
+            <rect x="17" y="32" width="3" height="7" rx="1" fill="#93c5fd" />
+            <rect x="22" y="29" width="3" height="10" rx="1" fill="#3b82f6" />
+            <rect x="27" y="34" width="3" height="5" rx="1" fill="#bfdbfe" />
+            <rect x="32" y="28" width="3" height="11" rx="1" fill="#1d4ed8" />
+            <rect x="37" y="30" width="3" height="9" rx="1" fill="#2563eb" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Dashboard
+            <span class="icon-tag-color" style="color: #60a5fa;">Xanh Royal</span>
+          </div>
+          <div class="icon-path">/</div>
+          <div class="icon-desc">Chỉ số doanh thu, hiệu năng & biểu đồ</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_dash_new)" />
+            <rect x="13" y="14" width="30" height="28" rx="5" fill="#ffffff" />
+            <rect x="16" y="17" width="11" height="9" rx="2" fill="#dbeafe" />
+            <rect x="29" y="17" width="11" height="9" rx="2" fill="#dbeafe" />
+            <rect x="24" y="29" width="4" height="10" rx="1" fill="#1d4ed8" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Bàn làm việc (GIỮ NGUYÊN Xanh Emerald) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ws_main)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="14" width="28" height="28" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="18" y="18" width="20" height="6" rx="2" fill="#ecfdf5" />
+            <rect x="18" y="18" width="4" height="6" rx="2" fill="#10b981" />
+            <rect x="24" y="20.5" width="11" height="1.8" rx="0.9" fill="#047857" />
+            <rect x="18" y="26" width="20" height="6" rx="2" fill="#f0fdf4" />
+            <rect x="18" y="26" width="4" height="6" rx="2" fill="#34d399" />
+            <rect x="24" y="28.5" width="8" height="1.8" rx="0.9" fill="#059669" />
+            <rect x="18" y="34" width="20" height="5" rx="2" fill="#f0fdf4" />
+            <rect x="18" y="34" width="4" height="5" rx="2" fill="#6ee7b7" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Bàn làm việc
+            <span class="icon-tag-color" style="color: #10b981;">Xanh Emerald</span>
+          </div>
+          <div class="icon-path">/workspace</div>
+          <div class="icon-desc">Nhiệm vụ cá nhân & danh sách đầu việc</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ws_main)" />
+            <rect x="14" y="14" width="28" height="28" rx="5" fill="#ffffff" />
+            <rect x="18" y="18" width="20" height="6" rx="2" fill="#10b981" />
+            <rect x="18" y="26" width="20" height="6" rx="2" fill="#34d399" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Lịch trình (Tím Indigo Đậm) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_cal_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#6366f1" /><stop offset="100%" stop-color="#4338ca" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_cal_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#4338ca" />
+            <rect x="20" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+            <rect x="33.2" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+            <rect x="18" y="26" width="4" height="4" rx="1" fill="#e0e7ff" />
+            <rect x="24" y="26" width="4" height="4" rx="1" fill="#e0e7ff" />
+            <rect x="30" y="26" width="4" height="4" rx="1" fill="#e0e7ff" />
+            <rect x="18" y="32" width="4" height="4" rx="1" fill="#e0e7ff" />
+            <rect x="24" y="32" width="4" height="4" rx="1" fill="#4f46e5" />
+            <rect x="30" y="32" width="4" height="4" rx="1" fill="#e0e7ff" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Lịch trình
+            <span class="icon-tag-color" style="color: #818cf8;">Tím Indigo</span>
+          </div>
+          <div class="icon-path">/calendar</div>
+          <div class="icon-desc">Lịch công tác, họp & lịch trình cá nhân</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_cal_new)" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#4338ca" />
+            <rect x="24" y="31" width="6" height="6" rx="1.5" fill="#4f46e5" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Bảng tin nội bộ (Tờ Báo Feed Tin Tức - News Feed) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_feed_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#d946ef" /><stop offset="100%" stop-color="#a21caf" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_feed_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <!-- Tờ báo sau (hiệu ứng feed xếp lớp) -->
+            <rect x="19" y="13" width="23" height="26" rx="3.5" fill="#fdf4ff" opacity="0.6" />
+            <!-- Tờ báo chính phía trước -->
+            <rect x="14" y="16" width="25" height="27" rx="3.5" fill="#ffffff" filter="url(#softShadow)" />
+            <!-- Dải header / Tên nhật báo -->
+            <rect x="17" y="19" width="19" height="3" rx="1" fill="#a21caf" />
+            <!-- Khung ảnh tin tức nổi bật -->
+            <rect x="17" y="24" width="8" height="8" rx="1.5" fill="#fae8ff" stroke="#e879f9" stroke-width="0.6" />
+            <!-- Các dòng tóm tắt bài báo bên cạnh ảnh -->
+            <rect x="27" y="24.5" width="9" height="1.8" rx="0.9" fill="#64748b" />
+            <rect x="27" y="27.5" width="9" height="1.8" rx="0.9" fill="#cbd5e1" />
+            <rect x="27" y="30.5" width="6" height="1.8" rx="0.9" fill="#cbd5e1" />
+            <!-- 2 cột tin tức bên dưới -->
+            <rect x="17" y="35" width="9" height="1.6" rx="0.8" fill="#94a3b8" />
+            <rect x="17" y="38" width="7" height="1.6" rx="0.8" fill="#cbd5e1" />
+            <rect x="28" y="35" width="8" height="1.6" rx="0.8" fill="#94a3b8" />
+            <rect x="28" y="38" width="5" height="1.6" rx="0.8" fill="#cbd5e1" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Bảng tin nội bộ
+            <span class="icon-tag-color" style="color: #e879f9;">Tờ Báo Feed</span>
+          </div>
+          <div class="icon-path">/feed</div>
+          <div class="icon-desc">Trang tin tức, bài viết feed & văn hóa công ty</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_feed_new)" />
+            <rect x="19" y="13" width="23" height="26" rx="3.5" fill="#fdf4ff" opacity="0.6" />
+            <rect x="14" y="16" width="25" height="27" rx="3.5" fill="#ffffff" />
+            <rect x="17" y="19" width="19" height="3" rx="1" fill="#a21caf" />
+            <rect x="17" y="24" width="8" height="8" rx="1.5" fill="#e879f9" />
+            <rect x="27" y="24.5" width="9" height="2" rx="1" fill="#64748b" />
+            <rect x="27" y="28" width="7" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="17" y="35" width="19" height="2" rx="1" fill="#cbd5e1" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 3: KHÁCH HÀNG ==================== -->
+  <div class="section-wrapper" id="khach-hang">
+    <div class="section-head">
+      <h2>👥 Phân Hệ: KHÁCH HÀNG (CRM)</h2>
+      <span>(8 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Tiềm năng (Đỏ Hồng San Hô - Coral Rose) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_cont_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f43f5e" /><stop offset="100%" stop-color="#be123c" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_cont_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="16" width="28" height="24" rx="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="21.5" cy="24" r="3.5" fill="#f43f5e" />
+            <path d="M17 32C17 29.5 19 28.5 21.5 28.5C24 28.5 26 29.5 26 32" stroke="#f43f5e" stroke-width="1.6" stroke-linecap="round" />
+            <rect x="28" y="22" width="10" height="2" rx="1" fill="#94a3b8" />
+            <rect x="28" y="26" width="8" height="1.8" rx="0.9" fill="#cbd5e1" />
+            <rect x="28" y="30" width="11" height="1.8" rx="0.9" fill="#cbd5e1" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Tiềm năng
+            <span class="icon-tag-color" style="color: #fb7185;">Hồng Coral</span>
+          </div>
+          <div class="icon-path">/contacts</div>
+          <div class="icon-desc">Danh sách khách hàng & nhật ký liên hệ</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_cont_new)" />
+            <rect x="14" y="16" width="28" height="24" rx="4.5" fill="#ffffff" />
+            <circle cx="21" cy="24" r="3.5" fill="#f43f5e" />
+            <rect x="27" y="22" width="11" height="2.5" rx="1" fill="#94a3b8" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Pipeline (Xanh Mòng Két Đậm - Dark Teal/Mint - Tách biệt với Bàn làm việc) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_pipe_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284c7" /><stop offset="100%" stop-color="#0f766e" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_pipe_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <!-- Phễu chuyển đổi bán hàng 3 tầng -->
+            <path d="M15 17H41L36 24H20L15 17Z" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M21 26H35L32 32H24L21 26Z" fill="#a5f3fc" />
+            <path d="M25 34H31L29 40H27L25 34Z" fill="#38bdf8" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Pipeline
+            <span class="icon-tag-color" style="color: #38bdf8;">Teal Cyan</span>
+          </div>
+          <div class="icon-path">/deals</div>
+          <div class="icon-desc">Phễu chuyển đổi & tiến trình bán hàng</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_pipe_new)" />
+            <path d="M15 17H41L36 24H20L15 17Z" fill="#ffffff" />
+            <path d="M21 26H35L32 32H24L21 26Z" fill="#a5f3fc" />
+            <path d="M25 34H31L29 40H27L25 34Z" fill="#38bdf8" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Học viên (Tím Violet Quý Tộc) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_stu_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#8b5cf6" /><stop offset="100%" stop-color="#6d28d9" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_stu_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M28 16L14 23L28 30L42 23L28 16Z" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M20 26.5V33.5C20 36 24 38 28 38C32 38 36 36 36 33.5V26.5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+            <path d="M38 25V33" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" />
+            <circle cx="38" cy="34" r="1.5" fill="#fbbf24" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Học viên
+            <span class="icon-tag-color" style="color: #a78bfa;">Tím Violet</span>
+          </div>
+          <div class="icon-path">/students</div>
+          <div class="icon-desc">Hồ sơ học viên, lệ phí & bằng cấp</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_stu_new)" />
+            <path d="M28 16L14 23L28 30L42 23L28 16Z" fill="#ffffff" />
+            <path d="M20 27V33C20 35.5 24 37 28 37C32 37 36 35.5 36 33V27" stroke="#ffffff" stroke-width="2.5" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Nhật ký Data (Xanh Sky Băng Giá) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_data_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284c7" /><stop offset="100%" stop-color="#075985" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_data_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <ellipse cx="28" cy="19" rx="14" ry="4" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M14 19V26C14 28.2 20.3 30 28 30C35.7 30 42 28.2 42 26V19" fill="#e0f2fe" />
+            <ellipse cx="28" cy="26" rx="14" ry="4" fill="#ffffff" />
+            <circle cx="37" cy="23" r="1" fill="#0284c7" />
+            <path d="M14 26V34C14 36.2 20.3 38 28 38C35.7 38 42 36.2 42 34V26" fill="#bae6fd" />
+            <ellipse cx="28" cy="34" rx="14" ry="4" fill="#ffffff" />
+            <circle cx="37" cy="31" r="1" fill="#0284c7" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Nhật ký Data
+            <span class="icon-tag-color" style="color: #38bdf8;">Xanh Sky</span>
+          </div>
+          <div class="icon-path">/data</div>
+          <div class="icon-desc">Toàn bộ kho dữ liệu data phân bổ</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_data_new)" />
+            <ellipse cx="28" cy="19" rx="14" ry="4" fill="#ffffff" />
+            <path d="M14 19V27C14 29 20 31 28 31C36 31 42 29 42 27V19" fill="#bae6fd" />
+            <path d="M14 27V35C14 37 20 39 28 39C36 39 42 37 42 35V27" fill="#7dd3fc" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Đối soát công bằng (Vàng Hổ Phách Sang Trọng - Cân Vàng Công Lý) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_fair_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f59e0b" /><stop offset="100%" stop-color="#b45309" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_fair_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="26.5" y="16" width="3" height="22" rx="1.5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="22" y="37" width="12" height="3" rx="1.5" fill="#ffffff" />
+            <rect x="15" y="19" width="26" height="2.5" rx="1.2" fill="#ffffff" />
+            <!-- Đĩa cân trái -->
+            <path d="M17 21L14 28H22L19 21" stroke="#fef3c7" stroke-width="1.2" />
+            <path d="M13 28C13 30.5 16 31.5 18 31.5C20 31.5 23 30.5 23 28H13Z" fill="#ffffff" />
+            <!-- Đĩa cân phải -->
+            <path d="M37 21L34 28H42L39 21" stroke="#fef3c7" stroke-width="1.2" />
+            <path d="M33 28C33 30.5 36 31.5 38 31.5C40 31.5 43 30.5 43 28H33Z" fill="#ffffff" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Đối soát công bằng
+            <span class="icon-tag-color" style="color: #fbbf24;">Hổ Phách</span>
+          </div>
+          <div class="icon-path">/fair-share</div>
+          <div class="icon-desc">Cân bằng & minh bạch chia data</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_fair_new)" />
+            <rect x="26.5" y="16" width="3" height="22" rx="1.5" fill="#ffffff" />
+            <rect x="15" y="19" width="26" height="2.5" rx="1.2" fill="#ffffff" />
+            <path d="M13 28C13 30.5 16 31.5 18 31.5C20 31.5 23 30.5 23 28H13Z" fill="#ffffff" />
+            <path d="M33 28C33 30.5 36 31.5 38 31.5C40 31.5 43 30.5 43 28H33Z" fill="#ffffff" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- AI Pre-screener (Xanh Ngọc Ma Trận - Matrix Teal) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_gate_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0d9488" /><stop offset="100%" stop-color="#134e4a" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_gate_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="26" r="3.5" fill="#0f766e" />
+            <path d="M28 20V22.5" stroke="#0f766e" stroke-width="2" stroke-linecap="round" />
+            <path d="M28 29.5V32" stroke="#0f766e" stroke-width="2" stroke-linecap="round" />
+            <path d="M22 26H24.5" stroke="#0f766e" stroke-width="2" stroke-linecap="round" />
+            <path d="M31.5 26H34" stroke="#0f766e" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            AI Pre-screener
+            <span class="icon-tag-color" style="color: #2dd4bf;">Matrix Teal</span>
+          </div>
+          <div class="icon-path">/gatekeeper</div>
+          <div class="icon-desc">Bộ lọc AI đánh giá chất lượng data</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_gate_new)" />
+            <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" />
+            <circle cx="28" cy="26" r="3.5" fill="#0f766e" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Ticket data lỗi (Đỏ Cam Cảnh Báo - Flame Warning) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_ticket_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ea580c" /><stop offset="100%" stop-color="#9a3412" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_ticket_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M15 19C15 17.8954 15.8954 17 17 17H39C40.1046 17 41 17.8954 41 19V25C39 25 37.5 26.5 37.5 28C37.5 29.5 39 31 41 31V37C41 38.1046 40.1046 39 39 39H17C15.8954 39 15 38.1046 15 37V31C17 31 18.5 29.5 18.5 28C18.5 26.5 17 25 15 25V19Z" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="27" y="21" width="2.5" height="7" rx="1.2" fill="#ea580c" />
+            <circle cx="28.2" cy="32" r="1.4" fill="#ea580c" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Ticket data lỗi
+            <span class="icon-tag-color" style="color: #fb923c;">Đỏ Cam</span>
+          </div>
+          <div class="icon-path">/tickets</div>
+          <div class="icon-desc">Báo cáo số lỗi & duyệt data cấp bù</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ticket_new)" />
+            <path d="M15 19H41V25C39 25 37.5 26.5 37.5 28C37.5 29.5 39 31 41 31V37H15V31C17 31 18.5 29.5 18.5 28C18.5 26.5 17 25 15 25V19Z" fill="#ffffff" />
+            <rect x="27" y="22" width="2.5" height="7" rx="1.2" fill="#ea580c" />
+            <circle cx="28.2" cy="32" r="1.4" fill="#ea580c" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Helpdesk (Xanh Hải Quân Cứu Hộ - Marine Navy) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_help_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284c7" /><stop offset="100%" stop-color="#1e3a8a" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_help_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="28" r="6" fill="#1e3a8a" />
+            <path d="M28 14V22" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />
+            <path d="M28 34V42" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />
+            <path d="M14 28H22" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />
+            <path d="M34 28H42" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Helpdesk
+            <span class="icon-tag-color" style="color: #60a5fa;">Hải Quân</span>
+          </div>
+          <div class="icon-path">/support-tickets</div>
+          <div class="icon-desc">Ticket yêu cầu IT & Hỗ trợ kỹ thuật</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_help_new)" />
+            <circle cx="28" cy="28" r="14" fill="#ffffff" />
+            <circle cx="28" cy="28" r="6" fill="#1e3a8a" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 4: TÀI CHÍNH ==================== -->
+  <div class="section-wrapper" id="tai-chinh">
+    <div class="section-head">
+      <h2>💰 Phân Hệ: TÀI CHÍNH</h2>
+      <span>(3 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Purchase Order (Xanh Lá Ngân Hàng - Bank Jade) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_po_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#059669" /><stop offset="100%" stop-color="#064e3b" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_po_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="13" y="17" width="30" height="22" rx="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="13" y="22" width="30" height="4" fill="#064e3b" />
+            <rect x="17" y="28" width="5.5" height="4.5" rx="1" fill="#fbbf24" stroke="#d97706" stroke-width="0.5" />
+            <rect x="25" y="30" width="13" height="2" rx="1" fill="#cbd5e1" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Purchase Order
+            <span class="icon-tag-color" style="color: #34d399;">Xanh Jade</span>
+          </div>
+          <div class="icon-path">/expenses</div>
+          <div class="icon-desc">Duyệt chi phí, mua sắm & thanh toán</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_po_new)" />
+            <rect x="13" y="17" width="30" height="22" rx="4.5" fill="#ffffff" />
+            <rect x="13" y="22" width="30" height="4" fill="#064e3b" />
+            <rect x="17" y="28" width="6" height="4.5" rx="1" fill="#fbbf24" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Sales Order (Vàng Kim Hoàng Gia - Golden Gold) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_so_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#eab308" /><stop offset="100%" stop-color="#ca8a04" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_so_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M16 15H40V39L36 37L32 39L28 37L24 39L20 37L16 39V15Z" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="22" r="3.5" fill="#fef9c3" />
+            <text x="28" y="24.5" font-size="7" font-weight="900" fill="#ca8a04" text-anchor="middle">₫</text>
+            <rect x="20" y="28" width="16" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="20" y="32" width="11" height="2" rx="1" fill="#cbd5e1" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Sales Order
+            <span class="icon-tag-color" style="color: #fde047;">Vàng Kim</span>
+          </div>
+          <div class="icon-path">/deposits</div>
+          <div class="icon-desc">Đơn đặt cọc & các đợt thanh toán</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_so_new)" />
+            <path d="M16 15H40V39L36 37L32 39L28 37L24 39L20 37L16 39V15Z" fill="#ffffff" />
+            <text x="28" y="25" font-size="9" font-weight="900" fill="#ca8a04" text-anchor="middle">₫</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Dự báo dòng tiền (Xanh Ngọc Biển Sâu - Deep Ocean Wave) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_cash_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#14b8a6" /><stop offset="100%" stop-color="#0f766e" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_cash_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <circle cx="28" cy="28" r="13" stroke="#ccfbf1" stroke-width="3" stroke-dasharray="24 16" filter="url(#softShadow)" />
+            <path d="M37 17L42 20L38 24" fill="#ffffff" />
+            <path d="M19 39L14 36L18 32" fill="#ffffff" />
+            <circle cx="28" cy="28" r="6" fill="#ffffff" />
+            <text x="28" y="30.5" font-size="7.5" font-weight="900" fill="#0f766e" text-anchor="middle">$</text>
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Dự báo dòng tiền
+            <span class="icon-tag-color" style="color: #2dd4bf;">Ocean Teal</span>
+          </div>
+          <div class="icon-path">/cash-flow</div>
+          <div class="icon-desc">Dự báo thu chi & lưu chuyển tiền tệ</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_cash_new)" />
+            <circle cx="28" cy="28" r="12" stroke="#ffffff" stroke-width="3" />
+            <circle cx="28" cy="28" r="5" fill="#ffffff" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 5: CHƯƠNG TRÌNH ==================== -->
+  <div class="section-wrapper" id="chuong-trinh">
+    <div class="section-head">
+      <h2>🎓 Phân Hệ: CHƯƠNG TRÌNH & ĐÀO TẠO</h2>
+      <span>(6 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Chương trình (Xanh Coban Kiến Trúc - Cobalt Azure) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_prog_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284c7" /><stop offset="100%" stop-color="#1d4ed8" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_prog_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M17 39V19C17 17.8954 17.8954 17 19 17H31C32.1046 17 33 17.8954 33 19V39H17Z" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M33 25H38C39.1046 25 40 25.8954 40 27V39H33V25Z" fill="#bae6fd" />
+            <rect x="21" y="21" width="3" height="3" rx="0.5" fill="#1d4ed8" />
+            <rect x="26" y="21" width="3" height="3" rx="0.5" fill="#1d4ed8" />
+            <rect x="21" y="27" width="3" height="3" rx="0.5" fill="#1d4ed8" />
+            <rect x="26" y="27" width="3" height="3" rx="0.5" fill="#1d4ed8" />
+            <rect x="23.5" y="34" width="4" height="5" rx="0.5" fill="#1d4ed8" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Chương trình
+            <span class="icon-tag-color" style="color: #60a5fa;">Cobalt Blue</span>
+          </div>
+          <div class="icon-path">/projects</div>
+          <div class="icon-desc">Chương trình đào tạo & cấu trúc dự án</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_prog_new)" />
+            <path d="M18 39V17H32V39H18Z" fill="#ffffff" />
+            <path d="M32 25H39V39H32V25Z" fill="#bae6fd" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Khóa học (Hồng Sen Rạng Rỡ - Fuchsia Rose) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_course_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ec4899" /><stop offset="100%" stop-color="#be185d" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_course_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M28 17L14 23L28 29L42 23L28 17Z" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M14 28L28 34L42 28" stroke="#fbcfe8" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M14 33L28 39L42 33" stroke="#f472b6" stroke-width="2.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Khóa học
+            <span class="icon-tag-color" style="color: #f472b6;">Hồng Sen</span>
+          </div>
+          <div class="icon-path">/projects?tab=campaigns</div>
+          <div class="icon-desc">Các lớp học phần, môn & chiến dịch</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_course_new)" />
+            <path d="M28 17L14 23L28 29L42 23L28 17Z" fill="#ffffff" />
+            <path d="M14 28L28 34L42 28" stroke="#ffffff" stroke-width="2.5" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Lịch học (Tím Lavender Trí Thức) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_sch_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#4f46e5" /><stop offset="100%" stop-color="#3730a3" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_sch_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#3730a3" />
+            <circle cx="28" cy="31" r="6" fill="#e0e7ff" />
+            <path d="M28 31L28 28" stroke="#3730a3" stroke-width="1.5" stroke-linecap="round" />
+            <path d="M28 31L31 31" stroke="#3730a3" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Lịch học
+            <span class="icon-tag-color" style="color: #818cf8;">Lavender</span>
+          </div>
+          <div class="icon-path">/schedules</div>
+          <div class="icon-desc">Thời khóa biểu lớp & lịch giảng viên</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_sch_new)" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" />
+            <circle cx="28" cy="30" r="5" fill="#3730a3" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Đối tác (Xanh Navy Doanh Nghiệp - Corporate Navy) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_comp_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#3b82f6" /><stop offset="100%" stop-color="#1e3a8a" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_comp_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M14 26L22 18L28 24L24 28L14 26Z" fill="#dbeafe" />
+            <path d="M42 26L34 18L28 24L32 28L42 26Z" fill="#dbeafe" />
+            <rect x="23" y="24" width="10" height="10" rx="3" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M25 27H31" stroke="#1e3a8a" stroke-width="1.8" stroke-linecap="round" />
+            <path d="M25 31H29" stroke="#1e3a8a" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Đối tác
+            <span class="icon-tag-color" style="color: #60a5fa;">Navy B2B</span>
+          </div>
+          <div class="icon-path">/companies</div>
+          <div class="icon-desc">Trường liên kết, đối tác & giảng viên</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_comp_new)" />
+            <rect x="21" y="21" width="14" height="14" rx="4" fill="#ffffff" />
+            <path d="M24 28H32" stroke="#1e3a8a" stroke-width="2" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tài liệu (Nâu Da Bò Sang Trọng - Ochre Leather) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_files_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#d97706" /><stop offset="100%" stop-color="#92400e" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_files_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M15 20C15 18.8954 15.8954 18 17 18H23L26 21H39C40.1046 21 41 21.8954 41 23V37C41 38.1046 40.1046 39 39 39H17C15.8954 39 15 38.1046 15 37V20Z" fill="#fde68a" />
+            <rect x="18" y="15" width="20" height="16" rx="2" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="22" y="19" width="12" height="1.8" rx="0.9" fill="#92400e" />
+            <rect x="22" y="23" width="8" height="1.8" rx="0.9" fill="#cbd5e1" />
+            <path d="M14 26H42V37C42 38.1046 41.1046 39 40 39H16C14.8954 39 14 38.1046 14 37V26Z" fill="#fbbf24" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Tài liệu
+            <span class="icon-tag-color" style="color: #f59e0b;">Nâu Da Bò</span>
+          </div>
+          <div class="icon-path">/files</div>
+          <div class="icon-desc">Kho tài liệu đám mây, biểu mẫu & SOP</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_files_new)" />
+            <path d="M15 20H24L27 23H41V38H15V20Z" fill="#ffffff" />
+            <path d="M14 27H42V39H14V27Z" fill="#fde68a" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Nhà cung cấp (Xám Than Titan Vận Tải - Logistics Slate) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_sup_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#475569" /><stop offset="100%" stop-color="#334155" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_sup_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="20" width="18" height="15" rx="2" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M32 24H37L41 29V35H32V24Z" fill="#ffffff" />
+            <path d="M33 26H36L39 30H33V26Z" fill="#475569" />
+            <circle cx="20" cy="36" r="3.5" fill="#0f172a" />
+            <circle cx="20" cy="36" r="1.5" fill="#ffffff" />
+            <circle cx="36" cy="36" r="3.5" fill="#0f172a" />
+            <circle cx="36" cy="36" r="1.5" fill="#ffffff" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Nhà cung cấp
+            <span class="icon-tag-color" style="color: #94a3b8;">Xám Titan</span>
+          </div>
+          <div class="icon-path">/suppliers</div>
+          <div class="icon-desc">Nhà cung ứng, thiết bị & chuỗi logistics</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_sup_new)" />
+            <rect x="14" y="20" width="18" height="15" rx="2" fill="#ffffff" />
+            <path d="M32 24H37L41 29V35H32V24Z" fill="#ffffff" />
+            <circle cx="20" cy="36" r="3" fill="#0f172a" />
+            <circle cx="36" cy="36" r="3" fill="#0f172a" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 6: NHÂN SỰ ==================== -->
+  <div class="section-wrapper" id="nhan-su">
+    <div class="section-head">
+      <h2>👔 Phân Hệ: NHÂN SỰ & TIỀN LƯƠNG</h2>
+      <span>(6 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Quản lý công (GIỮ NGUYÊN Cam Hoàng Hôn) -->
+      <div class="icon-card" style="border-color: rgba(255, 122, 0, 0.4);">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_att_main)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#ea580c" />
+            <rect x="20" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+            <rect x="33.2" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+            <circle cx="20" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="25.3" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="30.6" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="36" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="20" cy="34" r="1.8" fill="#ea580c" />
+            <circle cx="25.3" cy="34" r="1.8" fill="#ea580c" />
+            <circle cx="30.6" cy="34" r="1.8" fill="#cbd5e1" />
+            <circle cx="36" cy="34" r="1.8" fill="#cbd5e1" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Quản lý công
+            <span class="icon-tag-color" style="color: #ff7a00;">Cam Hoàng Hôn</span>
+          </div>
+          <div class="icon-path">/attendance</div>
+          <div class="icon-desc">Bảng ngày công, ca làm việc & điểm danh</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_att_main)" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#ea580c" />
+            <circle cx="24" cy="30" r="2.5" fill="#ea580c" />
+            <circle cx="32" cy="30" r="2.5" fill="#ea580c" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Phiếu lương (Hồng Tím Mận - Berry Fuchsia) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_pay_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#db2777" /><stop offset="100%" stop-color="#9d174d" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_pay_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="16" y="14" width="24" height="29" rx="3.5" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="22" r="4.5" fill="#fdf2f8" stroke="#db2777" stroke-width="1.2" />
+            <text x="28" y="25" font-size="7" font-weight="900" fill="#9d174d" text-anchor="middle">₫</text>
+            <rect x="20" y="29" width="16" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="20" y="33" width="12" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="20" y="37" width="14" height="2" rx="1" fill="#db2777" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Phiếu lương
+            <span class="icon-tag-color" style="color: #f472b6;">Berry Rose</span>
+          </div>
+          <div class="icon-path">/my-payslips</div>
+          <div class="icon-desc">Chi tiết bảng lương, thưởng & xác nhận ký</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_pay_new)" />
+            <rect x="16" y="14" width="24" height="29" rx="3.5" fill="#ffffff" />
+            <circle cx="28" cy="22" r="4.5" fill="#fdf2f8" />
+            <text x="28" y="25" font-size="7" font-weight="900" fill="#9d174d" text-anchor="middle">₫</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Phòng ban (Xanh Ngọc Biển Caribe - Caribbean Aqua) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_dept_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#06b6d4" /><stop offset="100%" stop-color="#0e7490" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_dept_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="22" y="15" width="12" height="8" rx="2" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="19" r="2" fill="#0e7490" />
+            <path d="M28 23V27H18V31" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+            <path d="M28 27H38V31" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+            <rect x="13" y="31" width="10" height="8" rx="2" fill="#ffffff" />
+            <circle cx="18" cy="35" r="1.8" fill="#0e7490" />
+            <rect x="33" y="31" width="10" height="8" rx="2" fill="#ffffff" />
+            <circle cx="38" cy="35" r="1.8" fill="#0e7490" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Phòng ban
+            <span class="icon-tag-color" style="color: #22d3ee;">Aqua Cyan</span>
+          </div>
+          <div class="icon-path">/consultants?tab=teams</div>
+          <div class="icon-desc">Cơ cấu tổ chức & sơ đồ nhóm phòng ban</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_dept_new)" />
+            <rect x="22" y="15" width="12" height="8" rx="2" fill="#ffffff" />
+            <rect x="13" y="31" width="10" height="8" rx="2" fill="#ffffff" />
+            <rect x="33" y="31" width="10" height="8" rx="2" fill="#ffffff" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Nhân sự công ty (Tím Thạch Anh Đậm - Deep Amethyst) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_hrm_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#7c3aed" /><stop offset="100%" stop-color="#5b21b6" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_hrm_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <circle cx="28" cy="21" r="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M20 37C20 32.5 23.5 30 28 30C32.5 30 36 32.5 36 37" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" />
+            <circle cx="18" cy="24" r="3.2" fill="#ddd6fe" />
+            <path d="M12 36C12 33 14.5 31.5 17.5 31.5" stroke="#ddd6fe" stroke-width="2" stroke-linecap="round" />
+            <circle cx="38" cy="24" r="3.2" fill="#ddd6fe" />
+            <path d="M38.5 31.5C41.5 31.5 44 33 44 36" stroke="#ddd6fe" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Nhân sự công ty
+            <span class="icon-tag-color" style="color: #a78bfa;">Tím Amethyst</span>
+          </div>
+          <div class="icon-path">/consultants</div>
+          <div class="icon-desc">Danh bạ & hồ sơ nhân sự toàn công ty</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_hrm_new)" />
+            <circle cx="28" cy="21" r="4.5" fill="#ffffff" />
+            <path d="M20 37C20 32.5 23.5 30 28 30C32.5 30 36 32.5 36 37" stroke="#ffffff" stroke-width="2.5" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tài khoản cá nhân (Xám Bạc Kim Loại - Steel Slate) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_acc_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#64748b" /><stop offset="100%" stop-color="#334155" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_acc_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <circle cx="28" cy="28" r="14" stroke="#ffffff" stroke-width="1.8" />
+            <circle cx="28" cy="23" r="5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M18.5 36C19.5 31.5 23.5 29.5 28 29.5C32.5 29.5 36.5 31.5 37.5 36" fill="#ffffff" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Tài khoản cá nhân
+            <span class="icon-tag-color" style="color: #94a3b8;">Xám Bạc</span>
+          </div>
+          <div class="icon-path">/account</div>
+          <div class="icon-desc">Hồ sơ cá nhân, bảo mật & đổi mật khẩu</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_acc_new)" />
+            <circle cx="28" cy="23" r="5" fill="#ffffff" />
+            <path d="M19 36C20 31.5 24 29.5 28 29.5C32 29.5 36 31.5 37 36" fill="#ffffff" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Nhân sự & Lương - HRM (Tím Mận Indigo Sâu - Royal Plum) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_hrm_full_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#6d28d9" /><stop offset="100%" stop-color="#4c1d95" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_hrm_full_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="23" r="3.2" fill="#4c1d95" />
+            <path d="M22 32C22 28.5 25 27 28 27C31 27 34 28.5 34 32" stroke="#4c1d95" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Nhân sự & Lương
+            <span class="icon-tag-color" style="color: #c084fc;">Royal Plum</span>
+          </div>
+          <div class="icon-path">/hrm</div>
+          <div class="icon-desc">Hợp đồng lao động, bảo hiểm & bảng lương</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_hrm_full_new)" />
+            <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" />
+            <circle cx="28" cy="24" r="3.2" fill="#4c1d95" />
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== NHÓM 7: CÀI ĐẶT HỆ THỐNG ==================== -->
+  <div class="section-wrapper" id="cai-dat">
+    <div class="section-head">
+      <h2>⚙️ Phân Hệ: CÀI ĐẶT HỆ THỐNG</h2>
+      <span>(6 Chức năng)</span>
+    </div>
+    <div class="icons-grid">
+      
+      <!-- Cài đặt hệ thống (Xám Thép Cơ Khí - Titanium Steel) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_set_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#475569" /><stop offset="100%" stop-color="#1e293b" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_set_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <g filter="url(#softShadow)">
+              <circle cx="24" cy="24" r="7" stroke="#ffffff" stroke-width="3" />
+              <path d="M24 14V17M24 31V34M14 24H17M31 24H34M17 17L19 19M29 29L31 31M17 31L19 29M29 19L31 17" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" />
+            </g>
+            <circle cx="36" cy="35" r="4.5" stroke="#94a3b8" stroke-width="2.2" />
+            <path d="M36 28V30M36 40V42M29 35H31M41 35H43" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Cài đặt hệ thống
+            <span class="icon-tag-color" style="color: #cbd5e1;">Xám Cơ Khí</span>
+          </div>
+          <div class="icon-path">/settings</div>
+          <div class="icon-desc">Cấu hình tham số, ca kíp & tích hợp chung</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_set_new)" />
+            <circle cx="24" cy="24" r="7" stroke="#ffffff" stroke-width="3" />
+            <circle cx="36" cy="35" r="4.5" stroke="#94a3b8" stroke-width="2.2" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Huấn luyện AI (Đỏ Mận Công Nghệ - Cyber Crimson) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_ai_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#be123c" /><stop offset="100%" stop-color="#881337" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_ai_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="18" y="18" width="20" height="20" rx="4" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="22" y="22" width="12" height="12" rx="2" fill="#881337" />
+            <circle cx="28" cy="28" r="2.5" fill="#facc15" />
+            <path d="M23 14V18M28 14V18M33 14V18" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+            <path d="M23 38V42M28 38V42M33 38V42" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+            <path d="M14 23H18M14 28H18M14 33H18" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+            <path d="M38 23H42M38 28H42M38 33H42" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Huấn luyện AI
+            <span class="icon-tag-color" style="color: #fb7185;">Crimson Red</span>
+          </div>
+          <div class="icon-path">/ai-training</div>
+          <div class="icon-desc">Huấn luyện Chatbot, RAG & tri thức AI</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ai_new)" />
+            <rect x="18" y="18" width="20" height="20" rx="4" fill="#ffffff" />
+            <rect x="23" y="23" width="10" height="10" rx="2" fill="#881337" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Quản lý tài khoản (Xanh Tím An Ninh - Shield Navy) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_acc_admin" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#4338ca" /><stop offset="100%" stop-color="#312e81" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_acc_admin)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="24" y="27" width="8" height="6" rx="1.5" fill="#f59e0b" />
+            <path d="M25.5 27V24C25.5 22.6 26.6 21.5 28 21.5C29.4 21.5 30.5 22.6 30.5 24V27" stroke="#d97706" stroke-width="1.5" stroke-linecap="round" fill="none" />
+            <circle cx="28" cy="30" r="1" fill="#78350f" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Quản lý tài khoản
+            <span class="icon-tag-color" style="color: #818cf8;">Shield Navy</span>
+          </div>
+          <div class="icon-path">/accounts</div>
+          <div class="icon-desc">Phân quyền, cấp tài khoản & an ninh truy cập</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_acc_admin)" />
+            <path d="M28 14L39 18V26C39 33 34 38 28 41C22 38 17 33 17 26V18L28 14Z" fill="#ffffff" />
+            <rect x="25" y="27" width="6" height="5" rx="1" fill="#f59e0b" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Vòng phân bổ (Xanh Chuối Sinh Động - Electric Lime) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_rounds_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#65a30d" /><stop offset="100%" stop-color="#3f6212" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_rounds_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <circle cx="28" cy="18" r="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="18" cy="34" r="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="38" cy="34" r="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M28 22V26L18 30V34" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+            <path d="M28 26L38 30V34" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Vòng phân bổ
+            <span class="icon-tag-color" style="color: #a3e635;">Electric Lime</span>
+          </div>
+          <div class="icon-path">/rounds</div>
+          <div class="icon-desc">Cấu hình thứ tự xoay vòng chia data</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_rounds_new)" />
+            <circle cx="28" cy="18" r="4" fill="#ffffff" />
+            <circle cx="18" cy="34" r="4" fill="#ffffff" />
+            <circle cx="38" cy="34" r="4" fill="#ffffff" />
+            <path d="M28 22V26L18 30M28 26L38 30" stroke="#ffffff" stroke-width="2" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Quy tắc định tuyến (Tím Điện Quang - Electric Violet) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_rules_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#9333ea" /><stop offset="100%" stop-color="#6b21a8" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_rules_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="15" y="24" width="8" height="8" rx="2" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="39" cy="19" r="4" fill="#ffffff" />
+            <circle cx="39" cy="37" r="4" fill="#ffffff" />
+            <path d="M23 28H29C32 28 32 19 35 19H39" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" />
+            <path d="M29 28C32 28 32 37 35 37H39" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" />
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Quy tắc định tuyến
+            <span class="icon-tag-color" style="color: #c084fc;">Violet Neon</span>
+          </div>
+          <div class="icon-path">/rules</div>
+          <div class="icon-desc">Quy định chặn, skip, giữ data & định tuyến</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_rules_new)" />
+            <rect x="15" y="24" width="8" height="8" rx="2" fill="#ffffff" />
+            <circle cx="39" cy="19" r="4" fill="#ffffff" />
+            <circle cx="39" cy="37" r="4" fill="#ffffff" />
+            <path d="M23 28H29C32 28 32 19 35 19M29 28C32 28 32 37 35 37" stroke="#ffffff" stroke-width="2" fill="none" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Tích hợp Data (Xanh Lam Ngọc Kết Nối - Connection Cyan) -->
+      <div class="icon-card">
+        <div class="icon-display">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <defs>
+              <linearGradient id="bg_integ_new" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0891b2" /><stop offset="100%" stop-color="#155e75" />
+              </linearGradient>
+            </defs>
+            <rect width="56" height="56" rx="16" fill="url(#bg_integ_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <g transform="rotate(-45 28 28)" filter="url(#softShadow)">
+              <rect x="16" y="24" width="14" height="8" rx="4" stroke="#ffffff" stroke-width="2.5" fill="none" />
+              <rect x="26" y="24" width="14" height="8" rx="4" stroke="#ffffff" stroke-width="2.5" fill="none" />
+            </g>
+          </svg>
+        </div>
+        <div class="icon-meta">
+          <div class="icon-name">
+            Tích hợp Data
+            <span class="icon-tag-color" style="color: #22d3ee;">Cyan Link</span>
+          </div>
+          <div class="icon-path">/integrations</div>
+          <div class="icon-desc">Webhook, Google Sheets, Zalo & Meta API</div>
+        </div>
+        <div class="icon-preview-row">
+          <span class="mini-preview-tag">Bản 32px:</span>
+          <svg width="32" height="32" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_integ_new)" />
+            <g transform="rotate(-45 28 28)">
+              <rect x="16" y="24" width="14" height="8" rx="4" stroke="#ffffff" stroke-width="2.5" fill="none" />
+              <rect x="26" y="24" width="14" height="8" rx="4" stroke="#ffffff" stroke-width="2.5" fill="none" />
+            </g>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== MÔ PHỎNG THỰC TẾ TRONG APP LAUNCHER ==================== -->
+  <div class="launcher-modal-mock" id="launcher-preview">
+    <div class="mock-title">
+      <span style="font-size: 22px;">🚀</span>
+      <span>Mô Phỏng Trực Quan Bộ Màu Đa Dạng Trong App Launcher</span>
+    </div>
+
+    <!-- Thanh tìm kiếm giả lập -->
+    <div style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-card); border-radius: 9999px; padding: 12px 24px; display: flex; align-items: center; gap: 12px; margin-bottom: 24px; max-width: 600px;">
+      <span style="color: var(--text-muted);">🔍</span>
+      <span style="color: var(--text-muted); font-size: 14px;">Tìm kiếm nhanh chức năng...</span>
+    </div>
+
+    <!-- Khu vực GẦN ĐÂY (Recent Items 56px với bộ màu đa dạng mới) -->
+    <div style="margin-bottom: 30px;">
+      <h4 style="font-size: 12px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px;">
+        Gần Đây (Mỗi icon một sắc thái riêng biệt)
+      </h4>
+      <div class="mock-recent-grid">
+        
+        <!-- 1. Quy trình (ĐỎ RUBY GIỮ MÀU) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_wf_main)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="15" y="14" width="26" height="30" rx="4" fill="#7f1d1d" />
+            <rect x="17" y="16" width="22" height="26" rx="2.5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="23" y="12" width="10" height="5" rx="1.5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.8" />
+            <circle cx="28" cy="14.5" r="1.2" fill="#64748b" />
+            <rect x="21" y="22" width="13" height="2" rx="1" fill="#cbd5e1" />
+            <rect x="21" y="27" width="14" height="2" rx="1" fill="#cbd5e1" />
+            <g transform="rotate(45 37 34)">
+              <rect x="35" y="24" width="4" height="14" rx="1" fill="#fbbf24" stroke="#ffffff" stroke-width="0.8" />
+              <path d="M35 38L37 41L39 38H35Z" fill="#1e293b" />
+            </g>
+          </svg>
+          <span class="mock-recent-label">Quy trình</span>
+        </div>
+
+        <!-- 2. Bàn làm việc (XANH EMERALD GIỮ MÀU) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ws_main)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="14" width="28" height="28" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="18" y="18" width="20" height="6" rx="2" fill="#ecfdf5" />
+            <rect x="18" y="18" width="4" height="6" rx="2" fill="#10b981" />
+            <rect x="18" y="26" width="20" height="6" rx="2" fill="#f0fdf4" />
+            <rect x="18" y="26" width="4" height="6" rx="2" fill="#34d399" />
+          </svg>
+          <span class="mock-recent-label">Bàn làm việc</span>
+        </div>
+
+        <!-- 3. Quản lý công (CAM HOÀNG HÔN GIỮ MÀU) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_att_main)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#ea580c" />
+            <rect x="20" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+            <rect x="33.2" y="13.5" width="2.8" height="5" rx="1.4" fill="#ffffff" />
+            <circle cx="20" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="25.3" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="30.6" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="36" cy="28" r="1.8" fill="#ea580c" />
+            <circle cx="20" cy="34" r="1.8" fill="#ea580c" />
+            <circle cx="25.3" cy="34" r="1.8" fill="#ea580c" />
+            <circle cx="30.6" cy="34" r="1.8" fill="#cbd5e1" />
+            <circle cx="36" cy="34" r="1.8" fill="#cbd5e1" />
+          </svg>
+          <span class="mock-recent-label">Quản lý công</span>
+        </div>
+
+        <!-- 4. Dashboard (Xanh Royal) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_dash_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="13" y="14" width="30" height="28" rx="5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="16" y="17" width="11" height="9" rx="2" fill="#dbeafe" />
+            <rect x="29" y="17" width="11" height="9" rx="2" fill="#eff6ff" />
+            <rect x="17" y="32" width="3" height="7" rx="1" fill="#93c5fd" />
+            <rect x="22" y="29" width="3" height="10" rx="1" fill="#3b82f6" />
+            <rect x="32" y="28" width="3" height="11" rx="1" fill="#1d4ed8" />
+          </svg>
+          <span class="mock-recent-label">Dashboard</span>
+        </div>
+
+        <!-- 5. Tiềm năng (Hồng Coral) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_cont_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="14" y="16" width="28" height="24" rx="4.5" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="21.5" cy="24" r="3.5" fill="#f43f5e" />
+            <path d="M17 32C17 29.5 19 28.5 21.5 28.5C24 28.5 26 29.5 26 32" stroke="#f43f5e" stroke-width="1.6" />
+            <rect x="28" y="22" width="10" height="2" rx="1" fill="#94a3b8" />
+          </svg>
+          <span class="mock-recent-label">Tiềm năng</span>
+        </div>
+
+        <!-- 6. Sales Order (Vàng Kim) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_so_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <path d="M16 15H40V39L36 37L32 39L28 37L24 39L20 37L16 39V15Z" fill="#ffffff" filter="url(#softShadow)" />
+            <circle cx="28" cy="22" r="3.5" fill="#fef9c3" />
+            <text x="28" y="24.5" font-size="7" font-weight="900" fill="#ca8a04" text-anchor="middle">₫</text>
+          </svg>
+          <span class="mock-recent-label">Sales Order</span>
+        </div>
+
+        <!-- 7. Bảng tin nội bộ (Tờ Báo Feed Tin Tức) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_feed_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <rect x="19" y="13" width="23" height="26" rx="3.5" fill="#fdf4ff" opacity="0.6" />
+            <rect x="14" y="16" width="25" height="27" rx="3.5" fill="#ffffff" filter="url(#softShadow)" />
+            <rect x="17" y="19" width="19" height="3" rx="1" fill="#a21caf" />
+            <rect x="17" y="24" width="8" height="8" rx="1.5" fill="#fae8ff" stroke="#e879f9" stroke-width="0.6" />
+            <rect x="27" y="24.5" width="9" height="1.8" rx="0.9" fill="#64748b" />
+            <rect x="27" y="27.5" width="9" height="1.8" rx="0.9" fill="#cbd5e1" />
+            <rect x="27" y="30.5" width="6" height="1.8" rx="0.9" fill="#cbd5e1" />
+            <rect x="17" y="35" width="9" height="1.6" rx="0.8" fill="#94a3b8" />
+            <rect x="17" y="38" width="7" height="1.6" rx="0.8" fill="#cbd5e1" />
+            <rect x="28" y="35" width="8" height="1.6" rx="0.8" fill="#94a3b8" />
+            <rect x="28" y="38" width="5" height="1.6" rx="0.8" fill="#cbd5e1" />
+          </svg>
+          <span class="mock-recent-label">Bảng tin</span>
+        </div>
+
+        <!-- 8. Cài đặt hệ thống (Xám Cơ Khí) -->
+        <div class="mock-recent-item">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect width="56" height="56" rx="16" fill="url(#bg_set_new)" />
+            <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+            <circle cx="24" cy="24" r="7" stroke="#ffffff" stroke-width="3" />
+            <path d="M24 14V17M24 31V34M14 24H17M31 24H34" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" />
+            <circle cx="36" cy="35" r="4.5" stroke="#94a3b8" stroke-width="2.2" />
+          </svg>
+          <span class="mock-recent-label">Cài đặt</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Khu vực DANH MỤC CHI TIẾT (32px + Text với các màu sắc riêng) -->
+    <div>
+      <h4 style="font-size: 12px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px;">
+        Mẫu Danh Mục Chi Tiết (Kích thước 32px sắc nét)
+      </h4>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 24px;">
+        
+        <!-- Quy trình -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-card);">
+          <svg width="34" height="34" viewBox="0 0 56 56" fill="none" style="flex-shrink: 0;">
+            <rect width="56" height="56" rx="16" fill="url(#bg_wf_main)" />
+            <rect x="15" y="14" width="26" height="30" rx="4" fill="#7f1d1d" />
+            <rect x="17" y="16" width="22" height="26" rx="2.5" fill="#ffffff" />
+            <rect x="23" y="12" width="10" height="5" rx="1.5" fill="#e2e8f0" />
+            <rect x="21" y="23" width="14" height="2.5" rx="1" fill="#cbd5e1" />
+          </svg>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main);">Quy trình</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Quản lý phê duyệt nghỉ phép, tạm ứng, chi phí</div>
+          </div>
+        </div>
+
+        <!-- Bàn làm việc -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-card);">
+          <svg width="34" height="34" viewBox="0 0 56 56" fill="none" style="flex-shrink: 0;">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ws_main)" />
+            <rect x="14" y="14" width="28" height="28" rx="5" fill="#ffffff" />
+            <rect x="18" y="18" width="20" height="6" rx="2" fill="#10b981" />
+            <rect x="18" y="26" width="20" height="6" rx="2" fill="#34d399" />
+          </svg>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main);">Bàn làm việc</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Nhiệm vụ cá nhân và danh sách đầu việc</div>
+          </div>
+        </div>
+
+        <!-- Quản lý công -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-card);">
+          <svg width="34" height="34" viewBox="0 0 56 56" fill="none" style="flex-shrink: 0;">
+            <rect width="56" height="56" rx="16" fill="url(#bg_att_main)" />
+            <rect x="14" y="16" width="28" height="26" rx="5" fill="#ffffff" />
+            <path d="M14 21C14 18.2386 16.2386 16 19 16H37C39.7614 16 42 18.2386 42 21V23H14V21Z" fill="#ea580c" />
+            <circle cx="24" cy="30" r="2.5" fill="#ea580c" />
+            <circle cx="32" cy="30" r="2.5" fill="#ea580c" />
+          </svg>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main);">Quản lý công</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Báo cáo check-in, bảng chấm công và xin nghỉ phép</div>
+          </div>
+        </div>
+
+        <!-- Sales Order -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-card);">
+          <svg width="34" height="34" viewBox="0 0 56 56" fill="none" style="flex-shrink: 0;">
+            <rect width="56" height="56" rx="16" fill="url(#bg_so_new)" />
+            <path d="M16 15H40V39L36 37L32 39L28 37L24 39L20 37L16 39V15Z" fill="#ffffff" />
+            <text x="28" y="25" font-size="9" font-weight="900" fill="#ca8a04" text-anchor="middle">₫</text>
+          </svg>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main);">Sales Order</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Theo dõi tiến độ đơn đặt cọc và các đợt thanh toán</div>
+          </div>
+        </div>
+
+        <!-- Học viên -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-card);">
+          <svg width="34" height="34" viewBox="0 0 56 56" fill="none" style="flex-shrink: 0;">
+            <rect width="56" height="56" rx="16" fill="url(#bg_stu_new)" />
+            <path d="M28 16L14 23L28 30L42 23L28 16Z" fill="#ffffff" />
+            <path d="M20 27V33C20 35.5 24 37 28 37C32 37 36 35.5 36 33V27" stroke="#ffffff" stroke-width="2.5" />
+          </svg>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main);">Học viên</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Hồ sơ tuyển sinh, nộp lệ phí và quản lý học vụ</div>
+          </div>
+        </div>
+
+        <!-- Huấn luyện AI -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-card);">
+          <svg width="34" height="34" viewBox="0 0 56 56" fill="none" style="flex-shrink: 0;">
+            <rect width="56" height="56" rx="16" fill="url(#bg_ai_new)" />
+            <rect x="18" y="18" width="20" height="20" rx="4" fill="#ffffff" />
+            <rect x="23" y="23" width="10" height="10" rx="2" fill="#881337" />
+          </svg>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-main);">Huấn luyện AI</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Huấn luyện AI chatbot tư vấn và tự động hóa hỗ trợ</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 50px; text-align: center; color: var(--text-muted); font-size: 13px;">
+    MYERP App Icon Design System • Đa Dạng Sắc Thái • Tinh Gọn • Đúng Bản Chất Nghiệp Vụ
+  </div>
+
+</body>
+</html>

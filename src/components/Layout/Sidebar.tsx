@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import { AppIcon } from '../common/AppIcons';
 import { LayoutDashboard, Users, GitBranch, Settings, ChevronLeft, Webhook, Link2, Database, ShieldCheck, Ticket, Plus, Scale, Filter, Cpu, Building2, TrendingUp, FileText, Calendar, Package, Receipt, CreditCard, BarChart2, Truck, File, Boxes, Layers, Clock, Home, CheckSquare, LifeBuoy, User, Clipboard, Globe, GraduationCap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -935,16 +936,16 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                           )}
                           {/* Icon Box — with badge dot when collapsed */}
                           <div style={{
-                            width: 30, height: 30, borderRadius: 8,
-                            background: isActive ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)',
+                            width: 30, height: 30,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0, transition: 'all 0.2s', position: 'relative'
                           }}>
-                            <Icon size={15} color={isActive ? '#dadada' : 'rgba(255,255,255,0.5)'} />
+                            <AppIcon name={name} size={26} />
                             {isCollapsed && badgeCount > 0 && (
                               <div style={{
-                                position: 'absolute', top: 3, right: 3, width: 6, height: 6,
-                                borderRadius: '50%', background: badgeKey === 'gatekeeper' ? '#f59e0b' : '#ef4444'
+                                position: 'absolute', top: 0, right: 0, width: 8, height: 8,
+                                borderRadius: '50%', background: badgeKey === 'gatekeeper' ? '#f59e0b' : '#ef4444',
+                                boxShadow: '0 0 0 1.5px var(--sidebar-bg)'
                               }} />
                             )}
                           </div>
