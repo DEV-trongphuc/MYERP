@@ -121,13 +121,6 @@ function runMailerCron($conn) {
         
         $cleanTo = strtolower(trim($to));
         $isInternal = isset($internalEmailsMap[$cleanTo]) || (substr($cleanTo, -13) === '@ideas.edu.vn');
-        if (!$isInternal) {
-            echo "[" . date('Y-m-d H:i:s') . "] [SECURITY SHIELD] BLOCKED email to customer: $cleanTo (Mail ID: $mailId)\n";
-            $errMsgBlocked = 'BLOCKED: Customer email disabled by system policy';
-            $updFailStmt->bind_param("si", $errMsgBlocked, $mailId);
-            $updFailStmt->execute();
-            continue;
-        }
 
         // BẢO VỆ TUYỆT ĐỐI CC: Chỉ cho phép email nội bộ vào danh sách CC
         $safeCcList = [];

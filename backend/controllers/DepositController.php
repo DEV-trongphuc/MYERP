@@ -1376,6 +1376,7 @@ class DepositController {
         $stmt = $this->db->prepare("
             SELECT d.*, m.milestone_name, m.expected_amount, m.expected_pay_date, m.status as milestone_status,
                    c.full_name, c.email as contact_email, c.phone as contact_phone,
+                   c.student_id, c.admission_date, c.program,
                    u.email as creator_email, u.full_name as creator_name,
                    o.email as owner_email, o.full_name as owner_name,
                    p.name as project_name
@@ -1399,6 +1400,9 @@ class DepositController {
         }
 
         $custName = trim($row['full_name'] ?? '');
+        $studentId = trim($row['student_id'] ?? '');
+        $programName = !empty($row['program']) ? trim($row['program']) : trim($row['project_name'] ?? '');
+        $admissionDateStr = !empty($row['admission_date']) ? date('d/m/Y', strtotime($row['admission_date'])) : 'Theo thông báo của Viện';
         $payDateStr = !empty($row['expected_pay_date']) 
             ? date('d/m/Y', strtotime($row['expected_pay_date'])) 
             : 'Chưa thiết lập';
@@ -1410,29 +1414,85 @@ class DepositController {
         $saleEmail = !empty($row['owner_email']) ? $row['owner_email'] : $row['creator_email'];
         $saleName = !empty($row['owner_name']) ? $row['owner_name'] : $row['creator_name'];
 
-        // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO KHÁCH HÀNG / HỌC VIÊN.
-        // TẤT CẢ THÔNG BÁO NHẮC ĐỀU CHỈ GỬI CHO SALE CHĂM SÓC.
-        if (empty($saleEmail)) {
-            respond(400, null, 'Không tìm thấy email của Sale chăm sóc để gửi nhắc nhở', false);
+        if ($remindTarget === 1) {
+            // Option 1: Gửi trực tiếp cho Học viên (nếu không có email thì fallback về Sale)
+            $hasEmail = !empty(trim($row['contact_email'] ?? ''));
+            if ($hasEmail) {
+                $emailSubject = "[IDEAS] Nhắc nhở lịch thanh toán: " . $row['milestone_name'];
+                $emailTitle = "NHẮC NHỞ THANH TOÁN";
+
+                $studentIdRow = !empty($studentId) 
+                    ? "<tr><td style=\"padding: 6px 0; color: #64748b; width: 150px;\">Mã học viên (Student ID):</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($studentId) . "</td></tr>" 
+                    : "";
+
+                $emailContent = "Chào <strong>" . htmlspecialchars($custName) . "</strong>,<br/><br/>" .
+                                "Đây là thông báo nhắc lịch thanh toán tự động theo hợp đồng đào tạo cho đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/><br/>" .
+                                "<table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b; width: 150px;\">Họ và tên:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($custName) . "</td></tr>" .
+                                $studentIdRow .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Chương trình:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($programName) . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Ngày nhập học:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($admissionDateStr) . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Đợt thanh toán:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . htmlspecialchars($row['milestone_name']) . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Số tiền cần đóng:</td><td style=\"padding: 6px 0; font-weight: 700; color: #BD1D2D; font-size: 15px;\">" . $amountStr . "</td></tr>" .
+                                "<tr><td style=\"padding: 6px 0; color: #64748b;\">Hạn thanh toán:</td><td style=\"padding: 6px 0; font-weight: 600; color: #0f172a;\">" . $payDateStr . "</td></tr>" .
+                                "</table><br/>" .
+                                "Vui lòng hoàn tất thanh toán và gửi hình ảnh Ủy nhiệm chi (UNC) cho bộ phận phụ trách hoặc phản hồi email này.<br/><br/>" .
+                                "Trân trọng cảm ơn Anh/Chị!";
+
+                sendEmailNotification($row['contact_email'], $emailSubject, $emailTitle, $emailContent, '', false, 0, true);
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_CUSTOMER_PAYMENT', 'deposit', $id, "Gửi email nhắc nhở thanh toán đợt {$row['milestone_name']} cho học viên $custName");
+
+                $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
+                $stmtUpd->execute([$milestoneId]);
+
+                respond(200, null, 'Đã gửi email nhắc lịch thanh toán tới học viên thành công');
+            } else {
+                if (empty($saleEmail)) {
+                    respond(400, null, 'Học viên không có email và không tìm thấy email Sale chăm sóc để gửi nhắc nhở', false);
+                }
+
+                $emailSubject = "[IDEAS] [Fallback] Nhắc lịch thanh toán của học viên: " . $custName;
+                $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
+                $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
+                                "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . "). Học viên chưa có email nên hệ thống fallback gửi cho Sale phụ trách.<br/><br/>" .
+                                "• Chương trình: <strong>" . htmlspecialchars($programName) . "</strong><br/>" .
+                                "• Đợt thanh toán: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong><br/>" .
+                                "• Số tiền cần thanh toán: <strong>" . $amountStr . "</strong><br/>" .
+                                "• Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/><br/>" .
+                                "Vui lòng chủ động liên hệ hỗ trợ học viên hoàn thành học phí đúng hạn.";
+
+                sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false, 0, false);
+                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_SALE_FALLBACK', 'deposit', $id, "Gửi email nhắc nhở fallback cho Sale $saleName chăm sóc học viên $custName do học viên không có email");
+
+                $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
+                $stmtUpd->execute([$milestoneId]);
+
+                respond(200, null, 'Học viên không có email. Đã gửi email nhắc nhở cho Sale chăm sóc thay thế');
+            }
+        } else {
+            // Option 2 (Mặc định): Chỉ gửi nhắc cho Sale chăm sóc
+            if (empty($saleEmail)) {
+                respond(400, null, 'Không tìm thấy email của Sale chăm sóc để gửi nhắc nhở', false);
+            }
+
+            $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+            $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
+            $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
+                            "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/><br/>" .
+                            "• Chương trình: <strong>" . htmlspecialchars($programName) . "</strong><br/>" .
+                            "• Đợt thanh toán: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong><br/>" .
+                            "• Số tiền cần thanh toán: <strong>" . $amountStr . "</strong><br/>" .
+                            "• Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/><br/>" .
+                            "Vui lòng chủ động liên hệ nhắc nhở học viên thanh toán đúng tiến độ.";
+
+            sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false, 0, false);
+            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_SALE_DIRECT', 'deposit', $id, "Gửi email nhắc nhở trực tiếp cho Sale $saleName về hạn thanh toán của học viên $custName");
+
+            $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $stmtUpd->execute([$milestoneId]);
+
+            respond(200, null, 'Đã gửi email nhắc nhở tới Sale chăm sóc thành công');
         }
-
-        $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
-        $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
-        $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
-                        "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/>" .
-                        "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                        "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
-                        "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
-                        "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
-
-        sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
-
-        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_SALE_DIRECT', 'deposit', $id, "Gửi email nhắc nhở trực tiếp cho Sale $saleName về hạn thanh toán của khách $custName");
-
-        $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
-        $stmtUpd->execute([$milestoneId]);
-
-        respond(200, null, 'Đã gửi email nhắc nhở tới Sale chăm sóc thành công');
     }
 
     public function getComments(array $auth, int $id): void {
