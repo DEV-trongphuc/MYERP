@@ -111,7 +111,7 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
 }) => {
   const [selectedBg, setSelectedBg] = useState<string>(currentBg || '');
   const [selectedCols, setSelectedCols] = useState<number>(currentCols || 4);
-  const [selectedOverlay, setSelectedOverlay] = useState<number>(currentOverlay ?? 35);
+  const [selectedOverlay, setSelectedOverlay] = useState<number>(currentOverlay ?? 50);
   const [activeTab, setActiveTab] = useState<'wallpapers' | 'patterns' | 'custom'>('wallpapers');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedPreview, setUploadedPreview] = useState<string>('');
@@ -208,10 +208,10 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
   const handleReset = () => {
     setSelectedBg('');
     setSelectedCols(4);
-    setSelectedOverlay(35);
+    setSelectedOverlay(50);
     setUploadedPreview('');
-    onSave('', 4, 35);
-    toast.success('Đã đặt lại giao diện mặc định!');
+    onSave('', 4, 50);
+    toast.success('Đã đặt lại giao diện mặc định (4 cột)!');
     onClose();
   };
 
@@ -648,7 +648,7 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
                 <span>10% (Nhìn rõ ảnh)</span>
-                <span>40% (Khuyến nghị)</span>
+                <span>50% (Khuyến nghị)</span>
                 <span>85% (Tối đa tương phản)</span>
               </div>
             </div>

@@ -276,7 +276,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   });
   const { language, setLanguage, t } = useLanguage();
   const { showConfirm, closeConfirm } = useUIStore();
-  const [showWorkspaceHelpModal, setShowWorkspaceHelpModal] = useState(false);
   const [showTicketHelpModal, setShowTicketHelpModal] = useState(false);
   const [showDatabankHelpModal, setShowDatabankHelpModal] = useState(false);
   const [sysSettings, setSysSettings] = useState<any>(null);
@@ -587,12 +586,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [wsCols, setWsCols] = useState<number>(() => {
     const uid = currentUser?.id || user?.id;
     const val = uid ? localStorage.getItem(`ws_custom_cols_${uid}`) : null;
-    return val ? Number(val) : 3;
+    return val ? Number(val) : 4;
   });
   const [wsOverlay, setWsOverlay] = useState<number>(() => {
     const uid = currentUser?.id || user?.id;
     const val = uid ? localStorage.getItem(`ws_custom_overlay_${uid}`) : null;
-    return val ? Number(val) : 40;
+    return val ? Number(val) : 50;
   });
 
   useEffect(() => {
@@ -5047,17 +5046,42 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     ];
 
     return (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: wsViewMode === 'focus' ? '0' : '1rem', 
-        paddingBottom: wsViewMode === 'focus' ? '0' : (isMobile ? '120px' : '200px'),
-        height: wsViewMode === 'focus' ? 'calc(100vh - 120px)' : 'auto',
-        overflow: wsViewMode === 'focus' ? 'hidden' : 'visible',
-        width: '100%',
-        maxWidth: '100%',
-        boxSizing: 'border-box'
-      }}>
+      <div 
+        className="workspace-custom-wrapper"
+        style={{ 
+          position: 'relative',
+          borderRadius: '0',
+          overflow: 'hidden',
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: wsViewMode === 'focus' ? '0' : '1rem', 
+          padding: wsBg ? (isMobile ? '12px' : '1.5rem 2.5rem') : '0',
+          paddingBottom: wsViewMode === 'focus' ? '0' : (isMobile ? '120px' : '200px'),
+          height: wsViewMode === 'focus' ? 'calc(100vh - 120px)' : 'auto',
+          minHeight: wsBg ? 'calc(100vh - 120px)' : 'auto',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
+          backgroundImage: wsBg ? (wsBg.startsWith('linear-gradient') || wsBg.startsWith('radial-gradient') ? wsBg : `url("${wsBg}")`) : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+          transition: 'all 0.3s ease'
+        }}>
+        {wsBg && (
+          <div 
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: `rgba(15, 23, 42, ${((wsOverlay ?? 50) / 100)})`,
+              backdropFilter: (wsOverlay ?? 50) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 50) / 5)}px)` : 'none',
+              WebkitBackdropFilter: (wsOverlay ?? 50) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 50) / 5)}px)` : 'none',
+              zIndex: 0,
+              pointerEvents: 'none'
+            }}
+          />
+        )}
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: wsViewMode === 'focus' ? '0' : '1rem', width: '100%' }}>
         {wsViewMode !== 'focus' && (
           <>
             {/* Workspace Header */}
@@ -5078,44 +5102,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 gap: '8px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
-                  <h1 className="page-title" style={{ margin: 0, fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  <h1 className="page-title" style={{ 
+                    margin: 0, 
+                    fontSize: isMobile ? '1.15rem' : '1.35rem', 
+                    fontWeight: 800, 
+                    whiteSpace: 'nowrap', 
+                    flexShrink: 0,
+                    color: wsBg ? '#ffffff' : 'var(--color-text)',
+                    textShadow: wsBg ? '0 2px 8px rgba(0,0,0,0.7)' : 'none'
+                  }}>
                     {t("Bàn làm việc")}
                   </h1>
-                  
-                  {/* Info Button */}
-                  <button
-                    onClick={() => setShowWorkspaceHelpModal(true)}
-                    style={{
-                      background: theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
-                      border: '1px solid var(--color-border)',
-                      padding: isMobile ? '0' : '2px 8px',
-                      width: isMobile ? '24px' : 'auto',
-                      height: '24px',
-                      borderRadius: isMobile ? '50%' : '20px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px',
-                      cursor: 'pointer',
-                      color: 'var(--color-text-muted)',
-                      transition: 'all 0.2s',
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.color = 'var(--color-primary)';
-                      e.currentTarget.style.borderColor = 'var(--color-primary-light)';
-                      e.currentTarget.style.background = 'var(--color-primary-light)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.color = 'var(--color-text-muted)';
-                      e.currentTarget.style.borderColor = 'var(--color-border)';
-                      e.currentTarget.style.background = theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)';
-                    }}
-                    title={t("Xem hướng dẫn sử dụng Bàn làm việc")}
-                  >
-                    <Info size={12} />
-                    {!isMobile && <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>{t("Giải thích cơ chế")}</span>}
-                  </button>
                   
                   {/* Completed Calls Count Pill */}
                   {isSaleUser && (
@@ -5126,13 +5123,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',
-                        background: 'rgba(16, 185, 129, 0.08)',
-                        border: '1px solid rgba(16, 185, 129, 0.15)',
+                        background: wsBg ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.08)',
+                        border: wsBg ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(16, 185, 129, 0.15)',
+                        backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                        WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
                         padding: '2px 8px',
                         borderRadius: '20px',
                         fontSize: '0.7rem',
                         fontWeight: 700,
-                        color: '#10b981',
+                        color: wsBg ? '#6ee7b7' : '#10b981',
                         cursor: 'pointer',
                         userSelect: 'none',
                         whiteSpace: 'nowrap',
@@ -6110,6 +6109,32 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   </button>
                 </div>
               )}
+
+              {/* Workspace Customizer Button */}
+              <button
+                onClick={() => setShowWorkspaceCustomizer(true)}
+                title={t('Tùy biến giao diện Bàn làm việc')}
+                style={{
+                  height: '32px',
+                  padding: isMobile ? '0 8px' : '0 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  background: showWorkspaceCustomizer ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                  color: showWorkspaceCustomizer ? 'var(--color-primary)' : 'var(--color-text)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  flexShrink: 0
+                }}
+                className="hover-lift"
+              >
+                <Palette size={14} style={{ color: 'var(--color-primary)' }} />
+                {!isMobile && <span>{t('Giao diện')}</span>}
+              </button>
             </div>
           </div>
         </div>
@@ -6598,7 +6623,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           </div>
         ) : wsViewMode === 'grid' ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '100px' : '40px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : `repeat(${wsCols || 4}, minmax(0, 1fr))`, gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '100px' : '40px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
             {paginatedWsTasks.map(task => {
               const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
               const isToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
@@ -7800,6 +7825,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         )}
 
         {/* Task Details Modal moved to root level */}
+        </div>
       </div>
     );
   };
@@ -18521,127 +18547,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         document.body
       )}
 
-      {/* Interactive Explanation Modals */}
-      <CustomModal
-        isOpen={showWorkspaceHelpModal}
-        onClose={() => setShowWorkspaceHelpModal(false)}
-        title={t("Hướng dẫn sử dụng Bàn làm việc")}
-        width="760px"
-      >
-        <div style={{ padding: '0.25rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 12, 
-            padding: '0.875rem 1rem', 
-            background: 'var(--color-primary-light)', 
-            border: '1px solid rgba(163, 20, 34, 0.15)', 
-            borderRadius: 12 
-          }}>
-            <Info size={24} color="var(--color-primary)" style={{ flexShrink: 0 }} />
-            <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
-              {t("Bàn làm việc (Workspace) là trung tâm quản lý tất cả nhiệm vụ và hoạt động cần xử lý của bạn trong ngày. Hệ thống phân loại công việc thành 3 nhóm độc lập:")}
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {/* Nhóm 1 */}
-            <div style={{ 
-              display: 'flex', 
-              gap: 12, 
-              padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(59, 130, 246, 0.04)' : 'rgba(59, 130, 246, 0.02)', 
-              borderLeft: '4px solid #3b82f6', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
-            }}>
-              <Users size={20} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
-                  {t("1. Công việc khách hàng (Client Tasks)")}
-                </h5>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                  {t("Các công việc gắn trực tiếp với hồ sơ khách hàng hoặc deal giao dịch (gọi điện, hẹn gặp, ký cọc...). Bất kỳ cập nhật nào tại đây sẽ đồng bộ trực tiếp vào Nhật ký hoạt động của khách hàng đó.")}
-                </p>
-              </div>
-            </div>
-
-            {/* Nhóm 2 */}
-            <div style={{ 
-              display: 'flex', 
-              gap: 12, 
-              padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(16, 185, 129, 0.04)' : 'rgba(16, 185, 129, 0.02)', 
-              borderLeft: '4px solid #10b981', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
-            }}>
-              <Building2 size={20} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
-                  {t("2. Công việc nội bộ team (Internal Tasks)")}
-                </h5>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                  {t("Công việc chung của phòng ban hoặc công ty giao xuống, được phân loại cụ thể thành: Nhiệm vụ (Task nội bộ), Thông báo (Yêu cầu đọc), Chiến dịch (Bán hàng chung) và Chính sách (Quy định cần tuân thủ).")}
-                </p>
-              </div>
-            </div>
-
-            {/* Nhóm 3 */}
-            <div style={{ 
-              display: 'flex', 
-              gap: 12, 
-              padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(139, 92, 246, 0.04)' : 'rgba(139, 92, 246, 0.02)', 
-              borderLeft: '4px solid #8b5cf6', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
-            }}>
-              <User size={20} color="#8b5cf6" style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
-                  {t("3. Công việc cá nhân (Personal Tasks)")}
-                </h5>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                  {t("Nhiệm vụ tự lập để quản lý quỹ thời gian cá nhân của bạn. Chỉ có bạn mới nhìn thấy các công việc này, giúp bạn chủ động ghi chú các đầu việc nhỏ lẻ ngoài lề.")}
-                </p>
-              </div>
-            </div>
-
-            {/* Daily Calls Tracker */}
-            <div style={{ 
-              display: 'flex', 
-              gap: 12, 
-              padding: '1rem', 
-              background: theme === 'dark' ? 'rgba(245, 158, 11, 0.04)' : 'rgba(245, 158, 11, 0.02)', 
-              borderLeft: '4px solid #f59e0b', 
-              borderTop: '1px solid var(--color-border-light)',
-              borderRight: '1px solid var(--color-border-light)',
-              borderBottom: '1px solid var(--color-border-light)',
-              borderRadius: '0 8px 8px 0'
-            }}>
-              <Phone size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <h5 style={{ fontSize: '0.875rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--color-text)' }}>
-                  {t("Theo dõi cuộc gọi hàng ngày (Calls Completed)")}
-                </h5>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.4 }}>
-                  {t("Chỉ số \"Đã gọi\" trên tiêu đề đếm tổng số cuộc gọi mà bạn đã thực hiện và lưu nhật ký thành công trong ngày hôm nay. Bấm vào chỉ số này để xem nhanh danh sách chi tiết các cuộc gọi đó.")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem', gap: '0.75rem', borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem' }}>
-          <button className="btn primary" onClick={() => setShowWorkspaceHelpModal(false)} style={{ minWidth: 100 }}>{t("Đồng ý")}</button>
-        </div>
-      </CustomModal>
+      {/* Workspace Customizer Modal */}
+      {showWorkspaceCustomizer && (
+        <WorkspaceCustomizerModal
+          isOpen={showWorkspaceCustomizer}
+          onClose={() => setShowWorkspaceCustomizer(false)}
+          currentBg={wsBg}
+          currentCols={wsCols}
+          currentOverlay={wsOverlay}
+          onSave={(bg, cols, overlay) => {
+            setWsBg(bg);
+            setWsCols(cols);
+            setWsOverlay(overlay);
+            const uid = currentUser?.id || user?.id;
+            if (uid) {
+              localStorage.setItem(`ws_custom_bg_${uid}`, bg);
+              localStorage.setItem(`ws_custom_cols_${uid}`, String(cols));
+              localStorage.setItem(`ws_custom_overlay_${uid}`, String(overlay));
+            }
+          }}
+          userId={currentUser?.id || user?.id}
+        />
+      )}
 
       <CustomModal
         isOpen={showTicketHelpModal}
