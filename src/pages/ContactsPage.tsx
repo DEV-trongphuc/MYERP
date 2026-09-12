@@ -353,15 +353,15 @@ const FMT_VND = (n: any) => {
 const AGO_DAYS = (d: string) => d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 999;
 
 const DEFAULT_PIPELINE_STAGES = [
-  { id: '31', name: '01 – New Lead', system_slug: 'new_lead', color: '#2563eb', order_index: 1 },
-  { id: '32', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#64748b', order_index: 2 },
-  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#06b6d4', order_index: 3 },
-  { id: '34', name: '04 – Needed', system_slug: 'needed', color: '#7c3aed', order_index: 4 },
+  { id: '31', name: '01 – New Lead', system_slug: 'new_lead', color: '#f97316', order_index: 1 },
+  { id: '32', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#eab308', order_index: 2 },
+  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
+  { id: '34', name: '04 – Needed', system_slug: 'needed', color: '#ef4444', order_index: 4 },
   { id: '35', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#0d9488', order_index: 5 },
   { id: '36', name: '06 – Program Matched', system_slug: 'program_matched', color: '#0284c7', order_index: 6 },
   { id: '37', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#d97706', order_index: 7 },
   { id: '38', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#ea580c', order_index: 8 },
-  { id: '39', name: '09 – Application Started', system_slug: 'application_started', color: '#e11d48', order_index: 9 },
+  { id: '39', name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
   { id: '40', name: '10 – Application Completed', system_slug: 'application_completed', color: '#4338ca', order_index: 10 },
   { id: '41', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#65a30d', order_index: 11 },
   { id: '42', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#16a34a', order_index: 12 },

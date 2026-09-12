@@ -12582,15 +12582,15 @@ switch ($action) {
 
                 $keepIds = [];
                 $standardStageColors = [
-                    'new_lead'                => '#2563eb', // 01: Blue
-                    'contact_attempted'       => '#64748b', // 02: Slate Blue-Grey
-                    'connected'               => '#06b6d4', // 03: Cyan
-                    'needed'                  => '#7c3aed', // 04: Violet
+                    'new_lead'                => '#f97316', // 01: Orange (Màu cam)
+                    'contact_attempted'       => '#eab308', // 02: Yellow (Màu vàng)
+                    'connected'               => '#8b5cf6', // 03: Purple (Màu tím)
+                    'needed'                  => '#ef4444', // 04: Red (Màu đỏ)
                     'discovery_completed'     => '#0d9488', // 05: Teal
                     'program_matched'         => '#0284c7', // 06: Sky Blue
                     'proposal_sent'           => '#d97706', // 07: Amber / Warm Gold
                     'evaluation_objection'    => '#ea580c', // 08: Bright Orange
-                    'application_started'     => '#e11d48', // 09: Rose Red
+                    'application_started'     => '#f59e0b', // 09: Amber / Yellow-Orange (Màu vàng cam)
                     'application_completed'   => '#4338ca', // 10: Indigo / Deep Blue
                     'admission_approved'      => '#65a30d', // 11: Lime Green
                     'offer_accepted'          => '#16a34a', // 12: Vibrant Green

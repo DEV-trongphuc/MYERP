@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 267;
+$targetVersion = 268;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3114,8 +3114,20 @@ try {
         $logMsg("Nâng cấp lên phiên bản 267 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 268 && $targetVersion >= 268) {
+        $logMsg("Bắt đầu Nâng cấp v268: Cập nhật màu sắc các giai đoạn pipeline (01 cam, 02 vàng, 03 tím, 04 đỏ, 09 vàng cam)...", "info");
+
+        $conn->query("UPDATE `pipeline_stages` SET `color` = '#f97316' WHERE `system_slug` = 'new_lead'");
+        $conn->query("UPDATE `pipeline_stages` SET `color` = '#eab308' WHERE `system_slug` = 'contact_attempted'");
+        $conn->query("UPDATE `pipeline_stages` SET `color` = '#8b5cf6' WHERE `system_slug` = 'connected'");
+        $conn->query("UPDATE `pipeline_stages` SET `color` = '#ef4444' WHERE `system_slug` = 'needed'");
+        $conn->query("UPDATE `pipeline_stages` SET `color` = '#f59e0b' WHERE `system_slug` = 'application_started'");
+
+        $logMsg("Nâng cấp lên phiên bản 268 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '267') ON DUPLICATE KEY UPDATE setting_value = '267'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '268') ON DUPLICATE KEY UPDATE setting_value = '268'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 
