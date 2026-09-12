@@ -7333,8 +7333,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
 
                     {/* Info Section */}
                     <div className={styles.profileInfoSection}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '2px', flexWrap: 'wrap' }}>
-                        <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', rowGap: '8px' }}>
+                        <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px', margin: 0, marginRight: '4px' }}>
                           {(isProfileLoading && !formData.full_name && !contact?.full_name) ? (
                             <Skeleton width={180} height={26} borderRadius={6} />
                           ) : (
@@ -7358,9 +7358,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             {copiedField === 'name' ? <Check size={13} className="text-success" /> : <Copy size={13} />}
                           </button>
                         </h2>
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => formData.phone && showCall(formData.phone)}>
                             <Phone size={12} style={{ color: 'var(--color-primary)' }} />
@@ -14056,31 +14053,80 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   <p className="text-xs text-light mt-1">Tải lên: {doc.date} • {isLink ? 'Google Drive Link' : doc.size}</p>
                                 </div>
                                 {!isLink && fileUrl && (
-                                  <button
-                                    type="button"
-                                    onClick={() => downloadFileWithWebpToJpg(fileUrl, doc.name)}
-                                    style={{
-                                      background: 'rgba(16, 185, 129, 0.08)',
-                                      color: '#059669',
-                                      border: '1px solid rgba(16, 185, 129, 0.2)',
-                                      padding: '6px 10px',
-                                      borderRadius: '8px',
-                                      fontSize: '0.78rem',
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      height: '30px',
-                                      textDecoration: 'none',
-                                      transition: 'all 0.2s',
-                                      flexShrink: 0
-                                    }}
-                                    className="hover-lift"
-                                    title="Tải tệp này về máy (tự động chuyển sang JPG nếu là ảnh WebP)"
-                                  >
-                                    <Download size={13} /> Tải về
-                                  </button>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                    {/* Nút đặt làm ảnh đại diện nếu là file ảnh */}
+                                    {(/\.(jpe?g|png|webp|gif|svg)($|\?)/i.test(fileUrl) || /\.(jpe?g|png|webp|gif|svg)$/i.test(doc.name || '') || doc.type === 'image') && (
+                                      (() => {
+                                        const isCurrentAvatar = Boolean(
+                                          formData.avatar_url && fileUrl && (
+                                            formData.avatar_url === fileUrl ||
+                                            formData.avatar_url.split('?')[0].endsWith(fileUrl.split('/').pop()?.split('?')[0] || '---xyz---')
+                                          )
+                                        );
+                                        return (
+                                          <button
+                                            type="button"
+                                            className="hover-lift"
+                                            style={{
+                                              background: isCurrentAvatar ? 'rgba(16, 185, 129, 0.16)' : 'rgba(100, 116, 139, 0.08)',
+                                              color: isCurrentAvatar ? '#059669' : 'var(--color-text-muted)',
+                                              border: isCurrentAvatar ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--color-border-light)',
+                                              padding: '6px',
+                                              borderRadius: '8px',
+                                              cursor: isCurrentAvatar ? 'default' : 'pointer',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              height: '30px',
+                                              width: '32px',
+                                              transition: 'all 0.2s',
+                                              boxShadow: isCurrentAvatar ? '0 0 0 2px rgba(16, 185, 129, 0.15)' : 'none'
+                                            }}
+                                            title={isCurrentAvatar ? "Đang là ảnh đại diện của khách hàng" : "Đặt làm ảnh đại diện"}
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              if (isCurrentAvatar) return;
+                                              try {
+                                                await api.put(`/contacts/${effectiveContactId}`, { avatar_url: fileUrl });
+                                                setFormData((prev: any) => ({ ...prev, avatar_url: fileUrl }));
+                                                addToast('Đã đặt làm ảnh đại diện thành công!', 'success');
+                                                onUpdate?.({ ...formData, avatar_url: fileUrl });
+                                              } catch (err: any) {
+                                                addToast(err.response?.data?.message || 'Lỗi khi cập nhật ảnh đại diện', 'error');
+                                              }
+                                            }}
+                                          >
+                                            {isCurrentAvatar ? <UserCheck size={14} style={{ color: '#059669' }} /> : <User size={14} />}
+                                          </button>
+                                        );
+                                      })()
+                                    )}
+
+                                    {/* Nút Tải về (chỉ icon) */}
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadFileWithWebpToJpg(fileUrl, doc.name)}
+                                      style={{
+                                        background: 'rgba(16, 185, 129, 0.08)',
+                                        color: '#059669',
+                                        border: '1px solid rgba(16, 185, 129, 0.2)',
+                                        padding: '6px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        height: '30px',
+                                        width: '32px',
+                                        textDecoration: 'none',
+                                        transition: 'all 0.2s'
+                                      }}
+                                      className="hover-lift"
+                                      title="Tải tệp này về máy"
+                                    >
+                                      <Download size={14} />
+                                    </button>
+                                  </div>
                                 )}
                                 {isOwnerOrAdmin && !doc.isCoopAttachment && (
                                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
@@ -14089,37 +14135,35 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         background: 'rgba(100, 116, 139, 0.08)',
                                         color: 'var(--color-text-light)',
                                         border: '1px solid var(--color-border-light)',
-                                        padding: '6px 12px',
+                                        padding: '6px',
                                         borderRadius: '8px',
-                                        fontSize: '0.78rem',
-                                        fontWeight: 700,
                                         cursor: 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '4px',
+                                        justifyContent: 'center',
                                         height: '30px',
+                                        width: '32px',
                                         transition: 'all 0.2s'
                                       }}
                                       className="hover-lift"
                                       title="Di chuyển tệp vào/ra thư mục"
                                       onClick={() => setMovingFile(doc)}
                                     >
-                                      <ArrowRightLeft size={13} /> Di chuyển
+                                      <ArrowRightLeft size={14} />
                                     </button>
                                     <button
                                       style={{
                                         background: 'rgba(100, 116, 139, 0.08)',
                                         color: 'var(--color-text-light)',
                                         border: '1px solid var(--color-border-light)',
-                                        padding: '6px 12px',
+                                        padding: '6px',
                                         borderRadius: '8px',
-                                        fontSize: '0.78rem',
-                                        fontWeight: 700,
                                         cursor: 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '4px',
+                                        justifyContent: 'center',
                                         height: '30px',
+                                        width: '32px',
                                         transition: 'all 0.2s'
                                       }}
                                       className="hover-lift"
@@ -14153,20 +14197,21 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         });
                                       }}
                                     >
-                                      <Pencil size={13} /> Đổi tên
+                                      <Pencil size={14} />
                                     </button>
                                     <button
                                       style={{
                                         background: 'rgba(239, 68, 68, 0.08)',
                                         color: '#ef4444',
                                         border: '1px solid rgba(239, 68, 68, 0.15)',
-                                        padding: '6px 10px',
+                                        padding: '6px',
                                         borderRadius: '8px',
                                         cursor: 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         height: '30px',
+                                        width: '32px',
                                         transition: 'all 0.2s'
                                       }}
                                       className="hover-lift"
@@ -14189,7 +14234,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         });
                                       }}
                                     >
-                                      <Trash2 size={13} />
+                                      <Trash2 size={14} />
                                     </button>
                                   </div>
                                 )}
@@ -14272,8 +14317,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             alignItems: 'center', 
                             justifyContent: 'center', 
                             zIndex: effectiveZIndex + 50, 
-                            background: 'rgba(15, 23, 42, 0.88)',
-                            backdropFilter: 'blur(8px)',
+                            background: 'rgba(0, 0, 0, 0.94)',
+                            backdropFilter: 'blur(16px)',
+                            WebkitBackdropFilter: 'blur(16px)',
                             padding: '24px'
                           }} 
                           onClick={() => setPreviewDocImage(null)}

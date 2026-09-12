@@ -513,7 +513,7 @@ export const SuppliersPage: React.FC = () => {
                 className="drawer-backdrop"
                 onClick={() => setShowModal(false)}
                 style={{
-                  zIndex: 10000,
+                  zIndex: 2147483600,
                   opacity: animateIn ? 1 : 0,
                   transition: 'opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
                   pointerEvents: animateIn ? 'auto' : 'none'
@@ -527,7 +527,7 @@ export const SuppliersPage: React.FC = () => {
                   transform: animateIn ? 'translateX(0)' : 'translateX(100%)',
                   transition: 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
                   willChange: 'transform',
-                  zIndex: 10600
+                  zIndex: 2147483601
                 }}
               >
                 {/* Header */}
