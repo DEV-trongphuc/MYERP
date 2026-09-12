@@ -4498,7 +4498,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         }
       }
 
-      const json = await fetchAPI(`get_calendar_stats&year=${year}&month=${month}&consultant=${encodeURIComponent(consultantParam)}`);
+      const json = await fetchAPI(`get_calendar_stats&year=${year}&month=${month}&consultant=${encodeURIComponent(consultantParam)}&user_id=${encodeURIComponent(String(activeUserId && activeUserId !== 'all' ? activeUserId : ''))}`);
       if (json.success) {
         setCalendarData(json.data || {});
       }
@@ -4542,24 +4542,55 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [activeTab, currentDate, calendarUserId, token]);
 
-  const handleDateClick = async (dateStr: string) => {
-    setSelectedCalendarDate(dateStr);
+  const fetchDayDetails = async (dateStr: string) => {
+    if (!dateStr) return;
     setDayDetailsLoading(true);
     setDayDetails(null);
     try {
       let consultantParam = '';
-      if (['sale', 'manager'].includes(String(displayUser?.role).toLowerCase())) {
-        consultantParam = displayUser.name;
+      let consultantUserId = '';
+      const activeUserId = calendarUserId || currentUser?.id;
+      if (activeUserId && activeUserId !== 'all') {
+        consultantUserId = String(activeUserId);
+        if (Number(activeUserId) === Number(currentUser?.id)) {
+          consultantParam = currentUser?.name || currentUser?.username || '';
+        } else {
+          const selectedUserObj = users.find(u => Number(u.id) === Number(activeUserId));
+          if (selectedUserObj) {
+            consultantParam = selectedUserObj.name || selectedUserObj.full_name || selectedUserObj.username || '';
+          }
+        }
       }
-      const json = await fetchAPI(`get_calendar_day_details&date=${dateStr}&consultant=${encodeURIComponent(consultantParam)}&view=individual`);
+      const queryParams = new URLSearchParams({
+        date: dateStr,
+        view: 'individual'
+      });
+      if (consultantParam) {
+        queryParams.append('consultant', consultantParam);
+      }
+      if (consultantUserId) {
+        queryParams.append('user_id', consultantUserId);
+      }
+      const json = await fetchAPI(`get_calendar_day_details&${queryParams.toString()}`);
       if (json.success) {
         setDayDetails(json.data);
+      } else {
+        toast.error(json.message || t('Lỗi tải chi tiết ngày'));
       }
     } catch (e: any) {
       toast.error(t('Lỗi tải chi tiết ngày: ') + e.message);
+    } finally {
+      setDayDetailsLoading(false);
     }
-    setDayDetailsLoading(false);
   };
+
+  const handleDateClick = fetchDayDetails;
+
+  useEffect(() => {
+    if (schedulerModalOpen && selectedSchedulerDate) {
+      fetchDayDetails(selectedSchedulerDate);
+    }
+  }, [schedulerModalOpen, selectedSchedulerDate, calendarUserId]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -10327,6 +10358,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             setSchedulerModalTab(hasLeads ? 'leads' : 'diary');
             setDiaryPage(1);
             setTasksPage(1);
+            fetchDayDetails(dateStr);
             setSchedulerModalOpen(true);
           }}
           style={{
@@ -10370,6 +10402,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 setShowTaskForm(true);
                 setDiaryPage(1);
                 setTasksPage(1);
+                fetchDayDetails(dateStr);
                 setSchedulerModalOpen(true);
               }}
               className="quick-add-btn btn primary sm icon-only"
@@ -10482,85 +10515,155 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '4px', alignContent: 'end' }}>
             {dayData.distributed > 0 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '2px 4px',
-                borderRadius: '4px',
-                background: 'var(--color-success-light)',
-                color: 'var(--color-success)',
-                fontSize: '0.6875rem',
-                fontWeight: 600
-              }} title={t("Đã chia")}>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSchedulerDate(dateStr);
+                  setSchedulerModalTab('leads');
+                  setDiaryPage(1);
+                  setTasksPage(1);
+                  fetchDayDetails(dateStr);
+                  setSchedulerModalOpen(true);
+                }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  background: 'var(--color-success-light)',
+                  color: 'var(--color-success)',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                className="hover-lift"
+                title={t("Đã chia - Nhấn để xem danh sách")}
+              >
                 <span>{t('Chia')}:</span>
                 <strong>{dayData.distributed}</strong>
               </div>
             )}
             {dayData.ticket_total > 0 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '2px 4px',
-                borderRadius: '4px',
-                background: theme === 'dark' ? 'var(--color-primary-light)' : '#fff5f6',
-                color: theme === 'dark' ? 'var(--color-primary)' : '#a31422',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                border: theme === 'dark' ? '1px solid var(--color-border)' : '1px solid #ddd6fe'
-              }} title={t("Ticket lỗi")}>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSchedulerDate(dateStr);
+                  setSchedulerModalTab('tickets');
+                  setDiaryPage(1);
+                  setTasksPage(1);
+                  fetchDayDetails(dateStr);
+                  setSchedulerModalOpen(true);
+                }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  background: theme === 'dark' ? 'var(--color-primary-light)' : '#fff5f6',
+                  color: theme === 'dark' ? 'var(--color-primary)' : '#a31422',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  border: theme === 'dark' ? '1px solid var(--color-border)' : '1px solid #ddd6fe',
+                  cursor: 'pointer'
+                }}
+                className="hover-lift"
+                title={t("Ticket lỗi - Nhấn để xem chi tiết")}
+              >
                 <span>{t('Ticket')}:</span>
                 <strong>{dayData.ticket_total}</strong>
               </div>
             )}
             {dayData.reminder > 0 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '2px 4px',
-                borderRadius: '4px',
-                background: theme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fce7f3',
-                color: theme === 'dark' ? '#f472b6' : '#db2777',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                border: theme === 'dark' ? '1px solid rgba(236, 72, 153, 0.25)' : 'none'
-              }} title={t("Nhắc lại")}>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSchedulerDate(dateStr);
+                  setSchedulerModalTab('diary');
+                  setDiaryPage(1);
+                  setTasksPage(1);
+                  fetchDayDetails(dateStr);
+                  setSchedulerModalOpen(true);
+                }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  background: theme === 'dark' ? 'rgba(236, 72, 153, 0.15)' : '#fce7f3',
+                  color: theme === 'dark' ? '#f472b6' : '#db2777',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  border: theme === 'dark' ? '1px solid rgba(236, 72, 153, 0.25)' : 'none',
+                  cursor: 'pointer'
+                }}
+                className="hover-lift"
+                title={t("Nhắc lại - Nhấn để xem chi tiết")}
+              >
                 <span>{t('Nhắc')}:</span>
                 <strong>{dayData.reminder}</strong>
               </div>
             )}
             {dayTasksCount > 0 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '2px 4px',
-                borderRadius: '4px',
-                background: theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
-                color: theme === 'dark' ? '#60a5fa' : '#1d4ed8',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                border: theme === 'dark' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid #bfdbfe'
-              }} title={t("Công việc quan trọng")}>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSchedulerDate(dateStr);
+                  setSchedulerModalTab('tasks');
+                  setDiaryPage(1);
+                  setTasksPage(1);
+                  fetchDayDetails(dateStr);
+                  setSchedulerModalOpen(true);
+                }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  background: theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+                  color: theme === 'dark' ? '#60a5fa' : '#1d4ed8',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  border: theme === 'dark' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid #bfdbfe',
+                  cursor: 'pointer'
+                }}
+                className="hover-lift"
+                title={t("Công việc quan trọng - Nhấn để xem chi tiết")}
+              >
                 <span>{t('Việc')}:</span>
                 <strong>{dayTasksCount}</strong>
               </div>
             )}
             {dayNotesCount > 0 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '2px 4px',
-                borderRadius: '4px',
-                background: theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb',
-                color: theme === 'dark' ? '#fbbf24' : '#b45309',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid #fde68a'
-              }} title={t("Nhật ký đã ghi nhận")}>
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedSchedulerDate(dateStr);
+                  setSchedulerModalTab('diary');
+                  setDiaryPage(1);
+                  setTasksPage(1);
+                  fetchDayDetails(dateStr);
+                  setSchedulerModalOpen(true);
+                }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  background: theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb',
+                  color: theme === 'dark' ? '#fbbf24' : '#b45309',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid #fde68a',
+                  cursor: 'pointer'
+                }}
+                className="hover-lift"
+                title={t("Nhật ký đã ghi nhận - Nhấn để xem chi tiết")}
+              >
                 <span>{t('Nhật ký')}:</span>
                 <strong>{dayNotesCount}</strong>
               </div>
@@ -17410,7 +17513,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   color: schedulerModalTab === 'leads' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   fontWeight: 600
                 }}>
-                  {dayDetails?.sales?.length || 0}
+                  {dayDetailsLoading ? '...' : (dayDetails?.sales?.length || 0)}
                 </span>
               </button>
 

@@ -4154,16 +4154,21 @@ switch ($action) {
         $distFilter = '';
         $ticketFilter = '';
 
+        $paramUserId = (isset($_GET['user_id']) && $_GET['user_id'] !== 'all' && is_numeric($_GET['user_id'])) ? (int)$_GET['user_id'] : ((isset($_GET['consultant_id']) && is_numeric($_GET['consultant_id'])) ? (int)$_GET['consultant_id'] : 0);
+
         if ($decodedUser['role'] === 'sale') {
             $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
             $stmtC->bind_param("s", $decodedUser['email']);
             $stmtC->execute();
             $cRow = $stmtC->get_result()->fetch_assoc();
             $stmtC->close();
-            $consultantId = $cRow ? (int)$cRow['id'] : 0;
+            $consultantId = $cRow ? (int)$cRow['id'] : (int)($decodedUser['user_id'] ?? 0);
 
             $distFilter = " AND dl.assigned_to = " . $consultantId;
             $ticketFilter = " AND t.consultant_id = " . $consultantId;
+        } elseif ($paramUserId > 0) {
+            $distFilter = " AND dl.assigned_to = " . $paramUserId;
+            $ticketFilter = " AND t.consultant_id = " . $paramUserId;
         } elseif ($decodedUser['role'] === 'manager' && (!isset($_GET['consultant']) || $_GET['consultant'] === 'all')) {
             $teamMemberIds = [];
             $stmtTeam = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
@@ -4183,17 +4188,20 @@ switch ($action) {
                 $distFilter = " AND dl.assigned_to = " . (int)$decodedUser['user_id'];
                 $ticketFilter = " AND t.consultant_id = " . (int)$decodedUser['user_id'];
             }
-        } elseif (isset($_GET['consultant']) && $_GET['consultant'] !== 'all') {
-            // Find consultant ID from name
-            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE name = ? LIMIT 1");
-            $stmtC->bind_param("s", $_GET['consultant']);
+        } elseif (isset($_GET['consultant']) && $_GET['consultant'] !== 'all' && trim($_GET['consultant']) !== '') {
+            // Find consultant ID from name or username
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE name = ? OR username = ? LIMIT 1");
+            $consultantName = trim($_GET['consultant']);
+            $stmtC->bind_param("ss", $consultantName, $consultantName);
             $stmtC->execute();
             $cRow = $stmtC->get_result()->fetch_assoc();
             $stmtC->close();
             $consultantId = $cRow ? (int)$cRow['id'] : 0;
 
-            $distFilter = " AND dl.assigned_to = " . $consultantId;
-            $ticketFilter = " AND t.consultant_id = " . $consultantId;
+            if ($consultantId > 0) {
+                $distFilter = " AND dl.assigned_to = " . $consultantId;
+                $ticketFilter = " AND t.consultant_id = " . $consultantId;
+            }
         }
 
         // 1. Get distribution logs count per day
@@ -4419,16 +4427,21 @@ switch ($action) {
         $distFilter = '';
         $ticketFilter = '';
 
+        $paramUserId = (isset($_GET['user_id']) && $_GET['user_id'] !== 'all' && is_numeric($_GET['user_id'])) ? (int)$_GET['user_id'] : ((isset($_GET['consultant_id']) && is_numeric($_GET['consultant_id'])) ? (int)$_GET['consultant_id'] : 0);
+
         if ($decodedUser['role'] === 'sale') {
             $stmtC = $conn->prepare("SELECT id FROM consultants WHERE email = ? LIMIT 1");
             $stmtC->bind_param("s", $decodedUser['email']);
             $stmtC->execute();
             $cRow = $stmtC->get_result()->fetch_assoc();
             $stmtC->close();
-            $consultantId = $cRow ? (int)$cRow['id'] : 0;
+            $consultantId = $cRow ? (int)$cRow['id'] : (int)($decodedUser['user_id'] ?? 0);
 
             $distFilter = " AND dl.assigned_to = " . $consultantId;
             $ticketFilter = " AND r.consultant_id = " . $consultantId;
+        } elseif ($paramUserId > 0) {
+            $distFilter = " AND dl.assigned_to = " . $paramUserId;
+            $ticketFilter = " AND r.consultant_id = " . $paramUserId;
         } elseif ($decodedUser['role'] === 'manager' && (!isset($_GET['consultant']) || $_GET['consultant'] === 'all')) {
             $teamMemberIds = [];
             $stmtTeam = $conn->prepare("SELECT id FROM consultants WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ?)");
@@ -4448,17 +4461,20 @@ switch ($action) {
                 $distFilter = " AND dl.assigned_to = " . (int)$decodedUser['user_id'];
                 $ticketFilter = " AND r.consultant_id = " . (int)$decodedUser['user_id'];
             }
-        } elseif (isset($_GET['consultant']) && $_GET['consultant'] !== 'all') {
-            // Find consultant ID from name
-            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE name = ? LIMIT 1");
-            $stmtC->bind_param("s", $_GET['consultant']);
+        } elseif (isset($_GET['consultant']) && $_GET['consultant'] !== 'all' && trim($_GET['consultant']) !== '') {
+            // Find consultant ID from name or username
+            $stmtC = $conn->prepare("SELECT id FROM consultants WHERE name = ? OR username = ? LIMIT 1");
+            $consultantName = trim($_GET['consultant']);
+            $stmtC->bind_param("ss", $consultantName, $consultantName);
             $stmtC->execute();
             $cRow = $stmtC->get_result()->fetch_assoc();
             $stmtC->close();
             $consultantId = $cRow ? (int)$cRow['id'] : 0;
 
-            $distFilter = " AND dl.assigned_to = " . $consultantId;
-            $ticketFilter = " AND r.consultant_id = " . $consultantId;
+            if ($consultantId > 0) {
+                $distFilter = " AND dl.assigned_to = " . $consultantId;
+                $ticketFilter = " AND r.consultant_id = " . $consultantId;
+            }
         }
 
         $view = $_GET['view'] ?? '';
