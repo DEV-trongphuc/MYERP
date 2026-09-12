@@ -1,11 +1,19 @@
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users, AlertTriangle, RefreshCw,
   GitBranch, UserPlus, Zap, Calendar, BarChart2, Scale,
   FileSpreadsheet, MessageCircle, Database, Server, ExternalLink, Clock, CheckCircle, Cpu,
   ShieldAlert, Filter, Ticket as TicketIcon,
-  FileText, CheckSquare, AlertCircle, CheckCircle2, Settings, DollarSign, Send, CreditCard, TrendingUp, Receipt, Award, ArrowRight
+  FileText, CheckSquare, AlertCircle, CheckCircle2, Settings, DollarSign, Send, CreditCard, TrendingUp, Receipt, Award, ArrowRight,
+  Package,
+  Tag,
+  XCircle,
+  Eye,
+  Briefcase,
+  Home,
+  Coffee,
+  Truck
 } from 'lucide-react';
 import {
   Bar, XAxis, YAxis, CartesianGrid,
@@ -17,12 +25,15 @@ import { CustomModal } from '../components/ui/CustomModal';
 import { useNavigate } from 'react-router-dom';
 import { withRouterFreezer } from '../components/RouterFreezer';
 import { fetchAPI, getDefaultDateFilter } from '../utils/api';
+import api from '../api/axios';
 import { useLanguage } from '../contexts/LanguageContext';
 import toast from 'react-hot-toast';
 import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skeleton';
 
 import { Avatar } from '../components/ui/Avatar';
 import { WarRoomFlightDeck } from '../components/Dashboard/WarRoomFlightDeck';
+import { ExpenseQuickViewDrawer } from '../components/ExpenseQuickViewDrawer';
+import { DepositDetailDrawer } from '../components/DepositDetailDrawer';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserJobTitle, getUserDisplayRoleOrTitle } from '../utils/roleUtils';
 
@@ -100,7 +111,10 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   // Accountant Dashboard specific states
   const [poList, setPoList] = useState<any[]>([]);
   const [soList, setSoList] = useState<any[]>([]);
-  const [activeOrderType, setActiveOrderType] = useState<'so' | 'po'>('so');
+  const [activeOrderType, setActiveOrderType] = useState<'so' | 'po'>('po');
+  const [selectedExpenseId, setSelectedExpenseId] = useState<number | null>(null);
+  const [selectedDeposit, setSelectedDeposit] = useState<any | null>(null);
+  const [usersList, setUsersList] = useState<any[]>([]);
 
   // Subtab and Marketing states
   const [activeSubTab, setActiveSubTab] = useState<'default' | 'hr' | 'accountant' | 'marketing'>('default');
@@ -125,6 +139,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const [hrDashboardMonth, setHrDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
   const [hrDashboardPayslips, setHrDashboardPayslips] = useState<any[]>([]);
   const [hrLoading, setHrLoading] = useState(false);
+
+  const usersMap = useMemo(() => {
+    const map = new Map<number, any>();
+    usersList.forEach(u => map.set(Number(u.id), u));
+    hrProfiles.forEach(p => {
+      if (!map.has(Number(p.id))) {
+        map.set(Number(p.id), p);
+      }
+    });
+    return map;
+  }, [usersList, hrProfiles]);
 
   // AI Pre-screener variables
   const aiPassed = stats?.ai_passed_count || 12;
@@ -532,14 +557,29 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     return options;
   }, [t]);
 
+  const hrProfileMap = useMemo(() => {
+    const map = new Map<any, any>();
+    hrProfiles.forEach((p: any) => {
+      if (p.id) map.set(Number(p.id), p);
+      if (p.user_id) map.set(Number(p.user_id), p);
+      if (p.code) map.set(String(p.code), p);
+    });
+    return map;
+  }, [hrProfiles]);
+
   const hrTopLatenessList = useMemo(() => {
     const payslipList = [...hrDashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
-      .map(p => ({
-        id: p.id || p.user_id,
-        name: p.employee_name,
-        value: Number(p.lateness_minutes || 0)
-      }));
+      .map(p => {
+        const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
+        return {
+          id: p.id || p.user_id,
+          name: prof?.full_name || p.employee_name,
+          avatar: prof?.avatar || prof?.avatar_url,
+          department: prof?.department_name || prof?.department || '',
+          value: Number(p.lateness_minutes || 0)
+        };
+      });
     
     if (payslipList.length > 0) {
       payslipList.sort((a, b) => b.value - a.value);
@@ -551,13 +591,20 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     }
 
     // Real fallback from weekly check-ins if payslips not yet generated
-    const userMap: Record<string, { id: any; name: string; value: number }> = {};
+    const userMap: Record<string, { id: any; name: string; avatar?: string; department?: string; value: number }> = {};
     hrWeeklyCheckIns.forEach((c: any) => {
       const late = Number(c.lateness_minutes || 0);
       if (late > 0) {
         const uid = c.user_id || c.user_name;
         if (!userMap[uid]) {
-          userMap[uid] = { id: uid, name: c.user_name || `ID #${uid}`, value: 0 };
+          const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid) || hrProfileMap.get(c.code);
+          userMap[uid] = { 
+            id: uid, 
+            name: prof?.full_name || prof?.name || c.user_name || `ID #${uid}`, 
+            avatar: prof?.avatar || prof?.avatar_url,
+            department: prof?.department_name || prof?.department || '',
+            value: 0 
+          };
         }
         userMap[uid].value += late;
       }
@@ -570,7 +617,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [hrDashboardPayslips, hrWeeklyCheckIns]);
+  }, [hrDashboardPayslips, hrWeeklyCheckIns, hrProfileMap]);
 
   const hrTopOTList = useMemo(() => {
     const payslipList = [...hrDashboardPayslips]
@@ -579,9 +626,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         const hours = Number(p.overtime_hours || 0) > 0 
           ? Number(p.overtime_hours) 
           : Math.round(Number(p.overtime_days || 0) * 8 * 10) / 10;
+        const prof = hrProfileMap.get(Number(p.user_id || p.employee_id || p.id));
         return {
           id: p.id || p.user_id,
-          name: p.employee_name,
+          name: prof?.full_name || p.employee_name,
+          avatar: prof?.avatar || prof?.avatar_url,
+          department: prof?.department_name || prof?.department || '',
           value: hours
         };
       });
@@ -597,26 +647,33 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
     // Real fallback from approved overtime requests
     const otLeaves = hrLeaves.filter((l: any) => l.leave_type === 'overtime' && l.status === 'approved');
-    const userMap: Record<string, { id: any; name: string; value: number }> = {};
+    const userMap: Record<string, { id: any; name: string; avatar?: string; department?: string; value: number }> = {};
     otLeaves.forEach((l: any) => {
       const hours = Number(l.total_hours || (Number(l.total_days || 0) * 8) || 0);
       if (hours > 0) {
         const uid = l.user_id || l.user_name;
         if (!userMap[uid]) {
-          userMap[uid] = { id: uid, name: l.user_name || `ID #${uid}`, value: 0 };
+          const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
+          userMap[uid] = { 
+            id: uid, 
+            name: prof?.full_name || prof?.name || l.user_name || `ID #${uid}`, 
+            avatar: prof?.avatar || prof?.avatar_url,
+            department: prof?.department_name || prof?.department || '',
+            value: 0 
+          };
         }
         userMap[uid].value += hours;
       }
     });
 
-    const list = Object.values(userMap).sort((a, b) => b.value - a.value);
-    if (list.length === 0) return [];
-    const maxVal = Math.max(...list.map(x => x.value));
-    return list.map(item => ({
+    const otList = Object.values(userMap).sort((a, b) => b.value - a.value);
+    if (otList.length === 0) return [];
+    const maxVal = Math.max(...otList.map(x => x.value));
+    return otList.map(item => ({
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [hrDashboardPayslips, hrLeaves]);
+  }, [hrDashboardPayslips, hrLeaves, hrProfileMap]);
 
   const syncDateFilterToModal = (filter: string) => {
     let mode = 'this_month';
@@ -2136,53 +2193,382 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
     };
 
-    const getPoStatusBadge = (status: string) => {
-      switch (status) {
-        case 'received':
-          return { label: t('Đã nhập kho'), bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' };
-        case 'ordered':
-          return { label: t('Đã đặt hàng'), bg: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6' };
-        case 'approved':
-          return { label: t('Đã duyệt'), bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' };
-        case 'draft':
-          return { label: t('Bản nháp'), bg: 'rgba(148, 163, 184, 0.12)', color: '#64748b' };
-        case 'cancelled':
-          return { label: t('Đã hủy'), bg: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' };
-        default:
-          return { label: t('Đang xử lý'), bg: 'rgba(245, 158, 11, 0.08)', color: '#d97706' };
+    const PO_CATEGORIES = [
+      { label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
+      { label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
+      { label: 'Vận hành', icon: Home, color: '#10b981' },
+      { label: 'Marketing', icon: Briefcase, color: '#ef4444' },
+      { label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
+      { label: 'Nhân sự', icon: Tag, color: '#06b6d4' },
+    ];
+
+    const getPoCatInfo = (cat: string) => {
+      const found = PO_CATEGORIES.find(c => c.label.toLowerCase() === String(cat || '').toLowerCase());
+      return found || { label: cat || 'Vận hành', icon: Home, color: '#10b981' };
+    };
+
+    const renderPoWorkflowSteps = (po: any) => {
+      interface StepInfo {
+        stepIndex: number;
+        title: string;
+        userId?: number;
+        userName?: string;
+        userAvatar?: string;
+        status: 'approved' | 'rejected' | 'pending' | 'waiting';
       }
+
+      const steps: StepInfo[] = [];
+      const overall = String(po.status || 'pending').toLowerCase();
+      const isDraft = overall === 'draft' || Boolean(po.is_draft);
+      const isPaid = Boolean(po.is_refunded) || overall === 'paid' || overall === 'refunded';
+      
+      const s1 = String(po.status_level_1 || (overall === 'level1_approved' || overall === 'approved' || isPaid ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')).toLowerCase();
+      const s2 = String(po.status_level_2 || 'none').toLowerCase();
+      const s3 = String(po.status_level_3 || 'none').toLowerCase();
+
+      // Step 1
+      const app1Id = Number(po.approver_id || 0);
+      const u1 = app1Id ? usersMap.get(app1Id) : null;
+      const app1Name = po.approver_name || u1?.full_name || u1?.name || '';
+      const app1Avatar = po.approver_avatar || u1?.avatar_url || u1?.avatar;
+      if (app1Id > 0 || app1Name || po.approver_id_2) {
+        let stepStatus: StepInfo['status'] = 'pending';
+        if (isDraft) stepStatus = 'waiting';
+        else if (s1 === 'approved' || overall === 'approved' || isPaid || overall === 'level1_approved') stepStatus = 'approved';
+        else if (s1 === 'rejected' || (overall === 'rejected' && s1 !== 'approved')) stepStatus = 'rejected';
+        else stepStatus = 'pending';
+
+        steps.push({
+          stepIndex: 1,
+          title: 'Cấp 1',
+          userId: app1Id,
+          userName: app1Name,
+          userAvatar: app1Avatar,
+          status: stepStatus
+        });
+      }
+
+      // Step 2
+      const app2Id = Number(po.approver_id_2 || 0);
+      const u2 = app2Id ? usersMap.get(app2Id) : null;
+      const app2Name = po.approver_name_2 || u2?.full_name || u2?.name || '';
+      const app2Avatar = po.approver_avatar_2 || u2?.avatar_url || u2?.avatar;
+      if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+        let stepStatus: StepInfo['status'] = 'waiting';
+        if (isDraft) stepStatus = 'waiting';
+        else if (s2 === 'approved' || (overall === 'approved' && s2 !== 'rejected')) stepStatus = 'approved';
+        else if (s2 === 'rejected') stepStatus = 'rejected';
+        else if (s1 === 'approved' && s2 !== 'approved' && s2 !== 'rejected') stepStatus = 'pending';
+        else stepStatus = 'waiting';
+
+        steps.push({
+          stepIndex: 2,
+          title: 'Cấp 2',
+          userId: app2Id,
+          userName: app2Name,
+          userAvatar: app2Avatar,
+          status: stepStatus
+        });
+      }
+
+      // Step 3
+      const app3Id = Number(po.approver_id_3 || 0);
+      const u3 = app3Id ? usersMap.get(app3Id) : null;
+      const app3Name = po.approver_name_3 || u3?.full_name || u3?.name || '';
+      const app3Avatar = po.approver_avatar_3 || u3?.avatar_url || u3?.avatar;
+      if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+        let stepStatus: StepInfo['status'] = 'waiting';
+        if (isDraft) stepStatus = 'waiting';
+        else if (s3 === 'approved' || (overall === 'approved' && s3 !== 'rejected')) stepStatus = 'approved';
+        else if (s3 === 'rejected') stepStatus = 'rejected';
+        else if (s1 === 'approved' && (s2 === 'approved' || s2 === 'none') && s3 !== 'approved' && s3 !== 'rejected') stepStatus = 'pending';
+        else stepStatus = 'waiting';
+
+        steps.push({
+          stepIndex: 3,
+          title: 'Cấp 3',
+          userId: app3Id,
+          userName: app3Name,
+          userAvatar: app3Avatar,
+          status: stepStatus
+        });
+      }
+
+      if (steps.length === 0) {
+        steps.push({
+          stepIndex: 1,
+          title: 'Duyệt',
+          userId: app1Id,
+          userName: app1Name || 'Người duyệt',
+          userAvatar: app1Avatar,
+          status: isDraft ? 'waiting' : (overall === 'approved' || isPaid ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')
+        });
+      }
+
+      // Related Watchers
+      let relIds: number[] = [];
+      const rawWatchers = po.related_user_ids || po.related_users;
+      if (Array.isArray(rawWatchers)) {
+        relIds = rawWatchers.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+      } else if (typeof rawWatchers === 'string') {
+        const trimmed = rawWatchers.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              relIds = parsed.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+            }
+          } catch {
+            relIds = trimmed.slice(1, -1).split(',').map((id: string) => Number(id.trim().replace(/^['"]|['"]$/g, ''))).filter((id: number) => id > 0);
+          }
+        } else {
+          relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+        }
+      }
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            {steps.map((st, idx) => {
+              const uObj = st.userId ? usersMap.get(st.userId) : null;
+              const displayName = uObj?.full_name || uObj?.name || st.userName || st.title;
+              const avatarUrl = st.userAvatar || uObj?.avatar_url || uObj?.avatar;
+
+              const isApproved = !isDraft && st.status === 'approved';
+              const isRejected = !isDraft && st.status === 'rejected';
+              const isPending = !isDraft && st.status === 'pending';
+
+              const borderColor = isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : 'var(--color-border)';
+              const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : isDraft ? 'Dự kiến duyệt (Bản nháp)' : 'Chưa đến lượt';
+
+              return (
+                <React.Fragment key={`po-step-${st.stepIndex}`}>
+                  {idx > 0 && (
+                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: '0 1px' }}>➔</span>
+                  )}
+                  <div 
+                    title={`${st.title}: ${displayName} (${statusText})`}
+                    style={{
+                      position: 'relative',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{
+                      borderRadius: '50%',
+                      padding: '1.5px',
+                      border: `2px solid ${borderColor}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--color-surface, #ffffff)',
+                      opacity: isDraft ? 0.95 : (st.status === 'waiting' ? 0.6 : 1)
+                    }}>
+                      <Avatar src={avatarUrl} name={displayName} size={24} />
+                    </div>
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '-2px',
+                      right: '-2px',
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : isDraft ? '#64748B' : '#8E8E93',
+                      border: '1.5px solid #ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      fontSize: '8px',
+                      fontWeight: 800
+                    }}>
+                      {isApproved ? '✓' : isRejected ? '✕' : isPending ? '•' : st.stepIndex}
+                    </div>
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {relIds.length > 0 && (
+            <div 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                marginLeft: '4px',
+                paddingLeft: '6px',
+                borderLeft: '1px solid var(--color-border)'
+              }}
+              title={`Người liên quan (${relIds.length}): ${relIds.map(id => usersMap.get(id)?.full_name || usersMap.get(id)?.name || id).join(', ')}`}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', marginRight: '1px' }}>
+                <Eye size={12} />
+              </div>
+              {relIds.slice(0, 3).map(id => {
+                const relU = usersMap.get(id);
+                return (
+                  <Avatar
+                    key={`rel-${id}`}
+                    src={relU?.avatar_url || relU?.avatar}
+                    name={relU?.full_name || relU?.name || `ID ${id}`}
+                    size={22}
+                  />
+                );
+              })}
+              {relIds.length > 3 && (
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                  +${relIds.length - 3}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const renderPoStatusBadge = (po: any) => {
+      const overall = String(po.status || 'pending').toLowerCase();
+      const isDraft = overall === 'draft' || Boolean(po.is_draft);
+      const isPaid = Boolean(po.is_refunded) || overall === 'paid' || overall === 'refunded';
+
+      const s1 = String(po.status_level_1 || 'pending').toLowerCase();
+      const s2 = String(po.status_level_2 || 'pending').toLowerCase();
+      const s3 = String(po.status_level_3 || 'pending').toLowerCase();
+
+      const hasL2 = Boolean(po.approver_id_2);
+      const hasL3 = Boolean(po.approver_id_3);
+
+      if (isDraft) {
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: 'var(--color-text-muted)',
+            background: 'rgba(107, 114, 128, 0.1)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            width: 'fit-content'
+          }}>
+            Bản nháp
+          </span>
+        );
+      }
+
+      if (isPaid) {
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: '#10b981',
+            background: 'rgba(16, 185, 129, 0.1)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            width: 'fit-content'
+          }}>
+            <CheckCircle2 size={10} /> Đã thanh toán
+          </span>
+        );
+      }
+
+      if (overall === 'approved') {
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: '#10b981',
+            background: 'rgba(16, 185, 129, 0.1)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            width: 'fit-content'
+          }}>
+            <CheckCircle2 size={10} /> Đã duyệt
+          </span>
+        );
+      }
+
+      if (overall === 'rejected') {
+        const rejectText = s3 === 'rejected' ? 'Cấp 3 từ chối' : (s2 === 'rejected' ? 'Cấp 2 từ chối' : (s1 === 'rejected' ? 'Cấp 1 từ chối' : 'Từ chối'));
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: '#ef4444',
+            background: 'rgba(239, 68, 68, 0.1)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            width: 'fit-content'
+          }}>
+            <XCircle size={10} /> {rejectText}
+          </span>
+        );
+      }
+
+      // Pending states
+      let pendingText = 'Chờ duyệt';
+      if (s1 === 'approved' && s2 === 'approved' && hasL3 && s3 !== 'approved') {
+        pendingText = 'Chờ Cấp 3 duyệt';
+      } else if (s1 === 'approved' && hasL2 && s2 !== 'approved') {
+        pendingText = 'Chờ Cấp 2 duyệt';
+      } else if (hasL2 && s1 !== 'approved') {
+        pendingText = 'Chờ Cấp 1 duyệt';
+      }
+
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          color: '#f59e0b',
+          background: 'rgba(245, 158, 11, 0.1)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          width: 'fit-content'
+        }}>
+          <Clock size={10} /> {pendingText}
+        </span>
+      );
     };
 
     return renderDashboardWrapper(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginTop: '-0.75rem', animation: 'slideUp 0.4s ease-out both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.4s ease-out both' }}>
         {/* Welcome Banner */}
         {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') 
           ? renderAdminWelcomeBanner() 
-          : renderWelcomeBannerForRole(t('Chào mừng trở lại! Thống kê tài chính, hóa đơn và duyệt chi chi tiêu.'), actIssues)}
+          : renderWelcomeBannerForRole(t('Chào mừng trở lại! Báo cáo nhanh tài chính, doanh thu, chi phí & dòng tiền.'), actIssues)}
 
-        {/* Header */}
-        {renderHeaderForRole(t("Tổng quan Doanh thu & Chi phí"), t("Theo dõi dòng tiền thu chi thực tế, công nợ đặt cọc và yêu cầu thanh toán chi phí."))}
+        {/* Header (Title & Global Filter) */}
+        {renderHeaderForRole(t("Quản lý tài chính & Kế toán"), t("Theo dõi doanh thu, chi phí, công nợ và dòng tiền doanh nghiệp.")) }
 
-        {/* KPIs Grid */}
+        {/* 4 KPI Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-          {/* Card 1: Revenue */}
-          <div className="stat-card hover-lift total-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative', overflow: 'hidden', padding: '1.25rem' }} onClick={() => navigate('/deposits')}>
+          {/* Card 1: Doanh thu thực nhận */}
+          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px', cursor: 'pointer' }} onClick={() => navigate('/deposits')}>
             <div className="decor-svg" style={{ color: '#10b981', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
               <DollarSign size={70} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('DOANH THU THỰC THU')}</span>
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('DOANH THU THỰC NHẬN')}</span>
               <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <DollarSign size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{formatVND(revenue)}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                <span>{t('Lợi nhuận')}: {formatVND(profit)}</span>
-              </span>
-            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981' }}>{formatVND(revenue)}</div>
             <div className={`stat-change ${revenueChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
                 {revenueChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
@@ -2192,60 +2578,35 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             </div>
           </div>
 
-          {/* Card 2: Pending Revenue */}
-          <div className="stat-card hover-lift duplicates-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative', overflow: 'hidden', padding: '1.25rem' }} onClick={() => navigate('/deposits')}>
-            <div className="decor-svg" style={{ color: '#f59e0b', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-              <FileText size={70} />
+          {/* Card 2: Lợi nhuận gộp */}
+          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px' }}>
+            <div className="decor-svg" style={{ color: '#3b82f6', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
+              <TrendingUp size={70} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('DOANH THU CHỜ DUYỆT')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <FileText size={16} />
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('LỢI NHUẬN GỘP')}</span>
+              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <TrendingUp size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{formatVND(pendingRevenue)}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                <span>{t('Đơn chờ đối soát')}: {pendingOrdersCount}</span>
-              </span>
-            </div>
-            <div className={`stat-change ${pendingRevenueChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                {pendingRevenueChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
-              </svg>
-              {pendingRevenueChange}
-              <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: profit >= 0 ? '#3b82f6' : '#ef4444' }}>{formatVND(profit)}</div>
+            <div className="stat-desc" style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginTop: 'auto' }}>
+              {t('Doanh thu')} - {t('Chi phí đã duyệt')}
             </div>
           </div>
 
-          {/* Card 3: Expenses */}
-          <div className="stat-card hover-lift errors-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative', overflow: 'hidden', padding: '1.25rem' }} onClick={() => navigate('/expenses')}>
+          {/* Card 3: Chi phí đã duyệt */}
+          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px', cursor: 'pointer' }} onClick={() => navigate('/expenses')}>
             <div className="decor-svg" style={{ color: '#ef4444', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
               <CreditCard size={70} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('CHI PHÍ ĐÃ CHI')}</span>
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('CHI PHÍ ĐÃ DUYỆT')}</span>
               <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <CreditCard size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{formatVND(approvedExpenses)}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              {topExpenseCategories.length > 0 ? (
-                topExpenseCategories.map((cat, idx) => (
-                  <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: idx === 0 ? '#ef4444' : '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                    <span>{cat.name}: {formatNumberCompact(cat.amount)}</span>
-                  </span>
-                ))
-              ) : (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                  <span>{t('Đã duyệt')}: {approvedExpensesCount} {t('phiếu')}</span>
-                </span>
-              )}
-            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444' }}>{formatVND(approvedExpenses)}</div>
             <div className={`stat-change ${approvedExpensesChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
                 {approvedExpensesChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
@@ -2255,28 +2616,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             </div>
           </div>
 
-          {/* Card 4: Pending Invoices */}
-          <div className="stat-card hover-lift distributed-card" style={{ minHeight: '140px', display: 'flex', flexDirection: 'column', cursor: 'pointer', position: 'relative', overflow: 'hidden', padding: '1.25rem' }} onClick={() => navigate('/expenses?status=pending')}>
-            <div className="decor-svg" style={{ color: '#3b82f6', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
-              <AlertTriangle size={70} />
+          {/* Card 4: Yêu cầu chi chờ duyệt */}
+          <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px', cursor: 'pointer' }} onClick={() => navigate('/expenses?status=pending')}>
+            <div className="decor-svg" style={{ color: '#f59e0b', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
+              <Clock size={70} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('YÊU CẦU DUYỆT CHI')}</span>
-              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertTriangle size={16} />
+              <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('YÊU CẦU CHI CHỜ DUYỆT')}</span>
+              <div style={{ width: 32, height: 32, borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{pendingExpenses}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                <span>{t('Chờ duyệt')}: {pendingExpenses}</span>
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                <span>{t('Đã duyệt')}: {approvedExpensesCount}</span>
-              </span>
-            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b' }}>{pendingExpenses} {t('khoản')}</div>
             <div className={`stat-change ${pendingExpensesChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
                 {pendingExpensesChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
@@ -2287,7 +2638,213 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           </div>
         </div>
 
-        {/* Charts & Details */}
+        {/* 1. Recent Orders Card (PO & SO) - Placed ON TOP as requested */}
+        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={18} color="var(--color-primary)" /> {t('Đơn Hàng Gần Đây (PO & SO)')}
+            </h3>
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px' }}>
+              <button
+                onClick={() => setActiveOrderType('po')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: activeOrderType === 'po' ? 'var(--color-surface)' : 'transparent',
+                  color: activeOrderType === 'po' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                {t('PO gần đây')} ({poList.length})
+              </button>
+              <button
+                onClick={() => setActiveOrderType('so')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: activeOrderType === 'so' ? 'var(--color-surface)' : 'transparent',
+                  color: activeOrderType === 'so' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                {t('SO gần đây')} ({soList.length})
+              </button>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
+            {activeOrderType === 'so' ? (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                    <th style={{ padding: '12px' }}>{t('Mã SO / Mã cọc')}</th>
+                    <th style={{ padding: '12px' }}>{t('Khách hàng')}</th>
+                    <th style={{ padding: '12px' }}>{t('Chương trình')}</th>
+                    <th style={{ padding: '12px', textAlign: 'right' }}>{t('Số tiền / Học phí')}</th>
+                    <th style={{ padding: '12px' }}>{t('Sale phụ trách')}</th>
+                    <th style={{ padding: '12px' }}>{t('Trạng thái')}</th>
+                    <th style={{ padding: '12px' }}>{t('Ngày đặt')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                        <td colSpan={7} style={{ padding: '12px' }}><Skeleton width="100%" height={16} /></td>
+                      </tr>
+                    ))
+                  ) : soList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn hàng bán nào gần đây')}</td>
+                    </tr>
+                  ) : soList.slice(0, 10).map((so, idx) => (
+                    <tr 
+                      key={so.id || idx} 
+                      onClick={() => setSelectedDeposit(so)}
+                      style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px', cursor: 'pointer' }}
+                      className="hover-bg transition-colors"
+                      title={t('Bấm để xem chi tiết đơn cọc / SO')}
+                    >
+                      <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                        {so.code || so.deposit_code || so.so_number || so.unit_code || `#SO-${so.id}`}
+                      </td>
+                      <td style={{ padding: '12px', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Avatar src={so.avatar || so.avatar_url} name={so.full_name || so.contact_name || ''} size={24} />
+                          <span>{so.full_name || so.contact_name || '—'}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px' }}>{so.project_name || '—'}</td>
+                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(so.price || so.total || so.amount || 0)}</td>
+                      <td style={{ padding: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Avatar src={so.creator_avatar || so.assigned_to_avatar} name={so.creator_name || '—'} size={24} />
+                          <span>{so.creator_name || '—'}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{ 
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
+                          background: so.status === 'approved' ? 'rgba(16, 185, 129, 0.08)' : (so.status === 'cancelled' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)'),
+                          color: so.status === 'approved' ? '#10b981' : (so.status === 'cancelled' ? '#dc2626' : '#d97706')
+                        }}>
+                          {so.status === 'approved' ? t('Hoàn tất cọc') : (so.status === 'cancelled' ? t('Bể cọc') : (so.status === 'pending_admin' ? t('Chờ duyệt') : t('Đang giao dịch')))}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{so.created_at || so.order_date ? new Date(so.created_at || so.order_date).toLocaleDateString('vi-VN') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                    <th style={{ padding: '12px', minWidth: 260, width: '30%' }}>{t('Tên hóa đơn / Đề xuất PO')}</th>
+                    <th style={{ padding: '12px' }}>{t('Người tạo')}</th>
+                    <th style={{ padding: '12px', textAlign: 'right' }}>{t('Số tiền')}</th>
+                    <th style={{ padding: '12px', minWidth: 180 }}>{t('Các bước & Người liên quan')}</th>
+                    <th style={{ padding: '12px' }}>{t('Ngày tạo')}</th>
+                    <th style={{ padding: '12px', textAlign: 'right' }}>{t('Thao tác')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                        <td colSpan={6} style={{ padding: '12px' }}><Skeleton width="100%" height={16} /></td>
+                      </tr>
+                    ))
+                  ) : poList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                        {t('Không có Purchase Order nào gần đây')}
+                      </td>
+                    </tr>
+                  ) : poList.slice(0, 10).map((po, idx) => {
+                    const catInfo = getPoCatInfo(po.category);
+                    const CatIcon = catInfo.icon;
+                    return (
+                      <tr 
+                        key={po.id || idx} 
+                        onClick={() => setSelectedExpenseId(po.id)}
+                        style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px', cursor: 'pointer' }}
+                        className="hover-bg transition-colors"
+                        title={t('Bấm để xem chi tiết Purchase Order')}
+                      >
+                        <td style={{ padding: '12px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{po.title}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '4px', 
+                                padding: '1px 6px', 
+                                borderRadius: '9999px', 
+                                background: `${catInfo.color}15`, 
+                                color: catInfo.color, 
+                                fontSize: '0.7rem', 
+                                fontWeight: 600 
+                              }}>
+                                <CatIcon size={10} color={catInfo.color} /> {po.category || 'Vận hành'}
+                              </span>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>#EXP-{po.id}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Avatar src={po.creator_avatar || po.avatar} name={po.creator_name || '—'} size={24} />
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>{po.creator_name || '—'}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                              {formatVND(po.amount || po.total || 0)}
+                            </span>
+                            {renderPoStatusBadge(po)}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          {renderPoWorkflowSteps(po)}
+                        </td>
+                        <td style={{ padding: '12px', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                          {po.created_at ? new Date(po.created_at).toLocaleDateString('vi-VN') : (po.order_date || '—')}
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'right' }}>
+                          <button 
+                            className="btn-icon sm" 
+                            title={t('Xem chi tiết')} 
+                            onClick={(e) => { e.stopPropagation(); setSelectedExpenseId(po.id); }}
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-primary)', cursor: 'pointer' }}
+                          >
+                            <ArrowRight size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* 2. Charts & Details - Placed BELOW Recent Orders as requested */}
         <div className="responsive-grid-6-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6.5fr 3.5fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
           <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', position: 'relative' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>{t('Xu hướng Thu - Chi (Triệu VND)')}</h3>
@@ -2357,166 +2914,6 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 </>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Recent Orders Card */}
-        <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileText size={18} color="var(--color-primary)" /> {t('Đơn Hàng Gần Đây (PO & SO)')}
-            </h3>
-            <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px' }}>
-              <button
-                onClick={() => setActiveOrderType('po')}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: activeOrderType === 'po' ? 'var(--color-surface)' : 'transparent',
-                  color: activeOrderType === 'po' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                {t('PO gần đây')} ({poList.length})
-              </button>
-              <button
-                onClick={() => setActiveOrderType('so')}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: activeOrderType === 'so' ? 'var(--color-surface)' : 'transparent',
-                  color: activeOrderType === 'so' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                {t('SO gần đây')} ({soList.length})
-              </button>
-            </div>
-          </div>
-
-          <div style={{ overflowX: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
-            {activeOrderType === 'so' ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                    <th style={{ padding: '12px' }}>{t('Mã sản phẩm / Mã căn')}</th>
-                    <th style={{ padding: '12px' }}>{t('Khách hàng')}</th>
-                    <th style={{ padding: '12px' }}>{t('Chương trình')}</th>
-                    <th style={{ padding: '12px', textAlign: 'right' }}>{t('Giá bán')}</th>
-                    <th style={{ padding: '12px' }}>{t('Sale phụ trách')}</th>
-                    <th style={{ padding: '12px' }}>{t('Trạng thái')}</th>
-                    <th style={{ padding: '12px' }}>{t('Ngày đặt')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                        <td colSpan={7} style={{ padding: '12px' }}><Skeleton width="100%" height={16} /></td>
-                      </tr>
-                    ))
-                  ) : soList.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn hàng bán nào gần đây')}</td>
-                    </tr>
-                  ) : soList.slice(0, 5).map((so, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
-                      <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{so.unit_code || so.so_number || '—'}</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={so.avatar || so.avatar_url} name={so.full_name || so.contact_name || ''} size={24} />
-                          <span>{so.full_name || so.contact_name || '—'}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px' }}>{so.project_name || '—'}</td>
-                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(so.price || so.total || 0)}</td>
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={so.creator_avatar || so.assigned_to_avatar} name={so.creator_name || '—'} size={24} />
-                          <span>{so.creator_name || '—'}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        <span style={{ 
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
-                          background: so.status === 'approved' ? 'rgba(16, 185, 129, 0.08)' : (so.status === 'cancelled' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)'),
-                          color: so.status === 'approved' ? '#10b981' : (so.status === 'cancelled' ? '#dc2626' : '#d97706')
-                        }}>
-                          {so.status === 'approved' ? t('Hoàn tất cọc') : (so.status === 'cancelled' ? t('Bể cọc') : (so.status === 'pending_admin' ? t('Chờ duyệt') : t('Đang giao dịch')))}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{so.created_at || so.order_date ? new Date(so.created_at || so.order_date).toLocaleDateString('vi-VN') : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                    <th style={{ padding: '12px' }}>{t('Mã PO')}</th>
-                    <th style={{ padding: '12px' }}>{t('Nhà cung cấp')}</th>
-                    <th style={{ padding: '12px', textAlign: 'right' }}>{t('Tổng tiền')}</th>
-                    <th style={{ padding: '12px' }}>{t('Người tạo')}</th>
-                    <th style={{ padding: '12px' }}>{t('Trạng thái')}</th>
-                    <th style={{ padding: '12px' }}>{t('Ngày đặt')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                        <td colSpan={6} style={{ padding: '12px' }}><Skeleton width="100%" height={16} /></td>
-                      </tr>
-                    ))
-                  ) : poList.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn nhập hàng nào gần đây')}</td>
-                    </tr>
-                  ) : poList.slice(0, 5).map((po, idx) => {
-                    const badge = getPoStatusBadge(po.status);
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
-                        <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{po.po_number}</td>
-                        <td style={{ padding: '12px', fontWeight: 600 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Avatar src={po.supplier_avatar} name={po.supplier_name || 'NCC'} size={24} />
-                            <span>{po.supplier_name || `Nhà cung cấp ID: ${po.supplier_id}`}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(po.total)}</td>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Avatar src={po.creator_avatar || po.avatar} name={po.creator_name || '—'} size={24} />
-                            <span>{po.creator_name || '—'}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <span style={{ 
-                            padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
-                            background: badge.bg,
-                            color: badge.color
-                          }}>
-                            {badge.label}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{po.order_date || po.created_at ? new Date(po.order_date || po.created_at).toLocaleDateString('vi-VN') : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
           </div>
         </div>
       </div>
