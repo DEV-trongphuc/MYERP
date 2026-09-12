@@ -2179,35 +2179,7 @@ export const Header = ({
                   onClick={() => setIsProfileMenuOpen(false)}
                 >
                   <FileText size={14} style={{ color: 'var(--color-primary)' }} />
-                  {t('Tài liệu Sản phẩm (/docs)')}
-                </a>
-
-                <a
-                  href="/api-docs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    width: '100%',
-                    padding: '8px 10px',
-                    border: 'none',
-                    background: 'transparent',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    color: 'var(--color-text)',
-                    fontSize: '0.8125rem',
-                    textAlign: 'left',
-                    textDecoration: 'none',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  onClick={() => setIsProfileMenuOpen(false)}
-                >
-                  <Code size={14} style={{ color: '#0284c7' }} />
-                  {t('Tài liệu API & SDK (/api-docs)')}
+                  {t('Document')}
                 </a>
 
                 <div style={{ borderBottom: '1px solid var(--color-border)', margin: '4px 0' }} />
@@ -3175,8 +3147,8 @@ export const Header = ({
                 onClick={handleClick}
                 style={{
                   position: 'fixed',
-                  bottom: 24,
-                  right: 24,
+                  bottom: typeof window !== 'undefined' && window.innerWidth <= 768 ? 'calc(var(--mobile-bottom-nav-height, 62px) + env(safe-area-inset-bottom, 0px) + 16px)' : 24,
+                  right: typeof window !== 'undefined' && window.innerWidth <= 768 ? 16 : 24,
                   width: 52,
                   height: 52,
                   borderRadius: '50%',

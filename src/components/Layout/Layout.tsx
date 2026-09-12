@@ -692,7 +692,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const totalPendingInboxCount = effTicketsCount + effHeldCount + effCheckInsCount + effCoopsCount + effSupportCount + effExpensesCount;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', background: 'var(--color-bg)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', minHeight: '100vh', width: '100vw', background: 'var(--color-bg)', overflow: 'hidden' }}>
       <style>{`
         @media (max-width: 600px) {
           .logs-tab-container {

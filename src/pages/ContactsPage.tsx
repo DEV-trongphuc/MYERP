@@ -1380,7 +1380,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
   }, [contacts]);
 
   return (
-    <div>
+    <div className="page-container contacts-page-container">
       {/* Header */}
       <div className="page-header" style={{ marginBottom: isMobile ? '0.75rem' : '1.5rem' }}>
         <div style={{ width: '100%' }}>

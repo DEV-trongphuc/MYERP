@@ -843,6 +843,17 @@ html {
 }
 
 
+html, body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  min-height: -webkit-fill-available;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   width: 100%;
   height: 100%;
@@ -909,6 +920,8 @@ ul {
 #root {
   width: 100%;
   height: 100%;
+  height: 100dvh;
+  min-height: -webkit-fill-available;
   display: flex;
   overflow: hidden;
 }
@@ -4324,13 +4337,7 @@ table td.wrap-cell, table th.wrap-cell {
   }
 }
 
-/* Adjust page padding on mobile to not be covered by sticky bottom nav */
-@media (max-width: 768px) {
-  .responsive-main,
-  .portal-main-content {
-    padding-bottom: 100px !important;
-  }
-}
+/* Adjust page padding on mobile to not be covered by sticky bottom nav (unified below in mobile section) */
 
 @media (max-width: 767px) {
   :root {
@@ -5322,8 +5329,36 @@ a,
   touch-action: manipulation;
 }
 
-/* Mobile page bottom scroll spacing so content is never obscured by browser bottom bar or navigation */
+/* Mobile page bottom scroll spacing so content is never obscured by Safari browser toolbar or navigation */
 @media (max-width: 768px) {
+  html, body, #root {
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+  }
+
+  /* Safe Area Top for Header on notch/Dynamic Island */
+  header {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    height: calc(60px + env(safe-area-inset-top, 0px)) !important;
+  }
+
+  /* Mobile Bottom Navigation with Safe Area */
+  .mobile-bottom-nav {
+    height: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  /* Floating check-in button on mobile: sit neatly above bottom nav */
+  .floating-checkin-btn {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 16px !important;
+    z-index: 9999 !important;
+  }
+
+  /* Mobile page scroll spacing:
+     Ensure generous space so bottom items (like pagination "Hiển thị 1 - 20 trên 19252" and last cards)
+     can scroll COMPLETELY ABOVE the bottom nav and floating button!
+  */
   .responsive-main,
   .sale-portal-main,
   .portal-main-content,
@@ -5333,8 +5368,43 @@ a,
   .app-main-content,
   .content-wrapper,
   main {
-    padding-bottom: calc(95px + env(safe-area-inset-bottom, 20px)) !important;
-    scroll-padding-bottom: calc(95px + env(safe-area-inset-bottom, 20px)) !important;
+    padding-bottom: calc(130px + env(safe-area-inset-bottom, 20px)) !important;
+    scroll-padding-bottom: calc(130px + env(safe-area-inset-bottom, 20px)) !important;
+    box-sizing: border-box;
+  }
+
+  /* WebKit/Safari fix: scroll container ignores padding-bottom of parent on overflow,
+     so we also explicitly pad the inner direct child */
+  .responsive-main > div,
+  .sale-portal-main > div,
+  .portal-main-content > div,
+  .page-container > div:last-child,
+  .contacts-page-container {
+    padding-bottom: calc(130px + env(safe-area-inset-bottom, 20px)) !important;
+    box-sizing: border-box;
+  }
+
+  /* WebKit spacer pseudo element to enforce bottom scroll reach */
+  .responsive-main::after,
+  .portal-main-content::after {
+    content: '';
+    display: block;
+    width: 100%;
+    height: calc(100px + env(safe-area-inset-bottom, 20px));
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+
+  /* Ensure pagination has breathing space on mobile and wraps cleanly */
+  .pagination,
+  .responsive-pagination {
+    margin-bottom: 28px !important;
+    padding-bottom: 24px !important;
+  }
+
+  .pagination-info {
+    font-size: 0.8rem !important;
+    line-height: 1.4 !important;
   }
 }
 
