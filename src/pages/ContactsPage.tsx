@@ -152,90 +152,57 @@ const renderInteractionInfo = (c: any) => {
 
 const getContactStage = (c: any, stages: any[]) => {
   if (c.lost_reason || c.status === 'lost') {
-    return { isLost: true };
+    return { isLost: true, color: '#dc2626', bgColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.22)' };
   }
-  // 1. Direct stage_name from backend
-  if (c.stage_name) {
-    const isEnrolled = c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled';
-    return {
-      name: c.stage_name,
-      color: isEnrolled ? '#db2777' : (c.stage_color || '#3b82f6'),
-      bgColor: `${isEnrolled ? '#ec4899' : (c.stage_color || '#3b82f6')}1a`,
-      borderColor: `${isEnrolled ? '#ec4899' : (c.stage_color || '#3b82f6')}33`,
-      isEnrolled
-    };
-  }
-  // 2. Lookup in pipelineStages by stage_id or pipeline_status (numeric or slug)
-  if (stages && stages.length > 0) {
-    const found = stages.find((s: any) => 
-      (c.stage_id && String(s.id) === String(c.stage_id)) ||
-      (c.pipeline_status && (String(s.id) === String(c.pipeline_status) || s.system_slug === c.pipeline_status))
-    );
-    if (found) {
-      const isEnrolled = found.system_slug === 'enrolled' || found.name === 'Học viên' || found.name === '14 – Enrolled';
-      return {
-        name: found.name,
-        color: isEnrolled ? '#db2777' : (found.color || '#3b82f6'),
-        bgColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}1a`,
-        borderColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}33`,
-        isEnrolled
-      };
-    }
-  }
-  // 3. Check notes or last_interaction for explicit transfer: [Chuyển Pipeline sang: ...]
+
+  const stagesToUse = (stages && stages.length > 0) ? stages : DEFAULT_PIPELINE_STAGES;
+
+  // 1. Direct lookup in pipelineStages by stage_id, slug, or name
+  const found = stagesToUse.find((s: any) => 
+    (c.stage_id && String(s.id) === String(c.stage_id)) ||
+    (c.pipeline_status && (String(s.id) === String(c.pipeline_status) || s.system_slug === c.pipeline_status)) ||
+    (c.stage_name && (s.name?.toLowerCase() === c.stage_name.toLowerCase() || s.name?.includes(c.stage_name) || c.stage_name.includes(s.name)))
+  );
+
+  // 2. Check notes or last_interaction for explicit transfer: [Chuyển Pipeline sang: ...]
+  let extractedStage: any = null;
   const match = (c.notes || c.last_interaction || '').match(/\[Chuyển Pipeline sang:\s*([^\]]+)\]/i);
   if (match && match[1]) {
-    const extractedName = match[1].trim();
-    if (stages && stages.length > 0) {
-      const found = stages.find((s: any) => s.name?.toLowerCase() === extractedName.toLowerCase() || s.name?.includes(extractedName));
-      if (found) {
-        const isEnrolled = found.system_slug === 'enrolled' || found.name === 'Học viên' || found.name === '14 – Enrolled';
-        return {
-          name: found.name,
-          color: isEnrolled ? '#db2777' : (found.color || '#3b82f6'),
-          bgColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}1a`,
-          borderColor: `${isEnrolled ? '#ec4899' : (found.color || '#3b82f6')}33`,
-          isEnrolled
-        };
-      }
-    }
-    const isEnrolled = extractedName.includes('Enrolled') || extractedName.includes('Học viên');
+    const extractedName = match[1].trim().toLowerCase();
+    extractedStage = stagesToUse.find((s: any) => s.name?.toLowerCase() === extractedName || s.name?.toLowerCase().includes(extractedName));
+  }
+
+  const targetStage = found || extractedStage;
+  const isEnrolled = c.pipeline_status === 'enrolled' || c.stage_name === 'Học viên' || c.stage_name === '14 – Enrolled' || targetStage?.system_slug === 'enrolled' || c.status === 'customer';
+
+  if (isEnrolled) {
     return {
-      name: extractedName,
-      color: isEnrolled ? '#db2777' : '#8b5cf6',
-      bgColor: isEnrolled ? '#ec48991a' : '#8b5cf61a',
-      borderColor: isEnrolled ? '#ec489933' : '#8b5cf633',
-      isEnrolled
+      name: c.stage_name || targetStage?.name || '14 – Enrolled',
+      color: '#db2777',
+      bgColor: '#db277712',
+      borderColor: '#db27772c',
+      isEnrolled: true
     };
   }
 
-  // 4. If customer / student
-  if (c.status === 'customer') {
-    return {
-      name: 'Học viên',
-      color: '#ec4899',
-      bgColor: 'rgba(236, 72, 153, 0.1)',
-      borderColor: 'rgba(236, 72, 153, 0.2)'
-    };
-  }
-
-  // 5. If churned
   if (c.status === 'churned') {
     return {
       name: 'Đã rời',
-      color: 'var(--color-danger)',
-      bgColor: 'rgba(239, 68, 68, 0.12)',
-      borderColor: 'rgba(239, 68, 68, 0.3)'
+      color: '#dc2626',
+      bgColor: 'rgba(239, 68, 68, 0.08)',
+      borderColor: 'rgba(239, 68, 68, 0.22)',
+      isEnrolled: false
     };
   }
 
-  // 6. Default to first active stage ('01 – New Lead') instead of raw 'Đủ điều kiện'
-  const firstStage = stages && stages.length > 0 ? stages[0] : null;
+  const name = c.stage_name || targetStage?.name || stagesToUse[0]?.name || '01 – New Lead';
+  const color = targetStage?.color || c.stage_color || stagesToUse[0]?.color || '#2563eb';
+
   return {
-    name: firstStage ? firstStage.name : '01 – New Lead',
-    color: firstStage?.color || 'var(--color-primary)',
-    bgColor: `${firstStage?.color || '#3b82f6'}1a`,
-    borderColor: `${firstStage?.color || '#3b82f6'}33`,
+    name,
+    color,
+    bgColor: `${color}12`,
+    borderColor: `${color}2c`,
     isEnrolled: false
   };
 };
@@ -386,20 +353,20 @@ const FMT_VND = (n: any) => {
 const AGO_DAYS = (d: string) => d ? Math.floor((Date.now()-new Date(d).getTime())/86400000) : 999;
 
 const DEFAULT_PIPELINE_STAGES = [
-  { id: '31', name: '01 – New Lead', system_slug: 'new_lead', color: '#3b82f6', order_index: 1 },
-  { id: '32', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#6366f1', order_index: 2 },
-  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#8b5cf6', order_index: 3 },
-  { id: '34', name: '04 – Needed', system_slug: 'needed', color: '#a855f7', order_index: 4 },
-  { id: '35', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#d946ef', order_index: 5 },
-  { id: '36', name: '06 – Program Matched', system_slug: 'program_matched', color: '#ec4899', order_index: 6 },
-  { id: '37', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#f43f5e', order_index: 7 },
-  { id: '38', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#f97316', order_index: 8 },
-  { id: '39', name: '09 – Application Started', system_slug: 'application_started', color: '#f59e0b', order_index: 9 },
-  { id: '40', name: '10 – Application Completed', system_slug: 'application_completed', color: '#eab308', order_index: 10 },
-  { id: '41', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#84cc16', order_index: 11 },
-  { id: '42', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#22c55e', order_index: 12 },
-  { id: '43', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#10b981', order_index: 13 },
-  { id: '44', name: '14 – Enrolled', system_slug: 'enrolled', color: '#ec4899', order_index: 14 }
+  { id: '31', name: '01 – New Lead', system_slug: 'new_lead', color: '#2563eb', order_index: 1 },
+  { id: '32', name: '02 – Contact Attempted', system_slug: 'contact_attempted', color: '#64748b', order_index: 2 },
+  { id: '33', name: '03 – Connected', system_slug: 'connected', color: '#06b6d4', order_index: 3 },
+  { id: '34', name: '04 – Needed', system_slug: 'needed', color: '#7c3aed', order_index: 4 },
+  { id: '35', name: '05 – Discovery Completed', system_slug: 'discovery_completed', color: '#0d9488', order_index: 5 },
+  { id: '36', name: '06 – Program Matched', system_slug: 'program_matched', color: '#0284c7', order_index: 6 },
+  { id: '37', name: '07 – Proposal Sent', system_slug: 'proposal_sent', color: '#d97706', order_index: 7 },
+  { id: '38', name: '08 – Evaluation / Objection', system_slug: 'evaluation_objection', color: '#ea580c', order_index: 8 },
+  { id: '39', name: '09 – Application Started', system_slug: 'application_started', color: '#e11d48', order_index: 9 },
+  { id: '40', name: '10 – Application Completed', system_slug: 'application_completed', color: '#4338ca', order_index: 10 },
+  { id: '41', name: '11 – Admission Approved', system_slug: 'admission_approved', color: '#65a30d', order_index: 11 },
+  { id: '42', name: '12 – Offer / Scholarship Accepted', system_slug: 'offer_accepted', color: '#16a34a', order_index: 12 },
+  { id: '43', name: '13 – Deposit / Tuition Payment', system_slug: 'deposit_tuition_payment', color: '#059669', order_index: 13 },
+  { id: '44', name: '14 – Enrolled', system_slug: 'enrolled', color: '#db2777', order_index: 14 }
 ];
 
 interface ContactsPageProps {
@@ -2847,11 +2814,17 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                 .table-wrap td a {
                   font-size: 0.8125rem !important;
                 }
-                .table-wrap td .badge {
-                  font-size: 0.7rem !important;
-                  padding: 2px 6px !important;
-                  border-radius: 4px !important;
+                .table-wrap td .badge, .table-wrap td .stage-badge {
+                  font-size: 0.72rem !important;
+                  padding: 3px 9px !important;
+                  border-radius: 9999px !important;
                   font-weight: 600 !important;
+                  display: inline-flex !important;
+                  align-items: center !important;
+                  white-space: nowrap !important;
+                  line-height: 1.25 !important;
+                  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+                  letter-spacing: 0.01em !important;
                 }
                 .table-wrap td span {
                   font-size: 0.8125rem !important;
@@ -3281,36 +3254,36 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               </span>
                             ) : c.lead_status === 'nurture' ? (
                               <span 
-                                className="badge" 
+                                className="stage-badge" 
                                 style={{ 
-                                  backgroundColor: 'rgba(245, 158, 11, 0.12)', 
-                                  color: '#d97706', 
-                                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                                  backgroundColor: 'rgba(2, 132, 199, 0.08)', 
+                                  color: '#0284c7', 
+                                  border: '1px solid rgba(2, 132, 199, 0.22)',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '2px 8px',
-                                  borderRadius: '6px'
+                                  gap: '6px',
+                                  padding: '3px 10px',
+                                  borderRadius: '9999px'
                                 }}
                               >
-                                <Clock size={11} />
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#0284c7', flexShrink: 0 }} />
                                 <span>Nurture</span>
                               </span>
                             ) : c.lead_status === 'lost' ? (
                               <span 
-                                className="badge" 
+                                className="stage-badge" 
                                 style={{ 
-                                  backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                  backgroundColor: 'rgba(239, 68, 68, 0.08)', 
                                   color: '#dc2626', 
-                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  border: '1px solid rgba(239, 68, 68, 0.22)',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '2px 8px',
-                                  borderRadius: '6px'
+                                  gap: '6px',
+                                  padding: '3px 10px',
+                                  borderRadius: '9999px'
                                 }}
                               >
-                                <Ban size={11} />
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#dc2626', flexShrink: 0 }} />
                                 <span>Lost</span>
                               </span>
                             ) : (() => {
@@ -3318,33 +3291,39 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               if (stageInfo.isLost) {
                                 return (
                                   <span 
-                                    className="badge" 
+                                    className="stage-badge" 
                                     style={{ 
-                                      backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                      backgroundColor: 'rgba(239, 68, 68, 0.08)', 
                                       color: '#dc2626', 
-                                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                                      border: '1px solid rgba(239, 68, 68, 0.22)',
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '4px',
-                                      padding: '2px 8px',
-                                      borderRadius: '6px'
+                                      gap: '6px',
+                                      padding: '3px 10px',
+                                      borderRadius: '9999px'
                                     }}
                                   >
-                                    <Ban size={11} />
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#dc2626', flexShrink: 0 }} />
                                     <span>Lost</span>
                                   </span>
                                 );
                               }
                               return (
                                 <span 
-                                  className="badge" 
+                                  className="stage-badge" 
                                   style={{ 
                                     backgroundColor: stageInfo.bgColor, 
                                     color: stageInfo.color, 
-                                    border: `1px solid ${stageInfo.borderColor}`
+                                    border: `1px solid ${stageInfo.borderColor}`,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '3px 10px',
+                                    borderRadius: '9999px'
                                   }}
                                 >
-                                  {stageInfo.name}
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: stageInfo.color, flexShrink: 0 }} />
+                                  <span>{stageInfo.name}</span>
                                 </span>
                               );
                             })()}
@@ -3790,21 +3769,21 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 </span>
                               ) : c.lead_status === 'nurture' ? (
                                 <span 
-                                  className="badge" 
+                                  className="stage-badge" 
                                   style={{ 
-                                    borderRadius: '8px', 
-                                    padding: '4px 8px', 
+                                    borderRadius: '9999px', 
+                                    padding: '3px 10px', 
                                     fontSize: '0.72rem', 
-                                    fontWeight: 700,
-                                    backgroundColor: 'rgba(245, 158, 11, 0.12)', 
-                                    color: '#d97706', 
-                                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                                    fontWeight: 600,
+                                    backgroundColor: 'rgba(2, 132, 199, 0.08)', 
+                                    color: '#0284c7', 
+                                    border: '1px solid rgba(2, 132, 199, 0.22)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '4px'
+                                    gap: '6px'
                                   }}
                                 >
-                                  <Clock size={11} />
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#0284c7', flexShrink: 0 }} />
                                   <span>Nurture</span>
                                 </span>
                               ) : (() => {
@@ -3812,39 +3791,43 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 if (stageInfo.isLost) {
                                   return (
                                     <span 
-                                      className="badge" 
+                                      className="stage-badge" 
                                       style={{ 
-                                        borderRadius: '8px', 
-                                        padding: '4px 8px', 
+                                        borderRadius: '9999px', 
+                                        padding: '3px 10px', 
                                         fontSize: '0.72rem', 
-                                        fontWeight: 700,
-                                        backgroundColor: 'rgba(239, 68, 68, 0.12)', 
+                                        fontWeight: 600,
+                                        backgroundColor: 'rgba(239, 68, 68, 0.08)', 
                                         color: '#dc2626', 
-                                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                                        border: '1px solid rgba(239, 68, 68, 0.22)',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '4px'
+                                        gap: '6px'
                                       }}
                                     >
-                                      <Ban size={11} />
+                                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#dc2626', flexShrink: 0 }} />
                                       <span>Lost</span>
                                     </span>
                                   );
                                 }
                                 return (
                                   <span 
-                                    className="badge" 
+                                    className="stage-badge" 
                                     style={{ 
-                                      borderRadius: '8px', 
-                                      padding: '4px 8px', 
+                                      borderRadius: '9999px', 
+                                      padding: '3px 10px', 
                                       fontSize: '0.72rem', 
-                                      fontWeight: 700,
+                                      fontWeight: 600,
                                       backgroundColor: stageInfo.bgColor, 
                                       color: stageInfo.color, 
-                                      border: `1px solid ${stageInfo.borderColor}`
+                                      border: `1px solid ${stageInfo.borderColor}`,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
                                     }}
                                   >
-                                    {stageInfo.name}
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: stageInfo.color, flexShrink: 0 }} />
+                                    <span>{stageInfo.name}</span>
                                   </span>
                                 );
                               })()}

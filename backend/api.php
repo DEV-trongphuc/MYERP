@@ -12581,7 +12581,22 @@ switch ($action) {
                 }
 
                 $keepIds = [];
-                $colors = ['#3b82f6', '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#14b8a6', '#10b981'];
+                $standardStageColors = [
+                    'new_lead'                => '#2563eb', // 01: Blue
+                    'contact_attempted'       => '#64748b', // 02: Slate Blue-Grey
+                    'connected'               => '#06b6d4', // 03: Cyan
+                    'needed'                  => '#7c3aed', // 04: Violet
+                    'discovery_completed'     => '#0d9488', // 05: Teal
+                    'program_matched'         => '#0284c7', // 06: Sky Blue
+                    'proposal_sent'           => '#d97706', // 07: Amber / Warm Gold
+                    'evaluation_objection'    => '#ea580c', // 08: Bright Orange
+                    'application_started'     => '#e11d48', // 09: Rose Red
+                    'application_completed'   => '#4338ca', // 10: Indigo / Deep Blue
+                    'admission_approved'      => '#65a30d', // 11: Lime Green
+                    'offer_accepted'          => '#16a34a', // 12: Vibrant Green
+                    'deposit_tuition_payment' => '#059669', // 13: Emerald Green
+                    'enrolled'                => '#db2777', // 14: Pink / Magenta
+                ];
 
                 $dealWonStatus = $input['deal_won_status'] ?? 'dong_deal';
                 if (!$dealWonStatus) {
@@ -12590,8 +12605,8 @@ switch ($action) {
 
                 foreach ($hierarchy as $idx => $slug) {
                     $name = $labels[$slug] ?? $slug;
-                    $color = $colors[$idx % count($colors)];
-                    $isWon = ($slug === $dealWonStatus) ? 1 : 0;
+                    $color = $standardStageColors[$slug] ?? ($existingStages[$idx]['color'] ?? '#3b82f6');
+                    $isWon = ($slug === $dealWonStatus || $slug === 'enrolled') ? 1 : 0;
                     $isLost = ($slug === 'that_bai' || $slug === 'lost') ? 1 : 0;
 
                     if (isset($existingStages[$idx])) {

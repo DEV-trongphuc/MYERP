@@ -2101,7 +2101,7 @@ try {
                 [
                     'name' => '02 – Contact Attempted',
                     'slug' => 'contact_attempted',
-                    'color' => '#6366f1',
+                    'color' => '#64748b',
                     'order' => 2,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2113,7 +2113,7 @@ try {
                 [
                     'name' => '03 – Connected',
                     'slug' => 'connected',
-                    'color' => '#8b5cf6',
+                    'color' => '#06b6d4',
                     'order' => 3,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2125,7 +2125,7 @@ try {
                 [
                     'name' => '04 – Needed',
                     'slug' => 'needed',
-                    'color' => '#a855f7',
+                    'color' => '#7c3aed',
                     'order' => 4,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2137,7 +2137,7 @@ try {
                 [
                     'name' => '05 – Discovery Completed',
                     'slug' => 'discovery_completed',
-                    'color' => '#d946ef',
+                    'color' => '#0d9488',
                     'order' => 5,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2149,7 +2149,7 @@ try {
                 [
                     'name' => '06 – Program Matched',
                     'slug' => 'program_matched',
-                    'color' => '#ec4899',
+                    'color' => '#0284c7',
                     'order' => 6,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2161,7 +2161,7 @@ try {
                 [
                     'name' => '07 – Proposal Sent',
                     'slug' => 'proposal_sent',
-                    'color' => '#f43f5e',
+                    'color' => '#d97706',
                     'order' => 7,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2173,7 +2173,7 @@ try {
                 [
                     'name' => '08 – Evaluation / Objection',
                     'slug' => 'evaluation_objection',
-                    'color' => '#f97316',
+                    'color' => '#ea580c',
                     'order' => 8,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2185,7 +2185,7 @@ try {
                 [
                     'name' => '09 – Application Started',
                     'slug' => 'application_started',
-                    'color' => '#f59e0b',
+                    'color' => '#e11d48',
                     'order' => 9,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2197,7 +2197,7 @@ try {
                 [
                     'name' => '10 – Application Completed',
                     'slug' => 'application_completed',
-                    'color' => '#eab308',
+                    'color' => '#4338ca',
                     'order' => 10,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2209,7 +2209,7 @@ try {
                 [
                     'name' => '11 – Admission Approved',
                     'slug' => 'admission_approved',
-                    'color' => '#84cc16',
+                    'color' => '#65a30d',
                     'order' => 11,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2221,7 +2221,7 @@ try {
                 [
                     'name' => '12 – Offer / Scholarship Accepted',
                     'slug' => 'offer_accepted',
-                    'color' => '#22c55e',
+                    'color' => '#16a34a',
                     'order' => 12,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2233,7 +2233,7 @@ try {
                 [
                     'name' => '13 – Deposit / Tuition Payment',
                     'slug' => 'deposit_tuition_payment',
-                    'color' => '#10b981',
+                    'color' => '#059669',
                     'order' => 13,
                     'is_won' => 0,
                     'is_lost' => 0,
@@ -2245,7 +2245,7 @@ try {
                 [
                     'name' => '14 – Enrolled',
                     'slug' => 'enrolled',
-                    'color' => '#ec4899',
+                    'color' => '#db2777',
                     'order' => 14,
                     'is_won' => 1,
                     'is_lost' => 0,
