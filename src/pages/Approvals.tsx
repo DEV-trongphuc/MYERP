@@ -13055,13 +13055,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 vatAmount = vAmt;
               }
 
-              let docLabel = vatRate > 0 ? `Hóa đơn điện tử VAT ${vatLabel}` : 'Không có hóa đơn';
+              let docLabel = vatRate > 0 ? 'Hóa đơn điện tử VAT' : 'Không có hóa đơn';
               if (rawNotes.includes('Hóa đơn bán lẻ')) {
                 docLabel = 'Hóa đơn bán lẻ / Biên lai thu tiền';
               } else if (rawNotes.includes('Không có hóa đơn')) {
                 docLabel = 'Không có hóa đơn (Giải trình nội bộ)';
               } else if (vatRate > 0) {
-                docLabel = `Hóa đơn điện tử VAT ${vatLabel}`;
+                docLabel = 'Hóa đơn điện tử VAT';
               }
 
               return (
@@ -13071,7 +13071,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Số tiền đề xuất')}</label>
                       {vatRate > 0 && (
                         <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
-                          ✓ {t('Đã gồm VAT')} {vatLabel}
+                          ✓ {t('Đã gồm VAT')}
                         </span>
                       )}
                     </div>
@@ -13114,8 +13114,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Receipt size={14} /> {t('Chi tiết thuế VAT')} ({vatLabel})
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Receipt size={14} color="var(--color-text, #1e293b)" /> {t('Chi tiết thuế VAT')}
                           </span>
                           <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
                             {t('Chứng từ')}: {docLabel}
@@ -13127,7 +13127,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                             <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>{formatApprovalCurrency(amountBeforeVat, expCurr)}</strong>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tiền thuế VAT')} ({vatLabel}):</span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{t('Tiền thuế VAT')}:</span>
                             <strong style={{ fontSize: '0.85rem', color: '#2563eb' }}>{formatApprovalCurrency(vatAmount, expCurr)}</strong>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>

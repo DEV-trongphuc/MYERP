@@ -2191,13 +2191,13 @@ export const ExpensesPage: React.FC = () => {
                         vatAmount = vAmt;
                       }
 
-                      let docLabel = vatRate > 0 ? `Hóa đơn điện tử VAT ${vatLabel}` : 'Không có hóa đơn';
+                      let docLabel = vatRate > 0 ? 'Hóa đơn điện tử VAT' : 'Không có hóa đơn';
                       if (rawNotes.includes('Hóa đơn bán lẻ')) {
                         docLabel = 'Hóa đơn bán lẻ / Biên lai thu tiền';
                       } else if (rawNotes.includes('Không có hóa đơn')) {
                         docLabel = 'Không có hóa đơn (Giải trình nội bộ)';
                       } else if (vatRate > 0) {
-                        docLabel = `Hóa đơn điện tử VAT ${vatLabel}`;
+                        docLabel = 'Hóa đơn điện tử VAT';
                       }
 
                       return (
@@ -2206,7 +2206,7 @@ export const ExpensesPage: React.FC = () => {
                             padding: '1.5rem', 
                             background: '#ffffff', 
                             borderRadius: '16px', 
-                            border: '1px solid var(--color-border-light)',
+                            border: '1px solid var(--color-border-light)', 
                             boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
                             display: 'flex',
                             alignItems: 'center',
@@ -2220,7 +2220,7 @@ export const ExpensesPage: React.FC = () => {
                                 </span>
                                 {vatRate > 0 && (
                                   <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
-                                    ✓ Đã gồm VAT {vatLabel}
+                                    ✓ Đã gồm VAT
                                   </span>
                                 )}
                               </div>
@@ -2253,8 +2253,8 @@ export const ExpensesPage: React.FC = () => {
                               gap: '6px'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <Receipt size={14} /> Chi tiết thuế VAT ({vatLabel})
+                                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text, #1e293b)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Receipt size={14} color="var(--color-text, #1e293b)" /> Chi tiết thuế VAT
                                 </span>
                                 <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
                                   Chứng từ: {docLabel}
@@ -2266,7 +2266,7 @@ export const ExpensesPage: React.FC = () => {
                                   <strong style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>{FMT(amountBeforeVat, expCurr)}</strong>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Tiền thuế VAT ({vatLabel}):</span>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Tiền thuế VAT:</span>
                                   <strong style={{ fontSize: '0.85rem', color: '#2563eb' }}>{FMT(vatAmount, expCurr)}</strong>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
