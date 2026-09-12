@@ -1026,6 +1026,10 @@ switch ($resource) {
         elseif ($resourceId === 'advances' && $method === 'POST') $ctrl->createAdvance($auth);
         elseif ($resourceId === 'advances' && $method === 'PUT') $ctrl->approveAdvance($auth);
         elseif ($resourceId === 'advances' && $method === 'DELETE' && $subResource) $ctrl->deleteAdvance($auth, (int)$subResource);
+        elseif ($resourceId === 'teams' && $method === 'GET') {
+            $tCtrl = new TeamController($db);
+            $tCtrl->index($auth);
+        }
         elseif ($resourceId === 'payroll') {
             if (!$subResource) {
                 if ($method === 'GET') $ctrl->indexPayslips($auth);

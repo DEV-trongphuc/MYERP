@@ -104,7 +104,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         }
       }
       setSelectedDateForDetail(dateParam);
-      setModalTab('checkin');
     }
   }, [location.search]);
 
@@ -669,9 +668,45 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     return dayExceptions;
   }, [dayExceptions, exceptionFilter]);
 
-  // Auto switch modal tab to the one that has data when opening day detail modal
+  // Track if explicit tab was set to avoid useEffect overriding it
+  const skipAutoTabRef = useRef(false);
+
+  // Automatically switch modal tab to the one with data immediately upon day selection
+  const handleOpenDayDetail = (dateStr: string, explicitTab?: 'checkin' | 'requests' | 'night_duty') => {
+    setSelectedDateForDetail(dateStr);
+    if (explicitTab) {
+      skipAutoTabRef.current = true;
+      setModalTab(explicitTab);
+      return;
+    }
+    const checkinCount = calendarCheckIns.filter(c => c.check_in_date === dateStr).length;
+    const dayLeaves = calendarLeaves.filter(l => {
+      const s = l.start_date_only || (l.start_date ? String(l.start_date).slice(0, 10) : '');
+      const e = l.end_date_only || (l.end_date ? String(l.end_date).slice(0, 10) : '');
+      return s <= dateStr && e >= dateStr;
+    });
+    const dayShifts = calendarShifts.filter(s => s.shift_date === dateStr);
+    const dayOt = dayShifts.filter(s => s.shift_type === 'overtime');
+    const dayDutyShifts = dayShifts.filter(s => s.shift_type !== 'overtime');
+
+    if (checkinCount > 0) {
+      setModalTab('checkin');
+    } else if (dayLeaves.length > 0 || dayOt.length > 0) {
+      setModalTab('requests');
+    } else if (dayDutyShifts.length > 0) {
+      setModalTab('night_duty');
+    } else {
+      setModalTab('checkin');
+    }
+  };
+
+  // Auto switch modal tab to the one that has data as backup watcher
   useEffect(() => {
     if (!selectedDateForDetail) return;
+    if (skipAutoTabRef.current) {
+      skipAutoTabRef.current = false;
+      return;
+    }
     const checkinCount = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).length;
     const exceptionsCount = dayExceptions.length;
     const shiftsCount = calendarShifts.filter(s => s.shift_date === selectedDateForDetail).length;
@@ -688,7 +723,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   }, [selectedDateForDetail, dayExceptions.length]);
 
   // Export company attendance summary states (HR / Admin only)
-  const canExportSummary = isHR(user, true) || Boolean((user as any)?.is_hr || (user as any)?.is_admin);
+  const userRoleStr = String(user?.role || '').toLowerCase().trim();
+  const canExportSummary = isHR(user, true) || 
+    isExecutive(user) || 
+    Boolean((user as any)?.is_hr || (user as any)?.is_admin) || 
+    ['admin', 'superadmin', 'super_admin', 'director', 'hr', 'hr_manager', 'hrm', 'nhan_su'].includes(userRoleStr);
   const [showExportSummaryModal, setShowExportSummaryModal] = useState(false);
   const [exportMode, setExportMode] = useState<'month' | 'range'>('month');
   const [exportMonth, setExportMonth] = useState<number>(() => currentMonth);
@@ -953,12 +992,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       const allLeaves: any[] = res.data?.leaves || [];
 
       // 2. Fetch full user list if needed
-      let employees = usersList;
+      let employees = consultants.length > 0 ? consultants : usersList;
       if (!employees || employees.length === 0) {
-        const uRes = await fetchAPI('users?all=1');
-        if (uRes && uRes.data && Array.isArray(uRes.data)) {
+        const uRes = await fetchAPI('get_consultants&all=1');
+        if (uRes && uRes.success && Array.isArray(uRes.data) && uRes.data.length > 0) {
           employees = uRes.data;
-          setUsersList(uRes.data);
+          setConsultants(uRes.data);
+        } else {
+          const uRes2 = await fetchAPI('users?all=1');
+          if (uRes2 && uRes2.data && Array.isArray(uRes2.data)) {
+            employees = uRes2.data;
+            setUsersList(uRes2.data);
+          }
         }
       }
 
@@ -2095,7 +2140,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 key={idx}
                 onClick={() => {
                   if (cell.dateStr) {
-                    setSelectedDateForDetail(cell.dateStr);
+                    handleOpenDayDetail(cell.dateStr);
                   }
                 }}
                 style={{
@@ -2351,7 +2396,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               {/* Trực đêm */}
                               {nights.length > 0 && (
                                 <span 
-                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDayDetail(cell.dateStr, 'night_duty');
+                                  }}
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
                                   title={t('Trực đêm: ') + nights.map(n => n.user_name).join(', ')}
                                 >
                                   <Moon size={10} /> {nights.length} {t('Đêm')}
@@ -2361,7 +2410,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               {/* Cuối tuần */}
                               {weekends.length > 0 && (
                                 <span 
-                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDayDetail(cell.dateStr, 'night_duty');
+                                  }}
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
                                   title={t('Cuối tuần: ') + weekends.map(w => w.user_name).join(', ')}
                                 >
                                   <Calendar size={10} /> {weekends.length} {t('C.tuần')}
@@ -2371,7 +2424,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               {/* Ngày lễ */}
                               {holidays.length > 0 && (
                                 <span 
-                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDayDetail(cell.dateStr, 'night_duty');
+                                  }}
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
                                   title={t('Ngày lễ: ') + holidays.map(h => h.user_name).join(', ')}
                                 >
                                   <Zap size={10} /> {holidays.length} {t('Lễ')}
@@ -2381,7 +2438,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               {/* Tăng ca (OT) */}
                               {overtimes.length > 0 && (
                                 <span 
-                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDayDetail(cell.dateStr, 'requests');
+                                  }}
+                                  style={{ fontSize: '0.62rem', padding: '1.5px 5px', borderRadius: '5px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}
                                   title={t('Tăng ca (OT): ') + overtimes.map(o => `${o.user_name} (${o.start_time || ''}-${o.end_time || ''})`).join(', ')}
                                 >
                                   <Zap size={10} /> {overtimes.length} OT
@@ -2396,6 +2457,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                   wfhList.map(l => `• ${l.user_name || l.full_name || t('Nhân viên')} (${(Number(l.approved) === 1 || l.status === 'approved') ? t('Đã duyệt') : t('Chờ duyệt')})`).join('\n');
                                 return (
                                   <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDayDetail(cell.dateStr, 'requests');
+                                    }}
                                     style={{
                                       fontSize: '0.62rem',
                                       padding: '1.5px 5px',
@@ -2438,6 +2503,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                   }).join('\n');
                                 return (
                                   <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDayDetail(cell.dateStr, 'requests');
+                                    }}
                                     style={{
                                       fontSize: '0.62rem',
                                       padding: '1.5px 5px',
@@ -2505,18 +2574,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 const isAppr = Number(s.approved) === 1 || s.status === 'approved';
 
                                 return (
-                                  <div key={`${s.shift_type}-${s.id}`} style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    fontSize: isMobile ? '0.625rem' : '0.68rem',
-                                    padding: isMobile ? '2px 4px' : '3px 6px',
-                                    borderRadius: '6px',
-                                    border: '1px solid ' + border,
-                                    backgroundColor: bg,
-                                    color: text,
-                                    fontWeight: 600
-                                  }} title={`${label} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
+                                  <div 
+                                    key={`${s.shift_type}-${s.id}`} 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDayDetail(cell.dateStr, s.shift_type === 'overtime' ? 'requests' : 'night_duty');
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      fontSize: isMobile ? '0.625rem' : '0.68rem',
+                                      padding: isMobile ? '2px 4px' : '3px 6px',
+                                      borderRadius: '6px',
+                                      border: '1px solid ' + border,
+                                      backgroundColor: bg,
+                                      color: text,
+                                      fontWeight: 600,
+                                      cursor: 'pointer'
+                                    }} 
+                                    title={`${label} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}
+                                  >
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '70px' : '110px' }}>
                                       <ShiftIcon size={isMobile ? 8 : 10} />
                                       {label}
@@ -2555,18 +2633,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 const lvBorder = isWFH ? 'rgba(16, 185, 129, 0.25)' : (isHalfDay ? 'rgba(234, 88, 12, 0.25)' : 'rgba(244, 63, 94, 0.25)');
 
                                 return (
-                                  <div key={lv.id} style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    fontSize: isMobile ? '0.625rem' : '0.68rem',
-                                    padding: isMobile ? '2px 4px' : '3px 6px',
-                                    borderRadius: '6px',
-                                    border: '1px solid ' + lvBorder,
-                                    backgroundColor: lvBg,
-                                    color: lvColor,
-                                    fontWeight: 600
-                                  }} title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}>
+                                  <div 
+                                    key={lv.id} 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenDayDetail(cell.dateStr, 'requests');
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      fontSize: isMobile ? '0.625rem' : '0.68rem',
+                                      padding: isMobile ? '2px 4px' : '3px 6px',
+                                      borderRadius: '6px',
+                                      border: '1px solid ' + lvBorder,
+                                      backgroundColor: lvBg,
+                                      color: lvColor,
+                                      fontWeight: 600,
+                                      cursor: 'pointer'
+                                    }} 
+                                    title={`${lvLabel} (${isAppr ? t('Đã duyệt') : t('Chờ duyệt')})`}
+                                  >
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: isMobile ? '65px' : '95px' }}>
                                       {isWFH ? <Home size={isMobile ? 8 : 10} /> : <Calendar size={isMobile ? 8 : 10} />}
                                       {lvLabel}
@@ -4699,7 +4786,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
   const departmentList = useMemo(() => {
     const depts = new Set<string>();
-    usersList.forEach((u: any) => {
+    const sourceList = consultants.length > 0 ? consultants : usersList;
+    sourceList.forEach((u: any) => {
       if (u.department && String(u.department).trim()) depts.add(String(u.department).trim());
       if (u.team_name && String(u.team_name).trim()) depts.add(String(u.team_name).trim());
     });
@@ -4707,7 +4795,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       if (t.name && String(t.name).trim()) depts.add(String(t.name).trim());
     });
     return Array.from(depts).sort();
-  }, [usersList, teamsList]);
+  }, [consultants, usersList, teamsList]);
 
   const renderExportSummaryModal = () => {
     if (!showExportSummaryModal) return null;
@@ -6056,6 +6144,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           onClose={() => {
             setSelectedDateForDetail(null);
             setModalTab('checkin');
+            skipAutoTabRef.current = false;
           }}
           title={`${t('Chi tiết chấm công ngày')} ${selectedDateForDetail}`}
           width="800px"

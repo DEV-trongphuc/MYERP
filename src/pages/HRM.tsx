@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchAPI } from '../utils/api';
 import { 
   Users, Calendar, CreditCard, DollarSign, Check, X, ShieldAlert,
   Send, Lock, Award, FileText, ChevronLeft, ChevronRight, Play, CheckCircle, ArrowLeft,
-  LayoutDashboard, Clock, User, Building2, MapPin, ClipboardList, PenTool, MessageSquare, Info, Save, Plus, HelpCircle
+  LayoutDashboard, Clock, User, Building2, MapPin, ClipboardList, PenTool, MessageSquare, Info, Save, Plus, HelpCircle,
+  Search, CheckCircle2, XCircle, Trash2, Eye, Flame, AlertCircle, Briefcase, BarChart2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -23,7 +24,7 @@ import type { ApprovalItem } from './Approvals';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useUIStore } from '../store/uiStore';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#0d9488'];
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6', '#f97316', '#64748b'];
 
 const FMT_COMPACT = (n: any) => {
   const num = Number(n || 0);
@@ -148,100 +149,339 @@ export default function HRM() {
     return (isLevel1Active && isLevel1Approver) || (isLevel2Active && isLevel2Approver);
   };
 
-  const renderActionStatusCell = (req: any, type: 'leave' | 'advance') => {
-    const isPending = req.status === 'pending';
-    const isApproved = req.status === 'approved';
-    
-    if (isPending) {
-      if (Number(req.user_id) === Number(user?.id)) {
-        return (
-          <span className="badge warning" style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
-            {t('Đang chờ duyệt')}
-          </span>
-        );
-      }
-      const isLevel1Active = req.status_level_1 === 'pending';
-      const isLevel2Active = req.status_level_1 === 'approved' && req.status_level_2 === 'pending';
-      
-      const isGlobalAdmin = isHR(user, true);
-      const isLevel1Approver = Number(req.approver_id) === Number(user?.id) || (isLevel1Active && isGlobalAdmin);
-      const isLevel2Approver = Number(req.approver_id_2) === Number(user?.id) || (isLevel2Active && isGlobalAdmin);
-      const isMyTurn = (isLevel1Active && isLevel1Approver) || (isLevel2Active && isLevel2Approver);
-      
-      if (isMyTurn) {
-        return (
-          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
-            <button 
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (type === 'leave') {
-                  await handleApproveLeave(req.id, 'approved');
-                } else {
-                  await handleApproveAdvance(req.id, 'approved');
-                }
-                loadData();
-              }} 
-              className="btn sm" 
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.725rem', fontWeight: 700 }}
-            >
-              <Check size={12} /> {t('Duyệt')}
-            </button>
-            <button 
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (type === 'leave') {
-                  await handleApproveLeave(req.id, 'rejected');
-                } else {
-                  await handleApproveAdvance(req.id, 'rejected');
-                }
-                loadData();
-              }} 
-              className="btn sm outline" 
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 2, borderColor: '#ef4444', color: '#ef4444', borderRadius: '6px', padding: '4px 10px', fontSize: '0.725rem', fontWeight: 700 }}
-            >
-              <X size={12} /> {t('Từ chối')}
-            </button>
+  const renderWorkflowStepsCell = (req: any, type: 'leave' | 'advance') => {
+    const approver1 = profiles.find(p => Number(p.id) === Number(req.approver_id));
+    const approver2 = profiles.find(p => Number(p.id) === Number(req.approver_id_2));
+
+    const isL1Done = req.status_level_1 === 'approved';
+    const isL1Reject = req.status_level_1 === 'rejected';
+    const isL2Done = req.status_level_2 === 'approved';
+    const isL2Reject = req.status_level_2 === 'rejected';
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        {approver1 ? (
+          <div style={{ position: 'relative', display: 'inline-flex' }} title={`${t('Cấp 1')}: ${approver1.full_name} (${isL1Done ? t('Đã duyệt') : isL1Reject ? t('Từ chối') : t('Chờ duyệt')})`}>
+            <div style={{
+              borderRadius: '50%',
+              padding: '1.5px',
+              border: `2px solid ${isL1Done ? '#10b981' : isL1Reject ? '#ef4444' : '#f59e0b'}`
+            }}>
+              <Avatar src={approver1.avatar_url || approver1.avatar} name={approver1.full_name} size={22} />
+            </div>
+            {isL1Done && (
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
+            )}
           </div>
-        );
-      } else {
-        if (isLevel1Active) {
-          const approver1 = profiles.find(p => Number(p.id) === Number(req.approver_id));
-          return (
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-              {t('Đang chờ')} {approver1?.full_name || t('Quản lý')} {t('duyệt')}
-            </span>
-          );
-        } else if (isLevel2Active) {
-          const approver2 = profiles.find(p => Number(p.id) === Number(req.approver_id_2));
-          return (
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-              {t('Đang chờ')} {approver2?.full_name || t('Kế toán')} {t('duyệt')}
-            </span>
-          );
-        } else {
-          return (
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-              {t('Đang chờ duyệt...')}
-            </span>
-          );
-        }
-      }
-    } else {
+        ) : (
+          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{t('Cấp 1')}</span>
+        )}
+
+        {approver2 && (
+          <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+        )}
+
+        {approver2 && (
+          <div style={{ position: 'relative', display: 'inline-flex' }} title={`${t('Cấp 2')}: ${approver2.full_name} (${isL2Done ? t('Đã duyệt') : isL2Reject ? t('Từ chối') : (isL1Done ? t('Chờ duyệt') : t('Chưa đến lượt'))})`}>
+            <div style={{
+              borderRadius: '50%',
+              padding: '1.5px',
+              border: `2px solid ${isL2Done ? '#10b981' : isL2Reject ? '#ef4444' : (isL1Done ? '#f59e0b' : 'var(--color-border)')}`
+            }}>
+              <Avatar src={approver2.avatar_url || approver2.avatar} name={approver2.full_name} size={22} />
+            </div>
+            {isL2Done && (
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const profilesMap = useMemo(() => {
+    const map = new Map<number, any>();
+    profiles.forEach(p => {
+      if (p.id) map.set(Number(p.id), p);
+    });
+    return map;
+  }, [profiles]);
+
+  const profilesByNameMap = useMemo(() => {
+    const map = new Map<string, any>();
+    profiles.forEach(p => {
+      if (p.full_name) map.set(p.full_name.toLowerCase().trim(), p);
+      if (p.name) map.set(p.name.toLowerCase().trim(), p);
+      if (p.username) map.set(p.username.toLowerCase().trim(), p);
+    });
+    return map;
+  }, [profiles]);
+
+  const renderCurrentApproverBadge = (item: any, type: 'leave' | 'advance') => {
+    let approverUser: any = null;
+    let stepLabel = '';
+    let badgeClass = 'badge warning';
+    let icon = <Clock size={10} />;
+
+    const overallStatus = String(item?.status || 'pending').toLowerCase();
+    const status1 = String(item?.status_level_1 || (overallStatus === 'level1_approved' ? 'approved' : 'pending')).toLowerCase();
+    const status2 = String(item?.status_level_2 || 'none').toLowerCase();
+    const status3 = String(item?.status_level_3 || 'none').toLowerCase();
+
+    // 00. If draft:
+    if (overallStatus === 'draft') {
       return (
-        <span style={{ 
-          fontWeight: 800, 
-          textTransform: 'uppercase', 
-          fontSize: '0.7rem', 
-          color: isApproved ? '#10b981' : '#ef4444',
-          backgroundColor: isApproved ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-          padding: '3px 10px',
-          borderRadius: '20px',
-          letterSpacing: '0.03em'
-        }}>
-          {isApproved ? (type === 'leave' ? t('Đã duyệt') : t('Đã duyệt chi')) : t('Đã từ chối')}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="badge" style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.12)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Clock size={10} />
+            <span>{t('Chưa gửi duyệt')}</span>
+          </span>
+        </div>
       );
     }
+
+    // 0. If overall status is rejected:
+    if (overallStatus === 'rejected') {
+      const rejectorName = item.rejected_by_name || item.approver_name_2 || item.approver_name;
+      let rejecterUser: any = null;
+      if (Number(item.rejected_by) > 0) {
+        rejecterUser = profilesMap.get(Number(item.rejected_by));
+      }
+      if (!rejecterUser && rejectorName) {
+        rejecterUser = profilesByNameMap.get(String(rejectorName).toLowerCase().trim());
+      }
+      const displayName = rejecterUser?.full_name || rejecterUser?.name || rejectorName || t('Người từ chối');
+      const avatarUrl = rejecterUser?.avatar_url || rejecterUser?.avatar;
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Avatar src={avatarUrl} name={displayName} size={24} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
+              {displayName}
+            </span>
+            <span className="badge danger" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
+              <XCircle size={10} />
+              <span>{t('Đã từ chối')}</span>
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // 1. If overall status is approved:
+    if (overallStatus === 'approved' || overallStatus === 'confirmed') {
+      let finalUser: any = null;
+      let finalApproverId = 0;
+      if (Number(item.approved_by) > 0) {
+        finalApproverId = Number(item.approved_by);
+      } else if (Number(item.approver_id_3) > 0) {
+        finalApproverId = Number(item.approver_id_3);
+      } else if (Number(item.approver_id_2) > 0) {
+        finalApproverId = Number(item.approver_id_2);
+      } else if (Number(item.hr_id) > 0) {
+        finalApproverId = Number(item.hr_id);
+      } else if (Number(item.approver_id) > 0) {
+        finalApproverId = Number(item.approver_id);
+      } else if (Number(item.manager_id) > 0) {
+        finalApproverId = Number(item.manager_id);
+      }
+
+      if (finalApproverId > 0) {
+        finalUser = profilesMap.get(finalApproverId);
+      }
+
+      let finalApproverName = '';
+      if (item.approved_by_name) {
+        finalApproverName = item.approved_by_name;
+      } else if (item.approver_name_3) {
+        finalApproverName = item.approver_name_3;
+      } else if (item.approver_name_2) {
+        finalApproverName = item.approver_name_2;
+      } else if (item.approver_name) {
+        finalApproverName = item.approver_name;
+      }
+
+      if (!finalUser && finalApproverName) {
+        finalUser = profilesByNameMap.get(String(finalApproverName).toLowerCase().trim());
+      }
+
+      if (!finalUser) {
+        if (type === 'leave' || item.type === 'leave') {
+          finalUser = profilesByNameMap.get('phuongntd') || profilesByNameMap.get('nguyễn thị duy phương');
+        }
+      }
+
+      const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Đã phê duyệt');
+      const avatarUrl = finalUser?.avatar_url || finalUser?.avatar;
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Avatar src={avatarUrl} name={displayName} size={24} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
+              {displayName}
+            </span>
+            <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
+              <CheckCircle2 size={10} />
+              <span>{t('Đã duyệt đủ cấp')}</span>
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. Identify current pending level
+    let targetApproverId = 0;
+    let targetApproverName = '';
+
+    const hasLevel2 = Boolean(item.approver_id_2 || item.approver_name_2 || (status2 !== 'none' && status2 !== ''));
+    const hasLevel3 = Boolean(item.approver_id_3 || item.approver_name_3 || (status3 !== 'none' && status3 !== ''));
+
+    if (status1 === 'approved' && hasLevel2 && status2 !== 'approved' && status2 !== 'rejected') {
+      targetApproverId = Number(item.approver_id_2 || 0);
+      targetApproverName = item.approver_name_2 || '';
+      stepLabel = t('Chờ duyệt Cấp 2');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else if (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && hasLevel3 && status3 !== 'approved' && status3 !== 'rejected') {
+      targetApproverId = Number(item.approver_id_3 || 0);
+      targetApproverName = item.approver_name_3 || '';
+      stepLabel = t('Chờ duyệt Cấp 3');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else if (status1 === 'pending' || overallStatus === 'pending') {
+      targetApproverId = Number(item.approver_id || item.manager_id || 0);
+      targetApproverName = item.approver_name || '';
+      stepLabel = hasLevel2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else {
+      targetApproverId = Number(item.approver_id || 0);
+      targetApproverName = item.approver_name || '';
+      stepLabel = t('Chờ duyệt');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    }
+
+    if (targetApproverId > 0) {
+      approverUser = profilesMap.get(targetApproverId);
+    }
+    if (!approverUser && targetApproverName) {
+      approverUser = profilesByNameMap.get(targetApproverName.toLowerCase().trim());
+    }
+
+    if (!approverUser) {
+      if (type === 'leave' || item.type === 'leave') {
+        approverUser = profilesByNameMap.get('phuongntd') || profilesByNameMap.get('nguyễn thị duy phương');
+      }
+    }
+
+    const displayName = approverUser?.full_name || approverUser?.name || targetApproverName || t('Chờ phân công');
+    const avatarUrl = approverUser?.avatar_url || approverUser?.avatar;
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Avatar src={avatarUrl} name={displayName} size={24} />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            {displayName}
+          </span>
+          {stepLabel && (
+            <span className={badgeClass} style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
+              {icon}
+              <span>{stepLabel}</span>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderApprovalActions = (item: any, type: 'leave' | 'advance') => {
+    const isPending = item.status === 'pending';
+    const isL1Active = item.status_level_1 === 'pending';
+    const isL2Active = item.status_level_1 === 'approved' && item.status_level_2 === 'pending';
+    const isGlobalAdmin = isHR(user, true);
+    const isL1Approver = Number(item.approver_id) === Number(user?.id) || (isL1Active && isGlobalAdmin);
+    const isL2Approver = Number(item.approver_id_2) === Number(user?.id) || (isL2Active && isGlobalAdmin);
+    const isMyTurn = isPending && ((isL1Active && isL1Approver) || (isL2Active && isL2Approver));
+
+    return (
+      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+        {isMyTurn && (
+          <>
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (type === 'leave') {
+                  await handleApproveLeave(item.id, 'rejected');
+                } else {
+                  await handleApproveAdvance(item.id, 'rejected');
+                }
+                loadData();
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+              title={t('Từ chối')}
+            >
+              <XCircle size={12} />
+              {t('Từ chối')}
+            </button>
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (type === 'leave') {
+                  await handleApproveLeave(item.id, 'approved');
+                } else {
+                  await handleApproveAdvance(item.id, 'approved');
+                }
+                loadData();
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+              title={t('Duyệt')}
+            >
+              <CheckCircle2 size={12} />
+              {t('Duyệt')}
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setSelectedApproval({ type, data: item })}
+          className="btn secondary"
+          style={{ height: '26px', width: '26px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', color: 'var(--color-primary)' }}
+          title={t('Xem chi tiết')}
+        >
+          <Eye size={12} />
+        </button>
+      </div>
+    );
   };
 
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -355,8 +595,9 @@ export default function HRM() {
   const [compensatoryLeaveUsed, setCompensatoryLeaveUsed] = useState(0.0);
 
   useEffect(() => {
-    fetchAPI('hrm/teams').then(res => {
-      setTeams(res?.data || []);
+    fetchAPI('teams').then(res => {
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      setTeams(list);
     }).catch(() => {});
     fetchAPI('hrm/leaves').then(res => {
       setLeaves(res?.data || []);
@@ -378,6 +619,10 @@ export default function HRM() {
   const [allowancePhone, setAllowancePhone] = useState(0);
   const [kpiTarget, setKpiTarget] = useState(0);
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dashboardShifts, setDashboardShifts] = useState<any[]>([]);
+  const [dashboardLeaves, setDashboardLeaves] = useState<any[]>([]);
+
   useEffect(() => {
     loadData();
   }, [activeTab]);
@@ -390,10 +635,16 @@ export default function HRM() {
       
       Promise.all([
         fetchAPI(`hrm/payroll?month_year=${dashboardMonth}`).catch(() => ({ data: [] })),
-        fetchAPI(`check-ins?month=${m}&year=${y}`).catch(() => ({ data: [] }))
+        fetchAPI(`check-ins?month=${m}&year=${y}&include_shifts=1`).catch(() => ({ data: [] }))
       ]).then(([payRes, checkRes]) => {
         setDashboardPayslips(payRes?.data || payRes || []);
-        setDashboardCheckIns(Array.isArray(checkRes) ? checkRes : checkRes?.data || []);
+        const checkData = checkRes?.data || checkRes || {};
+        const checkInsList = Array.isArray(checkData) ? checkData : (checkData.check_ins || []);
+        const shiftsList = checkData.shifts || [];
+        const leavesList = checkData.leaves || [];
+        setDashboardCheckIns(checkInsList);
+        setDashboardShifts(shiftsList);
+        setDashboardLeaves(leavesList);
       }).catch(() => {});
     }
   }, [activeTab, dashboardMonth]);
@@ -408,53 +659,189 @@ export default function HRM() {
   }, [activeTab]);
 
   const topLatenessList = React.useMemo(() => {
-    const list = [...dashboardPayslips]
+    // 1. Nếu dashboardPayslips đã có dữ liệu đi trễ
+    const fromPayslips = [...dashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
-      .map(p => ({
-        id: p.id,
-        name: p.employee_name,
-        value: Number(p.lateness_minutes || 0)
-      }))
-      .sort((a, b) => b.value - a.value);
-    
+      .map(p => {
+        const prof = profiles.find(x => Number(x.id) === Number(p.user_id));
+        return {
+          id: p.user_id || p.id,
+          name: p.employee_name,
+          avatar: prof?.avatar_url || prof?.avatar,
+          department: prof?.department || prof?.team_name || t('Chung'),
+          count: p.lateness_count || 1,
+          value: Number(p.lateness_minutes || 0)
+        };
+      });
+
+    if (fromPayslips.length > 0) {
+      const sorted = fromPayslips.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...sorted.map(x => x.value)) || 1;
+      return sorted.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // 2. Tính Realtime từ dashboardCheckIns của tháng
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
+    dashboardCheckIns.forEach(c => {
+      const lateness = Number(c.lateness_minutes || 0);
+      const isLate = c.status === 'late' || lateness > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
+      if (isLate) {
+        const uid = c.user_id;
+        const prof = profiles.find(x => Number(x.id) === Number(uid));
+        if (!map[uid]) {
+          map[uid] = {
+            id: uid,
+            name: c.user_name || prof?.full_name || t('Nhân viên'),
+            avatar: c.user_avatar || prof?.avatar_url || prof?.avatar,
+            department: prof?.department || prof?.team_name || t('Chung'),
+            count: 0,
+            value: 0
+          };
+        }
+        map[uid].count += 1;
+        map[uid].value += lateness > 0 ? lateness : 15;
+      }
+    });
+
+    const list = Object.values(map).sort((a, b) => b.value - a.value || b.count - a.count);
     const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
     return list.map(item => ({
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [dashboardPayslips]);
+  }, [dashboardPayslips, dashboardCheckIns, profiles, t]);
 
   const topOTList = React.useMemo(() => {
-    const list = [...dashboardPayslips]
-      .filter(p => Number(p.overtime_days || 0) > 0)
-      .map(p => ({
-        id: p.id,
-        name: p.employee_name,
-        value: Number(p.overtime_days || 0)
-      }))
-      .sort((a, b) => b.value - a.value);
+    // 1. Nếu dashboardPayslips đã có
+    const fromPayslips = [...dashboardPayslips]
+      .filter(p => Number(p.overtime_days || 0) > 0 || Number(p.overtime_hours || 0) > 0)
+      .map(p => {
+        const prof = profiles.find(x => Number(x.id) === Number(p.user_id));
+        const hours = Number(p.overtime_hours || 0) > 0 
+          ? Number(p.overtime_hours) 
+          : Math.round(Number(p.overtime_days || 0) * 8 * 10) / 10;
+        return {
+          id: p.user_id || p.id,
+          name: p.employee_name,
+          avatar: prof?.avatar_url || prof?.avatar,
+          department: prof?.department || prof?.team_name || t('Chung'),
+          count: 1,
+          value: hours,
+          unit: t('giờ')
+        };
+      });
+
+    if (fromPayslips.length > 0) {
+      const sorted = fromPayslips.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...sorted.map(x => x.value)) || 1;
+      return sorted.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // 2. Tính Realtime từ dashboardShifts và dashboardLeaves
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; unit: string }> = {};
     
+    dashboardShifts.filter(s => s.shift_type === 'overtime' && (Number(s.approved) === 1 || s.status === 'approved')).forEach(s => {
+      const uid = s.user_id;
+      const prof = profiles.find(x => Number(x.id) === Number(uid));
+      if (!map[uid]) {
+        map[uid] = {
+          id: uid,
+          name: s.user_name || prof?.full_name || t('Nhân viên'),
+          avatar: s.user_avatar || prof?.avatar_url || prof?.avatar,
+          department: prof?.department || prof?.team_name || t('Chung'),
+          count: 0,
+          value: 0,
+          unit: t('giờ')
+        };
+      }
+      map[uid].count += 1;
+      let shiftHours = Number(s.hours || s.total_hours || s.duration_hours || 0);
+      if (shiftHours <= 0 && s.start_time && s.end_time) {
+        const [sh, sm] = String(s.start_time).split(':').map(Number);
+        const [eh, em] = String(s.end_time).split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0) shiftHours = Math.round((diff / 60) * 10) / 10;
+      }
+      if (shiftHours <= 0) shiftHours = 4;
+      map[uid].value = Math.round((map[uid].value + shiftHours) * 10) / 10;
+    });
+
+    dashboardLeaves.filter(l => l.leave_type === 'overtime' && (Number(l.approved) === 1 || l.status === 'approved')).forEach(l => {
+      const uid = l.user_id;
+      const prof = profiles.find(x => Number(x.id) === Number(uid));
+      if (!map[uid]) {
+        map[uid] = {
+          id: uid,
+          name: l.user_name || prof?.full_name || t('Nhân viên'),
+          avatar: l.user_avatar || prof?.avatar_url || prof?.avatar,
+          department: prof?.department || prof?.team_name || t('Chung'),
+          count: 0,
+          value: 0,
+          unit: t('giờ')
+        };
+      }
+      const days = Number(l.total_days || 0.5);
+      const hours = Number(l.total_hours || (days * 8) || 4);
+      map[uid].count += 1;
+      map[uid].value = Math.round((map[uid].value + hours) * 10) / 10;
+    });
+
+    const list = Object.values(map).sort((a, b) => b.value - a.value);
     const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
     return list.map(item => ({
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [dashboardPayslips]);
+  }, [dashboardPayslips, dashboardShifts, dashboardLeaves, profiles, t]);
 
   const loadData = async () => {
     try {
       if (activeTab === 'dashboard') {
-        const [profRes, leaveRes, advRes] = await Promise.all([
+        const [profRes, leaveRes, advRes, teamRes] = await Promise.all([
           fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
           fetchAPI('hrm/leaves').catch(() => ({ data: [] })),
-          fetchAPI('hrm/advances').catch(() => ({ data: [] }))
+          fetchAPI('hrm/advances').catch(() => ({ data: [] })),
+          fetchAPI('teams').catch(() => ({ data: [] }))
         ]);
-        setProfiles(profRes?.data || []);
-        setLeaves(leaveRes?.data || []);
-        setAdvances(advRes?.data || []);
+        const filterNonEmployee = (list: any[]) => {
+          if (!Array.isArray(list)) return [];
+          return list.filter(item => {
+            const role = String(item?.role || '').toLowerCase();
+            const email = String(item?.email || '').toLowerCase();
+            if (role === 'superadmin' || role === 'super_admin') return false;
+            if (email === 'info@ideas.edu.vn') return false;
+            return true;
+          });
+        };
+        setProfiles(filterNonEmployee(profRes?.data || profRes || []));
+        setLeaves(leaveRes?.data || leaveRes || []);
+        setAdvances(advRes?.data || advRes || []);
+        const tList = Array.isArray(teamRes) ? teamRes : (teamRes?.data || []);
+        if (tList.length > 0) setTeams(tList);
       } else if (activeTab === 'profiles') {
-        const res = await fetchAPI('hrm/profiles');
-        setProfiles(res?.data || []);
+        const [res, teamRes] = await Promise.all([
+          fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
+          fetchAPI('teams').catch(() => ({ data: [] }))
+        ]);
+        const filterNonEmployee = (list: any[]) => {
+          if (!Array.isArray(list)) return [];
+          return list.filter(item => {
+            const role = String(item?.role || '').toLowerCase();
+            const email = String(item?.email || '').toLowerCase();
+            if (role === 'superadmin' || role === 'super_admin') return false;
+            if (email === 'info@ideas.edu.vn') return false;
+            return true;
+          });
+        };
+        setProfiles(filterNonEmployee(res?.data || res || []));
+        const tList = Array.isArray(teamRes) ? teamRes : (teamRes?.data || []);
+        if (tList.length > 0) setTeams(tList);
       } else if (activeTab === 'leaves') {
         const res = await fetchAPI('hrm/leaves');
         setLeaves(res?.data || []);
@@ -472,7 +859,12 @@ export default function HRM() {
   const loadAllPayslips = async () => {
     try {
       const res = await fetchAPI('hrm/payroll?month_year=all');
-      setAllPayslips(res?.data || []);
+      const raw = res?.data || [];
+      setAllPayslips(Array.isArray(raw) ? raw.filter((item: any) => {
+        const r = String(item?.role || '').toLowerCase();
+        const em = String(item?.email || '').toLowerCase();
+        return r !== 'superadmin' && r !== 'super_admin' && em !== 'info@ideas.edu.vn';
+      }) : []);
     } catch (err) {
       setAllPayslips([]);
     }
@@ -481,7 +873,12 @@ export default function HRM() {
   const loadPayslips = async () => {
     try {
       const res = await fetchAPI(`hrm/payroll?month_year=${payrollMonth}`);
-      setPayslips(res?.data || []);
+      const raw = res?.data || [];
+      setPayslips(Array.isArray(raw) ? raw.filter((item: any) => {
+        const r = String(item?.role || '').toLowerCase();
+        const em = String(item?.email || '').toLowerCase();
+        return r !== 'superadmin' && r !== 'super_admin' && em !== 'info@ideas.edu.vn';
+      }) : []);
     } catch (err: any) {
       setPayslips([]);
     }
@@ -780,123 +1177,156 @@ export default function HRM() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="page-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 className="page-title">
-            {t('Quản lý nhân sự')}
-          </h1>
-          <p className="page-subtitle">
-            {t('Tính toán công phép, khấu trừ bảo hiểm, tính thuế lũy tiến TNCN và xác thực lương online.')}
-          </p>
+      {/* Top Header */}
+      <div className="page-header" style={{ marginBottom: '1.25rem' }}>
+        <h1 className="page-title">{t('Quản lý nhân sự')}</h1>
+        <p className="page-subtitle">
+          {t('Tính toán công phép, khấu trừ bảo hiểm, tính thuế lũy tiến TNCN và xác thực lương online.')}
+        </p>
+      </div>
+
+      {/* Unified Subtabs & Filters Card (Đồng bộ UI Quy trình) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '12px',
+        padding: '8px 12px',
+        marginBottom: '1.25rem',
+        flexWrap: 'wrap',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        {/* Left: Subtabs Group */}
+        <div className="no-scrollbar" style={{
+          display: 'flex',
+          background: 'var(--color-bg-secondary, #f1f5f9)',
+          padding: '3px',
+          borderRadius: '9px',
+          gap: '2px',
+          overflowX: 'auto',
+          maxWidth: isMobile ? '100%' : 'none',
+          flexShrink: 0
+        }}>
+          {[
+            { id: 'dashboard', label: t('Tổng quan HR'), icon: LayoutDashboard },
+            { id: 'profiles', label: t('Hồ sơ lương nhân viên'), icon: Users },
+            { id: 'leaves', label: t('Phê duyệt Nghỉ Phép'), icon: Calendar, badge: leaves.filter(l => l.status === 'pending' && isMyPendingRequest(l)).length },
+            { id: 'advances', label: t('Tạm ứng Lương'), icon: CreditCard, badge: advances.filter(a => a.status === 'pending' && isMyPendingRequest(a)).length },
+            { id: 'payroll', label: t('Tính & Chốt Lương'), icon: DollarSign }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  borderRadius: '7px',
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: '0.8125rem',
+                  background: isActive ? 'var(--color-surface, #ffffff)' : 'transparent',
+                  color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <Icon size={14} />
+                <span>{tab.label}</span>
+                {!!tab.badge && tab.badge > 0 && (
+                  <span style={{
+                    fontSize: '0.68rem',
+                    background: '#ef4444',
+                    color: 'white',
+                    padding: '1px 6px',
+                    borderRadius: 99,
+                    fontWeight: 700
+                  }}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        {activeTab === 'dashboard' && (
-          <div style={{ position: 'relative', zIndex: 100, minWidth: '200px' }}>
+
+        {/* Right: Search Box + Month Selector + Only my pending toggle */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          flexWrap: 'wrap',
+          flex: isMobile ? '1 1 100%' : 'none',
+          justifyContent: isMobile ? 'stretch' : 'flex-end'
+        }}>
+          {/* Search Field */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--color-bg-secondary, #f1f5f9)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '0 10px',
+            height: '34px',
+            width: isMobile ? '100%' : (activeTab === 'profiles' || activeTab === 'leaves' || activeTab === 'advances' ? '220px' : '180px'),
+            minWidth: 0
+          }}>
+            <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder={activeTab === 'profiles' ? t('Tìm nhân sự...') : (activeTab === 'leaves' || activeTab === 'advances' ? t('Tìm kiếm đề xuất...') : t('Tìm kiếm...'))}
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ border: 'none', background: 'transparent', width: '100%', fontSize: '0.8125rem', outline: 'none', color: 'var(--color-text)' }}
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+                <X size={13} style={{ color: 'var(--color-text-muted)' }} />
+              </button>
+            )}
+          </div>
+
+          {/* Month Selector */}
+          <div style={{ minWidth: '150px' }}>
             <CustomSelect
               options={periodOptions.filter(opt => !opt.value.includes('MID') && !opt.value.includes('YEND') && !opt.value.includes('13'))}
               value={dashboardMonth}
-              onChange={(val) => setDashboardMonth(String(val))}
+              onChange={(val) => {
+                setDashboardMonth(String(val));
+                setPayrollMonth(String(val));
+              }}
+              size="sm"
               width="100%"
             />
           </div>
-        )}
-      </div>
 
-      {/* Tabs */}
-      <div className="no-scrollbar" style={{ 
-        display: 'flex',
-        background: 'var(--color-border-light)',
-        border: '1px solid var(--color-border)',
-        padding: '2px',
-        borderRadius: '8px',
-        gap: '2px',
-        width: isMobile ? '100%' : 'fit-content',
-        position: 'relative',
-        marginBottom: isMobile ? '1rem' : '1.5rem',
-        flexWrap: 'nowrap',
-        overflowX: isMobile ? 'auto' : 'visible',
-        WebkitOverflowScrolling: 'touch'
-      }}>
-        {[
-          { id: 'dashboard', label: t('Tổng quan HR'), icon: LayoutDashboard },
-          { id: 'profiles', label: t('Hồ sơ lương nhân viên'), icon: Users },
-          { id: 'leaves', label: t('Phê duyệt Nghỉ Phép'), icon: Calendar, badge: leaves.filter(l => l.status === 'pending' && isMyPendingRequest(l)).length },
-          { id: 'advances', label: t('Tạm ứng Lương'), icon: CreditCard, badge: advances.filter(a => a.status === 'pending' && isMyPendingRequest(a)).length },
-          { id: 'payroll', label: t('Tính & Chốt Lương'), icon: DollarSign }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              style={{
-                padding: '6px 16px',
-                height: '34px',
-                borderRadius: '6px',
-                border: 'none',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                background: 'transparent',
-                color: isActive ? 'var(--color-text)' : 'var(--color-text-light)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                position: 'relative',
-                outline: 'none',
-                boxShadow: 'none',
-                flexShrink: 0,
-                zIndex: 2,
-                transition: 'color 0.2s ease'
-              }}
-            >
-              {isActive && (
-                <motion.div 
-                  layoutId="activeHrmSubTabIndicator"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'var(--color-surface)',
-                    borderRadius: '6px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                    zIndex: 1
-                  }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-              
-              <span style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Icon size={14} />
-                <span>{tab.label}</span>
-              </span>
-              
-              {!!tab.badge && tab.badge > 0 && (
-                <span style={{
-                  position: 'relative',
-                  zIndex: 2,
-                  fontSize: '0.75rem',
-                  padding: '2px 6px',
-                  borderRadius: '10px',
-                  background: isActive ? '#ef4444' : 'rgba(239, 68, 68, 0.1)',
-                  color: isActive ? '#ffffff' : '#ef4444',
-                  fontWeight: 800,
-                  transition: 'background 0.2s ease, color 0.2s ease'
-                }}>
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+          {/* Checkbox Chờ tôi duyệt (chỉ hiện khi ở tab leaves hoặc advances) */}
+          {(activeTab === 'leaves' || activeTab === 'advances') && (
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={showOnlyMyPending}
+                onChange={(e) => setShowOnlyMyPending(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              {t('Chờ tôi duyệt')}
+            </label>
+          )}
+        </div>
       </div>
 
       {/* Content Area */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         
         {/* TAB 0: DASHBOARD */}
         {activeTab === 'dashboard' && (() => {
@@ -915,31 +1345,36 @@ export default function HRM() {
           const deptMap: Record<string, number> = {};
           profiles.forEach(p => {
             const userTeam = teams.find(t => Number(t.id) === Number(p.team_id));
-            const dept = userTeam ? userTeam.name : t('Khác');
+            const rawDept = (p.department && p.department !== 'Chung' && p.department !== 'Khác') ? p.department : (userTeam?.name || p.team_name);
+            const dept = rawDept || (
+              ['admin', 'superadmin', 'super_admin', 'director'].includes(String(p.role).toLowerCase()) ? 'Ban Giám đốc' :
+              p.role === 'hr' ? 'Phòng Nhân sự' :
+              p.role === 'accountant' ? 'Phòng Kế toán' :
+              p.role === 'marketing' ? 'Phòng Marketing' :
+              ['sales', 'sale', 'sale_admin', 'saleadmin'].includes(String(p.role).toLowerCase()) ? 'Phòng Kinh doanh' :
+              t('Khác')
+            );
             deptMap[dept] = (deptMap[dept] || 0) + 1;
           });
-          const deptData = Object.entries(deptMap).map(([name, value]) => ({
-            name: name,
-            value
-          }));
+          const deptData = Object.entries(deptMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
 
           const weeklyAttendanceData = [
-            { name: t('Thứ 2'), rate: 95 },
-            { name: t('Thứ 3'), rate: 88 },
-            { name: t('Thứ 4'), rate: 90 },
-            { name: t('Thứ 5'), rate: 85 },
-            { name: t('Thứ 6'), rate: 95 },
-            { name: t('Thứ 7'), rate: 82 }
+            { name: t('Thứ 2'), rate: 95, count: Math.round(totalHeadcount * 0.95) },
+            { name: t('Thứ 3'), rate: 88, count: Math.round(totalHeadcount * 0.88) },
+            { name: t('Thứ 4'), rate: 90, count: Math.round(totalHeadcount * 0.90) },
+            { name: t('Thứ 5'), rate: 85, count: Math.round(totalHeadcount * 0.85) },
+            { name: t('Thứ 6'), rate: 95, count: Math.round(totalHeadcount * 0.95) },
+            { name: t('Thứ 7'), rate: 82, count: Math.round(totalHeadcount * 0.82) }
           ];
 
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'slideUp 0.4s ease-out both' }}>
-              
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', animation: 'slideUp 0.3s ease-out both' }}>
               {/* Grid 4 KPI Cards */}
               <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-                
                 {/* KPI Card 1: Headcount */}
-                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px' }}>
+                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '130px' }}>
                   <div className="decor-svg" style={{ color: '#3b82f6', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
                     <Users size={70} />
                   </div>
@@ -956,7 +1391,7 @@ export default function HRM() {
                 </div>
 
                 {/* KPI Card 2: present today */}
-                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px' }}>
+                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '130px' }}>
                   <div className="decor-svg" style={{ color: '#10b981', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
                     <CheckCircle size={70} />
                   </div>
@@ -973,7 +1408,7 @@ export default function HRM() {
                 </div>
 
                 {/* KPI Card 3: present late/early */}
-                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px' }}>
+                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '130px' }}>
                   <div className="decor-svg" style={{ color: '#ec4899', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
                     <Clock size={70} />
                   </div>
@@ -990,7 +1425,7 @@ export default function HRM() {
                 </div>
 
                 {/* KPI Card 4: pending requests */}
-                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '135px' }}>
+                <div className="card hover-lift" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden', minHeight: '130px' }}>
                   <div className="decor-svg" style={{ color: '#f59e0b', opacity: 0.05, position: 'absolute', right: -10, bottom: -10, pointerEvents: 'none' }}>
                     <ShieldAlert size={70} />
                   </div>
@@ -1005,114 +1440,45 @@ export default function HRM() {
                     <span>{t('Tổng số đơn xin nghỉ & tạm ứng chờ duyệt')}</span>
                   </div>
                 </div>
-
-              </div>
-
-
-
-              {/* Charts Row */}
-              <div className="responsive-grid-6-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6fr 4fr', gap: '1.25rem' }}>
-                
-                {/* Attendance Rate weekly */}
-                <div className="card" style={{ padding: '1.25rem' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>
-                    {t('TỶ LỆ ĐI LÀM TUẦN NÀY (%)')}
-                  </h3>
-                  <div style={{ height: 260 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={weeklyAttendanceData} margin={{ left: -10, right: 5, top: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
-                        <YAxis domain={[50, 100]} ticks={[50, 65, 80, 95, 100]} tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
-                        <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }} />
-                        <Bar dataKey="rate" fill="var(--color-primary)" radius={[4, 4, 0, 0]} barSize={30} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Department Pie Chart - Style exactly like Nguồn Data */}
-                <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>
-                    {t('CƠ CẤU NHÂN SỰ THEO PHÒNG BAN')}
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    {totalHeadcount === 0 ? (
-                      <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{t('Chưa có dữ liệu')}</span>
-                    ) : (
-                      <>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <PieChart>
-                            <Pie
-                              data={deptData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={50}
-                              outerRadius={70}
-                              paddingAngle={4}
-                              dataKey="value"
-                            >
-                              {deptData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip
-                              contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                              itemStyle={{ color: 'var(--color-text)', fontWeight: 600 }}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                          gap: '6px 12px',
-                          width: '100%',
-                          marginTop: '12px',
-                          padding: '0 12px',
-                          fontSize: '0.75rem',
-                          color: 'var(--color-text-light)'
-                        }}>
-                          {deptData.map((entry, index) => (
-                            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                              <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[index % COLORS.length], flexShrink: 0 }} />
-                              <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{entry.name}</span>
-                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', fontWeight: 500, flexShrink: 0 }}>({entry.value})</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
               </div>
 
               {/* Side-by-side Top Lateness and Top OT Lists */}
               <div className="responsive-grid-1-1" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                
                 {/* Top Late-comers list */}
                 <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
+                    <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
                       <Clock size={18} color="#ec4899" /> {t('Top Nhân viên Đi trễ')}
                     </h3>
                   </div>
-                  <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
-                    {topLatenessList.length > 0 ? topLatenessList.map((item, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
-                            <span className="consultant-name" style={{ fontWeight: 600 }}>{item.name}</span>
-                          </span>
-                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('phút')}</span>
+                  <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
+                    {topLatenessList && topLatenessList.length > 0 ? topLatenessList.map((item, i) => {
+                      const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
+                      const barColor = colors[i % colors.length];
+                      return (
+                        <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
+                              <Avatar src={item.avatar} name={item.name} size={24} />
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text)' }}>
+                                {item.name}
+                                <BarChart2 size={14} style={{ opacity: 0.35, color: barColor }} />
+                              </span>
+                            </span>
+                            <span style={{ color: 'var(--color-text)', fontSize: '0.875rem', fontWeight: 600 }}>
+                              {item.value} {t('phút')}
+                            </span>
+                          </div>
+                          <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 24 }}>
+                            <div style={{ width: `${item.percent}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                          </div>
                         </div>
-                        <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
-                          <div style={{ width: `${item.percent}%`, height: '100%', background: '#ec4899', borderRadius: 4 }} />
-                        </div>
+                      );
+                    }) : (
+                      <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0', fontSize: '0.85rem' }}>
+                        🎉 {t('Tuyệt vời! Không có nhân viên nào đi trễ trong kỳ.')}
                       </div>
-                    )) : (
-                      <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Không có nhân viên đi trễ')}</div>
                     )}
                   </div>
                 </div>
@@ -1120,124 +1486,429 @@ export default function HRM() {
                 {/* Top OT (Overtime) list */}
                 <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                      <Award size={18} color="#fbbf24" /> {t('Top Nhân viên tăng ca (OT)')}
+                    <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
+                      <Flame size={18} color="#f59e0b" /> {t('Top Nhân viên tăng ca (OT)')}
                     </h3>
                   </div>
-                  <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
-                    {topOTList.length > 0 ? topOTList.map((item, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
-                            <span className="consultant-name" style={{ fontWeight: 600 }}>{item.name}</span>
-                          </span>
-                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('ngày OT')}</span>
+                  <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
+                    {topOTList && topOTList.length > 0 ? topOTList.map((item, i) => {
+                      const colors = ['#8b5cf6', '#3b82f6', '#f59e0b', '#10b981', '#06b6d4', '#ec4899', '#64748b'];
+                      const barColor = colors[i % colors.length];
+                      return (
+                        <div key={item.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 600, alignItems: 'center' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
+                              <Avatar src={item.avatar} name={item.name} size={24} />
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--color-text)' }}>
+                                {item.name}
+                                <BarChart2 size={14} style={{ opacity: 0.35, color: barColor }} />
+                              </span>
+                            </span>
+                            <span style={{ color: 'var(--color-text)', fontSize: '0.875rem', fontWeight: 600 }}>
+                              {item.value} {item.unit || t('giờ')}
+                            </span>
+                          </div>
+                          <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden', marginLeft: 24 }}>
+                            <div style={{ width: `${item.percent}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                          </div>
                         </div>
-                        <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
-                          <div style={{ width: `${item.percent}%`, height: '100%', background: '#fbbf24', borderRadius: 4 }} />
-                        </div>
+                      );
+                    }) : (
+                      <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0', fontSize: '0.85rem' }}>
+                        {t('Chưa có nhân viên nào ghi nhận tăng ca trong kỳ.')}
                       </div>
-                    )) : (
-                      <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Chưa có nhân viên tăng ca')}</div>
                     )}
                   </div>
                 </div>
-
               </div>
 
+              {/* Charts Row */}
+              <div className="responsive-grid-6-4" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6fr 4fr', gap: '1.25rem', marginBottom: '0.5rem' }}>
+                {/* Attendance Rate weekly */}
+                <div className="card" style={{ padding: '1.25rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle2 size={16} style={{ color: '#10b981' }} />
+                      {t('TỶ LỆ ĐI LÀM TUẦN NÀY (%)')}
+                    </h3>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                      TB: 89.5%
+                    </span>
+                  </div>
+                  <div style={{ height: 260 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={weeklyAttendanceData} margin={{ left: -20, right: 10, top: 15, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="attendanceBarGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.7} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={35} tickFormatter={(val) => `${val}%`} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px 12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{data.name}</div>
+                                  <div style={{ color: '#3b82f6', fontSize: '0.8rem', fontWeight: 600, marginTop: '2px' }}>
+                                    Tỷ lệ đi làm: {data.rate}% ({data.count}/{totalHeadcount} nhân sự)
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar dataKey="rate" fill="url(#attendanceBarGrad)" radius={[6, 6, 0, 0]} barSize={28} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Department Donut Chart */}
+                <div className="card" style={{ padding: '1.25rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Building2 size={16} style={{ color: '#3b82f6' }} />
+                    {t('CƠ CẤU NHÂN SỰ THEO PHÒNG BAN')}
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    {totalHeadcount === 0 ? (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{t('Chưa có dữ liệu')}</span>
+                    ) : (
+                      <>
+                        <div style={{ position: 'relative', width: '100%', height: 170 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={deptData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={48}
+                                outerRadius={68}
+                                paddingAngle={4}
+                                dataKey="value"
+                              >
+                                {deptData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                itemStyle={{ color: 'var(--color-text)', fontWeight: 600 }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            textAlign: 'center',
+                            pointerEvents: 'none'
+                          }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1 }}>{totalHeadcount}</div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 600, marginTop: '2px' }}>{t('Nhân sự')}</div>
+                          </div>
+                        </div>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                          gap: '6px 12px',
+                          width: '100%',
+                          marginTop: '8px',
+                          padding: '0 8px',
+                          fontSize: '0.75rem'
+                        }}>
+                          {deptData.map((entry, index) => {
+                            const pct = totalHeadcount > 0 ? Math.round((entry.value / totalHeadcount) * 100) : 0;
+                            return (
+                              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[index % COLORS.length], flexShrink: 0 }} />
+                                <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, color: 'var(--color-text)' }}>{entry.name}</span>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', fontWeight: 600, flexShrink: 0 }}>{entry.value} ({pct}%)</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           );
         })()}
 
         {/* TAB 1: PROFILES */}
-        {activeTab === 'profiles' && (
-          <div className="card" style={{ padding: '1.5rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--color-border-light)', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                    <th style={{ padding: '12px 16px' }}>{t('Nhân sự')}</th>
-                    <th style={{ padding: '12px 8px' }}>{t('Phòng ban / Vai trò')}</th>
-                    <th style={{ padding: '12px 8px' }}>{t('Ngày phép (Phép/Bù)')}</th>
-                    <th style={{ padding: '12px 8px' }}>{t('Lương Net thực tế')}</th>
-                    <th style={{ padding: '12px 8px' }}>{t('Lương BHXH')}</th>
-                    <th style={{ padding: '12px 8px' }}>{t('Phụ cấp')}</th>
-                    <th style={{ padding: '12px 8px' }}>{t('KPI Target')}</th>
-                    <th style={{ padding: '12px 16px', textAlign: 'center' }}>{t('Thao tác')}</th>
+        {activeTab === 'profiles' && (() => {
+          const filteredProfiles = profiles.filter(p => {
+            if (!searchTerm) return true;
+            const term = searchTerm.toLowerCase();
+            return (
+              p.full_name?.toLowerCase().includes(term) ||
+              p.email?.toLowerCase().includes(term) ||
+              p.phone?.toLowerCase().includes(term) ||
+              p.department?.toLowerCase().includes(term) ||
+              p.job_title?.toLowerCase().includes(term)
+            );
+          });
+
+          return (
+            <div className="card" style={{ padding: 0, background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{
+                maxHeight: 'calc(100vh - 280px)',
+                overflowY: 'auto',
+                overflowX: 'auto',
+                position: 'relative'
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
+                    <tr style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontWeight: 700 }}>
+                      <th style={{ padding: '14px 16px', minWidth: '240px' }}>{t('Nhân sự')}</th>
+                      <th style={{ padding: '14px 12px', minWidth: '180px' }}>{t('Phòng ban / Vai trò')}</th>
+                      <th style={{ padding: '14px 12px', minWidth: '160px' }}>{t('Ngày phép (Phép/Bù)')}</th>
+                      <th style={{ padding: '14px 12px', minWidth: '130px' }}>{t('Lương Net thực tế')}</th>
+                      <th style={{ padding: '14px 12px', minWidth: '120px' }}>{t('Lương BHXH')}</th>
+                      <th style={{ padding: '14px 12px', minWidth: '110px' }}>{t('Phụ cấp')}</th>
+                      <th style={{ padding: '14px 12px', minWidth: '120px' }}>{t('KPI Target')}</th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center', minWidth: '100px' }}>{t('Thao tác')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProfiles.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                          {searchTerm ? t('Không tìm thấy nhân sự phù hợp') : t('Chưa có hồ sơ nhân viên')}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredProfiles.map(user => {
+                        const userTeam = teams.find(t => Number(t.id) === Number(user.team_id));
+                        const teamName = userTeam ? userTeam.name : '';
+                        const deptName = user.department || user.team_name || teamName || t('Chung');
+                        
+                        const roleBadge = getRoleBadgeStyle(user.role);
+                        const remainingAnnual = Number(user.annual_leave_total ?? 12.0) - Number(user.annual_leave_used ?? 0.0);
+                        const remainingComp = Number(user.compensatory_leave_total ?? 0.0) - Number(user.compensatory_leave_used ?? 0.0);
+                        const totAnnual = Number(user.annual_leave_total ?? 12.0);
+                        const totComp = Number(user.compensatory_leave_total ?? 0.0);
+                        
+                        const fmtNum = (val: number) => Number.isInteger(val) ? val.toString() : val.toFixed(1);
+
+                        return (
+                          <tr key={user.id} className="hover-bg-secondary" style={{ borderBottom: '1px solid var(--color-border-light)', fontSize: '0.85rem', transition: 'background-color 0.15s' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <Avatar src={user.avatar_url || user.avatar} name={user.full_name} size={38} />
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{user.full_name}</span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                    {user.email || user.phone || t('Chưa cập nhật')}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                <span style={{ 
+                                  fontSize: '0.72rem', 
+                                  fontWeight: 700, 
+                                  padding: '2px 8px', 
+                                  borderRadius: '6px', 
+                                  backgroundColor: 'rgba(59, 130, 246, 0.08)', 
+                                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                                  color: '#2563eb',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <Building2 size={11} />
+                                  {deptName}
+                                </span>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', paddingLeft: '2px' }}>
+                                  {user.job_title || roleBadge.text || t('Nhân viên')}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+                                  <span style={{ color: 'var(--color-text-muted)', minWidth: '60px' }}>{t('Phép năm')}:</span>
+                                  <span style={{
+                                    fontWeight: 700,
+                                    color: remainingAnnual > 0 ? '#10b981' : '#ef4444',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: remainingAnnual > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                    fontSize: '0.75rem'
+                                  }}>
+                                    {fmtNum(remainingAnnual)} / {fmtNum(totAnnual)}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+                                  <span style={{ color: 'var(--color-text-muted)', minWidth: '60px' }}>{t('Nghỉ bù')}:</span>
+                                  <span style={{
+                                    fontWeight: 700,
+                                    color: remainingComp > 0 ? '#3b82f6' : 'var(--color-text-muted)',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    background: remainingComp > 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(107, 114, 128, 0.08)',
+                                    fontSize: '0.75rem'
+                                  }}>
+                                    {fmtNum(remainingComp)} / {fmtNum(totComp)}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px', fontWeight: 700, color: user.deal_salary ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                              {user.deal_salary ? formatCurrency(user.deal_salary) : '0đ'}
+                            </td>
+                            <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>
+                              {user.base_salary ? formatCurrency(user.base_salary) : '0đ'}
+                            </td>
+                            <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>
+                              {formatCurrency(Number(user.allowance_meal || 0) + Number(user.allowance_travel || 0) + Number(user.allowance_phone || 0))}
+                            </td>
+                            <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>
+                              {user.kpi_target ? formatCurrency(user.kpi_target) : '0đ'}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => handleEditProfile(user)}
+                                className="btn sm outline hover-lift"
+                                style={{ borderRadius: '8px', padding: '4px 12px', fontSize: '0.75rem', fontWeight: 700, borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                              >
+                                {t('Thiết lập')}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* TAB 2: LEAVES (Phong cách Quy trình Approvals) */}
+        {activeTab === 'leaves' && (() => {
+          const filteredList = leaves.filter(req => {
+            if (showOnlyMyPending && !(req.status === 'pending' && isMyPendingRequest(req))) return false;
+            if (!searchTerm) return true;
+            const term = searchTerm.toLowerCase();
+            return (
+              req.employee_name?.toLowerCase().includes(term) ||
+              req.reason?.toLowerCase().includes(term) ||
+              req.leave_type?.toLowerCase().includes(term)
+            );
+          });
+
+          if (filteredList.length === 0) {
+            return (
+              <EmptyCard
+                icon={<Calendar />}
+                title={t('Không có đơn nghỉ phép & tăng ca')}
+                description={showOnlyMyPending ? t('Không có đơn nào cần bạn duyệt.') : t('Không có đơn nghỉ phép hay tăng ca nào.')}
+              />
+            );
+          }
+
+          return (
+            <div className="responsive-table-wrap" style={{
+              background: 'var(--color-surface)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--color-border)',
+              overflowX: 'auto',
+              maxHeight: 'calc(100vh - 280px)',
+              overflowY: 'auto',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
+                  <tr style={{ color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '360px' }}>{t('Yêu cầu & Nội dung')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '180px' }}>{t('Người tạo & Thời gian')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '200px' }}>{t('Các bước & Người liên quan')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '180px' }}>{t('Người duyệt')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '140px' }}>{t('Thao tác')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {profiles.map(user => {
-                    const userTeam = teams.find(t => Number(t.id) === Number(user.team_id));
-                    const teamName = userTeam ? userTeam.name : '';
-                    
-                    const roleBadge = getRoleBadgeStyle(user.role);
-                    const remainingAnnual = Number(user.annual_leave_total ?? 12.0) - Number(user.annual_leave_used ?? 0.0);
-                    const remainingComp = Number(user.compensatory_leave_total ?? 0.0) - Number(user.compensatory_leave_used ?? 0.0);
-                    
+                  {filteredList.map(req => {
+                    const userProfile = profiles.find(p => Number(p.id) === Number(req.user_id));
+                    const leaveTypeText = req.leave_type === 'annual' ? t('Phép năm') : 
+                                        req.leave_type === 'sick' ? t('Nghỉ ốm') : 
+                                        req.leave_type === 'compensatory' ? t('Nghỉ bù') : 
+                                        req.leave_type === 'special_paid' ? t('Nghỉ chế độ') :
+                                        req.leave_type === 'overtime' ? t('Tăng ca (OT)') :
+                                        req.leave_type === 'remote_work' ? t('Làm từ xa (WFH)') :
+                                        req.leave_type === 'late_early' ? t('Đi trễ / Về sớm') : t('Không lương');
+
+                    const isOvertime = req.leave_type === 'overtime';
+                    const isRemote = req.leave_type === 'remote_work';
+
                     return (
-                      <tr key={user.id} className="hover-bg-secondary" style={{ borderBottom: '1px solid var(--color-border-light)', fontSize: '0.875rem', transition: 'background-color 0.2s' }}>
+                      <tr
+                        key={req.id}
+                        className="hover-bg-secondary"
+                        onClick={() => setSelectedApproval({ type: 'leave', data: req })}
+                        style={{ borderBottom: '1px solid var(--color-border-light)', cursor: 'pointer', transition: 'background 0.15s' }}
+                      >
+                        {/* 1. Yêu cầu & Nội dung */}
                         <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <Avatar src={user.avatar_url || user.avatar} name={user.full_name} size={36} />
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '8px',
+                              background: isOvertime ? 'rgba(139, 92, 246, 0.1)' : isRemote ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                              color: isOvertime ? '#8b5cf6' : isRemote ? '#10b981' : '#3b82f6'
+                            }}>
+                              {isOvertime ? <Flame size={16} /> : <Calendar size={16} />}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)' }}>
+                                {req.title || `${t('Đơn xin')} ${leaveTypeText} (${req.total_days || 1} ${t('ngày')})`}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                                {req.reason || `${new Date(req.start_date).toLocaleDateString('vi-VN')} đến ${new Date(req.end_date).toLocaleDateString('vi-VN')}`}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Người tạo & Thời gian */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Avatar src={userProfile?.avatar_url || userProfile?.avatar} name={req.employee_name} size={28} />
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{user.full_name}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                                {user.email || user.phone || t('Chưa cập nhật liên hệ')}
-                              </span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)', marginTop: '1px' }}>
-                                {t('Vào làm')}: {user.joined_date ? new Date(user.joined_date).toLocaleDateString('vi-VN') : t('Chưa thiết lập')}
+                              <span style={{ fontWeight: 600, fontSize: '0.825rem', color: 'var(--color-text)' }}>{req.employee_name}</span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                {new Date(req.created_at || req.start_date).toLocaleString('vi-VN')}
                               </span>
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: '14px 8px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                            <span style={{ 
-                              fontSize: '0.725rem', 
-                              fontWeight: 700, 
-                              padding: '3px 8px', 
-                              borderRadius: '6px', 
-                              backgroundColor: 'rgba(107, 114, 128, 0.08)', 
-                              border: '1px solid var(--color-border)',
-                              color: 'var(--color-text-muted)',
-                              textTransform: 'uppercase'
-                            }}>
-                              {user.job_title || teamName || t('Nhân viên')}
-                            </span>
-                          </div>
+
+                        {/* 3. Các bước & Người liên quan */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {renderWorkflowStepsCell(req, 'leave')}
                         </td>
-                        <td style={{ padding: '14px 8px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                              {t('Phép năm')}: <strong style={{ fontWeight: 700 }}>{remainingAnnual}</strong>/{user.annual_leave_total ?? 12}
-                            </span>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                              {t('Nghỉ bù')}: <strong style={{ fontWeight: 700 }}>{remainingComp}</strong>/{user.compensatory_leave_total ?? 0}
-                            </span>
-                          </div>
+
+                        {/* 4. Người duyệt / Trạng thái */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {renderCurrentApproverBadge(req, 'leave')}
                         </td>
-                        <td style={{ padding: '14px 8px', fontWeight: 700, color: 'var(--color-primary)' }}>
-                          {user.deal_salary ? formatCurrency(user.deal_salary) : '0đ'}
-                        </td>
-                        <td style={{ padding: '14px 8px', color: 'var(--color-text-muted)' }}>
-                          {user.base_salary ? formatCurrency(user.base_salary) : '0đ'}
-                        </td>
-                        <td style={{ padding: '14px 8px', color: 'var(--color-text-muted)' }}>
-                          {formatCurrency(Number(user.allowance_meal || 0) + Number(user.allowance_travel || 0) + Number(user.allowance_phone || 0))}
-                        </td>
-                        <td style={{ padding: '14px 8px', color: 'var(--color-text-muted)' }}>
-                          {user.kpi_target ? formatCurrency(user.kpi_target) : '0đ'}
-                        </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleEditProfile(user)}
-                            className="btn sm outline hover-lift"
-                            style={{ borderRadius: '8px', padding: '4px 12px', fontSize: '0.75rem', fontWeight: 700, borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
-                          >
-                            {t('Thiết lập')}
-                          </button>
+
+                        {/* 5. Thao tác */}
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          {renderApprovalActions(req, 'leave')}
                         </td>
                       </tr>
                     );
@@ -1245,243 +1916,120 @@ export default function HRM() {
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* TAB 2: LEAVES */}
-        {activeTab === 'leaves' && (
-          <div className="card" style={{ padding: '1.5rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={showOnlyMyPending}
-                  onChange={(e) => setShowOnlyMyPending(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                {t('Chỉ hiện yêu cầu tôi cần duyệt')}
-              </label>
-            </div>
-            {(() => {
-              const filteredList = leaves.filter(req => {
-                if (!showOnlyMyPending) return true;
-                return req.status === 'pending' && isMyPendingRequest(req);
-              });
-              if (filteredList.length === 0) {
-                return (
-                  <EmptyCard
-                    icon={<Calendar />}
-                    title={t('Không có đơn nghỉ phép & tăng ca')}
-                    description={showOnlyMyPending ? t('Không có đơn nào cần bạn duyệt.') : t('Không có đơn nghỉ phép hay tăng ca nào.')}
-                  />
-                );
-              }
-              return (
-                <div style={{ overflowX: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '0.5rem', boxShadow: 'var(--shadow-sm)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid var(--color-border-light)', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                        <th style={{ padding: '12px 16px' }}>{t('Nhân viên')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Loại phép')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Thời gian')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Lý do')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Người duyệt')}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'right' }}>{t('Hành động / Trạng thái')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredList.map(req => {
-                        const userProfile = profiles.find(p => Number(p.id) === Number(req.user_id));
-                        const approver1 = profiles.find(p => Number(p.id) === Number(req.approver_id));
-                        const approver2 = profiles.find(p => Number(p.id) === Number(req.approver_id_2));
-                        
-                        const isPending = req.status === 'pending';
-                        const isApproved = req.status === 'approved';
-                        
-                        const leaveTypeText = req.leave_type === 'annual' ? t('Phép năm') : 
-                                            req.leave_type === 'sick' ? t('Nghỉ ốm') : 
-                                            req.leave_type === 'compensatory' ? t('Nghỉ bù') : 
-                                            req.leave_type === 'special_paid' ? t('Nghỉ chế độ (Hiếu/Hỉ)') :
-                                            req.leave_type === 'overtime' ? t('Tăng ca') :
-                                            req.leave_type === 'remote_work' ? t('Làm từ xa (WFH)') :
-                                            req.leave_type === 'late_early' ? t('Đi trễ/Về sớm') : t('Không lương');
+        {/* TAB 3: ADVANCES (Phong cách Quy trình Approvals) */}
+        {activeTab === 'advances' && (() => {
+          const filteredList = advances.filter(adv => {
+            if (showOnlyMyPending && !(adv.status === 'pending' && isMyPendingRequest(adv))) return false;
+            if (!searchTerm) return true;
+            const term = searchTerm.toLowerCase();
+            return (
+              adv.employee_name?.toLowerCase().includes(term) ||
+              adv.reason?.toLowerCase().includes(term) ||
+              String(adv.amount).includes(term)
+            );
+          });
 
-                        return (
-                          <tr 
-                            key={req.id} 
-                            className="hover-bg-secondary" 
-                            style={{ borderBottom: '1px solid var(--color-border-light)', fontSize: '0.875rem', transition: 'background-color 0.2s', cursor: 'pointer' }}
-                            onClick={() => setSelectedApproval({ type: 'leave', data: req })}
-                          >
-                            <td style={{ padding: '14px 16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <Avatar src={userProfile?.avatar_url || userProfile?.avatar} name={req.employee_name} size={32} />
-                                <strong style={{ color: 'var(--color-text)' }}>{req.employee_name}</strong>
+          if (filteredList.length === 0) {
+            return (
+              <EmptyCard
+                icon={<CreditCard />}
+                title={t('Không có yêu cầu tạm ứng')}
+                description={showOnlyMyPending ? t('Không có yêu cầu tạm ứng nào cần bạn duyệt.') : t('Không có yêu cầu tạm ứng lương nào.')}
+              />
+            );
+          }
+
+          return (
+            <div className="responsive-table-wrap" style={{
+              background: 'var(--color-surface)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--color-border)',
+              overflowX: 'auto',
+              maxHeight: 'calc(100vh - 280px)',
+              overflowY: 'auto',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid var(--color-border)' }}>
+                  <tr style={{ color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '360px' }}>{t('Yêu cầu & Nội dung')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '180px' }}>{t('Người tạo & Thời gian')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '200px' }}>{t('Các bước & Người liên quan')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '180px' }}>{t('Người duyệt')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '140px' }}>{t('Thao tác')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredList.map(adv => {
+                    const empProfile = profiles.find(p => Number(p.id) === Number(adv.user_id));
+
+                    return (
+                      <tr
+                        key={adv.id}
+                        className="hover-bg-secondary"
+                        onClick={() => setSelectedApproval({ type: 'advance', data: adv })}
+                        style={{ borderBottom: '1px solid var(--color-border-light)', cursor: 'pointer', transition: 'background 0.15s' }}
+                      >
+                        {/* 1. Yêu cầu & Nội dung */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '8px',
+                              background: 'rgba(16, 185, 129, 0.1)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                              color: '#10b981'
+                            }}>
+                              <CreditCard size={16} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)' }}>
+                                {adv.title || `${t('Tạm ứng lương')} - ${formatCurrency(adv.amount)}`}
                               </div>
-                            </td>
-                            <td style={{ padding: '14px 8px' }}>
-                              <span style={{ 
-                                fontSize: '0.725rem', 
-                                fontWeight: 800, 
-                                backgroundColor: req.leave_type === 'overtime' ? 'rgba(139, 92, 246, 0.08)' : req.leave_type === 'special_paid' ? 'rgba(236, 72, 153, 0.08)' : 'rgba(59, 130, 246, 0.08)',
-                                color: req.leave_type === 'overtime' ? '#8b5cf6' : req.leave_type === 'special_paid' ? '#ec4899' : '#3b82f6', 
-                                padding: '2px 10px', 
-                                borderRadius: '20px', 
-                                textTransform: 'uppercase' 
-                              }}>
-                                {leaveTypeText}
+                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                                {adv.reason || t('Tạm ứng chi phí sinh hoạt cá nhân')}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Người tạo & Thời gian */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Avatar src={empProfile?.avatar_url || empProfile?.avatar} name={adv.employee_name} size={28} />
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.825rem', color: 'var(--color-text)' }}>{adv.employee_name}</span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                {new Date(adv.request_date || adv.created_at).toLocaleString('vi-VN')}
                               </span>
-                            </td>
-                            <td style={{ padding: '14px 8px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-                                <Calendar size={13} style={{ color: 'var(--color-text-light)' }} />
-                                <span>
-                                  {new Date(req.start_date).toLocaleDateString('vi-VN')} {t('đến')} {new Date(req.end_date).toLocaleDateString('vi-VN')} ({req.total_days} {t('ngày')})
-                                </span>
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 8px', color: 'var(--color-text-muted)', fontSize: '0.8125rem', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={req.reason}>
-                              {req.reason || '—'}
-                            </td>
-                            <td style={{ padding: '14px 8px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {approver1 && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
-                                    <span style={{ color: req.status_level_1 === 'approved' ? '#10b981' : (req.status_level_1 === 'rejected' ? '#ef4444' : '#6b7280'), fontSize: '0.5rem' }}>●</span>
-                                    <Avatar src={approver1.avatar_url || approver1.avatar} name={approver1.full_name} size={18} />
-                                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Cấp 1')}: {approver1.full_name}</span>
-                                  </div>
-                                )}
-                                {approver2 && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
-                                    <span style={{ color: req.status_level_2 === 'approved' ? '#10b981' : (req.status_level_2 === 'rejected' ? '#ef4444' : '#6b7280'), fontSize: '0.5rem' }}>●</span>
-                                    <Avatar src={approver2.avatar_url || approver2.avatar} name={approver2.full_name} size={18} />
-                                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Cấp 2')}: {approver2.full_name}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                              {renderActionStatusCell(req, 'leave')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-        )}
+                            </div>
+                          </div>
+                        </td>
 
-        {/* TAB 3: ADVANCES */}
-        {activeTab === 'advances' && (
-          <div className="card" style={{ padding: '1.5rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={showOnlyMyPending}
-                  onChange={(e) => setShowOnlyMyPending(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                {t('Chỉ hiện yêu cầu tôi cần duyệt')}
-              </label>
-            </div>
-            {(() => {
-              const filteredList = advances.filter(adv => {
-                if (!showOnlyMyPending) return true;
-                return adv.status === 'pending' && isMyPendingRequest(adv);
-              });
-              if (filteredList.length === 0) {
-                return (
-                  <EmptyCard
-                    icon={<CreditCard />}
-                    title={t('Không có yêu cầu tạm ứng')}
-                    description={showOnlyMyPending ? t('Không có yêu cầu tạm ứng nào cần bạn duyệt.') : t('Không có yêu cầu tạm ứng lương nào.')}
-                  />
-                );
-              }
-              return (
-                <div style={{ overflowX: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '0.5rem', boxShadow: 'var(--shadow-sm)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid var(--color-border-light)', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                        <th style={{ padding: '12px 16px' }}>{t('Nhân viên')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Số tiền tạm ứng')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Ngày đề xuất')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Lý do')}</th>
-                        <th style={{ padding: '12px 8px' }}>{t('Quy trình')}</th>
-                        <th style={{ padding: '12px 16px', textAlign: 'right' }}>{t('Hành động / Trạng thái')}</th>
+                        {/* 3. Các bước & Người liên quan */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {renderWorkflowStepsCell(adv, 'advance')}
+                        </td>
+
+                        {/* 4. Người duyệt / Trạng thái */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {renderCurrentApproverBadge(adv, 'advance')}
+                        </td>
+
+                        {/* 5. Thao tác */}
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          {renderApprovalActions(adv, 'advance')}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {filteredList.map(adv => {
-                        const isPending = adv.status === 'pending';
-                        const isApproved = adv.status === 'approved';
-                        const approver1 = profiles.find(p => Number(p.id) === Number(adv.approver_id));
-                        const approver2 = profiles.find(p => Number(p.id) === Number(adv.approver_id_2));
-                        
-                        return (
-                          <tr 
-                            key={adv.id} 
-                            className="hover-bg-secondary" 
-                            style={{ borderBottom: '1px solid var(--color-border-light)', fontSize: '0.875rem', transition: 'background-color 0.2s', cursor: 'pointer' }}
-                            onClick={() => setSelectedApproval({ type: 'advance', data: adv })}
-                          >
-                            <td style={{ padding: '14px 16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                {(() => {
-                                  const empProfile = profiles.find(p => Number(p.id) === Number(adv.user_id));
-                                  return <Avatar src={empProfile?.avatar_url || empProfile?.avatar} name={adv.employee_name} size={32} />;
-                                })()}
-                                <strong style={{ color: 'var(--color-text)' }}>{adv.employee_name}</strong>
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 8px', fontWeight: 800, color: 'var(--color-primary)' }}>
-                              {formatCurrency(adv.amount)}
-                            </td>
-                            <td style={{ padding: '14px 8px', color: 'var(--color-text-muted)' }}>
-                              {new Date(adv.request_date).toLocaleDateString('vi-VN')}
-                            </td>
-                            <td style={{ padding: '14px 8px', color: 'var(--color-text-muted)', fontSize: '0.825rem', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={adv.reason}>
-                              {adv.reason || t('Tạm ứng sinh hoạt')}
-                            </td>
-                            <td style={{ padding: '14px 8px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {approver1 && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
-                                    <span style={{ color: adv.status_level_1 === 'approved' ? '#10b981' : (adv.status_level_1 === 'rejected' ? '#ef4444' : '#6b7280'), fontSize: '0.5rem' }}>●</span>
-                                    <Avatar src={approver1.avatar_url || approver1.avatar} name={approver1.full_name} size={18} />
-                                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Cấp 1')}: {approver1.full_name}</span>
-                                  </div>
-                                )}
-                                {approver2 && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
-                                    <span style={{ color: adv.status_level_2 === 'approved' ? '#10b981' : (adv.status_level_2 === 'rejected' ? '#ef4444' : '#6b7280'), fontSize: '0.5rem' }}>●</span>
-                                    <Avatar src={approver2.avatar_url || approver2.avatar} name={approver2.full_name} size={18} />
-                                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>{t('Cấp 2')}: {approver2.full_name}</span>
-                                  </div>
-                                )}
-                                {!approver1 && !approver2 && (
-                                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{t('Duyệt trực tiếp')}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                              {renderActionStatusCell(adv, 'advance')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-        )}
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
 
         {/* TAB 4: PAYROLL CALCULATION */}
         {activeTab === 'payroll' && (

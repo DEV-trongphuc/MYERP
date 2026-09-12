@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 256;
+$targetVersion = 266;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2905,8 +2905,201 @@ try {
         $logMsg("Nâng cấp lên phiên bản 256 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 257) {
+        $logMsg("Nâng cấp lên phiên bản 257 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 258) {
+        $logMsg("Nâng cấp lên phiên bản 258 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 259) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 259: Xóa an toàn phiếu chi #EXP-10 và các dữ liệu liên quan...", "info");
+        try { $conn->query("DELETE FROM expenses WHERE id = 10 OR title LIKE '%EXP-10%'"); } catch (\Throwable $e) {}
+        try { $conn->query("DELETE FROM hrm_approval_requests WHERE (request_type IN ('expense', 'procedure_expense') AND id = 10) OR request_id = 10"); } catch (\Throwable $e) {}
+        try { $conn->query("DELETE FROM approval_logs WHERE request_type IN ('expense', 'expenses', 'procedure_expense') AND request_id = 10"); } catch (\Throwable $e) {}
+        try { $conn->query("DELETE FROM notifications WHERE message LIKE '%EXP-10%'"); } catch (\Throwable $e) {}
+        $logMsg("Đã dọn dẹp và xóa hoàn toàn phiếu chi #EXP-10 khỏi cơ sở dữ liệu.", "success");
+        $logMsg("Nâng cấp lên phiên bản 259 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 261 || $isForce) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 261: Đồng bộ phòng ban (teams/departments) cho toàn bộ nhân sự...", "info");
+        try {
+            $firstUserRes = $conn->query("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+            $defaultLeaderId = ($firstUserRes && $uRow = $firstUserRes->fetch_assoc()) ? (int)$uRow['id'] : null;
+
+            // 1. Tạo các phòng ban cơ bản nếu chưa tồn tại trong bảng teams
+            $essentialTeams = [
+                'Ban Giám đốc' => 'Ban Giám đốc và quản trị điều hành',
+                'Phòng Nhân sự' => 'Phòng ban chịu trách nhiệm quản lý hồ sơ nhân sự, bảng lương và trực ca',
+                'Phòng Kế toán' => 'Phòng ban chịu trách nhiệm quản lý dòng tiền, hóa đơn, cọc và chi phí',
+                'Phòng Marketing' => 'Phòng ban chịu trách nhiệm chạy chiến dịch quảng cáo và điều phối data lead',
+                'Phòng Kinh doanh' => 'Phòng ban tư vấn và bán hàng, quản lý chăm sóc leads và giao dịch',
+                'Học vụ - học thuật' => 'Phòng ban quản lý đào tạo và học vụ'
+            ];
+            foreach ($essentialTeams as $tName => $tDesc) {
+                $chk = $conn->prepare("SELECT id FROM teams WHERE name = ? LIMIT 1");
+                $chk->execute([$tName]);
+                $res = $chk->get_result();
+                if (!$res || $res->num_rows === 0) {
+                    $ins = $conn->prepare("INSERT INTO teams (name, description, leader_id) VALUES (?, ?, ?)");
+                    $ins->execute([$tName, $tDesc, $defaultLeaderId]);
+                    $ins->close();
+                    $logMsg("Đã tạo phòng ban: $tName", "success");
+                }
+                $chk->close();
+            }
+
+            // 2. Đồng bộ users: Nếu user có team_id thì cập nhật department = teams.name
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON u.team_id = t.id
+                SET u.department = t.name
+                WHERE u.department IS NULL OR TRIM(u.department) = '' OR u.department = 'Chung' OR u.department = 'Khác'
+            ");
+
+            // 3. Nếu user có department khớp tên team thì cập nhật team_id = team.id
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON TRIM(LOWER(u.department)) = TRIM(LOWER(t.name))
+                SET u.team_id = t.id
+                WHERE u.team_id IS NULL OR u.team_id = 0
+            ");
+
+            // 4. Nếu user chưa có department hoặc team_id, tự động gán theo role
+            // Ban Giám đốc
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON t.name = 'Ban Giám đốc'
+                SET u.team_id = t.id, u.department = 'Ban Giám đốc'
+                WHERE (u.department IS NULL OR TRIM(u.department) = '' OR u.department IN ('Chung', 'Khác'))
+                  AND u.role IN ('admin', 'superadmin', 'super_admin', 'director')
+            ");
+
+            // Phòng Nhân sự
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON t.name = 'Phòng Nhân sự'
+                SET u.team_id = t.id, u.department = 'Phòng Nhân sự'
+                WHERE (u.department IS NULL OR TRIM(u.department) = '' OR u.department IN ('Chung', 'Khác'))
+                  AND u.role IN ('hr')
+            ");
+
+            // Phòng Kế toán
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON t.name = 'Phòng Kế toán'
+                SET u.team_id = t.id, u.department = 'Phòng Kế toán'
+                WHERE (u.department IS NULL OR TRIM(u.department) = '' OR u.department IN ('Chung', 'Khác'))
+                  AND u.role IN ('accountant')
+            ");
+
+            // Phòng Marketing
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON t.name = 'Phòng Marketing'
+                SET u.team_id = t.id, u.department = 'Phòng Marketing'
+                WHERE (u.department IS NULL OR TRIM(u.department) = '' OR u.department IN ('Chung', 'Khác'))
+                  AND u.role IN ('marketing')
+            ");
+
+            // Phòng Kinh doanh
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON t.name = 'Phòng Kinh doanh'
+                SET u.team_id = t.id, u.department = 'Phòng Kinh doanh'
+                WHERE (u.department IS NULL OR TRIM(u.department) = '' OR u.department IN ('Chung', 'Khác'))
+                  AND u.role IN ('sales', 'sale', 'sale_admin', 'saleadmin')
+            ");
+
+            // 5. Nếu còn user nào chưa có department thì gán theo phòng đầu tiên hoặc 'Phòng Kinh doanh'
+            $conn->query("
+                UPDATE users u
+                JOIN teams t ON t.name = 'Phòng Kinh doanh'
+                SET u.team_id = t.id, u.department = 'Phòng Kinh doanh'
+                WHERE (u.department IS NULL OR TRIM(u.department) = '' OR u.department IN ('Chung', 'Khác'))
+            ");
+
+            $logMsg("Đã đồng bộ cơ cấu phòng ban cho toàn bộ nhân viên thành công.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi migration 261: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 261 hoàn tất.", "success");
+    }
+
+    // MIGRATION 265: Tắt tạm thời FOREIGN_KEY_CHECKS để xóa sạch tài khoản info@ideas.edu.vn và lương superadmin
+    if ($currentVersion < 265) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 265: Xóa an toàn tài khoản info@ideas.edu.vn và làm sạch dữ liệu lương superadmin...", "info");
+        
+        $conn->query("SET FOREIGN_KEY_CHECKS = 0");
+
+        // 1. Tìm user info@ideas.edu.vn
+        $res = $conn->query("SELECT id FROM users WHERE email = 'info@ideas.edu.vn'");
+        if ($res && $res->num_rows > 0) {
+            while ($row = $res->fetch_assoc()) {
+                $delUid = (int)$row['id'];
+                $logMsg("Đang xóa dữ liệu liên kết của tài khoản ID: $delUid (info@ideas.edu.vn)...", "info");
+                
+                $cleanupQueries = [
+                    "DELETE FROM monthly_payslips WHERE user_id = $delUid",
+                    "DELETE FROM hrm_salary_advances WHERE user_id = $delUid",
+                    "DELETE FROM hrm_leave_requests WHERE user_id = $delUid",
+                    "DELETE FROM hrm_profiles WHERE user_id = $delUid",
+                    "DELETE FROM check_ins WHERE user_id = $delUid",
+                    "UPDATE ticket_comments SET user_id = 1 WHERE user_id = $delUid",
+                    "UPDATE leads SET assigned_to = NULL WHERE assigned_to = $delUid",
+                    "UPDATE deals SET user_id = 1 WHERE user_id = $delUid",
+                    "UPDATE tickets SET assignee_id = NULL WHERE assignee_id = $delUid",
+                    "DELETE FROM users WHERE id = $delUid"
+                ];
+
+                foreach ($cleanupQueries as $q) {
+                    try {
+                        $conn->query($q);
+                    } catch (Throwable $ex) {}
+                }
+                
+                $logMsg("Đã hoàn tất xóa tài khoản info@ideas.edu.vn (ID: $delUid).", "success");
+            }
+        } else {
+            $logMsg("Không tìm thấy tài khoản info@ideas.edu.vn trong bảng users.", "info");
+        }
+
+        // 2. Xóa tất cả phiếu lương (monthly_payslips) của superadmin / super_admin
+        try {
+            $conn->query("DELETE FROM monthly_payslips WHERE user_id IN (SELECT id FROM users WHERE role IN ('superadmin', 'super_admin'))");
+            $logMsg("Đã xóa sạch các phiếu lương của tài khoản superadmin nếu có.", "success");
+        } catch (Throwable $ex) {}
+
+        // 3. Xóa hồ sơ HRM (hrm_profiles) của superadmin / super_admin
+        try {
+            $conn->query("DELETE FROM hrm_profiles WHERE user_id IN (SELECT id FROM users WHERE role IN ('superadmin', 'super_admin'))");
+            $logMsg("Đã xóa sạch hrm_profiles của tài khoản superadmin nếu có.", "success");
+        } catch (Throwable $ex) {}
+
+        $conn->query("SET FOREIGN_KEY_CHECKS = 1");
+
+        $logMsg("Nâng cấp lên phiên bản 265 hoàn tất.", "success");
+    }
+
+    // 72. Upgrade to 266: Clear test payroll periods 2026-07 and 2026-08
+    if ($currentVersion < 266) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 266: Xóa các kỳ lương Tháng 07/2026 và Tháng 08/2026...", "info");
+        try {
+            $conn->query("UPDATE hrm_salary_advances SET deducted_payslip_id = NULL WHERE deducted_payslip_id IN (SELECT id FROM monthly_payslips WHERE month_year IN ('2026-07', '2026-08'))");
+            $delRes = $conn->query("DELETE FROM monthly_payslips WHERE month_year IN ('2026-07', '2026-08')");
+            $affected = $conn->affected_rows;
+            $logMsg("Đã xóa sạch thành công {$affected} bản ghi lương của kỳ Tháng 07/2026 và Tháng 08/2026 trong bảng monthly_payslips.", "success");
+        } catch (Throwable $ex) {
+            $logMsg("Lỗi khi xóa kỳ lương: " . $ex->getMessage(), "error");
+        }
+
+        $logMsg("Nâng cấp lên phiên bản 266 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '256') ON DUPLICATE KEY UPDATE setting_value = '256'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '266') ON DUPLICATE KEY UPDATE setting_value = '266'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

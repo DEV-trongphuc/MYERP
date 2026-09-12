@@ -79,7 +79,7 @@ class CheckInController {
             respond(200, $row ?: null, 'Lấy thông tin check-in hôm nay thành công');
         }
 
-        $isManager = in_array($auth['role'], ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'hr'], true);
+        $isManager = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'hr', 'hr_manager', 'hrm', 'nhan_su'], true) || !empty($auth['is_admin']) || !empty($auth['is_hr']);
         
         try {
             $sql = "SELECT c.*, u.full_name as user_name, u.email as user_email, u.avatar_url as user_avatar, 

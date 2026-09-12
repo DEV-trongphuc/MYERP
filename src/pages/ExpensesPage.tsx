@@ -993,6 +993,356 @@ export const ExpensesPage: React.FC = () => {
     );
   };
 
+  const usersMap = useMemo(() => {
+    const map = new Map<number, any>();
+    (users || []).forEach((u: any) => {
+      if (u?.id) map.set(Number(u.id), u);
+    });
+    return map;
+  }, [users]);
+
+  const renderWorkflowStepsAndWatchers = (exp: any) => {
+    interface StepInfo {
+      stepIndex: number;
+      title: string;
+      userId?: number;
+      userName?: string;
+      userAvatar?: string;
+      status: 'approved' | 'rejected' | 'pending' | 'waiting';
+    }
+
+    const steps: StepInfo[] = [];
+    const overall = String(exp.status || 'pending').toLowerCase();
+    const isDraft = overall === 'draft' || Boolean(exp.is_draft);
+    const isPaid = Boolean(exp.is_refunded) || overall === 'paid' || overall === 'refunded';
+    
+    const s1 = String(exp.status_level_1 || (overall === 'level1_approved' || overall === 'approved' || isPaid ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')).toLowerCase();
+    const s2 = String(exp.status_level_2 || 'none').toLowerCase();
+    const s3 = String(exp.status_level_3 || 'none').toLowerCase();
+
+    // Step 1
+    const app1Id = Number(exp.approver_id || 0);
+    const app1Name = exp.approver_name || usersMap.get(app1Id)?.full_name || '';
+    const app1Avatar = exp.approver_avatar || usersMap.get(app1Id)?.avatar_url || usersMap.get(app1Id)?.avatar;
+    if (app1Id > 0 || app1Name || exp.approver_id_2) {
+      let stepStatus: StepInfo['status'] = 'pending';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s1 === 'approved' || overall === 'approved' || isPaid || overall === 'level1_approved') stepStatus = 'approved';
+      else if (s1 === 'rejected' || (overall === 'rejected' && s1 !== 'approved')) stepStatus = 'rejected';
+      else stepStatus = 'pending';
+
+      steps.push({
+        stepIndex: 1,
+        title: 'Cấp 1',
+        userId: app1Id,
+        userName: app1Name,
+        userAvatar: app1Avatar,
+        status: stepStatus
+      });
+    }
+
+    // Step 2
+    const app2Id = Number(exp.approver_id_2 || 0);
+    const app2Name = exp.approver_name_2 || usersMap.get(app2Id)?.full_name || '';
+    const app2Avatar = exp.approver_avatar_2 || usersMap.get(app2Id)?.avatar_url || usersMap.get(app2Id)?.avatar;
+    if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s2 === 'approved' || (overall === 'approved' && s2 !== 'rejected')) stepStatus = 'approved';
+      else if (s2 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && s2 !== 'approved' && s2 !== 'rejected') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 2,
+        title: 'Cấp 2',
+        userId: app2Id,
+        userName: app2Name,
+        userAvatar: app2Avatar,
+        status: stepStatus
+      });
+    }
+
+    // Step 3
+    const app3Id = Number(exp.approver_id_3 || 0);
+    const app3Name = exp.approver_name_3 || usersMap.get(app3Id)?.full_name || '';
+    const app3Avatar = exp.approver_avatar_3 || usersMap.get(app3Id)?.avatar_url || usersMap.get(app3Id)?.avatar;
+    if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s3 === 'approved' || (overall === 'approved' && s3 !== 'rejected')) stepStatus = 'approved';
+      else if (s3 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && (s2 === 'approved' || s2 === 'none') && s3 !== 'approved' && s3 !== 'rejected') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 3,
+        title: 'Cấp 3',
+        userId: app3Id,
+        userName: app3Name,
+        userAvatar: app3Avatar,
+        status: stepStatus
+      });
+    }
+
+    if (steps.length === 0) {
+      steps.push({
+        stepIndex: 1,
+        title: 'Duyệt',
+        userId: app1Id,
+        userName: app1Name || 'Người duyệt',
+        userAvatar: app1Avatar,
+        status: isDraft ? 'waiting' : (overall === 'approved' || isPaid ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')
+      });
+    }
+
+    // Related Watchers
+    let relIds: number[] = [];
+    const rawWatchers = exp.related_user_ids || exp.related_users;
+    if (Array.isArray(rawWatchers)) {
+      relIds = rawWatchers.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+    } else if (typeof rawWatchers === 'string') {
+      const trimmed = rawWatchers.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            relIds = parsed.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+          }
+        } catch {
+          relIds = trimmed.slice(1, -1).split(',').map((id: string) => Number(id.trim().replace(/^['"]|['"]$/g, ''))).filter((id: number) => id > 0);
+        }
+      } else {
+        relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+      }
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        {/* Step Approvers Chain */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          {steps.map((st, idx) => {
+            const uObj = st.userId ? usersMap.get(st.userId) : null;
+            const displayName = uObj?.full_name || uObj?.name || st.userName || st.title;
+            const avatarUrl = st.userAvatar || uObj?.avatar_url || uObj?.avatar;
+
+            const isApproved = !isDraft && st.status === 'approved';
+            const isRejected = !isDraft && st.status === 'rejected';
+            const isPending = !isDraft && st.status === 'pending';
+
+            const borderColor = isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : 'var(--color-border)';
+            const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : isDraft ? 'Dự kiến duyệt (Bản nháp)' : 'Chưa đến lượt';
+
+            return (
+              <React.Fragment key={`exp-step-${st.stepIndex}`}>
+                {idx > 0 && (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: '0 1px' }}>➔</span>
+                )}
+                <div 
+                  title={`${st.title}: ${displayName} (${statusText})`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{
+                    borderRadius: '50%',
+                    padding: '1.5px',
+                    border: `2px solid ${borderColor}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'var(--color-surface, #ffffff)',
+                    opacity: isDraft ? 0.95 : (st.status === 'waiting' ? 0.6 : 1)
+                  }}>
+                    <Avatar src={avatarUrl} name={displayName} size={24} />
+                  </div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-2px',
+                    right: '-2px',
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : isDraft ? '#64748B' : '#8E8E93',
+                    border: '1.5px solid #ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '8px',
+                    fontWeight: 800
+                  }}>
+                    {isApproved ? '✓' : isRejected ? '✕' : isPending ? '•' : st.stepIndex}
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Related Watchers Avatars */}
+        {relIds.length > 0 && (
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              marginLeft: '4px',
+              paddingLeft: '6px',
+              borderLeft: '1px solid var(--color-border)'
+            }}
+            title={`Người liên quan (${relIds.length}): ${relIds.map(id => usersMap.get(id)?.full_name || usersMap.get(id)?.name || id).join(', ')}`}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', marginRight: '1px' }}>
+              <Eye size={12} />
+            </div>
+            {relIds.slice(0, 3).map(id => {
+              const relU = usersMap.get(id);
+              return (
+                <Avatar
+                  key={`rel-${id}`}
+                  src={relU?.avatar_url || relU?.avatar}
+                  name={relU?.full_name || relU?.name || `ID ${id}`}
+                  size={22}
+                />
+              );
+            })}
+            {relIds.length > 3 && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                +{relIds.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderExpenseStatusBadge = (exp: any) => {
+    const overall = String(exp.status || 'pending').toLowerCase();
+    const isDraft = overall === 'draft' || Boolean(exp.is_draft);
+    const isPaid = Boolean(exp.is_refunded) || overall === 'paid' || overall === 'refunded';
+
+    const s1 = String(exp.status_level_1 || 'pending').toLowerCase();
+    const s2 = String(exp.status_level_2 || 'pending').toLowerCase();
+    const s3 = String(exp.status_level_3 || 'pending').toLowerCase();
+
+    const hasL2 = Boolean(exp.approver_id_2);
+    const hasL3 = Boolean(exp.approver_id_3);
+
+    if (isDraft) {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          color: 'var(--color-text-muted)',
+          background: 'rgba(107, 114, 128, 0.1)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          width: 'fit-content',
+          marginTop: '2px'
+        }}>
+          Bản nháp
+        </span>
+      );
+    }
+
+    if (isPaid) {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          color: '#10b981',
+          background: 'rgba(16, 185, 129, 0.1)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          width: 'fit-content',
+          marginTop: '2px'
+        }}>
+          <CheckCircle2 size={10} /> Đã thanh toán
+        </span>
+      );
+    }
+
+    if (overall === 'approved') {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          color: '#10b981',
+          background: 'rgba(16, 185, 129, 0.1)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          width: 'fit-content',
+          marginTop: '2px'
+        }}>
+          <CheckCircle2 size={10} /> Đã duyệt
+        </span>
+      );
+    }
+
+    if (overall === 'rejected') {
+      const rejectText = s3 === 'rejected' ? 'Cấp 3 từ chối' : (s2 === 'rejected' ? 'Cấp 2 từ chối' : (s1 === 'rejected' ? 'Cấp 1 từ chối' : 'Từ chối'));
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '3px',
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          color: '#ef4444',
+          background: 'rgba(239, 68, 68, 0.1)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          width: 'fit-content',
+          marginTop: '2px'
+        }}>
+          <XCircle size={10} /> {rejectText}
+        </span>
+      );
+    }
+
+    // Pending states
+    let pendingText = 'Chờ duyệt';
+    if (s1 === 'approved' && s2 === 'approved' && hasL3 && s3 !== 'approved') {
+      pendingText = 'Chờ Cấp 3 duyệt';
+    } else if (s1 === 'approved' && hasL2 && s2 !== 'approved') {
+      pendingText = 'Chờ Cấp 2 duyệt';
+    } else if (hasL2 && s1 !== 'approved') {
+      pendingText = 'Chờ Cấp 1 duyệt';
+    }
+
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '3px',
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        color: '#f59e0b',
+        background: 'rgba(245, 158, 11, 0.1)',
+        padding: '2px 6px',
+        borderRadius: '4px',
+        width: 'fit-content',
+        marginTop: '2px'
+      }}>
+        <Clock size={10} /> {pendingText}
+      </span>
+    );
+  };
+
   return (
     <div>
       {/* Header */}
@@ -1364,13 +1714,13 @@ export const ExpensesPage: React.FC = () => {
       {/* Main table */}
       <div className="card" style={{ overflow: 'visible' }}>
         <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto', overflowX: 'auto' }}>
-          <table style={{ minWidth: 850 }}>
+          <table style={{ minWidth: 960 }}>
             <thead>
               <tr>
-                <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)' }}>Tên hóa đơn</th>
+                <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)', minWidth: 340, width: '32%' }}>Tên hóa đơn</th>
                 <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)' }}>Người tạo</th>
-                <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)' }}>Số tiền</th>
-                <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)' }}>Người duyệt <Tooltip content="Thành viên chịu trách nhiệm phê duyệt khoản chi phí này." /></th>
+                <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)', minWidth: 150 }}>Số tiền</th>
+                <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)', minWidth: 200 }}>Các bước & Người liên quan <Tooltip content="Tiến trình phê duyệt qua các cấp và những người liên quan theo dõi." /></th>
                 <th style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-surface)', textAlign: 'right' }}>Thao tác</th>
               </tr>
             </thead>
@@ -1395,7 +1745,7 @@ export const ExpensesPage: React.FC = () => {
                       style={{ cursor: 'pointer' }}
                       className="hover-bg transition-colors"
                     >
-                      <td>
+                      <td style={{ minWidth: 340 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text)' }}>{exp.title}</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -1417,139 +1767,13 @@ export const ExpensesPage: React.FC = () => {
                         </div>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)' }}>{FMT(exp.amount, exp.currency)}</span>
-                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                            <Calendar size={12} style={{ color: 'var(--color-text-muted)' }} />
-                            Hạn chi: {exp.date && !isNaN(Date.parse(exp.date)) ? new Date(exp.date).toLocaleDateString('vi-VN') : '—'}
-                          </span>
+                          {renderExpenseStatusBadge(exp)}
                         </div>
                       </td>
                       <td>
-                        {(() => {
-                          const s1 = String(exp.status_level_1 || 'pending').toLowerCase();
-                          const s2 = String(exp.status_level_2 || 'pending').toLowerCase();
-                          const s3 = String(exp.status_level_3 || 'pending').toLowerCase();
-                          const overall = String(exp.status || 'pending').toLowerCase();
-
-                          const hasL2 = Boolean(exp.approver_id_2);
-                          const hasL3 = Boolean(exp.approver_id_3);
-
-                          const app1User = exp.approver_name 
-                            ? { full_name: exp.approver_name, avatar_url: exp.approver_avatar } 
-                            : users.find((u: any) => Number(u.id) === Number(exp.approver_id));
-
-                          const app2User = exp.approver_name_2 
-                            ? { full_name: exp.approver_name_2, avatar_url: exp.approver_avatar_2 } 
-                            : users.find((u: any) => Number(u.id) === Number(exp.approver_id_2));
-
-                          const app3User = exp.approver_name_3 
-                            ? { full_name: exp.approver_name_3, avatar_url: exp.approver_avatar_3 } 
-                            : users.find((u: any) => Number(u.id) === Number(exp.approver_id_3));
-
-                          let activeApprover = app1User;
-                          let statusBadge = (
-                            <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-                              <Clock size={10} /> Chờ duyệt
-                            </span>
-                          );
-                          let subText: React.ReactNode = null;
-
-                          if (overall === 'approved') {
-                            activeApprover = (hasL3 && app3User) ? app3User : ((hasL2 && app2User) ? app2User : app1User);
-                            statusBadge = (
-                              <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-                                <CheckCircle2 size={10} /> {exp.is_refunded ? 'Đã thanh toán' : 'Đã duyệt'}
-                              </span>
-                            );
-                            if (hasL2) {
-                              subText = <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 600 }}>Cả 2 cấp đã duyệt</span>;
-                            }
-                          } else if (overall === 'rejected') {
-                            if (s3 === 'rejected' && app3User) activeApprover = app3User;
-                            else if (s2 === 'rejected' && app2User) activeApprover = app2User;
-                            statusBadge = (
-                              <span className="badge danger" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-                                <XCircle size={10} /> {s3 === 'rejected' ? 'Cấp 3 từ chối' : (s2 === 'rejected' ? 'Cấp 2 từ chối' : 'Từ chối')}
-                              </span>
-                            );
-                          } else if (s1 === 'approved' && hasL2 && s2 !== 'approved') {
-                            // LEVEL 1 APPROVED, WAITING FOR LEVEL 2
-                            activeApprover = app2User || { full_name: 'Người duyệt Cấp 2', avatar_url: undefined };
-                            statusBadge = (
-                              <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-                                <Clock size={10} /> Chờ Cấp 2 duyệt
-                              </span>
-                            );
-                            subText = (
-                              <span style={{ fontSize: '0.68rem', color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                                ✓ {app1User?.full_name || 'Cấp 1'} đã duyệt
-                              </span>
-                            );
-                          } else if (s1 === 'approved' && s2 === 'approved' && hasL3 && s3 !== 'approved') {
-                            activeApprover = app3User || { full_name: 'Người duyệt Cấp 3', avatar_url: undefined };
-                            statusBadge = (
-                              <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-                                <Clock size={10} /> Chờ Cấp 3 duyệt
-                              </span>
-                            );
-                            subText = (
-                              <span style={{ fontSize: '0.68rem', color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                                ✓ Cấp 1 & 2 đã duyệt
-                              </span>
-                            );
-                          } else {
-                            activeApprover = app1User;
-                            statusBadge = (
-                              <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
-                                <Clock size={10} /> {hasL2 ? 'Chờ Cấp 1 duyệt' : 'Chờ duyệt'}
-                              </span>
-                            );
-                            if (hasL2) {
-                              subText = <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>Cần duyệt 2 cấp</span>;
-                            }
-                          }
-
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {activeApprover ? (
-                                  <>
-                                    <Avatar src={activeApprover.avatar_url} name={activeApprover.full_name || 'Admin'} size={24} style={{ border: '1px solid var(--color-border-light)' }} />
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>{activeApprover.full_name || 'Admin'}</span>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div style={{ 
-                                      width: '24px', 
-                                      height: '24px', 
-                                      borderRadius: '50%', 
-                                      background: 'rgba(245, 158, 11, 0.08)', 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      justifyContent: 'center', 
-                                      color: '#f59e0b', 
-                                      fontSize: '0.65rem', 
-                                      fontWeight: 800, 
-                                      border: '1px dashed rgba(245, 158, 11, 0.3)' 
-                                    }}>
-                                      ?
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#f59e0b', fontStyle: 'italic' }}>Chờ duyệt</span>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                {statusBadge}
-                                {subText}
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        {renderWorkflowStepsAndWatchers(exp)}
                       </td>
                       <td>
                         <div className="flex gap-1" style={{ justifyContent: 'flex-end' }}>
@@ -1980,10 +2204,10 @@ export const ExpensesPage: React.FC = () => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                           <div style={{ 
                             padding: '1.5rem', 
-                            background: 'linear-gradient(135deg, var(--color-primary-light, #fff5f5) 0%, #ffffff 100%)', 
+                            background: '#ffffff', 
                             borderRadius: '16px', 
-                            border: '1px solid rgba(189, 29, 45, 0.12)',
-                            boxShadow: '0 4px 15px rgba(189, 29, 45, 0.02)',
+                            border: '1px solid var(--color-border-light)',
+                            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -2020,9 +2244,10 @@ export const ExpensesPage: React.FC = () => {
                           {vatRate > 0 && (
                             <div style={{
                               padding: '12px 16px',
-                              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03), rgba(59, 130, 246, 0.06))',
-                              border: '1px solid rgba(37, 99, 235, 0.18)',
+                              background: '#ffffff',
+                              border: '1px solid var(--color-border-light)',
                               borderRadius: '12px',
+                              boxShadow: '0 1px 4px rgba(0, 0, 0, 0.02)',
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '6px'
@@ -2389,15 +2614,15 @@ export const ExpensesPage: React.FC = () => {
                         }}>
                           {/* Executive Brand Light Bank Card */}
                           <div style={{
-                            background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
-                            border: '1px solid #fecaca',
+                            background: '#ffffff',
+                            border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                             borderRadius: '14px',
                             padding: '12px 14px',
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'space-between',
                             gap: '10px',
-                            boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                             position: 'relative',
                             overflow: 'hidden'
                           }}>
@@ -2407,14 +2632,14 @@ export const ExpensesPage: React.FC = () => {
                                   width: '26px',
                                   height: '26px',
                                   borderRadius: '6px',
-                                  background: '#ffffff',
-                                  border: '1px solid #fecaca',
+                                  background: 'var(--color-bg-subtle, #f8fafc)',
+                                  border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   flexShrink: 0
                                 }}>
-                                  <Landmark size={14} style={{ color: '#dc2626' }} />
+                                  <Landmark size={14} style={{ color: 'var(--color-primary, #dc2626)' }} />
                                 </div>
                                 <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={bankName || 'Chuyển khoản Ngân hàng'}>
                                   {bankName || 'Chuyển khoản Ngân hàng'}
@@ -2427,9 +2652,9 @@ export const ExpensesPage: React.FC = () => {
                                 letterSpacing: '0.04em',
                                 padding: '2px 6px',
                                 borderRadius: '5px',
-                                background: '#ffffff',
+                                background: 'rgba(220, 38, 38, 0.06)',
                                 color: '#dc2626',
-                                border: '1px solid #fecaca',
+                                border: '1px solid rgba(220, 38, 38, 0.15)',
                                 flexShrink: 0
                               }}>
                                 Chuyển khoản 24/7
@@ -2440,11 +2665,11 @@ export const ExpensesPage: React.FC = () => {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              background: '#ffffff',
+                              background: '#f8fafc',
                               padding: '7px 10px',
                               borderRadius: '8px',
-                              border: '1px solid #fecaca',
-                              boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                              border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
+                              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
                             }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                                 <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
@@ -2457,35 +2682,37 @@ export const ExpensesPage: React.FC = () => {
                                   letterSpacing: '0.06em',
                                   color: '#dc2626'
                                 }}>
-                                  {bankNum}
+                                  {bankNum || '—'}
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(bankNum);
-                                  addToast('Đã sao chép số tài khoản!', 'success');
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '5px 9px',
-                                  borderRadius: '6px',
-                                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                                  color: '#ffffff',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  fontSize: '0.7rem',
-                                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
-                                  transition: 'all 0.2s ease',
-                                  flexShrink: 0
-                                }}
-                              >
-                                <Copy size={12} />
-                                <span>Sao chép</span>
-                              </button>
+                              {bankNum && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(bankNum);
+                                    addToast('Đã sao chép số tài khoản!', 'success');
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '5px 9px',
+                                    borderRadius: '6px',
+                                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.7rem',
+                                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                                    transition: 'all 0.2s ease',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <Copy size={12} />
+                                  <span>Sao chép</span>
+                                </button>
+                              )}
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '4px' }}>
@@ -2512,23 +2739,23 @@ export const ExpensesPage: React.FC = () => {
                               title="Bấm để phóng to mã QR"
                               style={{
                                 background: '#ffffff',
-                                border: '1px solid #fecaca',
+                                border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                                 borderRadius: '14px',
                                 padding: '6px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                                 cursor: 'pointer',
                                 transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                               }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.transform = 'scale(1.02)';
-                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 38, 38, 0.15)';
+                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.08)';
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = 'none';
-                                e.currentTarget.style.boxShadow = '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)';
+                                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.03)';
                               }}
                             >
                               <img

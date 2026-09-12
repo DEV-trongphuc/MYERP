@@ -9768,15 +9768,15 @@ export default function Approvals() {
                                     }}>
                                       {/* Executive Brand Light Bank Card */}
                                       <div style={{
-                                        background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
-                                        border: '1px solid #fecaca',
+                                        background: '#ffffff',
+                                        border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                                         borderRadius: '14px',
                                         padding: '12px 14px',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         justifyContent: 'space-between',
                                         gap: '10px',
-                                        boxShadow: '0 4px 16px rgba(220, 38, 38, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                                         position: 'relative',
                                         overflow: 'hidden'
                                       }}>
@@ -9786,8 +9786,8 @@ export default function Approvals() {
                                               width: '26px',
                                               height: '26px',
                                               borderRadius: '6px',
-                                              background: '#ffffff',
-                                              border: '1px solid #fecaca',
+                                              background: 'var(--color-bg-subtle, #f8fafc)',
+                                              border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                                               display: 'flex',
                                               alignItems: 'center',
                                               justifyContent: 'center',

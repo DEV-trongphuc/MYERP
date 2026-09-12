@@ -4679,14 +4679,92 @@ switch ($action) {
 
             // Fetch expenses (PO) for the date
             $expRes = $conn->query("
-                SELECT e.id, e.title, e.amount, e.status, e.date, e.refunded_at, e.is_refunded, u.full_name as creator_name, u.avatar_url as creator_avatar
+                SELECT 
+                    e.id, e.title, e.amount, e.status, e.date, e.refunded_at, e.is_refunded, e.is_draft,
+                    e.approver_id, e.approver_id_2, e.approver_id_3,
+                    e.status_level_1, e.status_level_2, e.status_level_3,
+                    e.related_user_ids,
+                    u.full_name as creator_name, u.avatar_url as creator_avatar,
+                    u2.full_name as approver_name, u2.avatar_url as approver_avatar,
+                    u4.full_name as approver_name_2, u4.avatar_url as approver_avatar_2,
+                    u5.full_name as approver_name_3, u5.avatar_url as approver_avatar_3
                 FROM expenses e
                 LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN users u2 ON e.approver_id = u2.id
+                LEFT JOIN users u4 ON e.approver_id_2 = u4.id
+                LEFT JOIN users u5 ON e.approver_id_3 = u5.id
                 WHERE DATE(COALESCE(e.refunded_at, e.date)) = '$escapedDate' AND e.deleted_at IS NULL $pendingFilterPO
                 ORDER BY e.id DESC
             ");
             if ($expRes) {
+                $rawExpenseRows = [];
+                $allWatcherIds = [];
                 while ($row = $expRes->fetch_assoc()) {
+                    $rawExpenseRows[] = $row;
+                    $relStr = trim((string)($row['related_user_ids'] ?? ''));
+                    if ($relStr !== '') {
+                        if ($relStr[0] === '[') {
+                            $decoded = json_decode($relStr, true);
+                            if (is_array($decoded)) {
+                                foreach ($decoded as $item) {
+                                    $wId = is_array($item) ? (int)($item['id'] ?? $item['user_id'] ?? 0) : (int)$item;
+                                    if ($wId > 0) $allWatcherIds[$wId] = true;
+                                }
+                            }
+                        } else {
+                            $parts = explode(',', $relStr);
+                            foreach ($parts as $p) {
+                                $wId = (int)trim($p);
+                                if ($wId > 0) $allWatcherIds[$wId] = true;
+                            }
+                        }
+                    }
+                }
+
+                $watchersMap = [];
+                if (!empty($allWatcherIds)) {
+                    $idsList = implode(',', array_keys($allWatcherIds));
+                    $wRes = $conn->query("SELECT id, full_name, avatar_url FROM users WHERE id IN ($idsList)");
+                    if ($wRes) {
+                        while ($wRow = $wRes->fetch_assoc()) {
+                            $watchersMap[(int)$wRow['id']] = [
+                                'id' => (int)$wRow['id'],
+                                'name' => $wRow['full_name'],
+                                'avatar' => $wRow['avatar_url']
+                            ];
+                        }
+                    }
+                }
+
+                foreach ($rawExpenseRows as $row) {
+                    $watchers = [];
+                    $relStr = trim((string)($row['related_user_ids'] ?? ''));
+                    if ($relStr !== '') {
+                        $parsedIds = [];
+                        if ($relStr[0] === '[') {
+                            $decoded = json_decode($relStr, true);
+                            if (is_array($decoded)) {
+                                foreach ($decoded as $item) {
+                                    $wId = is_array($item) ? (int)($item['id'] ?? $item['user_id'] ?? 0) : (int)$item;
+                                    if ($wId > 0) $parsedIds[] = $wId;
+                                }
+                            }
+                        } else {
+                            $parts = explode(',', $relStr);
+                            foreach ($parts as $p) {
+                                $wId = (int)trim($p);
+                                if ($wId > 0) $parsedIds[] = $wId;
+                            }
+                        }
+                        foreach ($parsedIds as $wId) {
+                            if (isset($watchersMap[$wId])) {
+                                $watchers[] = $watchersMap[$wId];
+                            } else {
+                                $watchers[] = ['id' => $wId, 'name' => "User $wId", 'avatar' => null];
+                            }
+                        }
+                    }
+
                     $expenses[] = [
                         'id' => (int)$row['id'],
                         'title' => $row['title'],
@@ -4695,6 +4773,21 @@ switch ($action) {
                         'date' => $row['date'],
                         'refunded_at' => $row['refunded_at'],
                         'is_refunded' => (int)$row['is_refunded'],
+                        'is_draft' => (int)($row['is_draft'] ?? 0),
+                        'approver_id' => $row['approver_id'] ? (int)$row['approver_id'] : null,
+                        'approver_name' => $row['approver_name'],
+                        'approver_avatar' => $row['approver_avatar'],
+                        'approver_id_2' => $row['approver_id_2'] ? (int)$row['approver_id_2'] : null,
+                        'approver_name_2' => $row['approver_name_2'],
+                        'approver_avatar_2' => $row['approver_avatar_2'],
+                        'approver_id_3' => $row['approver_id_3'] ? (int)$row['approver_id_3'] : null,
+                        'approver_name_3' => $row['approver_name_3'],
+                        'approver_avatar_3' => $row['approver_avatar_3'],
+                        'status_level_1' => $row['status_level_1'],
+                        'status_level_2' => $row['status_level_2'],
+                        'status_level_3' => $row['status_level_3'],
+                        'related_user_ids' => $row['related_user_ids'],
+                        'watchers' => $watchers,
                         'creator_name' => $row['creator_name'] ?: 'N/A',
                         'creator_avatar' => $row['creator_avatar']
                     ];

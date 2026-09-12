@@ -530,12 +530,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   const hrTopOTList = useMemo(() => {
     const list = [...hrDashboardPayslips]
-      .filter(p => Number(p.overtime_days || 0) > 0)
-      .map(p => ({
-        id: p.id,
-        name: p.employee_name,
-        value: Number(p.overtime_days || 0)
-      }))
+      .filter(p => Number(p.overtime_days || 0) > 0 || Number(p.overtime_hours || 0) > 0)
+      .map(p => {
+        const hours = Number(p.overtime_hours || 0) > 0 
+          ? Number(p.overtime_hours) 
+          : Math.round(Number(p.overtime_days || 0) * 8 * 10) / 10;
+        return {
+          id: p.id,
+          name: p.employee_name,
+          value: hours
+        };
+      })
       .sort((a, b) => b.value - a.value);
     
     const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
@@ -1777,8 +1782,67 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
         </div>
 
+        {/* Side-by-side Top Lateness and Top OT Lists */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
+          
+          {/* Top Late-comers list */}
+          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
+                <Clock size={18} color="#ec4899" /> {t('Top Nhân viên Đi trễ')}
+              </h3>
+            </div>
+            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
+              {hrTopLatenessList.length > 0 ? hrTopLatenessList.map((item, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
+                      <span style={{ fontWeight: 600 }}>{item.name}</span>
+                    </span>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('phút')}</span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#ec4899', borderRadius: 4 }} />
+                  </div>
+                </div>
+              )) : (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Không có nhân viên đi trễ')}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Top OT (Overtime) list */}
+          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
+                <Award size={18} color="#fbbf24" /> {t('Top Nhân viên tăng ca (OT)')}
+              </h3>
+            </div>
+            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
+              {hrTopOTList.length > 0 ? hrTopOTList.map((item, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
+                      <span style={{ fontWeight: 600 }}>{item.name}</span>
+                    </span>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('giờ OT')}</span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#fbbf24', borderRadius: 4 }} />
+                  </div>
+                </div>
+              )) : (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Chưa có nhân viên tăng ca')}</div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
         {/* Charts Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6fr 4fr', gap: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '6fr 4fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
           
           {/* Weekly Attendance */}
           <div className="card" style={{ padding: '1.25rem' }}>
@@ -1848,65 +1912,6 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     ))}
                   </div>
                 </>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Side-by-side Top Lateness and Top OT Lists */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-          
-          {/* Top Late-comers list */}
-          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                <Clock size={18} color="#ec4899" /> {t('Top Nhân viên Đi trễ')}
-              </h3>
-            </div>
-            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
-              {hrTopLatenessList.length > 0 ? hrTopLatenessList.map((item, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
-                      <span style={{ fontWeight: 600 }}>{item.name}</span>
-                    </span>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('phút')}</span>
-                  </div>
-                  <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#ec4899', borderRadius: 4 }} />
-                  </div>
-                </div>
-              )) : (
-                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Không có nhân viên đi trễ')}</div>
-              )}
-            </div>
-          </div>
-
-          {/* Top OT (Overtime) list */}
-          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text)' }}>
-                <Award size={18} color="#fbbf24" /> {t('Top Nhân viên tăng ca (OT)')}
-              </h3>
-            </div>
-            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
-              {hrTopOTList.length > 0 ? hrTopOTList.map((item, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 16 }}>#{i + 1}</span>
-                      <span style={{ fontWeight: 600 }}>{item.name}</span>
-                    </span>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{item.value} {t('ngày OT')}</span>
-                  </div>
-                  <div style={{ height: 6, background: 'var(--color-bg)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${item.percent}%`, height: '100%', background: '#fbbf24', borderRadius: 4 }} />
-                  </div>
-                </div>
-              )) : (
-                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem 0' }}>{t('Chưa có nhân viên tăng ca')}</div>
               )}
             </div>
           </div>

@@ -2003,15 +2003,15 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           }}>
                             {/* Executive Brand Light Bank Card */}
                             <div style={{
-                              background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
-                              border: '1px solid #fecaca',
+                              background: '#ffffff',
+                              border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                               borderRadius: '14px',
                               padding: '12px 14px',
                               display: 'flex',
                               flexDirection: 'column',
                               justifyContent: 'space-between',
                               gap: '10px',
-                              boxShadow: '0 4px 16px rgba(220, 38, 38, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                               position: 'relative',
                               overflow: 'hidden'
                             }}>
@@ -2021,8 +2021,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                                     width: '26px',
                                     height: '26px',
                                     borderRadius: '6px',
-                                    background: '#ffffff',
-                                    border: '1px solid #fecaca',
+                                    background: 'var(--color-bg-subtle, #f8fafc)',
+                                    border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -2035,7 +2035,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                                         style={{ width: '18px', height: '18px', objectFit: 'contain' }}
                                       />
                                     ) : (
-                                      <Landmark size={14} style={{ color: '#dc2626' }} />
+                                      <Landmark size={14} style={{ color: 'var(--color-primary, #dc2626)' }} />
                                     )}
                                   </div>
                                   <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={paymentBankName}>
@@ -2049,9 +2049,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                                   letterSpacing: '0.04em',
                                   padding: '2px 6px',
                                   borderRadius: '5px',
-                                  background: '#ffffff',
+                                  background: 'rgba(220, 38, 38, 0.06)',
                                   color: '#dc2626',
-                                  border: '1px solid #fecaca',
+                                  border: '1px solid rgba(220, 38, 38, 0.15)',
                                   flexShrink: 0
                                 }}>
                                   Napas 247
@@ -2062,11 +2062,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                background: '#ffffff',
+                                background: '#f8fafc',
                                 padding: '7px 10px',
                                 borderRadius: '8px',
-                                border: '1px solid #fecaca',
-                                boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                                border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
+                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
                               }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                                   <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
@@ -2132,13 +2132,13 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                               title={vietQrUrl ? 'Bấm để phóng to mã QR' : undefined}
                               style={{
                                 background: '#ffffff',
-                                border: '1px solid #fecaca',
+                                border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                                 borderRadius: '14px',
                                 padding: '8px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                                 cursor: vietQrUrl ? 'pointer' : 'default',
                                 transition: 'all 0.2s ease'
                               }}

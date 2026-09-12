@@ -80,33 +80,115 @@ class HRMController {
     public function indexProfiles(array $auth): void {
         if (!$this->isAdmin($auth)) {
             // Allow individual employee to fetch their own profile
+            try {
+                $stmt = $this->db->prepare("
+                    SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
+                           u.avatar_url, u.avatar_url as avatar, u.job_title,
+                           COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(t.name), ''), 
+                               CASE 
+                                   WHEN u.role IN ('admin', 'superadmin', 'super_admin', 'director') THEN 'Ban Giám đốc'
+                                   WHEN u.role = 'hr' THEN 'Phòng Nhân sự'
+                                   WHEN u.role = 'accountant' THEN 'Phòng Kế toán'
+                                   WHEN u.role = 'marketing' THEN 'Phòng Marketing'
+                                   WHEN u.role IN ('sales', 'sale', 'sale_admin', 'saleadmin') THEN 'Phòng Kinh doanh'
+                                   ELSE 'Khác'
+                               END
+                           ) as department,
+                           COALESCE(NULLIF(TRIM(t.name), ''), NULLIF(TRIM(u.department), '')) as team_name,
+                           p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
+                           p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
+                           p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
+                    FROM users u
+                    LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                    LEFT JOIN teams t ON u.team_id = t.id
+                    WHERE u.tenant_id = ? AND u.id = ?
+                    LIMIT 1
+                ");
+                $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
+                respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+            } catch (\Throwable $e) {
+                $stmt = $this->db->prepare("
+                    SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
+                           u.avatar_url, u.avatar_url as avatar, u.job_title,
+                           COALESCE(NULLIF(TRIM(t.name), ''), 
+                               CASE 
+                                   WHEN u.role IN ('admin', 'superadmin', 'super_admin', 'director') THEN 'Ban Giám đốc'
+                                   WHEN u.role = 'hr' THEN 'Phòng Nhân sự'
+                                   WHEN u.role = 'accountant' THEN 'Phòng Kế toán'
+                                   WHEN u.role = 'marketing' THEN 'Phòng Marketing'
+                                   WHEN u.role IN ('sales', 'sale', 'sale_admin', 'saleadmin') THEN 'Phòng Kinh doanh'
+                                   ELSE 'Khác'
+                               END
+                           ) as department,
+                           COALESCE(NULLIF(TRIM(t.name), ''), 'Khác') as team_name,
+                           p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
+                           p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
+                           p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
+                    FROM users u
+                    LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                    LEFT JOIN teams t ON u.team_id = t.id
+                    WHERE u.tenant_id = ? AND u.id = ?
+                    LIMIT 1
+                ");
+                $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
+                respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
+            }
+            return;
+        }
+
+        try {
             $stmt = $this->db->prepare("
                 SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
+                       u.avatar_url, u.avatar_url as avatar, u.job_title,
+                       COALESCE(NULLIF(TRIM(u.department), ''), NULLIF(TRIM(t.name), ''), 
+                           CASE 
+                               WHEN u.role IN ('admin', 'superadmin', 'super_admin', 'director') THEN 'Ban Giám đốc'
+                               WHEN u.role = 'hr' THEN 'Phòng Nhân sự'
+                               WHEN u.role = 'accountant' THEN 'Phòng Kế toán'
+                               WHEN u.role = 'marketing' THEN 'Phòng Marketing'
+                               WHEN u.role IN ('sales', 'sale', 'sale_admin', 'saleadmin') THEN 'Phòng Kinh doanh'
+                               ELSE 'Khác'
+                           END
+                       ) as department,
+                       COALESCE(NULLIF(TRIM(t.name), ''), NULLIF(TRIM(u.department), '')) as team_name,
                        p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
                        p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
                        p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
                 FROM users u
                 LEFT JOIN hrm_profiles p ON u.id = p.user_id
-                WHERE u.tenant_id = ? AND u.id = ?
-                LIMIT 1
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                ORDER BY u.full_name
             ");
-            $stmt->execute([$auth['tenant_id'], $auth['user_id']]);
+            $stmt->execute([$auth['tenant_id']]);
             respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
-            return;
+        } catch (\Throwable $e) {
+            $stmt = $this->db->prepare("
+                SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
+                       u.avatar_url, u.avatar_url as avatar, u.job_title,
+                       COALESCE(NULLIF(TRIM(t.name), ''), 
+                           CASE 
+                               WHEN u.role IN ('admin', 'superadmin', 'super_admin', 'director') THEN 'Ban Giám đốc'
+                               WHEN u.role = 'hr' THEN 'Phòng Nhân sự'
+                               WHEN u.role = 'accountant' THEN 'Phòng Kế toán'
+                               WHEN u.role = 'marketing' THEN 'Phòng Marketing'
+                               WHEN u.role IN ('sales', 'sale', 'sale_admin', 'saleadmin') THEN 'Phòng Kinh doanh'
+                               ELSE 'Khác'
+                           END
+                       ) as department,
+                       COALESCE(NULLIF(TRIM(t.name), ''), 'Khác') as team_name,
+                       p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
+                       p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
+                       p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
+                FROM users u
+                LEFT JOIN hrm_profiles p ON u.id = p.user_id
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
+                ORDER BY u.full_name
+            ");
+            $stmt->execute([$auth['tenant_id']]);
+            respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
         }
-
-        $stmt = $this->db->prepare("
-            SELECT u.id, u.full_name, u.email, u.phone, u.role, u.is_active, u.dob, u.gender, u.citizen_id, u.address, u.bank_name, u.bank_account, u.team_id,
-                   p.joined_date, p.base_salary, p.deal_salary, p.has_insurance, p.allowance_meal, p.allowance_meal_type, p.allowance_travel, p.allowance_phone, p.kpi_target, p.kpi_multiplier_rules, p.custom_fields_json,
-                   p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used,
-                   p.insurance_rate_bhxh, p.insurance_rate_bhyt, p.insurance_rate_bhtn
-            FROM users u
-            LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ?
-            ORDER BY u.full_name
-        ");
-        $stmt->execute([$auth['tenant_id']]);
-        respond(200, $stmt->fetchAll(PDO::FETCH_ASSOC));
     }
 
     public function saveProfile(array $auth): void {
@@ -249,6 +331,7 @@ class HRMController {
 
         $stmt = $this->db->prepare("
             SELECT l.*, u.full_name as employee_name, u.email as employee_email,
+                   u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title,
                    COALESCE(p.annual_leave_total, 12.0) as annual_leave_total,
                    COALESCE(p.annual_leave_used, 0.0) as annual_leave_used,
                    COALESCE(p.compensatory_leave_total, 0.0) as compensatory_leave_total,
@@ -863,7 +946,7 @@ class HRMController {
         $userId = (int)$auth['user_id'];
         if ($this->isAdmin($auth)) {
             $stmt = $this->db->prepare("
-                SELECT a.*, u.full_name as employee_name
+                SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title
                 FROM hrm_salary_advances a
                 JOIN users u ON a.user_id = u.id
                 WHERE u.tenant_id = ?
@@ -872,7 +955,7 @@ class HRMController {
             $stmt->execute([$auth['tenant_id']]);
         } else {
             $stmt = $this->db->prepare("
-                SELECT a.*, u.full_name as employee_name
+                SELECT a.*, u.full_name as employee_name, u.avatar_url as employee_avatar, u.avatar_url, u.department, u.job_title
                 FROM hrm_salary_advances a
                 JOIN users u ON a.user_id = u.id
                 WHERE a.user_id = ? OR a.approver_id = ? OR a.approver_id_2 = ? OR a.related_user_ids LIKE ? OR a.related_user_ids LIKE ?
@@ -1211,7 +1294,7 @@ class HRMController {
                    p.annual_leave_total, p.annual_leave_used, p.compensatory_leave_total, p.compensatory_leave_used
             FROM users u
             LEFT JOIN hrm_profiles p ON u.id = p.user_id
-            WHERE u.tenant_id = ? AND u.is_active = 1
+            WHERE u.tenant_id = ? AND u.is_active = 1 AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
         ");
         $empStmt->execute([$auth['tenant_id']]);
         $employees = $empStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1663,7 +1746,7 @@ class HRMController {
                     SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
-                    WHERE u.tenant_id = ?
+                    WHERE u.tenant_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
                     ORDER BY p.month_year DESC
                 ");
                 $stmt->execute([$auth['tenant_id']]);
@@ -1672,7 +1755,7 @@ class HRMController {
                     SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
                     FROM monthly_payslips p
                     JOIN users u ON p.user_id = u.id
-                    WHERE p.user_id = ?
+                    WHERE p.user_id = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
                     ORDER BY p.month_year DESC
                 ");
                 $stmt->execute([$auth['user_id']]);
@@ -1686,7 +1769,7 @@ class HRMController {
                 SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
-                WHERE u.tenant_id = ? AND p.month_year = ?
+                WHERE u.tenant_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
             ");
             $stmt->execute([$auth['tenant_id'], $monthYear]);
         } else {
@@ -1694,7 +1777,7 @@ class HRMController {
                 SELECT p.*, u.full_name as employee_name, u.email, u.phone, u.job_title
                 FROM monthly_payslips p
                 JOIN users u ON p.user_id = u.id
-                WHERE p.user_id = ? AND p.month_year = ?
+                WHERE p.user_id = ? AND p.month_year = ? AND u.role NOT IN ('superadmin', 'super_admin') AND u.email != 'info@ideas.edu.vn'
             ");
             $stmt->execute([$auth['user_id'], $monthYear]);
         }
