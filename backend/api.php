@@ -4680,7 +4680,8 @@ switch ($action) {
             // Fetch expenses (PO) for the date
             $expRes = $conn->query("
                 SELECT 
-                    e.id, e.title, e.amount, e.status, e.date, e.refunded_at, e.is_refunded, e.is_draft,
+                    e.id, e.title, e.amount, e.status, e.date, e.refunded_at, e.is_refunded,
+                    (CASE WHEN e.status = 'draft' THEN 1 ELSE 0 END) AS is_draft,
                     e.approver_id, e.approver_id_2, e.approver_id_3,
                     e.status_level_1, e.status_level_2, e.status_level_3,
                     e.related_user_ids,
@@ -4773,7 +4774,7 @@ switch ($action) {
                         'date' => $row['date'],
                         'refunded_at' => $row['refunded_at'],
                         'is_refunded' => (int)$row['is_refunded'],
-                        'is_draft' => (int)($row['is_draft'] ?? 0),
+                        'is_draft' => (int)($row['is_draft'] ?? ($row['status'] === 'draft' ? 1 : 0)),
                         'approver_id' => $row['approver_id'] ? (int)$row['approver_id'] : null,
                         'approver_name' => $row['approver_name'],
                         'approver_avatar' => $row['approver_avatar'],
