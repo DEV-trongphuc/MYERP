@@ -63,10 +63,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_user_role') {
 }
 
 
-// Also allow any localhost origin (any port) for local dev
+// Also allow any localhost origin (any port) for local dev, and zalo.me for browser console sync
 $isLocalhost = (bool) preg_match('#^https?://localhost(:\d+)?$#', $origin);
 $isVercel = (bool) preg_match('#^https?://.*\.vercel\.app$#', $origin);
-if ($isLocalhost || $isVercel || in_array($origin, $allowed, true)) {
+$isZalo = (bool) preg_match('#^https?://(.*\.)?zalo\.me$#', $origin);
+if ($isLocalhost || $isVercel || $isZalo || in_array($origin, $allowed, true)) {
     header("Access-Control-Allow-Origin: $origin");
     header('Access-Control-Allow-Credentials: true');
 } else {
