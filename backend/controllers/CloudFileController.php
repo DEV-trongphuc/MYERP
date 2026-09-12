@@ -744,14 +744,14 @@ Nhiệm vụ của bạn:
     "full_name": "Họ và tên viết IN HOA có dấu (ví dụ: LÊ THỊ BÍCH VÂN)",
     "citizen_id": "Số định danh cá nhân / Số CCCD / Số CMND (chỉ số, nếu có)",
     "passport": "Số hộ chiếu / Passport No (ví dụ: C1234567, nếu là passport hoặc có ghi trên tài liệu)",
-    "birthday": "Ngày sinh định dạng YYYY-MM-DD (hoặc DD/MM/YYYY)",
+    "birthday": "Ngày sinh định dạng chuẩn DD/MM/YYYY (ví dụ: 03/08/1980)",
     "gender": "male hoặc female (nếu là Nam ghi 'male', Nữ ghi 'female')",
     "nationality": "Quốc tịch (ví dụ: Việt Nam / VIETNAMESE)",
     "place_of_birth": "Nơi sinh",
     "place_of_origin": "Quê quán",
-    "address": "Nơi thường trú / Địa chỉ cư trú đầy đủ nhất ghi trên giấy tờ",
-    "issue_date": "Ngày cấp định dạng YYYY-MM-DD (hoặc DD/MM/YYYY)",
-    "expiry_date": "Ngày hết hạn định dạng YYYY-MM-DD (hoặc DD/MM/YYYY)",
+    "address": "Nơi thường trú / Địa chỉ cư trú đầy đủ nhất. Nếu giấy tờ không có địa chỉ thường trú (như Hộ chiếu/Passport), BẮT BUỘC lấy Nơi sinh hoặc Quê quán điền vào đây",
+    "issue_date": "Ngày cấp định dạng DD/MM/YYYY (ví dụ: 30/09/2025)",
+    "expiry_date": "Ngày hết hạn định dạng DD/MM/YYYY (ví dụ: 30/09/2035)",
     "issue_place": "Nơi cấp (ví dụ: Cục Cảnh sát QLHC về TTXH hoặc Cục Quản lý xuất nhập cảnh)"
   }
 
@@ -827,6 +827,33 @@ EOT;
                 'invalid_reason' => $reason,
                 'raw_text' => $rawText
             ], $reason, false);
+        }
+
+        // Chuẩn hóa ngày sinh thành DD/MM/YYYY
+        if (!empty($parsedData['birthday'])) {
+            $bRaw = trim($parsedData['birthday']);
+            if (preg_match('/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/', $bRaw, $m)) {
+                $parsedData['birthday'] = sprintf('%02d/%02d/%04d', (int)$m[3], (int)$m[2], (int)$m[1]);
+            }
+        }
+
+        // Chuẩn hóa các trường ngày cấp / ngày hết hạn
+        foreach (['issue_date', 'expiry_date'] as $dateKey) {
+            if (!empty($parsedData[$dateKey])) {
+                $dRaw = trim($parsedData[$dateKey]);
+                if (preg_match('/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/', $dRaw, $m)) {
+                    $parsedData[$dateKey] = sprintf('%02d/%02d/%04d', (int)$m[3], (int)$m[2], (int)$m[1]);
+                }
+            }
+        }
+
+        // Nếu chưa có địa chỉ thì cập nhật bằng nơi sinh hoặc quê quán
+        if (empty(trim($parsedData['address'] ?? ''))) {
+            $fallbackAddr = trim($parsedData['place_of_birth'] ?? '');
+            if (empty($fallbackAddr)) {
+                $fallbackAddr = trim($parsedData['place_of_origin'] ?? '');
+            }
+            $parsedData['address'] = $fallbackAddr;
         }
 
         respond(200, [

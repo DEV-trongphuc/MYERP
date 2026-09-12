@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, Sparkles, FileText, Image as ImageIcon, AlertCircle, 
-  Check, ArrowLeft, RefreshCw, ShieldCheck, CreditCard, Award
+  Check, ArrowLeft, RefreshCw, ShieldCheck, CreditCard, Award,
+  Loader2, UploadCloud, Plus
 } from 'lucide-react';
 import api from '../../api/axios';
 
@@ -26,6 +27,89 @@ interface ExtractIdDocumentModalProps {
   effectiveZIndex?: number;
 }
 
+const resolveAttachmentUrl = (url: string | null | undefined): string => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  
+  let cleanPath = url.replace(/^\/+/, '');
+  if (cleanPath.includes('storage/uploads/')) {
+    cleanPath = cleanPath.replace('storage/uploads/', 'uploads/');
+  }
+  if (cleanPath.startsWith('backend/')) {
+    cleanPath = cleanPath.substring('backend/'.length);
+  }
+  if (cleanPath.startsWith('deposits/')) {
+    cleanPath = 'uploads/' + cleanPath;
+  }
+  
+  const apiBase = import.meta.env.VITE_API_URL || 'https://myerp.ideas.edu.vn/backend/api.php';
+  let baseUrl = apiBase.split('api.php')[0].replace(/\/+$/, '');
+  if (!baseUrl.startsWith('http')) {
+    baseUrl = 'https://myerp.ideas.edu.vn/backend';
+  }
+  return `${baseUrl}/${cleanPath}`;
+};
+
+const formatDateToVi = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '';
+  const clean = dateStr.trim();
+  const m = clean.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (m) {
+    const day = m[3].padStart(2, '0');
+    const month = m[2].padStart(2, '0');
+    return `${day}/${month}/${m[1]}`;
+  }
+  return clean;
+};
+
+const DocThumbnail: React.FC<{ doc: any; isSuggested?: boolean }> = ({ doc, isSuggested }) => {
+  const [imgError, setImgError] = useState(false);
+  const rawPath = doc.url || doc.file_path || '';
+  const isImg = (/\.(jpe?g|png|webp)($|\?)/i.test(rawPath) || /\.(jpe?g|png|webp)$/i.test(doc.name || '')) && !imgError;
+  const fullUrl = resolveAttachmentUrl(rawPath);
+
+  if (isImg && fullUrl) {
+    return (
+      <div style={{
+        width: '42px',
+        height: '42px',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        border: '1px solid rgba(0,0,0,0.1)',
+        background: '#0f172a',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+      }}>
+        <img 
+          src={fullUrl} 
+          alt={doc.name} 
+          onError={() => setImgError(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      width: '42px',
+      height: '42px',
+      borderRadius: '8px',
+      background: isSuggested ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+      color: isSuggested ? '#0284c7' : '#ef4444',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0
+    }}>
+      {isImg ? <ImageIcon size={20} /> : <FileText size={20} />}
+    </div>
+  );
+};
+
 export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
   isOpen,
   onClose,
@@ -38,6 +122,11 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
+  const [internalDocs, setInternalDocs] = useState<any[]>(docs || []);
+  const [isLoadingDocs, setIsLoadingDocs] = useState<boolean>(true);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [extractedData, setExtractedData] = useState<any>({
     document_type: '',
     full_name: '',
@@ -72,20 +161,106 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
     }
   }, [step]);
 
-  // Reset state when modal opens
+  // Fetch all documents for this contact when modal opens
+  const fetchCustomerDocs = async () => {
+    if (!contactId) {
+      setIsLoadingDocs(false);
+      return;
+    }
+    setIsLoadingDocs(true);
+    try {
+      const res = await api.get(`/cloud-files?contact_id=${contactId}&limit=1000`);
+      const raw = res.data?.data?.items || [];
+      const mapped = raw.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        date: new Date(d.created_at).toLocaleDateString('vi-VN'),
+        size: (() => {
+          const bytes = Number(d.file_size || 0);
+          if (!bytes) return '0 B';
+          const k = 1024;
+          const sizes = ['B', 'KB', 'MB', 'GB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        })(),
+        type: d.name.split('.').pop() || 'file',
+        url: d.file_path,
+        file_path: d.file_path,
+        category: d.category
+      }));
+      setInternalDocs(mapped);
+    } catch (e) {
+      console.error("Error fetching customer docs in modal:", e);
+      if (docs && docs.length > 0) {
+        setInternalDocs(docs);
+      }
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  // Reset state and fetch docs when modal opens
   useEffect(() => {
     if (isOpen) {
       setStep('select');
       setSelectedDoc(null);
       setErrorMessage('');
       setLoadingTextIndex(0);
+      fetchCustomerDocs();
     }
-  }, [isOpen]);
+  }, [isOpen, contactId]);
+
+  // Upload new file directly from computer
+  const handleUploadNewFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contactId) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(ext || '')) {
+      alert('Vui lòng chọn tệp hình ảnh (JPG, PNG, WEBP) hoặc file PDF.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const fData = new FormData();
+      fData.append('file', file);
+      fData.append('name', file.name);
+      fData.append('category', 'Hồ sơ & Định danh');
+      fData.append('visibility', 'shared');
+      fData.append('contact_id', contactId.toString());
+
+      const res = await api.post('/cloud-files', fData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data?.success || res.status === 200 || res.status === 201) {
+        const newFile = res.data.data;
+        const mappedNew = {
+          id: newFile.id,
+          name: newFile.name || file.name,
+          date: new Date().toLocaleDateString('vi-VN'),
+          size: file.size ? `${(file.size / 1024).toFixed(1)} KB` : '—',
+          type: ext,
+          url: newFile.file_path || newFile.path,
+          file_path: newFile.file_path || newFile.path,
+          category: 'Hồ sơ & Định danh'
+        };
+        setInternalDocs(prev => [mappedNew, ...prev]);
+        setSelectedDoc(mappedNew);
+      }
+    } catch (err) {
+      console.error("Error uploading file in extract modal:", err);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   if (!isOpen) return null;
 
-  // Filter valid files (images and pdfs)
-  const validDocs = docs.filter(doc => {
+  // Filter valid files (images and pdfs) from internalDocs
+  const validDocs = internalDocs.filter(doc => {
     if (doc.isLink) return false;
     const name = (doc.name || '').toLowerCase();
     const url = (doc.url || doc.file_path || '').toLowerCase();
@@ -123,19 +298,21 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
 
       if (res.data?.success && res.data?.data?.is_valid) {
         const d = res.data.data.data;
+        const bday = formatDateToVi(d.birthday || '');
+        const addr = (d.address || '').trim() || (d.place_of_birth || '').trim() || (d.place_of_origin || '').trim();
         setExtractedData({
           document_type: res.data.data.document_type || 'passport',
           full_name: d.full_name || '',
           citizen_id: d.citizen_id || '',
           passport: d.passport || '',
-          birthday: d.birthday || '',
+          birthday: bday,
           gender: d.gender === 'male' ? 'male' : (d.gender === 'female' ? 'female' : (d.gender || '')),
           nationality: d.nationality || 'Việt Nam',
           place_of_birth: d.place_of_birth || '',
           place_of_origin: d.place_of_origin || '',
-          address: d.address || '',
-          issue_date: d.issue_date || '',
-          expiry_date: d.expiry_date || '',
+          address: addr,
+          issue_date: formatDateToVi(d.issue_date || ''),
+          expiry_date: formatDateToVi(d.expiry_date || ''),
           issue_place: d.issue_place || ''
         });
         setStep('review');
@@ -169,8 +346,9 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
     onClose();
   };
 
-  const selectedFileUrl = selectedDoc?.url || selectedDoc?.file_path || '';
-  const isSelectedImage = /\.(jpe?g|png|webp)($|\?)/i.test(selectedFileUrl) || /\.(jpe?g|png|webp)$/i.test(selectedDoc?.name || '');
+  const rawSelectedUrl = selectedDoc?.url || selectedDoc?.file_path || '';
+  const selectedFileUrl = resolveAttachmentUrl(rawSelectedUrl);
+  const isSelectedImage = /\.(jpe?g|png|webp)($|\?)/i.test(rawSelectedUrl) || /\.(jpe?g|png|webp)$/i.test(selectedDoc?.name || '');
 
   return createPortal(
     <div 
@@ -179,9 +357,9 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
         position: 'fixed',
         inset: 0,
         zIndex: effectiveZIndex + 60,
-        background: 'rgba(15, 23, 42, 0.88)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        background: 'rgba(0, 0, 0, 0.78)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -194,11 +372,12 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
           background: 'var(--color-surface, #ffffff)',
           color: 'var(--color-text, #1e293b)',
           borderRadius: '20px',
-          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.45)',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.7)',
           border: '1px solid var(--color-border, #e2e8f0)',
-          width: '100%',
-          maxWidth: step === 'review' ? '920px' : '720px',
+          width: '95vw',
+          maxWidth: '960px',
           maxHeight: '90vh',
+          minHeight: step === 'select' ? '540px' : undefined,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -217,8 +396,8 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: '42px',
+              height: '42px',
               borderRadius: '12px',
               background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
               color: '#ffffff',
@@ -228,14 +407,14 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
               boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)',
               flexShrink: 0
             }}>
-              <Sparkles size={20} />
+              <Sparkles size={22} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>
                 Trích xuất Passport / CCCD bằng AI
               </h3>
-              <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted, #64748b)' }}>
-                {step === 'select' && 'Chọn tệp ảnh hoặc PDF từ tab Hồ sơ & Tài liệu của khách hàng'}
+              <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted, #64748b)' }}>
+                {step === 'select' && 'Chọn tệp ảnh hoặc PDF từ tab Hồ sơ & Tài liệu của khách hàng (hoặc tải trực tiếp từ máy)'}
                 {step === 'scanning' && 'Đang quét và phân tích dữ liệu định danh bằng Vision AI...'}
                 {step === 'review' && 'Kiểm tra & chỉnh sửa thông tin trích xuất trước khi điền vào hồ sơ'}
                 {step === 'error' && 'Kết quả kiểm tra tài liệu định danh'}
@@ -263,73 +442,196 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+        <div style={{ padding: '22px 26px', overflowY: 'auto', flex: 1 }}>
 
           {/* STEP 1: SELECT FILE */}
           {step === 'select' && (
-            <div>
-              {validDocs.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              
+              {/* Action Banner & Direct Upload Button */}
+              <div style={{
+                background: 'rgba(99, 102, 241, 0.08)',
+                border: '1px solid rgba(99, 102, 241, 0.2)',
+                borderRadius: '14px',
+                padding: '12px 18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: '#4f46e5', flex: 1, minWidth: '260px' }}>
+                  <ShieldCheck size={20} style={{ flexShrink: 0 }} />
+                  <span>
+                    Chỉ chấp nhận <strong>CCCD/CMND hoặc Hộ chiếu (Passport)</strong> dạng ảnh hoặc PDF. AI sẽ tự động từ chối nếu không đúng định danh.
+                  </span>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 16px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontSize: '0.84rem',
+                      fontWeight: 700,
+                      cursor: isUploading ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    className="hover-lift"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Đang tải lên...
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud size={16} />
+                        Tải tệp từ máy tính
+                      </>
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    style={{ display: 'none' }}
+                    onChange={handleUploadNewFile}
+                  />
+                </div>
+              </div>
+
+              {/* SKELETON LOADING KHI ĐANG TẢI DANH SÁCH TỆP */}
+              {isLoadingDocs ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '6px' }}>
+                  <style>{`
+                    @keyframes shimmerWave {
+                      0% { background-position: -200% 0; }
+                      100% { background-position: 200% 0; }
+                    }
+                    .shimmer-wave-effect {
+                      background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 35%, #cbd5e1 50%, #e2e8f0 65%, #f1f5f9 100%) !important;
+                      background-size: 250% 100% !important;
+                      animation: shimmerWave 1.4s ease-in-out infinite !important;
+                    }
+                  `}</style>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#6366f1', fontSize: '0.85rem', fontWeight: 600 }}>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Đang tải danh sách tài liệu từ hồ sơ khách hàng...</span>
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: '12px'
+                  }}>
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                      <div
+                        key={i}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '12px',
+                          border: '1px solid var(--color-border-light, #e2e8f0)',
+                          background: 'var(--color-surface, #ffffff)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)'
+                        }}
+                      >
+                        <div
+                          className="shimmer-wave-effect"
+                          style={{
+                            width: '42px',
+                            height: '42px',
+                            borderRadius: '8px',
+                            flexShrink: 0
+                          }}
+                        />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div
+                            className="shimmer-wave-effect"
+                            style={{
+                              height: '14px',
+                              width: `${60 + (i % 3) * 15}%`,
+                              borderRadius: '6px'
+                            }}
+                          />
+                          <div
+                            className="shimmer-wave-effect"
+                            style={{
+                              height: '10px',
+                              width: '42%',
+                              borderRadius: '6px'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : validDocs.length === 0 ? (
                 <div style={{
-                  padding: '40px 20px',
+                  padding: '48px 20px',
                   textAlign: 'center',
                   background: 'var(--color-bg, #f8fafc)',
                   borderRadius: '16px',
-                  border: '1px dashed var(--color-border, #cbd5e1)'
+                  border: '1px dashed var(--color-border, #cbd5e1)',
+                  margin: '10px 0'
                 }}>
                   <div style={{
-                    width: '54px',
-                    height: '54px',
+                    width: '60px',
+                    height: '60px',
                     borderRadius: '50%',
                     background: 'rgba(239, 68, 68, 0.1)',
                     color: '#ef4444',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    margin: '0 auto 12px'
+                    margin: '0 auto 14px'
                   }}>
-                    <AlertCircle size={28} />
+                    <AlertCircle size={32} />
                   </div>
-                  <h4 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 700 }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 700 }}>
                     Chưa có tệp ảnh hoặc PDF trong hồ sơ
                   </h4>
-                  <p style={{ margin: '0 auto 16px', fontSize: '0.85rem', color: 'var(--color-text-muted)', maxWidth: '420px' }}>
-                    Khách hàng này chưa có tệp ảnh (JPG, PNG) hoặc file PDF nào trong tab "Hồ sơ & Tài liệu". Vui lòng tải tài liệu lên trước khi trích xuất.
+                  <p style={{ margin: '0 auto 20px', fontSize: '0.88rem', color: 'var(--color-text-muted)', maxWidth: '460px' }}>
+                    Khách hàng này chưa có tệp ảnh (JPG, PNG) hoặc file PDF nào. Bạn có thể bấm nút dưới đây để tải trực tiếp từ máy tính lên.
                   </p>
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={() => fileInputRef.current?.click()}
                     style={{
-                      background: 'var(--color-primary, #bd1d2d)',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                       color: '#ffffff',
                       border: 'none',
-                      padding: '8px 18px',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      cursor: 'pointer'
+                      padding: '10px 22px',
+                      borderRadius: '10px',
+                      fontSize: '0.9rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)'
                     }}
+                    className="hover-lift"
                   >
-                    Đóng và tải tài liệu lên
+                    <UploadCloud size={18} />
+                    Tải tệp CCCD / Hộ chiếu lên ngay
                   </button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{
-                    background: 'rgba(99, 102, 241, 0.08)',
-                    border: '1px solid rgba(99, 102, 241, 0.2)',
-                    borderRadius: '12px',
-                    padding: '10px 14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '0.82rem',
-                    color: '#4f46e5'
-                  }}>
-                    <ShieldCheck size={18} style={{ flexShrink: 0 }} />
-                    <span>
-                      Hệ thống <strong>chỉ chấp nhận ảnh hoặc PDF của CCCD/CMND hoặc Hộ chiếu (Passport)</strong>. Nếu chọn tệp khác (CV, bảng điểm, hóa đơn...), AI sẽ từ chối trích xuất.
-                    </span>
-                  </div>
 
                   {/* Danh sách file đề xuất CCCD / Passport */}
                   {suggestedDocs.length > 0 && (
@@ -351,7 +653,6 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
                         {suggestedDocs.map(doc => {
                           const isSelected = selectedDoc?.id === doc.id;
-                          const isImg = /\.(jpe?g|png|webp)($|\?)/i.test(doc.url || doc.file_path || '') || /\.(jpe?g|png|webp)$/i.test(doc.name || '');
                           return (
                             <div
                               key={doc.id}
@@ -370,19 +671,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                               }}
                               className="hover-lift"
                             >
-                              <div style={{
-                                width: '38px',
-                                height: '38px',
-                                borderRadius: '8px',
-                                background: isImg ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                color: isImg ? '#0284c7' : '#ef4444',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                {isImg ? <ImageIcon size={20} /> : <FileText size={20} />}
-                              </div>
+                              <DocThumbnail doc={doc} isSuggested={true} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{
                                   fontSize: '0.84rem',
@@ -456,19 +745,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                               }}
                               className="hover-lift"
                             >
-                              <div style={{
-                                width: '38px',
-                                height: '38px',
-                                borderRadius: '8px',
-                                background: isImg ? 'rgba(100, 116, 139, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                color: isImg ? 'var(--color-text-muted)' : '#ef4444',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                {isImg ? <ImageIcon size={20} /> : <FileText size={20} />}
-                              </div>
+                              <DocThumbnail doc={doc} isSuggested={false} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{
                                   fontSize: '0.84rem',
@@ -547,12 +824,16 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   <img 
                     src={selectedFileUrl} 
                     alt="Document scanning" 
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.opacity = '0';
+                    }}
                     style={{
                       maxWidth: '90%',
                       maxHeight: '90%',
                       objectFit: 'contain',
                       borderRadius: '8px',
-                      opacity: 0.85
+                      opacity: 0.85,
+                      transition: 'opacity 0.2s'
                     }} 
                   />
                 ) : (
@@ -620,6 +901,9 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                     <img 
                       src={selectedFileUrl} 
                       alt="Source document" 
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.opacity = '0';
+                      }}
                       style={{
                         width: '100%',
                         height: 'auto',
@@ -717,14 +1001,14 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   {/* Ngày sinh */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
-                      Ngày sinh (DD/MM/YYYY hoặc YYYY-MM-DD)
+                      Ngày sinh (DD/MM/YYYY)
                     </label>
                     <input 
                       type="text"
                       className="form-input"
                       value={extractedData.birthday || ''}
                       onChange={e => setExtractedData({ ...extractedData, birthday: e.target.value })}
-                      placeholder="1995-08-20"
+                      placeholder="03/08/1980"
                     />
                   </div>
 
@@ -762,14 +1046,14 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                   {/* Ngày cấp */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: '4px', color: 'var(--color-text-muted)' }}>
-                      Ngày cấp
+                      Ngày cấp (DD/MM/YYYY)
                     </label>
                     <input 
                       type="text"
                       className="form-input"
                       value={extractedData.issue_date || ''}
                       onChange={e => setExtractedData({ ...extractedData, issue_date: e.target.value })}
-                      placeholder="2022-05-15"
+                      placeholder="30/09/2025"
                     />
                   </div>
 

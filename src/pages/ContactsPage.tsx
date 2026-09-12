@@ -2971,7 +2971,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           return (
                           <td style={{ width: isSale ? '230px' : '170px', maxWidth: isSale ? '280px' : '200px', padding: '0.85rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <Avatar name={fullName} size={32} />
+                              <Avatar name={fullName} src={c.avatar_url || c.avatar || c.photo} size={32} />
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
                                 <p style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={fullName}>{fullName}</span>
@@ -3653,7 +3653,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                               </div>
                             ) : (
                               <div style={{ flexShrink: 0 }}>
-                                <Avatar name={fullName} size={42} />
+                                <Avatar name={fullName} src={c.avatar_url || c.avatar || c.photo} size={42} />
                               </div>
                             )}
                             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>

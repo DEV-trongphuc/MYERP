@@ -9209,7 +9209,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           {isOwnerOrAdmin && (
                             <button
                               type="button"
-                              onClick={() => setShowExtractIdModal(true)}
+                              onClick={() => {
+                                fetchContactDocs(effectiveContactId);
+                                setShowExtractIdModal(true);
+                              }}
                               className="hover-lift"
                               style={{
                                 display: 'inline-flex',
