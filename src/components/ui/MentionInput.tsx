@@ -5,7 +5,8 @@ import api from '../../api/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { toast } from 'react-hot-toast';
-import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2 } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Link2, ImageIcon, Paperclip, List, ListOrdered, Trash2, Smile } from 'lucide-react';
+import { StickerPickerModal } from './StickerPickerModal';
 
 interface User {
   id: number;
@@ -50,6 +51,8 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [savedRange, setSavedRange] = useState<Range | null>(null);
+  const [showStickerModal, setShowStickerModal] = useState(false);
+  const [stickerAnchorEl, setStickerAnchorEl] = useState<HTMLElement | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -543,6 +546,58 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     }
   };
 
+  const insertNodeAtSelection = (nodeToInsert: Node) => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+      const selection = window.getSelection();
+      let currentRange: Range | null = savedRange;
+      if (selection && selection.rangeCount > 0) {
+        currentRange = selection.getRangeAt(0);
+      }
+
+      if (currentRange) {
+        currentRange.deleteContents();
+        currentRange.insertNode(nodeToInsert);
+        const space = document.createTextNode(' ');
+        currentRange.insertNode(space);
+        currentRange.setStartAfter(space);
+        currentRange.collapse(true);
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(currentRange);
+        }
+        setSavedRange(currentRange.cloneRange());
+      } else {
+        editorRef.current.appendChild(nodeToInsert);
+        editorRef.current.appendChild(document.createTextNode(' '));
+      }
+
+      const html = editorRef.current.innerHTML;
+      onChange({ target: { value: html } } as any);
+      checkEmpty();
+    }
+  };
+
+  const handleSelectStickerFromPicker = (stickerUrl: string) => {
+    const img = document.createElement('img');
+    img.src = stickerUrl;
+    img.alt = 'sticker';
+    img.className = 'chat-comment-sticker';
+    img.style.maxWidth = '110px';
+    img.style.maxHeight = '110px';
+    img.style.width = 'auto';
+    img.style.height = 'auto';
+    img.style.objectFit = 'contain';
+    img.style.display = 'block';
+    img.style.margin = '4px 0';
+    insertNodeAtSelection(img);
+  };
+
+  const handleSelectEmojiFromPicker = (emoji: string) => {
+    const textNode = document.createTextNode(emoji);
+    insertNodeAtSelection(textNode);
+  };
+
   const handleEditorAddLink = () => {
     let range: Range | null = null;
     const sel = window.getSelection();
@@ -734,6 +789,24 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           title="Chèn hình ảnh"
         >
           <ImageIcon size={13} />
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+              setSavedRange(sel.getRangeAt(0).cloneRange());
+            }
+          }}
+          onClick={(e) => {
+            setStickerAnchorEl(e.currentTarget);
+            setShowStickerModal(true);
+          }}
+          style={{ padding: '4px 6px', borderRadius: '4px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}
+          title="Biểu cảm & Nhãn dán Sticker"
+        >
+          <Smile size={14} />
         </button>
 
         <button
@@ -1008,6 +1081,14 @@ export const MentionInput: React.FC<MentionInputProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <StickerPickerModal
+        isOpen={showStickerModal}
+        onClose={() => setShowStickerModal(false)}
+        anchorEl={stickerAnchorEl}
+        onSelectSticker={handleSelectStickerFromPicker}
+        onSelectEmoji={handleSelectEmojiFromPicker}
+      />
     </div>
   );
 };

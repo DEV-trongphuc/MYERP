@@ -588,7 +588,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       items = [
         { name: 'Tổng quan', href: '/', icon: LayoutDashboard, end: true },
         { name: 'Bàn làm việc', href: '/workspace', icon: CheckSquare, badgeKey: 'workspaceTasks' },
-        { name: 'Lịch trình', href: '/calendar', icon: Calendar }
+        { name: 'Lịch trình', href: '/calendar', icon: Calendar },
+        { name: 'Bảng tin nội bộ', href: '/feed', icon: Globe }
       ];
     }
     const getModuleKeyForHref = (href: string): string | null => {
@@ -695,15 +696,16 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
         onMouseLeave={() => setIsHovered(false)}
         style={{
           width: isCollapsed ? 60 : 220,
-          background: 'var(--sidebar-bg)',
-          color: '#dadada',
+          background: 'radial-gradient(ellipse at 15% 0%, rgba(189, 29, 45, 0.08) 0%, transparent 50%), linear-gradient(180deg, #100d0e 0%, #0b090a 40%, #070708 100%)',
+          color: '#e2e8f0',
           display: 'flex',
           flexDirection: 'column',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           flexShrink: 0,
           position: 'relative',
           zIndex: 50,
-          boxShadow: '4px 0 24px rgba(0,0,0,0.12)'
+          borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.35)'
         }}
       >
         {/* Logo Area */}
@@ -717,7 +719,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
             alignItems: 'center',
             padding: isCollapsed ? '12px 0 0 0' : '12px 1rem 0 1rem',
             gap: '0.75rem',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
             flexShrink: 0,
             justifyContent: isCollapsed ? 'center' : 'flex-start',
             overflow: 'hidden',
@@ -745,7 +747,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
           {!isCollapsed && (
             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-              <span style={{ fontSize: '1.2rem', fontWeight: 900, whiteSpace: 'nowrap', color: 'white', letterSpacing: '-0.03em', lineHeight: 1.05 }}>
+              <span style={{ fontSize: '1.2rem', fontWeight: 900, whiteSpace: 'nowrap', color: '#ffffff', letterSpacing: '-0.03em', lineHeight: 1.05 }}>
                 IDEAS ERP
               </span>
               <span style={{
@@ -753,9 +755,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                 fontWeight: 800,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                background: 'linear-gradient(135deg, #f45b69 0%, #e63946 50%, #BD1D2D 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+                color: '#ef4444',
                 marginTop: '3px',
                 whiteSpace: 'nowrap'
               }}>
@@ -767,7 +767,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
 
         {/* Quick Action Button */}
         {['admin', 'superadmin', 'super_admin', 'director', 'sale', 'sales', 'marketing'].includes(String(user?.role || '').toLowerCase()) && (
-          <div style={{ padding: isCollapsed ? '0.5rem 0.25rem' : '0.875rem 0.75rem', display: 'flex', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ padding: isCollapsed ? '0.5rem 0.25rem' : '0.875rem 0.75rem', display: 'flex', justifyContent: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
             {isCollapsed ? (
               <button
                 onClick={() => {
@@ -823,13 +823,19 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           className="responsive-hide-mobile no-active-scale"
           style={{
             position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)',
-            width: 24, height: 24, borderRadius: '50%', background: 'var(--color-primary)', color: '#ffffff',
+            width: 24, height: 24, borderRadius: '50%', background: 'var(--color-primary, #BD1D2D)', color: '#ffffff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', zIndex: 200, border: 'none',
-            boxShadow: '0 2px 10px rgba(189, 29, 45, 0.4)', transition: 'all 0.2s',
+            cursor: 'pointer', zIndex: 200, border: '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0 2px 10px rgba(189, 29, 45, 0.45)', transition: 'all 0.2s',
             opacity: isHovered ? 1 : 0,
             visibility: isHovered ? 'visible' : 'hidden',
             pointerEvents: isHovered ? 'auto' : 'none'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
           }}
         >
           <ChevronLeft size={14} style={{ transform: isCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
@@ -857,7 +863,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                     fontWeight: 800,
                     letterSpacing: '0.08em',
                     textTransform: 'uppercase',
-                    color: 'rgba(255, 255, 255, 0.28)',
+                    color: 'rgba(255, 255, 255, 0.35)',
                     padding: '0.375rem 1rem',
                     whiteSpace: 'nowrap',
                     display: 'block'
@@ -912,11 +918,11 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                         display: 'flex', alignItems: 'center', gap: '0.75rem',
                         padding: isCollapsed ? '0.5rem 0' : '0.45rem 1rem',
                         justifyContent: isCollapsed ? 'center' : 'flex-start',
-                        color: isActive ? '#dadada' : 'rgba(255,255,255,0.5)',
+                        color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.65)',
                         textDecoration: 'none', fontSize: '0.825rem',
                         fontWeight: isActive ? 700 : 500, transition: 'all 0.2s ease',
                         position: 'relative',
-                        background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                        background: isActive ? 'linear-gradient(90deg, rgba(189, 29, 45, 0.16) 0%, rgba(189, 29, 45, 0.03) 100%)' : 'transparent',
                         whiteSpace: 'nowrap', overflow: 'hidden',
                       }}
                     >
@@ -928,8 +934,8 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                               left: 0,
                               top: 0,
                               bottom: 0,
-                              width: 4,
-                              background: 'var(--color-primary)',
+                              width: 3,
+                              background: '#BD1D2D',
                               borderRadius: '0 2px 2px 0',
                               zIndex: 10
                             }} />
@@ -945,7 +951,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
                               <div style={{
                                 position: 'absolute', top: 0, right: 0, width: 8, height: 8,
                                 borderRadius: '50%', background: badgeKey === 'gatekeeper' ? '#f59e0b' : '#ef4444',
-                                boxShadow: '0 0 0 1.5px var(--sidebar-bg)'
+                                boxShadow: '0 0 0 1.5px #140e11'
                               }} />
                             )}
                           </div>
@@ -998,6 +1004,10 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           }
           .sidebar-nav-item {
             scroll-margin: 50px 0;
+          }
+          .sidebar-nav-item:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.07) !important;
+            color: #ffffff !important;
           }
         `}</style>
       </aside>

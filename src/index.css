@@ -617,7 +617,7 @@
   --color-primary-hover: #a31422;
   --color-primary-light: rgba(189, 29, 45, 0.12);
   --color-primary-glow: rgba(189, 29, 45, 0.16);
-  --sidebar-bg: #121214; /* Deeper charcoal dark gray sidebar */
+  --sidebar-bg: #121214; /* Charcoal dark sidebar with subtle brand glow */
   --sidebar-hover: rgba(255, 255, 255, 0.08);
   --sidebar-active: #BD1D2D; /* Keep brand color on sidebar active item */
 
@@ -6260,4 +6260,43 @@ img[data-mention-avatar]:hover,
   border-radius: 12px;
   animation: aiScanPulse 2.2s ease-in-out infinite;
 }
+
+/* ================================================
+   CHAT & FEED STICKER AND EMOJI STYLES
+   ================================================ */
+.feed-comment-sticker,
+.chat-comment-sticker,
+.feed-rich-comment img[src*="/stickers/"],
+.rich-text-content img[src*="/stickers/"] {
+  display: block;
+  max-width: 120px !important;
+  max-height: 120px !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain;
+  margin: 6px 0;
+  border-radius: 8px;
+  background: transparent;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  user-select: none;
+}
+
+.feed-comment-sticker:hover,
+.chat-comment-sticker:hover,
+.feed-rich-comment img[src*="/stickers/"]:hover,
+.rich-text-content img[src*="/stickers/"]:hover {
+  transform: scale(1.12);
+}
+
+@keyframes scaleUpFade {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 

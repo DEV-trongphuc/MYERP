@@ -4,7 +4,7 @@ import DOMPurify from 'dompurify';
 import { 
   ThumbsUp, Heart, Laugh, Angry, MessageCircle, Share2, 
   Send, Trash2, Globe, Lock, Users, Link as LinkIcon, Paperclip, X, Camera, 
-  MessageSquare, MoreHorizontal, Filter, Search, Tag, Eye, Edit
+  MessageSquare, MoreHorizontal, Filter, Search, Tag, Eye, Edit, Smile
 } from 'lucide-react';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +17,7 @@ import { compressToWebP } from '../utils/imageCompress';
 import { CustomModal } from '../components/ui/CustomModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { MentionInput } from '../components/ui/MentionInput';
+import { StickerPickerModal } from '../components/ui/StickerPickerModal';
 import { useUIStore } from '../store/uiStore';
 
 // Reaction Types Constants
@@ -121,6 +122,12 @@ export const EnterpriseFeed: React.FC = () => {
   const [newCommentText, setNewCommentText] = useState<Record<number, string>>({});
   const [replyToCommentId, setReplyToCommentId] = useState<Record<number, number | null>>({});
   const [commentToDelete, setCommentToDelete] = useState<{ postId: number; commentId: number } | null>(null);
+
+  // Sticker modal state for feed comments
+  const [showFeedStickerModal, setShowFeedStickerModal] = useState(false);
+  const [feedStickerAnchorEl, setFeedStickerAnchorEl] = useState<HTMLElement | null>(null);
+  const [stickerTargetPostId, setStickerTargetPostId] = useState<number | null>(null);
+  const [stickerTargetParentId, setStickerTargetParentId] = useState<number | null>(null);
 
   // Floating reactions active state per post
   const [hoveredPostId, setHoveredPostId] = useState<number | null>(null);
@@ -599,6 +606,32 @@ export const EnterpriseFeed: React.FC = () => {
     }
   };
 
+  // Handle send sticker comment directly
+  const handleSendStickerComment = async (postId: number, stickerUrl: string, parentId: number | null = null) => {
+    try {
+      const res = await api.post(`/posts/${postId}/comments`, {
+        content: stickerUrl,
+        parent_id: parentId
+      });
+
+      if (res.data && res.data.success) {
+        setReplyToCommentId(prev => ({ ...prev, [postId]: null }));
+        loadComments(postId);
+        
+        // Increment comment count locally
+        setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+            return { ...p, comments_count: p.comments_count + 1 };
+          }
+          return p;
+        }));
+        toast.success(t('Đã gửi nhãn dán!'));
+      }
+    } catch (e) {
+      toast.error(t('Lỗi khi gửi nhãn dán'));
+    }
+  };
+
   // Handle delete comment
   const handleDeleteComment = async (postId: number, commentId: number) => {
     try {
@@ -717,18 +750,47 @@ export const EnterpriseFeed: React.FC = () => {
 
   const renderCommentContent = (content: string) => {
     if (!content) return null;
+    const trimmed = content.trim();
+
+    // Check if content is a direct sticker URL
+    if (/^\/stickers\/[a-zA-Z0-9_\-\/]+\.(png|gif|webp|jpg)$/i.test(trimmed)) {
+      return (
+        <div style={{ marginTop: '6px', marginBottom: '2px' }}>
+          <img 
+            src={trimmed} 
+            alt="sticker" 
+            className="feed-comment-sticker" 
+            style={{ 
+              maxWidth: '120px', 
+              maxHeight: '120px', 
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain', 
+              display: 'block', 
+              borderRadius: '8px' 
+            }} 
+          />
+        </div>
+      );
+    }
+
     const isHtml = /<[a-z][\s\S]*>/i.test(content);
     if (isHtml) {
       return (
         <div 
-          className="rich-text-content" 
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }} 
+          className="rich-text-content feed-rich-comment" 
+          dangerouslySetInnerHTML={{ 
+            __html: DOMPurify.sanitize(content, { 
+              ADD_TAGS: ['img', 'span', 'a'], 
+              ADD_ATTR: ['src', 'alt', 'style', 'class', 'href', 'target', 'rel'] 
+            }) 
+          }} 
           style={{ fontSize: '0.8rem', color: 'var(--color-text)', lineHeight: 1.4, wordBreak: 'break-word' }}
         />
       );
     }
     return (
-      <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text)', lineHeight: 1.4 }}>
+      <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text)', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
         {content}
       </p>
     );
@@ -1481,6 +1543,33 @@ export const EnterpriseFeed: React.FC = () => {
                             <Send size={11} />
                             <span>{t('Gửi')}</span>
                           </button>
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              setStickerTargetPostId(post.id);
+                              setStickerTargetParentId(replyToCommentId[post.id] || null);
+                              setFeedStickerAnchorEl(e.currentTarget);
+                              setShowFeedStickerModal(true);
+                            }}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              fontSize: '0.72rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: 'rgba(245, 158, 11, 0.12)',
+                              color: '#d97706',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={t('Gửi nhãn dán Sticker')}
+                          >
+                            <Smile size={13} />
+                            <span>{t('Nhãn dán')}</span>
+                          </button>
                           {replyToCommentId[post.id] && (
                             <button 
                               onClick={() => setReplyToCommentId(prev => ({ ...prev, [post.id]: null }))}
@@ -2143,6 +2232,30 @@ export const EnterpriseFeed: React.FC = () => {
           confirmType="danger"
         />
       )}
+
+      <StickerPickerModal
+        isOpen={showFeedStickerModal}
+        onClose={() => {
+          setShowFeedStickerModal(false);
+          setStickerTargetPostId(null);
+          setStickerTargetParentId(null);
+          setFeedStickerAnchorEl(null);
+        }}
+        anchorEl={feedStickerAnchorEl}
+        onSelectSticker={(url) => {
+          if (stickerTargetPostId) {
+            handleSendStickerComment(stickerTargetPostId, url, stickerTargetParentId);
+          }
+        }}
+        onSelectEmoji={(emoji) => {
+          if (stickerTargetPostId) {
+            setNewCommentText(prev => ({
+              ...prev,
+              [stickerTargetPostId]: (prev[stickerTargetPostId] || '') + emoji
+            }));
+          }
+        }}
+      />
     </div>
   );
 };

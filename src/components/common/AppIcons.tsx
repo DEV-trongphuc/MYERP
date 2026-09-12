@@ -46,7 +46,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 2. BÀN LÀM VIỆC (Xanh Emerald - Khay nhiệm vụ card)
-  if (normName.includes('bàn làm việc') || normName.includes('workspace')) {
+  if (normName.includes('bàn làm việc') || normName.includes('workspace') || normName.includes('công việc') || normName === 'tasks') {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -101,7 +101,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 4. BẢNG TIN NỘI BỘ (Tờ báo feed tin tức đa tầng)
-  if (normName.includes('bảng tin') || normName.includes('feed')) {
+  if (normName.includes('bảng tin') || normName.includes('feed') || normName.includes('mạng xã hội')) {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -185,7 +185,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 7. TIỀM NĂNG / KHÁCH HÀNG (Hồng San Hô - Coral Rose)
-  if (normName.includes('tiềm năng') || normName.includes('khách hàng') || normName.includes('contacts')) {
+  if (normName.includes('tiềm năng') || normName.includes('khách hàng') || normName.includes('contacts') || normName.includes('thông tin') || normName === 'info') {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -228,7 +228,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 9. HỌC VIÊN (Tím Violet - Mũ cử nhân tốt nghiệp)
-  if (normName.includes('học viên') || normName.includes('sinh viên') || normName.includes('students') || normName.includes('nộp hồ sơ') || normName.includes('lệ phí')) {
+  if (normName.includes('học viên') || normName.includes('sinh viên') || normName.includes('students') || normName.includes('nộp hồ sơ') || normName.includes('lệ phí') || normName.includes('học tập') || normName === 'learning') {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -384,7 +384,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 16. SALES ORDER / ĐẶT CỌC (Vàng Kim Hoàng Gia - Biên nhận tiền ₫)
-  if (normName.includes('sales order') || normName.includes('đặt cọc') || normName.includes('deposits')) {
+  if (normName.includes('sales order') || normName.includes('đặt cọc') || normName.includes('deposits') || normName.includes('thanh toán') || normName === 'deals') {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -494,7 +494,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 21. ĐỐI TÁC (Corporate Navy - Bắt tay liên kết B2B)
-  if (normName.includes('đối tác') || normName.includes('companies')) {
+  if (normName.includes('đối tác') || normName.includes('companies') || normName.includes('hợp tác') || normName === 'cooperation') {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -516,7 +516,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
   }
 
   // 22. TÀI LIỆU (Nâu Da Bò - Cặp hồ sơ lưu trữ)
-  if (normName.includes('tài liệu') || normName.includes('files')) {
+  if (normName.includes('tài liệu') || normName.includes('files') || normName.includes('hồ sơ') || normName === 'docs') {
     return (
       <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
         <defs>
@@ -801,6 +801,69 @@ export const AppIcon: React.FC<AppIconProps> = ({ name, size = 56, className = '
           <rect x="16" y="24" width="14" height="8" rx="4" stroke="#ffffff" strokeWidth="2.5" fill="none" />
           <rect x="26" y="24" width="14" height="8" rx="4" stroke="#ffffff" strokeWidth="2.5" fill="none" />
         </g>
+      </svg>
+    );
+  }
+
+  // 35. TƯƠNG TÁC / TIMELINE (Xanh Lam Royal - Lịch sử & Hoạt động trao đổi)
+  if (normName.includes('tương tác') || normName.includes('timeline') || normName.includes('nhật ký') || normName === 'activity') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_tl_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3b82f6" />
+            <stop offset="100%" stopColor="#1d4ed8" />
+          </linearGradient>
+          {filterDef('ai_tl_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_tl_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+        <rect x="14" y="15" width="28" height="26" rx="5" fill="#ffffff" filter="url(#ai_tl_sh)" />
+        <circle cx="28" cy="25" r="6.5" stroke="#3b82f6" strokeWidth="1.8" fill="#eff6ff" />
+        <path d="M28 21.5V25L30.5 27.5" stroke="#1d4ed8" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="20" y="34.5" width="16" height="2" rx="1" fill="#94a3b8" />
+      </svg>
+    );
+  }
+
+  // 36. PHÂN LOẠI / TAGS (Hồng Sen - Nhãn mác & Tag phân loại)
+  if (normName.includes('phân loại') || normName.includes('tag') || normName === 'tags') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_tag_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ec4899" />
+            <stop offset="100%" stopColor="#be185d" />
+          </linearGradient>
+          {filterDef('ai_tag_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_tag_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+        <path d="M17 18C17 16.3431 18.3431 15 20 15H28.5858C29.3815 15 30.1446 15.3161 30.7071 15.8787L40.1213 25.2929C41.2929 26.4645 41.2929 28.3635 40.1213 29.5351L31.5351 38.1213C30.3635 39.2929 28.4645 39.2929 27.2929 38.1213L17.8787 28.7071C17.3161 28.1446 17 27.3815 17 26.5858V18Z" fill="#ffffff" filter="url(#ai_tag_sh)" />
+        <circle cx="23" cy="21" r="2.5" fill="#ec4899" />
+        <rect x="23" y="27" width="8" height="2" rx="1" transform="rotate(45 23 27)" fill="#cbd5e1" />
+      </svg>
+    );
+  }
+
+  // 37. SCORING / CHẤM ĐIỂM (Cyan - Tâm điểm Radar & Lead Score)
+  if (normName.includes('scoring') || normName.includes('chấm điểm') || normName.includes('lead score')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none" className={className} style={style}>
+        <defs>
+          <linearGradient id="ai_sc_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#0e7490" />
+          </linearGradient>
+          {filterDef('ai_sc_sh')}
+        </defs>
+        <rect width="56" height="56" rx="16" fill="url(#ai_sc_bg)" />
+        <rect width="56" height="56" rx="16" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+        <circle cx="28" cy="28" r="14" fill="#ffffff" filter="url(#ai_sc_sh)" />
+        <circle cx="28" cy="28" r="10" stroke="#06b6d4" strokeWidth="1.8" fill="#ecfeff" />
+        <circle cx="28" cy="28" r="5.5" stroke="#0891b2" strokeWidth="1.6" fill="#cffafe" />
+        <circle cx="28" cy="28" r="2.5" fill="#0e7490" />
+        <path d="M28 12V16M28 40V44M12 28H16M40 28H44" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
       </svg>
     );
   }

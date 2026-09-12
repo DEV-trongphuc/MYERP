@@ -42,6 +42,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { getModulePermissionScope } from '../store/authStore';
 import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { AppIcon } from '../components/common/AppIcons';
 
 const EditHistoryIndicator = ({ history }: { history: any }) => {
   const [showPopup, setShowPopup] = useState(false);
@@ -374,34 +375,17 @@ const TABS = [
   { id: 'tickets', label: 'Helpdesk', icon: <LifeBuoy size={16} /> },
 ];
 
-const renderColoredTabIcon = (tabId: string, IconComponent: any) => {
-  let bgColor = 'var(--color-primary)';
-  switch (tabId) {
-    case 'info': bgColor = '#ef4444'; break;
-    case 'learning': bgColor = '#8b5cf6'; break;
-    case 'tags': bgColor = '#ec4899'; break;
-    case 'cooperation': bgColor = '#f59e0b'; break;
-    case 'tasks': bgColor = '#10b981'; break;
-    case 'docs': bgColor = '#8b5cf6'; break;
-    case 'timeline': bgColor = '#3b82f6'; break;
-    case 'scoring': bgColor = '#06b6d4'; break;
-    case 'invoices': bgColor = '#f43f5e'; break;
-    case 'deals': bgColor = '#eab308'; break;
-    case 'quotes': bgColor = '#10b981'; break;
-    case 'expenses': bgColor = '#ef4444'; break;
-    case 'tickets': bgColor = '#6b7280'; break;
-  }
+const renderColoredTabIcon = (tabId: string, _IconComponent?: any, tabLabel?: string) => {
   return (
     <div style={{
       width: '28px',
       height: '28px',
-      borderRadius: '7px',
-      backgroundColor: bgColor,
-      display: 'grid',
-      placeItems: 'center',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       flexShrink: 0
     }}>
-      {React.cloneElement(IconComponent, { size: 15, color: 'white', style: { display: 'block', width: '15px', height: '15px', margin: 'auto' } })}
+      <AppIcon name={tabLabel || tabId} size={28} />
     </div>
   );
 };
@@ -8452,7 +8436,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                           }}
                                         >
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            {renderColoredTabIcon(tab.id, tab.icon)}
+                                            {renderColoredTabIcon(tab.id, tab.icon, tab.label)}
                                             <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>{tab.label}</span>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -8615,7 +8599,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                         style={{ padding: '11px 0.875rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                          {renderColoredTabIcon(tab.id, tab.icon)}
+                                          {renderColoredTabIcon(tab.id, tab.icon, tab.label)}
                                           <span>{tab.label}</span>
                                         </div>
                                         {tab.id === 'tasks' && tasks.filter(t => !t.done).length > 0 && (
