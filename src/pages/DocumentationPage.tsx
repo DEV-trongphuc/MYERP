@@ -3809,6 +3809,288 @@ export const DocumentationPage: React.FC = () => {
               </ul>
             </div>
           )
+        },
+        {
+          id: 'auto-engines-mastery',
+          title: 'Đại Danh Mục 10 Cỗ Máy Tự Động Hóa & 11 Tiến Trình Ngầm Vận Hành Doanh Nghiệp',
+          description: 'Bản tổng phổ toàn diện 10 cỗ máy thông minh tự động hóa cốt lõi và 11 tiến trình ngầm (Daemon Crons) vận hành nền tảng IDEAS MYERP.',
+          headings: [
+            { id: 'mastery-overview', text: '1. Tổng Quan Kiến Trúc Tự Động Hóa Doanh Nghiệp' },
+            { id: 'ten-core-engines', text: '2. Đại Danh Mục 10 Cỗ Máy Tự Động Hóa Cốt Lõi' },
+            { id: 'eleven-daemon-crons', text: '3. Ma Trận 11 Tiến Trình Ngầm (Background Daemon Crons)' },
+            { id: 'fail-safe-locking', text: '4. Kiến Trúc Khóa An Toàn Chống Xung Đột (Concurrency Safeguards)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="mastery-overview">1. Tổng Quan Kiến Trúc Tự Động Hóa Doanh Nghiệp</h2>
+              <p>
+                <strong>IDEAS MYERP</strong> được kiến trúc như một hệ điều hành doanh nghiệp tự vận hành (Autonomous Enterprise Operating System),
+                nơi mọi luồng thông tin từ Tiếp thị (Marketing) → Tuyển sinh (Admissions) → Tài chính (Finance) → Quản lý Đào tạo (Academic)
+                đến Nhân sự – Chấm công – Tiền lương (HRM &amp; Payroll) đều được kết nối liền mạch qua các cỗ máy thông minh và mạng lưới tiến trình ngầm.
+              </p>
+              <div className="doc-flow">
+                <div className="doc-flow-step">1. Thu Thập Đa Kênh (Meta, Sheets, CAPI)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">2. AI Gatekeeper Chấm Điểm 0-100</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">3. 5 GATES Phân Bổ / Miễn Trừ REF Data</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">4. Bắn Tin 1-1 Riêng Tư &amp; Non-blocking Shutdown</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">5. Bàn Giao Học Vụ &amp; 11 Crons Vận Hành Định Kỳ</div>
+              </div>
+
+              <h2 id="ten-core-engines">2. Đại Danh Mục 10 Cỗ Máy Tự Động Hóa Cốt Lõi</h2>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '4%' }}>#</th>
+                    <th style={{ width: '22%' }}>Cỗ Máy Thông Minh</th>
+                    <th style={{ width: '24%' }}>Tệp Thực Thi &amp; Phân Hệ</th>
+                    <th>Đặc Tả Cơ Chế Tự Động Hóa &amp; Logic Nghiệp Vụ Vận Hành</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>1</td>
+                    <td><strong>AI Gatekeeper &amp; Pre-Screening Engine</strong></td>
+                    <td><code>backend/webhook_logic.php</code><br /><code>src/pages/Gatekeeper.tsx</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Chấm điểm tự động 0 - 100:</strong> Sử dụng mô hình ngôn ngữ lớn (OpenAI GPT-4o / Google Gemini) chấm điểm tiềm năng lead theo thời gian thực dựa trên chức danh, học vấn, mục tiêu và nguồn gốc.</li>
+                        <li><strong>Phân loại nhiệt độ 4 nấc:</strong> Tự động gán nhãn <code>hot</code>, <code>warm</code>, <code>low_intent</code>, <code>nurture</code> để định tuyến nguồn lực tư vấn.</li>
+                        <li><strong>Bộ lọc viễn thông &amp; Blacklist:</strong> Nhận diện sim rác, số ảo, số spam viễn thông và chặn nạp vào CRM.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td><strong>5-GATES Weighted Round-Robin Engine</strong></td>
+                    <td><code>backend/webhook_logic.php</code> (hàm <code>checkConsultantGates</code>, <code>getNextConsultantInRound</code>)</td>
+                    <td>
+                      <ul>
+                        <li><strong>5 Cổng kiểm soát nối tiếp:</strong> Roster dự án (Gate 1) → Ca trực &amp; Chấm công (Gate 2: Hành chính, Cuối tuần <code>require_checkin_weekend_lead</code>, Ngày lễ <code>holiday_shift_registrations</code>, Ca đêm <code>night_shift_registrations</code>) → Sẵn sàng &amp; Vacation Mode (Gate 3) → Van chống ôm data (Gate 4) → Hạn mức Giờ Vàng (Gate 5: 06:00 - 08:30).</li>
+                        <li><strong>Điều phối theo trọng số:</strong> Chia số theo <code>receive_ratio</code>, <code>data_per_turn</code> và <code>current_turn_remaining</code>.</li>
+                        <li><strong>Pending ngoài giờ &amp; Ân hạn 2 phút:</strong> Lead ngoài giờ gom vào <code>pending_work_hours</code>; đầu ca quét giải phóng kèm ân hạn 2 phút (<code>lead_response_timeout_minutes</code>), quá hạn tự động thu hồi tái phân bổ cho TVV online.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td><strong>Direct Referral Ownership &amp; 180-Day Protection Engine</strong></td>
+                    <td><code>backend/webhook_logic.php</code><br /><code>backend/controllers/CompanyController.php</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Miễn trừ 100% 5 GATES:</strong> Data giới thiệu (<code>gioi_thieu</code>, <code>ref</code>, <code>referral</code>) và Data tự khai thác (<code>ca_nhan</code>) hoàn toàn không đi qua 5 Gates, gán thẳng cho chính TVV phụ trách.</li>
+                        <li><strong>Không trừ Cap Limit:</strong> Miễn trừ hạn ngạch lead tối đa trong ngày, TVV nhận không giới hạn số lượng khách giới thiệu.</li>
+                        <li><strong>Bảo hộ độc quyền 180 ngày:</strong> Khách hàng quay lại trong vòng 6 tháng tự động được nhận diện và chuyển về cho TVV cũ chăm sóc, loại trừ 100% tranh chấp nội bộ.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>4</td>
+                    <td><strong>Starvation Prevention &amp; Fair-Share Compensation Engine</strong></td>
+                    <td><code>backend/webhook_logic.php</code><br /><code>src/pages/FairShareAudit.tsx</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Chống đói dữ liệu khi nghỉ phép:</strong> Tự động tích lũy <code>skipped_credit</code> trong thời gian nhân viên bật Vacation Mode hoặc nghỉ phép; khi quay lại làm việc tự động cấp bù <code>compensation_count</code>, áp trần điều tiết <code>starvation_max_leads_per_hour = 5 lead/giờ</code> tránh bị dội data.</li>
+                        <li><strong>Cấp bù data rác:</strong> TVV gửi ticket báo lỗi data (<code>data_reports</code>) → Quản lý duyệt → Tự động sinh bản ghi <code>distribution_logs.status = 'compensation'</code>, ưu tiên nhận số mới ở lượt tiếp theo.</li>
+                        <li><strong>Bảo vệ khách cũ khi nghỉ phép:</strong> Khách cũ quay lại trong thời gian TVV nghỉ phép ngắn ngày vẫn được bảo lưu nguyên vẹn quyền phụ trách cho TVV đó.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>5</td>
+                    <td><strong>Omnichannel Notification Matrix &amp; Non-Blocking Shutdown Engine</strong></td>
+                    <td><code>backend/NotificationService.php</code><br /><code>user_notification_settings</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Ma trận 4 kênh độc lập:</strong> Quản lý tập trung 4 kênh In-App Bell, Zalo Bot, Telegram Bot và Email SMTP. Mỗi sự kiện hỗ trợ công tắc Master bật/tắt toàn cục và công tắc cấu hình riêng lẻ cho từng nhân sự.</li>
+                        <li><strong>Phát tán bất đồng bộ cực nhanh (Non-Blocking Shutdown Dispatch):</strong> Ứng dụng kỹ thuật <code>register_shutdown_function($dispatchClosure)</code> — phản hồi kết quả HTTP về máy khách ngay lập tức trong sub-100ms, sau đó máy chủ âm thầm phát tán thông báo đa kênh trong tiến trình ngắt, triệt tiêu hoàn toàn hiện tượng trễ hoặc treo giao diện.</li>
+                        <li><strong>Bộ cách ly môi trường kiểm thử (Test Harness Isolation):</strong> Hàm <code>isTestExecution()</code> tự động phát hiện các luồng kiểm thử hoặc audit, ngăn chặn 100% việc gửi thông báo nhầm tới người dùng thật hoặc nhóm chat chính thức.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>6</td>
+                    <td><strong>Real-Time Bi-Directional Google Sheets Sync Engine</strong></td>
+                    <td><code>backend/two_way_sync.gs</code><br /><code>backend/cron_sync.php</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Đồng bộ hai chiều thời gian thực:</strong> Kịch bản Google Apps Script tích hợp Web App tiếp nhận cập nhật qua phương thức POST, sử dụng cơ chế khóa script <code>LockService.getScriptLock()</code> chờ tối đa 10s để chống xung đột ghi dữ liệu.</li>
+                        <li><strong>Khử vòng lặp vô hạn (Anti Ping-Pong Hashing):</strong> Tính toán mã băm chuỗi nội dung hiển thị (<code>getDisplayValues()</code>) đồng bộ giữa Sheet và CRM. Khi một bên cập nhật thành công, bên kia nhận diện hash trùng khớp và không kích hoạt lại webhook, loại trừ tuyệt đối hiện tượng ping-pong dữ liệu.</li>
+                        <li><strong>Tự động ánh xạ &amp; Chuẩn hóa viễn thông:</strong> Tự động làm sạch số điện thoại (+84, khoảng trắng, dấu chấm) và chuẩn hóa email trước khi lưu trữ hoặc tìm kiếm dòng tương ứng.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>7</td>
+                    <td><strong>Interactive Two-Way Chatbots (Zalo &amp; Telegram Assistant)</strong></td>
+                    <td><code>backend/zalo_webhook.php</code><br /><code>backend/telegram_webhook.php</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Tương tác điều hành trực tiếp từ Chat App:</strong> Quản trị viên và Lãnh đạo có thể tra cứu và điều hành trực tiếp từ Zalo/Telegram qua hệ thống câu lệnh <code>/tools</code>, <code>/report</code>, <code>/sales</code>, <code>/round</code>, <code>/check &lt;sdt&gt;</code>, <code>/ticket</code>.</li>
+                        <li><strong>Định tuyến tin nhắn bảo mật 1-1:</strong> Tự động phân loại tin nhắn theo Chat ID cá nhân của từng Sale, bắn thông báo nhận lead riêng tư kèm link thao tác sâu mà không cần đăng nhập CRM từ máy tính.</li>
+                        <li><strong>Hỗ trợ kết nối kép:</strong> Tương thích đồng thời với Zalo Bot Platform API, Zalo Official Account v3.0 CS API và Telegram Webhook Bot.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>8</td>
+                    <td><strong>Smart Attendance 3-Tier &amp; Cascade Late Deductions Engine</strong></td>
+                    <td><code>backend/controllers/CheckInController.php</code><br /><code>src/pages/AttendancePage.tsx</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Xác thực sinh trắc học 3 lớp:</strong> GPS Geofencing bán kính văn phòng, Wi-Fi BSSID matching và Selfie Biometrics nhận diện khuôn mặt.</li>
+                        <li><strong>Quy đổi trễ từng phút:</strong> Tích lũy số phút trễ thực tế, quy đổi sang ngày công theo công thức <code>lateDays = totalLateMinutes / 480</code>.</li>
+                        <li><strong>Cấn trừ luân chuyển 3 bước (Cascade Deductions):</strong> Bước 1: Trừ Nghỉ bù (bảo toàn phép năm và lương) → Bước 2: Trừ Phép năm (bảo toàn lương) → Bước 3: Trừ Ngày công tính lương.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>9</td>
+                    <td><strong>25-Factor Automated Payroll &amp; Payslip Locking Engine</strong></td>
+                    <td><code>backend/controllers/HRMController.php</code><br /><code>src/pages/MyPayslips.tsx</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Tính lương tự động đa tham số:</strong> Tự động tính tiền lương từ ngày công thực tế, trừ bảo hiểm xã hội, tính thuế TNCN biểu lũy tiến từng phần, cộng hoa hồng đơn cọc tuyển sinh và phụ cấp trách nhiệm.</li>
+                        <li><strong>Khóa sổ phiếu lương điện tử:</strong> Chốt kỳ lương, khóa sổ chống chỉnh sửa (Payslip Locking), ký số điện tử và tiếp nhận khiếu nại lương trực tuyến.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>10</td>
+                    <td><strong>Academic Handover &amp; Thesis Milestone Automated Engine</strong></td>
+                    <td><code>backend/cron_academic_reminders.php</code><br /><code>backend/controllers/AcademicController.php</code></td>
+                    <td>
+                      <ul>
+                        <li><strong>Bàn giao sạch khi Enrolled (Won):</strong> Tự động cấp mã học viên (<code>student_code</code>) và đồng bộ vào danh sách học viên chiến dịch.</li>
+                        <li><strong>Tiến trình nhắc lịch thạc sĩ tự động:</strong> Tự động đếm ngược nhắc mốc nộp Luận văn Thạc sĩ (<code>thesis_milestones_json</code>), nhắc seminar giảng viên trước 12 giờ, báo buổi học khẩn cấp trước 2 giờ và nhắc hạn nộp bài tập.</li>
+                        <li><strong>Cơ chế hạ cấp hủy cọc linh hoạt (<code>deposit_demote_status</code>):</strong> Tự động hạ cấp phễu tuyển sinh theo cấu hình, khấu trừ doanh số dự kiến và ghi nhận lý do hủy cọc khi phát sinh hoàn cọc.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="eleven-daemon-crons">3. Ma Trận 11 Tiến Trình Ngầm (Background Daemon Crons)</h2>
+              <p>
+                Hệ thống duy trì <strong>11 tiến trình ngầm (Daemon Crons)</strong> chạy tuần hoàn ở cấp độ máy chủ để tự động hóa toàn bộ các tác vụ định kỳ:
+              </p>
+              <div className="table-responsive">
+                <table className="doc-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '4%' }}>#</th>
+                      <th style={{ width: '22%' }}>Tệp Script Cron</th>
+                      <th style={{ width: '18%' }}>Tần Suất / Thời Điểm</th>
+                      <th>Nhiệm Vụ Thực Thi Phía Máy Chủ &amp; Logic Vận Hành</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1</td>
+                      <td><code>cron_master.php</code></td>
+                      <td>Mỗi 1 phút (<code>* * * * *</code>)</td>
+                      <td>Nhạc trưởng điều phối toàn bộ hệ thống crons, kiểm soát thứ tự thực thi tuần tự và giải phóng tài nguyên CPU/RAM.</td>
+                    </tr>
+                    <tr>
+                      <td>2</td>
+                      <td><code>cron_academic_reminders.php</code></td>
+                      <td>Mỗi 15 phút</td>
+                      <td>Quét mốc luận văn thạc sĩ (<code>thesis_milestones_json</code>), gửi email nhắc giảng viên trước 12h, báo buổi học online trước 2h và nhắc hạn nộp bài tập môn học. Khóa chống chạy trùng qua <code>flock(LOCK_EX | LOCK_NB)</code>.</td>
+                    </tr>
+                    <tr>
+                      <td>3</td>
+                      <td><code>cron_sync.php</code></td>
+                      <td>Mỗi 2 phút</td>
+                      <td>Cỗ máy đồng bộ đa nền tảng (224 KB): Đồng bộ 2 chiều Google Sheets API, giải phóng hàng đợi <code>pending_work_hours</code> kèm ân hạn check-in 2 phút, quét thu hồi lead theo SLA 30 phút.</td>
+                    </tr>
+                    <tr>
+                      <td>4</td>
+                      <td><code>cron_daily_report.php</code></td>
+                      <td>Cuối ngày (17:00 / 22:00)</td>
+                      <td>Tự động mở lại trạng thái active cho nhân sự hết hạn nghỉ phép (<code>leave_end &lt; CURDATE()</code>), tổng hợp doanh số cọc, số cuộc gọi, vinh danh Top Sales và gửi bản tin qua nhóm Zalo/Telegram Ban Lãnh Đạo.</td>
+                    </tr>
+                    <tr>
+                      <td>5</td>
+                      <td><code>cron_ai_worker.php</code></td>
+                      <td>Mỗi 5 phút</td>
+                      <td>Xử lý hàng đợi tác vụ AI bất đồng bộ: Chấm điểm tiềm năng lead, vector embeddings tài liệu quy chế và phân tích văn bản RAG.</td>
+                    </tr>
+                    <tr>
+                      <td>6</td>
+                      <td><code>cron_deposit_reminders.php</code></td>
+                      <td>Mỗi 30 phút</td>
+                      <td>Quét các đơn cọc và đơn bán hàng có đợt thanh toán học phí đến hạn (Installments), tự động gửi thông báo nhắc học viên hoàn tất nghĩa vụ tài chính.</td>
+                    </tr>
+                    <tr>
+                      <td>7</td>
+                      <td><code>cron_mailer.php</code></td>
+                      <td>Mỗi 1 phút</td>
+                      <td>Rút các email chờ gửi trong <code>mail_queue</code> với khóa <code>FOR UPDATE SKIP LOCKED</code>, gửi qua Amazon SES SMTP Port 587 TLS, áp trần rate limit 100ms chống nghẽn và cơ chế retry 3 lần.</td>
+                    </tr>
+                    <tr>
+                      <td>8</td>
+                      <td><code>cron_queue_worker.php</code></td>
+                      <td>Mỗi 1 phút</td>
+                      <td>Xử lý hàng đợi sự kiện nền, cập nhật badge số đỏ thời gian thực cho Server-Sent Events (SSE) và giải phóng các tác vụ thông báo đẩy.</td>
+                    </tr>
+                    <tr>
+                      <td>9</td>
+                      <td><code>cron_recurring_tasks.php</code></td>
+                      <td>Mỗi 1 giờ</td>
+                      <td>Quét các mẫu quy trình công việc (<code>workflow_task_templates</code>), tự động sinh Task định kỳ hàng ngày/tuần/tháng cho các phòng ban theo đúng lịch biểu.</td>
+                    </tr>
+                    <tr>
+                      <td>10</td>
+                      <td><code>cron_weekly_report.php</code></td>
+                      <td>Cuối tuần (Chủ Nhật 20:00)</td>
+                      <td>Tổng hợp số liệu kinh doanh, tỷ lệ chuyển đổi tuần, phát hành báo cáo chiến lược cho Ban Giám Đốc trước phiên họp giao ban đầu tuần.</td>
+                    </tr>
+                    <tr>
+                      <td>11</td>
+                      <td><code>cron_monthly_report.php</code></td>
+                      <td>Cuối tháng (Ngày cuối lúc 23:00)</td>
+                      <td>Chốt sổ doanh thu tổng thể tháng, tính toán tỷ lệ hoàn thành KPI tuyển sinh, chi phí hoa hồng và kết xuất báo cáo tài chính quản trị.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="fail-safe-locking">4. Kiến Trúc Khóa An Toàn Chống Xung Đột (Concurrency Safeguards)</h2>
+              <p>
+                Để đảm bảo tính toàn vẹn dữ liệu tuyệt đối (Zero Data Corruption) khi phục vụ hàng ngàn người dùng và hàng triệu lượt truy vấn đồng thời:
+              </p>
+              <ul>
+                <li><strong>Khóa Tệp Hệ Điều Hành (OS File Lock):</strong> Toàn bộ các tiến trình ngầm đều sử dụng cơ chế khóa tệp độc quyền:
+                  <div className="doc-code-box">
+                    <code>
+                      $lockFile = sys_get_temp_dir() . '/cron_academic_reminders_' . md5(__DIR__) . '.lock';<br />
+                      if (!flock($lockFp, LOCK_EX | LOCK_NB)) &#123; exit(0); &#125; // Thoát an toàn nếu tiến trình trước đang chạy
+                    </code>
+                  </div>
+                  Loại trừ 100% rủi ro hai worker cùng quét và gửi email/thông báo trùng lặp cho học viên.
+                </li>
+                <li><strong>Khóa Ứng Dụng Cấp Độ Cơ Sở Dữ Liệu (MySQL Advisory Lock):</strong>
+                  Khi thực thi thuật toán phân bổ lead Round-Robin hoặc ghi nhận đơn cọc:
+                  <div className="doc-code-box">
+                    <code>
+                      SELECT GET_LOCK('round_robin_assign_' . $roundId, 5);<br />
+                      -- Thực thi phân bổ an toàn tuyệt đối, không trùng số<br />
+                      SELECT RELEASE_LOCK('round_robin_assign_' . $roundId);
+                    </code>
+                  </div>
+                </li>
+                <li><strong>Mã Định Danh Bất Biến (Header X-Idempotency-Key):</strong>
+                  Mọi yêu cầu nhạy cảm từ Webhook hoặc Web Form đều hỗ trợ truyền UUID định danh. Nếu server phát hiện cùng một mã trong vòng 5 phút, hệ thống tự động trả về kết quả đã xử lý trước đó, ngăn chặn hoàn toàn tình trạng khách bấm đúp nút nộp đơn hoặc giao dịch bị trừ tiền hai lần.
+                </li>
+                <li><strong>Khóa Hàng Đợi Bất Đồng Bộ (FOR UPDATE SKIP LOCKED):</strong>
+                  Trong <code>cron_mailer.php</code>, tiến trình rút tác vụ gửi mail bằng lệnh <code>FOR UPDATE SKIP LOCKED</code>, cho phép nhiều worker chạy song song mà không bao giờ bị khóa chết (Deadlock) hay xử lý trùng một bản ghi thư.
+                </li>
+              </ul>
+            </div>
+          )
         }
       ]
     }
