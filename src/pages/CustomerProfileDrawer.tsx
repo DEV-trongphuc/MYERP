@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, User, Users, UserPlus, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap, Bell } from 'lucide-react';
@@ -18,7 +19,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { CustomModal } from '../components/ui/CustomModal';
 import { SignaturePadModal } from '../components/ui/SignaturePadModal';
 import { compressToWebP } from '../utils/imageCompress';
-import { downloadFileWithWebpToJpg, convertWebpBlobToJpgBlob, isWebpFile } from '../utils/fileDownloader';
+import { downloadFileWithWebpToJpg, convertWebpBlobToJpgBlob, isWebpFile, downloadFileWithName } from '../utils/fileDownloader';
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
 const ExpenseCreateDrawer = lazy(() => import('../components/ExpenseCreateDrawer').then(module => ({ default: module.ExpenseCreateDrawer })));
 const DepositDetailDrawer = lazy(() => import('../components/DepositDetailDrawer').then(module => ({ default: module.DepositDetailDrawer })));
@@ -729,7 +730,7 @@ const ActivityComments: React.FC<{
 
       const payload = { 
         content: commentText, 
-        attachments: uploadedUrl ? [uploadedUrl] : [],
+        attachments: uploadedUrl ? [{ url: uploadedUrl, name: attachmentFile?.name || uploadedUrl.split('/').pop() }] : [],
         parent_id: replyTo ? replyTo.id : null
       };
       await api.post(`/activities/${activityId}/comments`, payload);
@@ -825,20 +826,31 @@ const ActivityComments: React.FC<{
                       </div>
                     </div>
                     {c.content && <div style={{ fontSize: isReply ? '0.8125rem' : '0.875rem', color: 'var(--color-text-light)', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderFormattedText(c.content, users, onMentionClick)}</div>}
-                    {c.attachments && c.attachments.map((att: string, i: number) => {
-                      const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(att);
-                      const fullUrl = resolveAttachmentUrl(att);
+                    {c.attachments && c.attachments.map((attItem: any, i: number) => {
+                      const fileUrl = typeof attItem === 'string' ? attItem : (attItem?.url || attItem?.path || '');
+                      const fileName = typeof attItem === 'object' && attItem?.name ? attItem.name : (fileUrl.split('/').pop() || 'Tệp đính kèm');
+                      const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
+                      const fullUrl = resolveAttachmentUrl(fileUrl);
                       return (
                         <div key={i} style={{ marginTop: '0.5rem' }}>
                           {isImg ? (
-                            <a href={fullUrl} target="_blank" rel="noreferrer">
-                              <img src={fullUrl} alt="attachment" style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1px solid var(--color-border)' }} />
+                            <a href={fullUrl} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); downloadFileWithName(fullUrl, fileName); }}>
+                              <img src={fullUrl} alt={fileName} style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '8px', border: '1px solid var(--color-border)' }} />
                             </a>
                           ) : (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-bg-light)', borderRadius: '8px', border: '1px solid var(--color-border)', width: 'fit-content' }}>
                               <FileText size={18} style={{ color: 'var(--color-primary)' }} />
-                              <a href={fullUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'underline' }}>
-                                {att.split('/').pop()}
+                              <a 
+                                href={fullUrl} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="comment-attachment-chip"
+                                data-file-url={fullUrl}
+                                data-file-name={fileName}
+                                onClick={(e) => { e.preventDefault(); downloadFileWithName(fullUrl, fileName); }}
+                                style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer' }}
+                              >
+                                {fileName}
                               </a>
                             </div>
                           )}
@@ -2081,12 +2093,13 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       contact_email: targetContactEmail,
       related_type: 'contact',
       related_id: targetContactId,
-      due_date: todayStr,
+      due_date: `${todayStr} 18:00:00`,
       user_id: formData.owner_id || contact?.owner_id || currentUser?.id,
       created_by: currentUser?.id,
       type: 'task',
       status: 'open',
-      priority: 'medium'
+      priority: 'medium',
+      from_customer_drawer: true
     });
   };
 
@@ -4485,7 +4498,113 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         fetchData(activeTab, true, fresh.id);
         fetchLinkedProfiles(fresh.id);
 
-        addToast(`Đã chuyển sang hồ sơ "${fresh.full_name}" (${fresh.program || 'Chương trình khác'})`, 'info');
+        toast.custom((t) => (
+          <div
+            style={{
+              animation: t.visible
+                ? 'notifToastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+                : 'notifToastSlideOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              background: '#ffffff',
+              color: '#0f172a',
+              borderRadius: '16px',
+              padding: '10px 14px',
+              boxShadow: '0 16px 36px -6px rgba(15, 23, 42, 0.16), 0 4px 12px rgba(15, 23, 42, 0.06)',
+              border: '1px solid #e2e8f0',
+              borderLeft: '4px solid #10b981',
+              minWidth: '300px',
+              maxWidth: '420px',
+              position: 'relative',
+              pointerEvents: 'auto'
+            }}
+          >
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <Avatar name={fresh.full_name} src={fresh.avatar_url || fresh.avatar} size={42} />
+              <span style={{
+                position: 'absolute',
+                bottom: -2,
+                right: -2,
+                width: '15px',
+                height: '15px',
+                borderRadius: '50%',
+                background: '#10b981',
+                border: '2px solid #ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+              }}>
+                <Check size={9} color="#ffffff" strokeWidth={3} />
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                <ArrowRightLeft size={11} style={{ color: '#2563eb' }} />
+                <span>Đã chuyển sang hồ sơ</span>
+              </div>
+              <div style={{ 
+                fontSize: '0.88rem', 
+                fontWeight: 700, 
+                color: '#0f172a', 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap' 
+              }}>
+                {fresh.full_name}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' }}>
+                <span style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
+                  color: '#1e40af',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  padding: '1px 8px',
+                  borderRadius: '10px',
+                  maxWidth: '220px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {fresh.program || 'Chương trình khác'}
+                </span>
+                {fresh.id && (
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                    #{fresh.id}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toast.dismiss(t.id);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#94a3b8',
+                padding: '4px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#475569')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+              title="Đóng"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ), { duration: 3500 });
         onUpdate?.(fresh);
       }
     } catch (e: any) {
@@ -4683,8 +4802,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         className="connected-profiles-bar"
         style={{
           padding: '8px 16px',
-          background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)',
-          borderBottom: '1px solid var(--color-border-light)',
+          background: '#f1f5f9',
+          borderBottom: '1px solid var(--color-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -4698,12 +4817,12 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             width: '24px',
             height: '24px',
             borderRadius: '6px',
-            background: 'linear-gradient(135deg, var(--color-primary) 0%, #83101b 100%)',
+            background: 'linear-gradient(135deg, #475569 0%, #334155 100%)',
             color: '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 2px 4px rgba(163, 20, 34, 0.25)'
+            boxShadow: '0 2px 4px rgba(71, 85, 105, 0.2)'
           }}>
             <Layers size={13} />
           </div>
@@ -4711,14 +4830,14 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             <span style={{ 
               fontSize: '0.725rem', 
               fontWeight: 800, 
-              color: 'var(--color-text)', 
+              color: '#334155', 
               textTransform: 'uppercase', 
               letterSpacing: '0.04em' 
             }}>
               Chương trình ({linkedProfiles.length})
             </span>
             {loadingLinkedProfiles && (
-              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-primary)' }} />
+              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', color: '#64748b' }} />
             )}
           </div>
         </div>
@@ -4726,7 +4845,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '2px 0', flex: 1, minWidth: 0 }}>
           {linkedProfiles.map((p: any) => {
             const isCurrent = Number(p.id) === Number(effectiveContactId);
-            const stageColor = p.stage_color || 'var(--color-primary)';
+            const stageColor = p.stage_color || '#2563eb';
             const programTitle = p.program?.trim() || (p.pipeline_status === 'enrolled' || p.status === 'customer' ? 'Học viên chính thức' : 'Chưa đặt tên CT');
             
             return (
@@ -4743,24 +4862,24 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   fontSize: '0.75rem',
                   fontWeight: isCurrent ? 800 : 600,
                   cursor: isCurrent ? 'default' : 'pointer',
-                  border: isCurrent ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                  background: isCurrent ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
-                  color: isCurrent ? 'var(--color-primary)' : 'var(--color-text)',
-                  boxShadow: isCurrent ? '0 2px 8px rgba(163, 20, 34, 0.18)' : '0 1px 2px rgba(0,0,0,0.03)',
+                  border: isCurrent ? `2px solid ${stageColor}` : '1px solid var(--color-border)',
+                  background: isCurrent ? `${stageColor}18` : '#ffffff',
+                  color: isCurrent ? stageColor : 'var(--color-text)',
+                  boxShadow: isCurrent ? `0 2px 8px ${stageColor}33` : '0 1px 2px rgba(0,0,0,0.03)',
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
                   flexShrink: 0
                 }}
                 onMouseEnter={(e) => {
                   if (!isCurrent) {
-                    e.currentTarget.style.borderColor = 'rgba(163, 20, 34, 0.4)';
+                    e.currentTarget.style.borderColor = stageColor;
                     e.currentTarget.style.background = '#ffffff';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!isCurrent) {
                     e.currentTarget.style.borderColor = 'var(--color-border)';
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.75)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
                   }
                 }}
                 title={`Hồ sơ #${p.id} - ${programTitle}\nTrạng thái: ${p.stage_name || p.pipeline_status || 'Giai đoạn 1'}\nPhụ trách: ${p.owner_name || 'Chưa gán'}`}
@@ -4784,60 +4903,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                   {p.stage_name || p.pipeline_status || 'Giai đoạn 1'}
                 </span>
                 {isCurrent && (
-                  <span style={{
-                    fontSize: '0.625rem',
-                    fontWeight: 800,
-                    color: 'var(--color-primary)',
-                    background: 'rgba(163, 20, 34, 0.08)',
-                    padding: '1px 5px',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(163, 20, 34, 0.25)'
-                  }}>
-                    Đang xem
+                  <span 
+                    title="Đang xem hồ sơ này"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: stageColor,
+                      background: `${stageColor}18`,
+                      padding: '2px',
+                      borderRadius: '50%',
+                      border: `1px solid ${stageColor}40`,
+                      marginLeft: '2px',
+                      flexShrink: 0
+                    }}
+                  >
+                    <Eye size={11} strokeWidth={2.5} />
                   </span>
                 )}
               </button>
             );
           })}
-
-          {/* Quick Clone / Add Program button */}
-          <button
-            type="button"
-            onClick={handleOpenCloneModal}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 10px',
-              borderRadius: '20px',
-              fontSize: '0.725rem',
-              fontWeight: 700,
-              color: 'var(--color-primary)',
-              background: 'rgba(163, 20, 34, 0.06)',
-              border: '1px dashed rgba(163, 20, 34, 0.35)',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--color-primary)';
-              e.currentTarget.style.color = '#ffffff';
-              e.currentTarget.style.borderStyle = 'solid';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(163, 20, 34, 0.06)';
-              e.currentTarget.style.color = 'var(--color-primary)';
-              e.currentTarget.style.borderStyle = 'dashed';
-            }}
-            title="Nhân bản thêm hồ sơ cho khách hàng này với chương trình học khác"
-          >
-            <Plus size={13} />
-            <span>Thêm CT mới</span>
-          </button>
         </div>
       </div>
     );
+
   };
 
   useEffect(() => {
@@ -15813,6 +15903,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               setShowApproverDropdown(false);
             }}
             task={selectedTaskForDetails}
+            isFromCustomerDrawer={true}
             onUpdate={() => {
               fetchData();
             }}

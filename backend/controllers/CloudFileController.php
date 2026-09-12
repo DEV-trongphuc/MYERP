@@ -152,11 +152,17 @@ class CloudFileController {
             ];
             if (in_array($ext, $blockedExts)) respond(422, null, "Định dạng tệp .$ext không được hỗ trợ hoặc không an toàn", false);
 
-            // Kiểm tra nội dung file có chứa mã script hoặc PHP độc hại không
-            $fileContent = @file_get_contents($file['tmp_name']);
-            if ($fileContent !== false) {
-                if (preg_match('/<\?php/i', $fileContent) || preg_match('/<\?=/i', $fileContent) || preg_match('/<script/i', $fileContent)) {
-                    respond(422, null, 'Nội dung file chứa mã độc hại nguy hiểm bị chặn', false);
+            $isBinaryImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+            if ($isBinaryImage) {
+                if (!@getimagesize($file['tmp_name'])) {
+                    respond(422, null, 'File ảnh không hợp lệ hoặc bị hỏng', false);
+                }
+            } else {
+                $fileContent = @file_get_contents($file['tmp_name']);
+                if ($fileContent !== false) {
+                    if (preg_match('/<\?php/i', $fileContent) || preg_match('/<script/i', $fileContent)) {
+                        respond(422, null, 'Nội dung file chứa mã độc hại nguy hiểm bị chặn', false);
+                    }
                 }
             }
 

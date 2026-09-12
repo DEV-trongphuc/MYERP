@@ -51,7 +51,7 @@ class HRMController {
             $dateStr = ": {$start}";
         }
         $reason = trim($l['reason'] ?? '');
-        $reasonStr = $reason ? " - " . mb_substr($reason, 0, 45) . (mb_strlen($reason) > 45 ? '...' : '') : '';
+        $reasonStr = $reason ? " - {$reason}" : '';
 
         if ($type === 'remote_work') return "Đăng ký WFH{$dateStr}{$daysStr}{$reasonStr}";
         if ($type === 'overtime') return "Đăng ký OT{$dateStr}{$daysStr}{$reasonStr}";
@@ -2248,7 +2248,7 @@ class HRMController {
             }
         }
 
-        // 5. Pending Bulk Attendance Requests (Loại trừ đơn do chính mình tạo)
+        // 5. Pending Bulk Attendance Requests (Cho phép Trưởng phòng / Quản lý tự duyệt đơn chấm công của chính mình)
         $stmtBulks = $this->db->prepare("
             SELECT r.*, u.full_name as employee_name, u.team_id,
                    u_mgr.full_name as manager_name,
@@ -2260,15 +2260,24 @@ class HRMController {
             JOIN users u ON r.user_id = u.id
             LEFT JOIN users u_mgr ON r.manager_id = u_mgr.id
             LEFT JOIN users u_real ON r.approved_by = u_real.id
-            WHERE u.tenant_id = ? AND r.status IN ('pending_manager', 'pending_hr') AND r.user_id != ?
+            WHERE u.tenant_id = ? AND r.status IN ('pending_manager', 'pending_hr') 
+              AND (r.user_id != ? OR r.manager_id = ? OR ?)
             ORDER BY r.created_at DESC
             LIMIT 100
         ");
-        $stmtBulks->execute([$auth['tenant_id'], $userId]);
+        $canSelfApproveRole = ($isGlobalAdmin || $role === 'manager' || !empty($ledTeamIds)) ? 1 : 0;
+        $stmtBulks->execute([$auth['tenant_id'], $userId, $userId, $canSelfApproveRole]);
         $bulks = $stmtBulks->fetchAll(PDO::FETCH_ASSOC);
         foreach ($bulks as $b) {
             $shouldShow = false;
             $isAssignedApprover = ((int)($b['manager_id'] ?? 0) === $userId) || (!empty($b['manager_name']) && trim(mb_strtolower($b['manager_name'])) === $userFullName);
+
+            if ((int)$b['user_id'] === $userId) {
+                // Đơn của chính mình: Chỉ hiển thị cho Trưởng phòng/Quản lý tự duyệt
+                if (!$isAssignedApprover && !$isGlobalAdmin && $role !== 'manager' && empty($ledTeamIds)) {
+                    continue;
+                }
+            }
 
             if ($b['status'] === 'pending_manager') {
                 if (!empty($b['manager_id']) || !empty($b['manager_name'])) {
@@ -2655,7 +2664,7 @@ class HRMController {
                     'approver_name_2' => $l['approver_name_2'] ?? null,
                     'approved_by_name' => $l['approved_by_name'] ?? null,
                     'status_level_1' => $l['status_level_1'] ?? 'pending',
-                    'status_level_2' => $l['status_level_2'] ?? 'pending',
+                    'status_level_2' => $l['status_level_2'] ?? 'none',
                     'start_date' => $l['start_date'] ?? null,
                     'end_date' => $l['end_date'] ?? null,
                     'total_days' => $l['total_days'] ?? null,
@@ -2944,7 +2953,7 @@ class HRMController {
                 'approver_name_2' => $l['approver_name_2'] ?? null,
                 'approved_by_name' => $l['approved_by_name'] ?? null,
                 'status_level_1' => $l['status_level_1'] ?? 'pending',
-                'status_level_2' => $l['status_level_2'] ?? 'pending',
+                'status_level_2' => $l['status_level_2'] ?? 'none',
                 'start_date' => $l['start_date'] ?? null,
                 'end_date' => $l['end_date'] ?? null,
                 'total_days' => $l['total_days'] ?? null,

@@ -836,7 +836,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   </button>
                 </div>
               )}
-              {viewItem.status !== 'approved' && onEditClick && (
+              {viewItem.status !== 'approved' && onEditClick && Number(user?.id) === Number(viewItem.created_by || viewItem.user_id) && (
                 <button 
                   className="btn secondary sm" 
                   style={{ 
@@ -1088,10 +1088,10 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                     <div style={{ 
                       padding: '1.5rem', 
-                      background: 'linear-gradient(135deg, var(--color-primary-light, #fff5f5) 0%, #ffffff 100%)', 
+                      background: '#ffffff', 
                       borderRadius: '16px', 
-                      border: '1px solid rgba(189, 29, 45, 0.12)',
-                      boxShadow: '0 4px 15px rgba(189, 29, 45, 0.02)',
+                      border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
+                      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -1116,7 +1116,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         </p>
                       </div>
                       <div style={{
-                        background: 'rgba(189, 29, 45, 0.08)',
+                        background: 'rgba(189, 29, 45, 0.06)',
                         padding: '12px',
                         borderRadius: '12px',
                         color: 'var(--color-primary)'
@@ -1128,12 +1128,13 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     {vatRate > 0 && (
                       <div style={{
                         padding: '10px 14px',
-                        background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03), rgba(59, 130, 246, 0.06))',
-                        border: '1px solid rgba(37, 99, 235, 0.18)',
+                        background: '#ffffff',
+                        border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                         borderRadius: '12px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '6px'
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1330,62 +1331,90 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     })()}
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Áp dụng cho đối tượng</span>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
-                      {(viewItem.entities && viewItem.entities.length > 0) ? (
-                        viewItem.entities.map((e: any, idx: number) => {
-                          const typeText = e.entity_type === 'contact' ? 'KHTN' : (e.entity_type === 'company' ? 'Công ty' : 'Cơ hội');
-                          return (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.775rem' }}>
-                              {e.entity_type === 'contact' && (
-                                <Avatar src={e.avatar_url} name={e.name} size={16} />
-                              )}
-                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                                {e.name || e.entity_id}
-                              </span>
-                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
-                                ({typeText}{Number(e.amount) > 0 ? ': ' + FMT(e.amount, viewItem.currency) : ''})
-                              </span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Không áp dụng</span>
-                      )}
-                    </div>
-                  </div>
+                  {/* Chi tiết đề xuất (thay thế Áp dụng cho đối tượng & Người liên quan) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Chi tiết đề xuất</span>
+                    {(() => {
+                      const rawNotes = viewItem.notes || viewItem.description || '';
+                      
+                      const extractMetaField = (text: string, label: string) => {
+                        const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+                        const m = text.match(reg);
+                        return m ? m[1].trim() : '';
+                      };
 
-                  {/* Người liên quan (Theo dõi) */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Người liên quan (Theo dõi)</span>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
-                      {(() => {
-                        const relIdsRaw = viewItem.related_user_ids;
-                        let relIds: number[] = [];
-                        if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
-                        else if (typeof relIdsRaw === 'string' && relIdsRaw.trim()) {
-                          try {
-                            const parsed = JSON.parse(relIdsRaw);
-                            if (Array.isArray(parsed)) relIds = parsed.map(Number);
-                            else relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
-                          } catch {
-                            relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
-                          }
-                        }
-                        const relUsers = users.filter((u: any) => relIds.includes(Number(u.id)));
-                        if (relUsers.length === 0) {
-                          return <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Không có</span>;
-                        }
-                        return relUsers.map((u: any) => (
-                          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.775rem' }}>
-                            <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={16} />
-                            <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
-                            {u.role && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>({u.role})</span>}
+                      const contentVal = extractMetaField(rawNotes, 'Nội dung đề xuất');
+                      const reasonVal = extractMetaField(rawNotes, 'Lý do');
+                      const detailsMatch = rawNotes.match(/Chi tiết:\s*([\s\S]+?)(?=\n\n|\n\[|$)/i);
+                      const detailText = detailsMatch ? detailsMatch[1].trim() : '';
+
+                      let cleanNotes = rawNotes
+                        .replace(/\[Thông tin chuyển khoản\]:[^\n]*/gi, '')
+                        .replace(/\[Thanh toán theo đợt\]:[^\n]*/gi, '')
+                        .replace(/\[Lặp lại định kỳ\]:[^\n]*/gi, '')
+                        .replace(/\[Hồ sơ chi phí\]:[^\n]*/gi, '')
+                        .replace(/Phòng ban:[^\n]*/gi, '')
+                        .replace(/Vị trí:[^\n]*/gi, '')
+                        .replace(/Đối tượng:[^\n]*/gi, '')
+                        .replace(/Thụ hưởng[^:]*:[^\n]*/gi, '')
+                        .replace(/Hình thức:[^\n]*/gi, '')
+                        .replace(/DANH SÁCH VĂN PHÒNG PHẨM[\s\S]*?(?=\n\n|$)/gi, '')
+                        .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*?(?=\n\n|$)/gi, '')
+                        .replace(/^Số tiền:\s*0\s*đ\.\s*Ghi chú:\s*"?/i, '')
+                        .replace(/"$/, '')
+                        .trim();
+
+                      if (contentVal || reasonVal) {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {contentVal && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Nội dung / Giải trình:</span>
+                                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                  {contentVal}
+                                </div>
+                              </div>
+                            )}
+                            {reasonVal && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Lý do đề xuất:</span>
+                                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                  {reasonVal}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ));
-                      })()}
-                    </div>
+                        );
+                      }
+
+                      if (detailText) {
+                        return (
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                            {detailText}
+                          </div>
+                        );
+                      }
+
+                      if (cleanNotes) {
+                        return (
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                            {cleanNotes}
+                          </div>
+                        );
+                      }
+
+                      if (viewItem.description) {
+                        return (
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                            {viewItem.description}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Chưa có chi tiết đề xuất</span>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1458,15 +1487,15 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   }}>
                     {/* Executive Brand Light Bank Card */}
                     <div style={{
-                      background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
-                      border: '1px solid #fecaca',
+                      background: '#ffffff',
+                      border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                       borderRadius: '14px',
                       padding: '12px 14px',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
                       gap: '10px',
-                      boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                       position: 'relative',
                       overflow: 'hidden'
                     }}>
@@ -1476,14 +1505,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                             width: '26px',
                             height: '26px',
                             borderRadius: '6px',
-                            background: '#ffffff',
-                            border: '1px solid #fecaca',
+                            background: 'var(--color-bg-subtle, #f8fafc)',
+                            border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             flexShrink: 0
                           }}>
-                            <Landmark size={14} style={{ color: '#dc2626' }} />
+                            <Landmark size={14} style={{ color: 'var(--color-primary, #dc2626)' }} />
                           </div>
                           <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={bankName || 'Chuyển khoản Ngân hàng'}>
                             {bankName || 'Chuyển khoản Ngân hàng'}
@@ -1496,9 +1525,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                           letterSpacing: '0.04em',
                           padding: '2px 6px',
                           borderRadius: '5px',
-                          background: '#ffffff',
+                          background: 'rgba(220, 38, 38, 0.06)',
                           color: '#dc2626',
-                          border: '1px solid #fecaca',
+                          border: '1px solid rgba(220, 38, 38, 0.15)',
                           flexShrink: 0
                         }}>
                           Chuyển khoản 24/7
@@ -1509,11 +1538,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        background: '#ffffff',
+                        background: '#f8fafc',
                         padding: '7px 10px',
                         borderRadius: '8px',
-                        border: '1px solid #fecaca',
-                        boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                        border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
                       }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                           <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
@@ -1583,13 +1612,13 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         title="Bấm để phóng to mã QR"
                         style={{
                           background: '#ffffff',
-                          border: '1px solid #fecaca',
+                          border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                           borderRadius: '14px',
                           padding: '6px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                           cursor: 'pointer',
                           transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                         }}
@@ -1761,11 +1790,119 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   );
                 }
 
+                interface ParsedExpenseRow {
+                  index: number;
+                  name: string;
+                  quantity: string | number;
+                  price: number;
+                  vat: number;
+                  subtotal: number;
+                }
+                let parsedExpenseRows: ParsedExpenseRow[] = [];
+                if (Array.isArray(viewItem.items) && viewItem.items.length > 0) {
+                  parsedExpenseRows = viewItem.items.map((it: any, idx: number) => {
+                    const q = Number(it.quantity) || 1;
+                    const p = Number(it.price) || 0;
+                    return {
+                      index: idx + 1,
+                      name: it.content || it.name || '',
+                      quantity: q,
+                      price: p,
+                      vat: Number(it.vat !== undefined ? it.vat : 10),
+                      subtotal: q * p
+                    };
+                  });
+                } else if (rawNotes.includes('[Chi tiết các khoản chi]')) {
+                  const itemMatches = Array.from(rawNotes.matchAll(/[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*SL:\s*(\d+(?:\.\d+)?)\s*-\s*Đơn giá:\s*([0-9.,]+)[^\-]*-\s*VAT:\s*(\d+)%/gi));
+                  parsedExpenseRows = itemMatches.map((m: any) => {
+                    const q = Number(m[3]) || 1;
+                    const p = Number(m[4].replace(/\D/g, '')) || 0;
+                    return {
+                      index: Number(m[1]),
+                      name: m[2].trim(),
+                      quantity: q,
+                      price: p,
+                      vat: Number(m[5]) || 0,
+                      subtotal: q * p
+                    };
+                  });
+                }
+
+                if (parsedExpenseRows.length > 0) {
+                  return (
+                    <div className="card" style={{ 
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border-light)',
+                      borderRadius: '16px',
+                      padding: '1.5rem',
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '14px'
+                    }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Receipt size={15} /> Chi tiết các khoản chi ({parsedExpenseRows.length} hạng mục)
+                      </div>
+
+                      <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                          <thead>
+                            <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                              <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>#</th>
+                              <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Nội dung chi / Hạng mục</th>
+                              <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Số lượng</th>
+                              <th style={{ padding: '10px 12px', width: '130px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Đơn giá</th>
+                              <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>VAT</th>
+                              <th style={{ padding: '10px 12px', width: '130px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Thành tiền</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {parsedExpenseRows.map((it, idx) => (
+                              <tr key={idx} style={{ borderBottom: idx < parsedExpenseRows.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                                  {it.index || (idx + 1)}
+                                </td>
+                                <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text)' }}>
+                                  {it.name}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(59, 130, 246, 0.1)',
+                                    color: '#2563eb',
+                                    fontWeight: 700,
+                                    fontSize: '0.78rem'
+                                  }}>
+                                    {it.quantity}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--color-text)' }}>
+                                  {Number(it.price).toLocaleString('vi-VN')} {viewItem.currency || 'VND'}
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                                  {it.vat}%
+                                </td>
+                                <td style={{ padding: '10px 12px', fontWeight: 750, color: 'var(--color-primary)' }}>
+                                  {Number(it.subtotal).toLocaleString('vi-VN')} {viewItem.currency || 'VND'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                }
+
                 let cleanNotes = viewItem.notes || '';
                 const bankRegex = /\[Thông tin chuyển khoản\]:[^\n]*/;
                 const installmentRegex = /\[Thanh toán theo đợt\]:[^\n]*/;
                 const recurringRegex = /\[Lặp lại định kỳ\]:[^\n]*/;
                 cleanNotes = cleanNotes.replace(bankRegex, '').replace(installmentRegex, '').replace(recurringRegex, '').trim();
+                cleanNotes = cleanNotes.replace(/\[Chi tiết các khoản chi\]:[^\n]*(\n[•\-*][^\n]*)*\s*/gi, '').trim();
                 cleanNotes = cleanNotes.replace(/^Số tiền:\s*0\s*đ\.\s*Ghi chú:\s*"?/i, '').replace(/"$/, '').trim();
 
                 if (contentVal || reasonVal) {

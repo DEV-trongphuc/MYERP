@@ -3,9 +3,26 @@ class NotificationController {
     private PDO $db;
     public function __construct(PDO $db) { $this->db = $db; }
 
+    public static function cleanHtmlAndEntities(?string $str): string {
+        if (!$str) return '';
+        $clean = strip_tags($str);
+        $clean = html_entity_decode($clean, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $clean = html_entity_decode($clean, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $clean = str_ireplace('&nbsp;', ' ', $clean);
+        $clean = preg_replace('/[\xc2\xa0\x{00a0}\x{200b}\x{200c}\x{200d}\x{feff}]/u', ' ', $clean);
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        return trim($clean);
+    }
+
     public function index(array $auth): void {
         // Tự động gộp các thông báo tải tài liệu trùng lặp / liên tiếp cho cùng đối tượng trong 24h
         $this->consolidateUploadNotifications((int)$auth['user_id']);
+
+        // Dọn dẹp các ký tự html entities cũ như &nbsp; trong database
+        try {
+            $this->db->exec("UPDATE notifications SET body = REPLACE(body, '&nbsp;', ' ') WHERE body LIKE '%&nbsp;%'");
+            $this->db->exec("UPDATE notifications SET title = REPLACE(title, '&nbsp;', ' ') WHERE title LIKE '%&nbsp;%'");
+        } catch (\Throwable $cleanEx) {}
 
         $stmt = $this->db->prepare("SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100");
         $stmt->execute([$auth['user_id']]);
@@ -97,6 +114,9 @@ class NotificationController {
                 $item['actor_name'] = null;
                 $item['actor_avatar'] = '/LOGO.jpg';
             }
+
+            $item['title'] = self::cleanHtmlAndEntities($item['title'] ?? '');
+            $item['body'] = self::cleanHtmlAndEntities($item['body'] ?? '');
         }
         unset($item);
         

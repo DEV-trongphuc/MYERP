@@ -265,6 +265,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const { user, token, login, logout, updateUser } = useAuth();
   const currentUser = user;
   const isSaleUser = currentUser && ['sale', 'sales'].includes(String(currentUser.role).toLowerCase());
+  const isTopAdmin = Boolean(currentUser && ['superadmin', 'super_admin', 'admin'].includes(String(currentUser.role).toLowerCase()));
+  const [adminViewFull, setAdminViewFull] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ws_admin_view_full') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const { language, setLanguage, t } = useLanguage();
   const { showConfirm, closeConfirm } = useUIStore();
   const [showWorkspaceHelpModal, setShowWorkspaceHelpModal] = useState(false);
@@ -926,7 +934,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   useEffect(() => {
     setWsTasksPage(1);
-  }, [wsSearch, wsPriority, wsStatus, wsDatePreset, wsSubTab, wsTeamSubFilter, wsTaskFilter, wsActivityType, wsRelatedType]);
+  }, [wsSearch, wsPriority, wsStatus, wsDatePreset, wsSubTab, wsTeamSubFilter, wsTaskFilter, wsActivityType, wsRelatedType, adminViewFull]);
 
   useEffect(() => {
     const isFocus = wsViewMode === 'focus';
@@ -1180,22 +1188,31 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     const datePreset = wsDatePreset && wsDatePreset !== 'all' ? getPresetDates(wsDatePreset) : null;
 
     const filtered = wsTasks.filter(task => {
-      // 0. Strict privacy isolation: "của ai thấy người đó hoặc có liên quan thì mới thấy thôi ko được thấy mà ko có liên quan nhé"
-      const currentRole = String(currentUser?.role || '').toLowerCase();
-      const isTopAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(currentRole);
-      if (!isTopAdmin) {
+      // 0. Strict privacy isolation:
+      // "nếu là admin thì có 1 nút admin view full thì mới hiện hết công việc ra thôi còn lại thì vẫn chỉ show công việc của họ"
+      const shouldViewAll = isTopAdmin && adminViewFull;
+      if (!shouldViewAll) {
         const uid = Number(currentUser?.id || 0);
         const uidStr = String(uid);
+        const userName = String(currentUser?.username || '').toLowerCase();
+        const fullName = String(currentUser?.full_name || currentUser?.name || '').toLowerCase();
+        const taskBody = String(task.body || '').toLowerCase();
+        const taskTags = String(task.tags || '').toLowerCase();
+
         const isAssignee = Number(task.user_id) === uid;
         const isCreator = Number(task.created_by) === uid;
         const isApprover = Number(task.approver_id) === uid;
         const isParticipant = task.participant_ids ? String(task.participant_ids).split(',').map(s => s.trim()).includes(uidStr) : false;
+        const isMentioned = taskBody.includes(`data-user-id="${uid}"`) ||
+                            taskBody.includes(`data-user-id='${uid}'`) ||
+                            taskBody.includes(`data-user-id=${uid}`) ||
+                            (fullName && taskBody.includes(`@${fullName}`)) ||
+                            (userName && (taskBody.includes(`@${userName}`) || taskTags.includes(`@${userName}`)));
         const isContactOrDealInvolved = (task.contact_owner_id && Number(task.contact_owner_id) === uid) ||
                                        (task.owner_id && Number(task.owner_id) === uid) ||
                                        (task.collaborator_ids && String(task.collaborator_ids).split(',').map(s => s.trim()).includes(uidStr));
-        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass') || (currentUser?.team_id && Number(task.team_id) === Number(currentUser.team_id)));
 
-        if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isContactOrDealInvolved && !isManagerViewingTeam) {
+        if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isMentioned && !isContactOrDealInvolved) {
           return false;
         }
       }
@@ -1206,8 +1223,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       } else {
         if (task.is_hidden && Number(task.is_hidden) === 1) return false;
         // Filter by Status: hide completed tasks unless showDoneTasks or explicitly filtered by wsStatus === 'done'
-        if (!showDoneTasks && wsStatus !== 'done' && (task.status === 'done' || task.status === 'completed')) return false;
-        if (wsStatus && wsStatus !== 'all' && !showDoneTasks && task.status !== wsStatus) return false;
+        if (!showDoneTasks && wsStatus !== 'done' && (task.status === 'done' || task.status === 'completed' || Number(task.progress) >= 100)) return false;
+        if (wsStatus && wsStatus !== 'all' && wsStatus !== 'planned' && !showDoneTasks && task.status !== wsStatus) return false;
       }
 
       // 2. Filter by Priority
@@ -1291,7 +1308,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (!aPinned && bPinned) return 1;
       return 0;
     });
-  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds]);
+  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin]);
 
   const workspaceStats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -1312,9 +1329,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       // Skip hidden tasks in statistics
       if (task.is_hidden || Number(task.is_hidden) === 1) return;
 
-      const currentRole = String(currentUser?.role || '').toLowerCase();
-      const isTopAdmin = ['superadmin', 'super_admin', 'admin', 'director'].includes(currentRole);
-      if (!isTopAdmin) {
+      const shouldViewAll = isTopAdmin && adminViewFull;
+      if (!shouldViewAll) {
         const uid = Number(currentUser?.id || 0);
         const isAssignee = Number(task.user_id) === uid;
         const isCreator = Number(task.created_by) === uid;
@@ -1323,7 +1339,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         const isContactOrDealInvolved = (task.contact_owner_id && Number(task.contact_owner_id) === uid) ||
                                        (task.owner_id && Number(task.owner_id) === uid) ||
                                        (task.collaborator_ids && String(task.collaborator_ids).split(',').map(s => s.trim()).includes(currentUserIdStr));
-        const isManagerViewingTeam = currentRole === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass') || (currentUser?.team_id && Number(task.team_id) === Number(currentUser.team_id)));
+        const isManagerViewingTeam = String(currentUser?.role || '').toLowerCase() === 'manager' && (wsSubTab === 'team' || (wsTeamId && wsTeamId !== 'all_teams_bypass') || (currentUser?.team_id && Number(task.team_id) === Number(currentUser.team_id)));
 
         if (!isAssignee && !isCreator && !isApprover && !isParticipant && !isContactOrDealInvolved && !isManagerViewingTeam) {
           return;
@@ -1379,7 +1395,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     });
 
     return { overdue, dueToday, upcoming, pendingApproval, assignedToMe, collaborator };
-  }, [wsTasks, wsSubTab, currentUser]);
+  }, [wsTasks, wsSubTab, currentUser, adminViewFull, isTopAdmin]);
 
   const paginatedWsTasks = useMemo(() => {
     const startIndex = (wsTasksPage - 1) * wsTasksPageSize;
@@ -2685,6 +2701,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         setPendingAttachments([]);
         setReplyTo(null);
         loadTaskComments(selectedTaskForDetails.id);
+        fetchPortalTasks();
       }
     } catch (e) {
       console.error(e);
@@ -5160,7 +5177,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         id: 'new',
                         subject: '',
                         priority: 'medium',
-                        due_date: new Date().toISOString().slice(0, 10),
+                        due_date: `${new Date().toISOString().slice(0, 10)} 18:00:00`,
                         description: '',
                         link: '',
                         user_id: String(user?.id || ''),
@@ -5885,6 +5902,71 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 {t('Hiện việc đã xong')}
               </span>
             </div>
+
+            {/* Toggle Switch Admin View Full (chỉ hiện cho Admin) */}
+            {isTopAdmin && (
+              <div
+                onClick={() => {
+                  setAdminViewFull(prev => {
+                    const next = !prev;
+                    try {
+                      localStorage.setItem('ws_admin_view_full', String(next));
+                    } catch {}
+                    return next;
+                  });
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setAdminViewFull(prev => {
+                      const next = !prev;
+                      try {
+                        localStorage.setItem('ws_admin_view_full', String(next));
+                      } catch {}
+                      return next;
+                    });
+                  }
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '32px',
+                  padding: '0 8px',
+                  borderRadius: '6px',
+                  border: adminViewFull ? '1.5px solid var(--color-primary, #BD1D2D)' : '1px solid var(--color-border)',
+                  background: adminViewFull ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  flexShrink: 0,
+                  transition: 'all 0.2s'
+                }}
+                title={adminViewFull ? t('Đang xem toàn bộ công việc hệ thống. Bấm để chỉ xem việc của tôi') : t('Bấm để xem toàn bộ công việc hệ thống (Admin view full)')}
+              >
+                <div style={{ pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+                  <ToggleSwitch
+                    checked={adminViewFull}
+                    onChange={() => {}}
+                    small={true}
+                  />
+                </div>
+                <span style={{
+                  fontSize: '0.78rem',
+                  fontWeight: adminViewFull ? 700 : 600,
+                  color: adminViewFull ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text)',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <Shield size={12} style={{ color: adminViewFull ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)' }} />
+                  {t('Admin view full')}
+                </span>
+              </div>
+            )}
 
             {/* View Mode Switcher */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', flexShrink: 0 }}>
@@ -6667,31 +6749,62 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     </div>
                   </div>
 
-                  <div style={{ borderTop: '1px solid var(--color-border-light)', margin: '2px 0' }} />
+                  <div style={{ borderTop: '1px solid var(--color-border-light)', margin: '4px 0 6px 0' }} />
 
-                  {/* Footer metadata */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      {task.due_date && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', color: dateBadgeColor, background: dateBadgeBg, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Calendar size={11} /> {getDueDateLabel(task.due_date, task.status === 'done', t)}
-                          {isOverdue && task.status !== 'done' && <ShieldAlert size={10} style={{ marginLeft: 2 }} />}
-                        </span>
-                      )}
-                      
-                      {task.related_type === 'contact' && task.related_id && (
+                  {/* Customer row (công việc có khách hàng thì tên khách hàng nằm 1 hàng trên) */}
+                  {(() => {
+                    const hasCustomer = Boolean((task.related_type === 'contact' && task.related_id) || task.contact_name || task.contact_id);
+                    const customerId = task.contact_id || (task.related_type === 'contact' ? task.related_id : null);
+                    const customerDisplayName = formatVietnameseFullName(task.contact_name || (task.related_type === 'contact' ? t('Khách hàng') : ''));
+
+                    if (!hasCustomer || !customerDisplayName) return null;
+
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
                         <span
                           style={{
-                            fontSize: '0.7rem', fontWeight: 700, padding: '3px 9px', borderRadius: '20px',
-                            color: 'var(--color-text, #334155)', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', border: '1px solid var(--color-border-light, rgba(0,0,0,0.05))', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                            fontSize: '0.725rem',
+                            fontWeight: 700,
+                            padding: '3px 10px',
+                            borderRadius: '20px',
+                            color: 'var(--color-text, #334155)',
+                            background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))',
+                            border: '1px solid var(--color-border-light, rgba(0,0,0,0.06))',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            cursor: customerId ? 'pointer' : 'default',
+                            maxWidth: '100%',
+                            transition: 'all 0.15s ease'
                           }}
                           onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenContactProfile(Number(task.related_id));
+                            if (customerId) {
+                              e.stopPropagation();
+                              handleOpenContactProfile(Number(customerId));
+                            }
                           }}
+                          title={customerDisplayName}
                         >
-                          <Avatar name={formatVietnameseFullName(task.contact_name || t('Khách hàng'))} size={14} />
-                          {formatVietnameseFullName(task.contact_name || t('Khách hàng'))}
+                          <Avatar 
+                            src={task.contact_avatar} 
+                            name={customerDisplayName} 
+                            size={15} 
+                          />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {customerDisplayName}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Footer metadata: Deadline bên dưới và Người thực hiện */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', minHeight: '26px' }}>
+                    <div>
+                      {task.due_date && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', color: dateBadgeColor, background: dateBadgeBg, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                          <Calendar size={11} /> {getDueDateLabel(task.due_date, task.status === 'done', t)}
+                          {isOverdue && task.status !== 'done' && <ShieldAlert size={10} style={{ marginLeft: 2 }} />}
                         </span>
                       )}
                     </div>
@@ -7050,21 +7163,32 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             )}
 
                             {/* Related Entity Badge */}
-                            {task.related_type === 'contact' && task.related_id && (
-                              <div style={{ marginBottom: '6px' }} onClick={e => e.stopPropagation()}>
-                                <span
-                                  style={{
-                                    fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px',
-                                    color: 'var(--color-text, #334155)', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', border: '1px solid var(--color-border-light, rgba(0,0,0,0.05))', display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                    cursor: 'pointer'
-                                  }}
-                                  onClick={() => handleOpenContactProfile(Number(task.related_id))}
-                                >
-                                  <Avatar name={formatVietnameseFullName(task.contact_name || t('Khách hàng'))} size={12} />
-                                  {formatVietnameseFullName(task.contact_name || t('Khách hàng'))}
-                                </span>
-                              </div>
-                            )}
+                            {/* Related Entity Badge */}
+                            {(() => {
+                              const hasKanbanContact = Boolean((task.related_type === 'contact' && task.related_id) || task.contact_name || task.contact_id);
+                              const kContactId = task.contact_id || (task.related_type === 'contact' ? task.related_id : null);
+                              const kContactName = formatVietnameseFullName(task.contact_name || (task.related_type === 'contact' ? t('Khách hàng') : ''));
+                              if (!hasKanbanContact || !kContactName) return null;
+
+                              return (
+                                <div style={{ marginBottom: '6px' }} onClick={e => e.stopPropagation()}>
+                                  <span
+                                    style={{
+                                      fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px',
+                                      color: 'var(--color-text, #334155)', background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))', border: '1px solid var(--color-border-light, rgba(0,0,0,0.05))', display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      cursor: kContactId ? 'pointer' : 'default'
+                                    }}
+                                    onClick={() => {
+                                      if (kContactId) handleOpenContactProfile(Number(kContactId));
+                                    }}
+                                    title={kContactName}
+                                  >
+                                    <Avatar src={task.contact_avatar} name={kContactName} size={13} />
+                                    {kContactName}
+                                  </span>
+                                </div>
+                              );
+                            })()}
 
                             {/* Tags */}
                             {task.tags && (
@@ -18668,6 +18792,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             isFocusSessionActive={isFocusSessionActive}
             focusTaskIndex={focusTaskIndex}
             onNextFocusTask={handleNextFocusTask}
+            onOpenFocusMode={() => setWsViewMode('focus')}
           />
         </Suspense>
       )}

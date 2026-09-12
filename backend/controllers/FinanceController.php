@@ -690,8 +690,18 @@ class FinanceController
             $where[] = '(e.amount > 0 OR (e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%" AND e.title NOT LIKE "%văn phòng phẩm%" AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"))';
         }
         if ($category) {
-            $where[] = 'e.category=?';
-            $params[] = $category;
+            if ($category === 'Vận Chuyển' || $category === 'Di chuyển') {
+                $where[] = '(e.category = ? OR e.category = ?)';
+                $params[] = 'Vận Chuyển';
+                $params[] = 'Di chuyển';
+            } elseif ($category === 'Văn phòng phẩm' || $category === 'Công cụ') {
+                $where[] = '(e.category = ? OR e.category = ?)';
+                $params[] = 'Văn phòng phẩm';
+                $params[] = 'Công cụ';
+            } else {
+                $where[] = 'e.category=?';
+                $params[] = $category;
+            }
         }
         if ($from) {
             $where[] = 'e.date >= ?';
@@ -1192,6 +1202,12 @@ class FinanceController
             $row = $check->fetch();
             if (!$row)
                 respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
+
+            $isCreator = (int)($row['created_by'] ?? 0) === (int)$auth['user_id'];
+            $updatingGeneralFields = !empty(array_intersect(array_keys($data), ['title', 'category', 'amount', 'vat_amount', 'date', 'notes', 'vendor_name', 'entities']));
+            if (!$isCreator && $updatingGeneralFields) {
+                respond(403, null, 'Chỉ người tạo phiếu mới có quyền chỉnh sửa chi phí', false);
+            }
 
             $currentTotal = (float) ($data['amount'] ?? $row['amount']);
             if ($currentTotal < 0) respond(422, null, 'Số tiền chi phí không được âm', false);

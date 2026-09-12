@@ -6,6 +6,7 @@ type User = {
   id?: number;
   username: string;
   name: string;
+  full_name?: string;
   role: 'superadmin' | 'admin' | 'manager' | 'director' | 'assistant' | 'viewer' | 'sale' | 'hr' | 'accountant' | 'marketing';
   email?: string;
   consultant_id?: number;

@@ -29,7 +29,7 @@ const getInitials = (name: string) => {
   return cleaned[0].toUpperCase();
 };
 
-const getColorFromName = (name: string) => {
+export const getColorFromName = (name: string) => {
   const colors = [
     '#007AFF', // iOS Blue
     '#34C759', // iOS Green
@@ -127,15 +127,17 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
 
   const calcFontSize = React.useMemo(() => {
     if (initials.length >= 2) {
-      if (finalSize <= 18) return 6;
+      if (finalSize <= 16) return 4.8;
+      if (finalSize <= 18) return 5.5;
       if (finalSize <= 20) return 6.5;
       if (finalSize <= 24) return 7.5;
       if (finalSize <= 32) return 9.5;
       return Math.floor(finalSize * 0.32);
     }
-    if (finalSize <= 18) return 7.5;
-    if (finalSize <= 20) return 8.5;
-    if (finalSize <= 24) return 10;
+    if (finalSize <= 16) return 6;
+    if (finalSize <= 18) return 7;
+    if (finalSize <= 20) return 8;
+    if (finalSize <= 24) return 9.5;
     return Math.floor(finalSize * 0.38);
   }, [finalSize, initials.length]);
 
@@ -146,8 +148,12 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
       style={{ 
         width: finalSize, 
         height: finalSize, 
-        fontSize: `${calcFontSize}px`,
+        minWidth: finalSize,
+        minHeight: finalSize,
+        flexShrink: 0,
         backgroundColor: resolvedSrc && !hasError ? 'transparent' : bgColor,
+        boxShadow: finalSize <= 18 ? 'none' : undefined,
+        border: finalSize <= 18 ? 'none' : undefined,
         ...style 
       }}
     >
@@ -159,7 +165,26 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, size = 'md', classNam
           onError={() => setHasError(true)} 
         />
       ) : (
-        <span className={styles.initials} style={{ letterSpacing: initials.length >= 2 ? '-0.02em' : 'normal' }}>{initials}</span>
+        <svg
+          viewBox="0 0 32 32"
+          width="100%"
+          height="100%"
+          style={{ display: 'block', pointerEvents: 'none', flexShrink: 0 }}
+        >
+          <text
+            x="50%"
+            y="52%"
+            dominantBaseline="central"
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={initials.length >= 2 ? "11" : "15"}
+            fontWeight="700"
+            letterSpacing={initials.length >= 2 ? "-0.5px" : "normal"}
+            fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          >
+            {initials}
+          </text>
+        </svg>
       )}
     </div>
   );

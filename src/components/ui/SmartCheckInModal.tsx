@@ -6,6 +6,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { fetchAPI } from '../../utils/api';
 import toast from 'react-hot-toast';
 import { CheckOutConfirmModal } from './CheckOutConfirmModal';
+import { triggerFullConfetti } from '../../utils/confettiHelper';
 
 // Module-level in-memory cache for ultra-fast location and address retrieval (0ms retrieval if recent)
 let globalCachedGPS: { coords: { latitude: number; longitude: number }; timestamp: number } | null = null;
@@ -504,25 +505,25 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
   }, [isCameraActive, capturedImage, isSuccessScreen, isLate, isCheckOutMode]);
 
   // Submit Check-in API (Ultra-optimized single-pass upload, non-blocking GPS)
-  const submitCheckIn = async (overrideImage?: string, overrideBlob?: Blob | null, confirmedCheckOut = false) => {
+  const submitCheckIn = async (overrideImage?: string, overrideBlob?: Blob | null, confirmedCheckOut = false): Promise<boolean> => {
     if (isBlockedEarlyCheckOut) {
       toast.error(t(`Không thể chấm công Ra ca trước khi ca làm việc bắt đầu (${morningShiftStart}).`));
-      return;
+      return false;
     }
 
     if (isBlockedLateCheckIn) {
       toast.error(t(`Đã quá giờ tan ca hôm nay (${afternoonShiftEnd}). Vui lòng tạo phiếu Cập nhật / Giải trình công để Quản lý phê duyệt.`));
-      return;
+      return false;
     }
 
     const imageToUse = overrideImage || capturedImage;
     const blobToUse = overrideBlob !== undefined ? overrideBlob : capturedBlob;
 
-    if (!imageToUse || submitting) return;
+    if (!imageToUse || submitting) return false;
 
     if (isCheckOutMode && !confirmedCheckOut) {
       setShowCheckOutConfirmModal(true);
-      return;
+      return false;
     }
 
     setSubmitting(true);
@@ -570,7 +571,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       if (!uploadRes.success || !uploadRes.data?.url) {
         toast.error(uploadRes.message || t('Lỗi tải ảnh lên'));
         setSubmitting(false);
-        return;
+        return false;
       }
 
       const res = await fetchAPI('check-ins', {
@@ -595,24 +596,32 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
 
         setSuccessMeta({ time: timeStr, date: dateStr, isLate, isCheckOut: isCheckOutMode });
         setIsSuccessScreen(true);
+        triggerFullConfetti();
 
         onCheckInSuccess();
         window.dispatchEvent(new CustomEvent('checkin-status-changed'));
         window.dispatchEvent(new CustomEvent('attendance-updated'));
         window.dispatchEvent(new CustomEvent('refresh-attendance'));
 
-        // Auto close modal after 1s
+        // Auto close modal after 2.2s
         setTimeout(() => {
           setIsSuccessScreen(false);
+          setShowCheckOutConfirmModal(false);
           onClose();
-        }, 1000);
+        }, 2200);
+
+        setSubmitting(false);
+        return true;
       } else {
         toast.error(res.message || t('Check-in thất bại'));
+        setSubmitting(false);
+        return false;
       }
     } catch (err: any) {
       toast.error(t('Lỗi check-in: ') + err.message);
+      setSubmitting(false);
+      return false;
     }
-    setSubmitting(false);
   };
 
   const circumference = 2 * Math.PI * 135; // r = 135
@@ -633,6 +642,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
       maxWidth="500px"
       fullScreenOnMobile={false}
       modalClassName="checkin-modal-dark"
+      zIndex={2000000000}
     >
       {/* 1. Blocked Early Check-Out State */}
       {isBlockedEarlyCheckOut && !isSuccessScreen ? (
@@ -856,9 +866,9 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
             <span>{successMeta?.time || ''} • {successMeta?.date || ''}</span>
           </div>
 
-          {/* 1s Animated Countdown Progress Bar */}
+          {/* 2.2s Animated Countdown Progress Bar */}
           <div style={{ width: '100%', maxWidth: '260px', height: 4, background: 'var(--color-border-light)', borderRadius: 99, overflow: 'hidden', margin: '0 auto 1.5rem auto' }}>
-            <div className="checkin-progress-bar" style={{ height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', borderRadius: 99, animation: 'checkin-progress-fill 1s linear forwards' }} />
+            <div className="checkin-progress-bar" style={{ height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', borderRadius: 99, animation: 'checkin-progress-fill 2.2s linear forwards' }} />
           </div>
         </div>
       ) : (
@@ -1281,6 +1291,7 @@ export const SmartCheckInModal: React.FC<SmartCheckInModalProps> = ({
         isEarly={isEarlyCheckOut}
         earlyMinutes={getEarlyMinutesCheckOut()}
         submitting={submitting}
+        zIndex={2147483647}
       />
     </>
   );

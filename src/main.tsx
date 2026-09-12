@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initAttachmentDownloadInterceptor } from './utils/fileDownloader'
+
+// Initialize global comment attachment download interceptor
+initAttachmentDownloadInterceptor();
 
 // Build version: 2026.09.07.1514
 console.log('%cPower by Turniodev (v20260907_1515)', 'color: red; font-weight: bold; font-size: 14px;');

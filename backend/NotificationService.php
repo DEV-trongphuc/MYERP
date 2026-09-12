@@ -28,6 +28,24 @@ class NotificationService {
     }
 
     /**
+     * Clean raw HTML tags, entities like &nbsp;, multiple whitespace from notification text
+     */
+    public static function cleanText($str): string {
+        if (!is_string($str) || $str === '') return '';
+        // 1. Strip HTML tags
+        $clean = strip_tags($str);
+        // 2. Decode HTML entities (decode twice in case of &amp;nbsp;)
+        $clean = html_entity_decode($clean, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $clean = html_entity_decode($clean, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // 3. Replace non-breaking spaces and invisible characters
+        $clean = str_ireplace('&nbsp;', ' ', $clean);
+        $clean = preg_replace('/[\xc2\xa0\x{00a0}\x{200b}\x{200c}\x{200d}\x{feff}]/u', ' ', $clean);
+        // 4. Collapse multiple spaces into one space
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        return trim($clean);
+    }
+
+    /**
      * Dispatch notification across all 4 independent channels (In-App Bell, Zalo Bot, Telegram Bot, Email)
      * 
      * @param PDO $db
@@ -131,12 +149,14 @@ class NotificationService {
                             INSERT INTO notifications (user_id, tenant_id, title, body, type, link, is_read, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
                         ");
+                        $cleanTitle = self::cleanText($title);
+                        $cleanBody = self::cleanText($body);
                         $insertedUserIds = [];
                         foreach ($bellRecipients as $rec) {
                             $rId = (int)($rec['id'] ?? 0);
                             if ($rId > 0 && !in_array($rId, $insertedUserIds, true) && $isChannelEnabled($rId, 'bell')) {
                                 $insertedUserIds[] = $rId;
-                                $insertNotif->execute([$rId, $tenantId, $title, $body, $type, $link]);
+                                $insertNotif->execute([$rId, $tenantId, $cleanTitle, $cleanBody, $type, $link]);
                             }
                         }
                     }
@@ -1385,7 +1405,7 @@ class NotificationService {
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
                 $authorName = $payload['author_name'] ?? 'Đồng nghiệp';
                 $commentText = $payload['comment'] ?? 'đã nhắc tên bạn';
-                $commentTextPlain = strip_tags($commentText); // strip html tags for cleaner view
+                $commentTextPlain = self::cleanText($commentText); // strip html tags, &nbsp; and decode entities cleanly
                 
                 $targetLink = $payload['link'] ?? '/';
                 $stmtFe = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'frontend_url' LIMIT 1");

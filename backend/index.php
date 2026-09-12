@@ -944,6 +944,13 @@ switch ($resource) {
         else respond(404, null, 'Route không tồn tại', false);
         break;
 
+    // DOWNLOAD FILE
+    case 'download-file':
+        require_once __DIR__ . '/controllers/UploadController.php';
+        $ctrl = new UploadController($db);
+        $ctrl->downloadFile();
+        break;
+
     // PRODUCTS
     case 'products':
         $auth = requireAuth();

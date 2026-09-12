@@ -32,12 +32,15 @@ export const BankSelect: React.FC<BankSelectProps> = ({
   }, []);
 
   const options: SelectOption[] = useMemo(() => {
-    return VIETNAM_BANKS.map((b) => ({
-      value: b.shortName,
-      label: `${b.shortName} (${b.code})`,
-      sublabel: b.name,
-      icon: <BankLogo logoUrl={b.logo} bank={b.shortName} width={50} height={32} />
-    }));
+    return VIETNAM_BANKS.map((b) => {
+      const displayCode = (b.code && b.code.toUpperCase() !== b.shortName.toUpperCase()) ? ` (${b.code})` : '';
+      return {
+        value: b.shortName,
+        label: `${b.shortName}${displayCode}`,
+        sublabel: b.name,
+        icon: <BankLogo logoUrl={b.logo} bank={b.shortName} width={32} height={20} />
+      };
+    });
   }, []);
 
   // Standardize existing value (e.g., 'HD bank' -> 'HDBank')
@@ -65,6 +68,7 @@ export const BankSelect: React.FC<BankSelectProps> = ({
         width="100%"
         direction={direction}
         disabled={disabled}
+        hideSelectedSublabel={true}
       />
     </div>
   );

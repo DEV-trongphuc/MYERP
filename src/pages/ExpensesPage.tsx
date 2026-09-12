@@ -32,11 +32,11 @@ const PAGE_SIZE = 10;
 
 
 const CATEGORIES = [
-  { label: 'Di chuyển', icon: Truck, color: '#3b82f6' },
+  { label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
   { label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
   { label: 'Vận hành', icon: Home, color: '#10b981' },
   { label: 'Marketing', icon: Briefcase, color: '#ef4444' },
-  { label: 'Công cụ', icon: CreditCard, color: '#BD1D2D' },
+  { label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
   { label: 'Nhân sự', icon: Tag, color: '#06b6d4' },
 ];
 
@@ -350,7 +350,11 @@ export const ExpensesPage: React.FC = () => {
 
   const catBreakdown = CATEGORIES.map(c => ({
     ...c,
-    total: items.filter(e => e.category === c.label).reduce((s, e) => s + Number(e.amount), 0),
+    total: items.filter(e => {
+      if (c.label === 'Vận Chuyển') return e.category === 'Vận Chuyển' || e.category === 'Di chuyển';
+      if (c.label === 'Văn phòng phẩm') return e.category === 'Văn phòng phẩm' || e.category === 'Công cụ';
+      return e.category === c.label;
+    }).reduce((s, e) => s + Number(e.amount), 0),
   })).sort((a, b) => b.total - a.total).filter(c => c.total > 0);
 
   const openCreate = () => { 
@@ -364,6 +368,14 @@ export const ExpensesPage: React.FC = () => {
     setShowModal(true); 
   };
   const openEdit = (item: any) => { 
+    if (item && item.id && !item.isClone) {
+      const creatorId = Number(item.created_by || item.user_id);
+      const currentUserId = Number(user?.id);
+      if (creatorId && currentUserId && creatorId !== currentUserId) {
+        addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
+        return;
+      }
+    }
     setEditItem(item); 
     setVendorSearch(item.vendor_name || '');
 
@@ -498,7 +510,12 @@ export const ExpensesPage: React.FC = () => {
     return false;
   };
 
-  const getCatInfo = (label: string) => CATEGORIES.find(c => c.label === label) || { color: '#6b7280', icon: Tag };
+  const getCatInfo = (label: string) => {
+    let normalized = label;
+    if (normalized === 'Di chuyển' || normalized === 'Vận chuyển') normalized = 'Vận Chuyển';
+    if (normalized === 'Công cụ' || normalized === 'công cụ') normalized = 'Văn phòng phẩm';
+    return CATEGORIES.find(c => c.label === normalized) || { color: '#6b7280', icon: Tag };
+  };
 
   const renderTimeline = () => {
     if (!viewItem) return null;
@@ -1538,7 +1555,9 @@ export const ExpensesPage: React.FC = () => {
                         <div className="flex gap-1" style={{ justifyContent: 'flex-end' }}>
                           {exp.status !== 'approved' && (
                             <>
-                              <button className="btn-icon sm" title="Sửa" onClick={(e) => { e.stopPropagation(); openEdit(exp); }}><Pencil size={13} /></button>
+                              {Number(user?.id) === Number(exp.created_by || exp.user_id) && (
+                                <button className="btn-icon sm" title="Sửa" onClick={(e) => { e.stopPropagation(); openEdit(exp); }}><Pencil size={13} /></button>
+                              )}
                               <button className="btn-icon sm text-danger" title="Xóa" onClick={(e) => {
                                 e.stopPropagation();
                                 showConfirm({
@@ -1707,7 +1726,7 @@ export const ExpensesPage: React.FC = () => {
                       </div>
                     )}
                     {/* Pencil Edit Action next to status badge */}
-                    {viewItem.status !== 'approved' && (
+                    {viewItem.status !== 'approved' && Number(user?.id) === Number(viewItem.created_by || viewItem.user_id) && (
                       <button 
                         className="btn secondary sm" 
                         style={{ 
@@ -2214,62 +2233,90 @@ export const ExpensesPage: React.FC = () => {
                           })()}
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Áp dụng cho đối tượng</span>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
-                            {(viewItem.entities && viewItem.entities.length > 0) ? (
-                              viewItem.entities.map((e: any, idx: number) => {
-                                const typeText = e.entity_type === 'contact' ? 'KHTN' : (e.entity_type === 'company' ? 'Công ty' : 'Cơ hội');
-                                return (
-                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.775rem' }}>
-                                    {e.entity_type === 'contact' && (
-                                      <Avatar src={e.avatar_url} name={e.name} size={16} />
-                                    )}
-                                    <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                                      {e.name || e.entity_id}
-                                    </span>
-                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
-                                      ({typeText}{Number(e.amount) > 0 ? ': ' + FMT(e.amount, viewItem.currency) : ''})
-                                    </span>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Không áp dụng</span>
-                            )}
-                          </div>
-                        </div>
+                        {/* Chi tiết đề xuất (thay thế Áp dụng cho đối tượng & Người liên quan) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Chi tiết đề xuất</span>
+                          {(() => {
+                            const rawNotes = viewItem.notes || viewItem.description || '';
+                            
+                            const extractMetaField = (text: string, label: string) => {
+                              const reg = new RegExp(`${label}:\\s*([^\\n]+(?:\\n(?!Vị trí:|Phòng ban:|Nội dung đề xuất:|Lý do:|DANH SÁCH|\\[Tài liệu|\\[Lặp lại|\\[Thanh toán)[^\\n]+)*)`, 'i');
+                              const m = text.match(reg);
+                              return m ? m[1].trim() : '';
+                            };
 
-                        {/* Người liên quan (Theo dõi) */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2', borderTop: '1px dotted var(--color-border-light)', paddingTop: '10px' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Người liên quan (Theo dõi)</span>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
-                            {(() => {
-                              const relIdsRaw = viewItem.related_user_ids;
-                              let relIds: number[] = [];
-                              if (Array.isArray(relIdsRaw)) relIds = relIdsRaw.map(Number);
-                              else if (typeof relIdsRaw === 'string' && relIdsRaw.trim()) {
-                                try {
-                                  const parsed = JSON.parse(relIdsRaw);
-                                  if (Array.isArray(parsed)) relIds = parsed.map(Number);
-                                  else relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
-                                } catch {
-                                  relIds = relIdsRaw.split(',').map(s => Number(s.trim())).filter(Boolean);
-                                }
-                              }
-                              const relUsers = users.filter((u: any) => relIds.includes(Number(u.id)));
-                              if (relUsers.length === 0) {
-                                return <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Không có</span>;
-                              }
-                              return relUsers.map((u: any) => (
-                                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.775rem' }}>
-                                  <Avatar src={u.avatar_url || u.avatar} name={u.full_name || u.name} size={16} />
-                                  <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{u.full_name || u.name}</span>
-                                  {u.role && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>({u.role})</span>}
+                            const contentVal = extractMetaField(rawNotes, 'Nội dung đề xuất');
+                            const reasonVal = extractMetaField(rawNotes, 'Lý do');
+                            const detailsMatch = rawNotes.match(/Chi tiết:\s*([\s\S]+?)(?=\n\n|\n\[|$)/i);
+                            const detailText = detailsMatch ? detailsMatch[1].trim() : '';
+
+                            let cleanNotes = rawNotes
+                              .replace(/\[Thông tin chuyển khoản\]:[^\n]*/gi, '')
+                              .replace(/\[Thanh toán theo đợt\]:[^\n]*/gi, '')
+                              .replace(/\[Lặp lại định kỳ\]:[^\n]*/gi, '')
+                              .replace(/\[Hồ sơ chi phí\]:[^\n]*/gi, '')
+                              .replace(/Phòng ban:[^\n]*/gi, '')
+                              .replace(/Vị trí:[^\n]*/gi, '')
+                              .replace(/Đối tượng:[^\n]*/gi, '')
+                              .replace(/Thụ hưởng[^:]*:[^\n]*/gi, '')
+                              .replace(/Hình thức:[^\n]*/gi, '')
+                              .replace(/DANH SÁCH VĂN PHÒNG PHẨM[\s\S]*?(?=\n\n|$)/gi, '')
+                              .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*?(?=\n\n|$)/gi, '')
+                              .replace(/^Số tiền:\s*0\s*đ\.\s*Ghi chú:\s*"?/i, '')
+                              .replace(/"$/, '')
+                              .trim();
+
+                            if (contentVal || reasonVal) {
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  {contentVal && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Nội dung / Giải trình:</span>
+                                      <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                        {contentVal}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {reasonVal && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Lý do đề xuất:</span>
+                                      <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                        {reasonVal}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                              ));
-                            })()}
-                          </div>
+                              );
+                            }
+
+                            if (detailText) {
+                              return (
+                                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                  {detailText}
+                                </div>
+                              );
+                            }
+
+                            if (cleanNotes) {
+                              return (
+                                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                  {cleanNotes}
+                                </div>
+                              );
+                            }
+
+                            if (viewItem.description) {
+                              return (
+                                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text)', background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', padding: '8px 12px', borderRadius: '8px', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                                  {viewItem.description}
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <span style={{ fontStyle: 'italic', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Chưa có chi tiết đề xuất</span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

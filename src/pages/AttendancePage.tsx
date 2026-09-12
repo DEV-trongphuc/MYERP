@@ -12,13 +12,14 @@ import { TableRowSkeleton } from '../components/ui/Skeleton';
 import { CustomSelect } from '../components/ui/CustomSelect';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 import api from '../api/axios';
-import { Clock, Calendar, Check, X, Trash2, Eye, ShieldAlert, AlertCircle, CheckCircle, Info, Download, Lightbulb, Upload, ChevronLeft, ChevronRight, Camera, Image, FileText, Zap, RefreshCw, Moon, MapPin, CheckSquare, Users, Plus, Home, ArrowLeft, UserPlus, Search, Loader2 } from 'lucide-react';
+import { Clock, Calendar, Check, X, Trash2, Eye, ShieldAlert, AlertCircle, CheckCircle, Info, Download, Lightbulb, Upload, ChevronLeft, ChevronRight, Camera, Image, FileText, Zap, RefreshCw, Moon, MapPin, CheckSquare, Users, Plus, Home, ArrowLeft, UserPlus, Search, Loader2, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PeriodFilter, getDateRange } from '../components/ui/PeriodFilter';
 import { useUIStore } from '../store/uiStore';
 import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { motion } from 'framer-motion';
-import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as checkCanApproveShifts, isRegularEmployee } from '../utils/roleUtils';
+import { canSelectAttendanceUser, canApproveAttendance, canApproveShifts as checkCanApproveShifts, isRegularEmployee, isHR, isExecutive } from '../utils/roleUtils';
+import * as XLSX from 'xlsx';
 
 const resolveAttachmentUrl = (path: string | null | undefined): string => {
   if (!path) return '';
@@ -668,6 +669,43 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     return dayExceptions;
   }, [dayExceptions, exceptionFilter]);
 
+  // Auto switch modal tab to the one that has data when opening day detail modal
+  useEffect(() => {
+    if (!selectedDateForDetail) return;
+    const checkinCount = calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).length;
+    const exceptionsCount = dayExceptions.length;
+    const shiftsCount = calendarShifts.filter(s => s.shift_date === selectedDateForDetail).length;
+
+    if (checkinCount > 0) {
+      setModalTab('checkin');
+    } else if (exceptionsCount > 0) {
+      setModalTab('requests');
+    } else if (shiftsCount > 0) {
+      setModalTab('night_duty');
+    } else {
+      setModalTab('checkin');
+    }
+  }, [selectedDateForDetail, dayExceptions.length]);
+
+  // Export company attendance summary states (HR / Admin only)
+  const canExportSummary = isHR(user, true) || Boolean((user as any)?.is_hr || (user as any)?.is_admin);
+  const [showExportSummaryModal, setShowExportSummaryModal] = useState(false);
+  const [exportMode, setExportMode] = useState<'month' | 'range'>('month');
+  const [exportMonth, setExportMonth] = useState<number>(() => currentMonth);
+  const [exportYear, setExportYear] = useState<number>(() => currentYear);
+  const [exportFromDate, setExportFromDate] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [exportToDate, setExportToDate] = useState<string>(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  });
+  const [exportDepartment, setExportDepartment] = useState<string>('all');
+  const [exportStandardDays, setExportStandardDays] = useState<number>(26);
+  const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
+
   // Shift registration approval states
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
@@ -871,6 +909,414 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     link.click();
     document.body.removeChild(link);
     toast.success(t('Đã xuất file chấm công ngày ') + date);
+  };
+
+  const handleExportCompanySummaryExcel = async () => {
+    let startDate = '';
+    let endDate = '';
+    let periodTitle = '';
+
+    if (exportMode === 'month') {
+      startDate = `${exportYear}-${String(exportMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(exportYear, exportMonth, 0).getDate();
+      endDate = `${exportYear}-${String(exportMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      periodTitle = `Tháng ${exportMonth}/${exportYear}`;
+    } else {
+      if (!exportFromDate || !exportToDate) {
+        toast.error(t('Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc'));
+        return;
+      }
+      if (exportFromDate > exportToDate) {
+        toast.error(t('Ngày bắt đầu không được lớn hơn ngày kết thúc'));
+        return;
+      }
+      startDate = exportFromDate;
+      endDate = exportToDate;
+      periodTitle = `Từ ngày ${exportFromDate} đến ${exportToDate}`;
+    }
+
+    setIsExportingExcel(true);
+    const toastId = toast.loading(t('Đang tổng hợp dữ liệu chấm công toàn công ty...'));
+
+    try {
+      // 1. Fetch checkins, shifts, leaves
+      const query = `check-ins&from=${startDate}&to=${endDate}&include_shifts=1&user_id=all`;
+      const res = await fetchAPI(query);
+      if (!res || !res.success) {
+        toast.error(res?.message || t('Không thể tải dữ liệu chấm công'), { id: toastId });
+        setIsExportingExcel(false);
+        return;
+      }
+
+      const allCheckIns: any[] = res.data?.check_ins || (Array.isArray(res.data) ? res.data : []);
+      const allShifts: any[] = res.data?.shifts || [];
+      const allLeaves: any[] = res.data?.leaves || [];
+
+      // 2. Fetch full user list if needed
+      let employees = usersList;
+      if (!employees || employees.length === 0) {
+        const uRes = await fetchAPI('users?all=1');
+        if (uRes && uRes.data && Array.isArray(uRes.data)) {
+          employees = uRes.data;
+          setUsersList(uRes.data);
+        }
+      }
+
+      if (!employees || employees.length === 0) {
+        toast.error(t('Không tìm thấy danh sách nhân sự'), { id: toastId });
+        setIsExportingExcel(false);
+        return;
+      }
+
+      // 3. Filter employees by department if specified
+      let filteredEmployees = employees;
+      if (exportDepartment !== 'all') {
+        filteredEmployees = employees.filter((u: any) => {
+          const uDept = String(u.department || '').toLowerCase().trim();
+          const uTeam = String(u.team_name || '').toLowerCase().trim();
+          const target = exportDepartment.toLowerCase().trim();
+          return uDept === target || uTeam === target || String(u.team_id) === String(exportDepartment);
+        });
+      }
+
+      // Sort employees by department then full_name
+      filteredEmployees = [...filteredEmployees].sort((a, b) => {
+        const deptCompare = String(a.department || '').localeCompare(String(b.department || ''), 'vi');
+        if (deptCompare !== 0) return deptCompare;
+        return String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi');
+      });
+
+      // 4. Compute summaries
+      const summaryRows: any[] = [];
+      const detailCheckInRows: any[] = [];
+      const detailLeaveRows: any[] = [];
+
+      let sumStdDays = 0;
+      let sumActDays = 0;
+      let sumAnnualLeave = 0;
+      let sumCompLeave = 0;
+      let sumSpecialLeave = 0;
+      let sumWfhDays = 0;
+      let sumUnpaidLeave = 0;
+      let sumLateCount = 0;
+      let sumLateMins = 0;
+      let sumEarlyMins = 0;
+      let sumSuppCount = 0;
+      let sumOtHours = 0;
+      let sumNightShifts = 0;
+      let sumWeekendShifts = 0;
+      let sumTotalPaidDays = 0;
+
+      filteredEmployees.forEach((emp: any, index: number) => {
+        const uid = Number(emp.id);
+        const empName = emp.full_name || emp.name || emp.username || `NV #${uid}`;
+        const empDept = emp.department || emp.team_name || 'Chung';
+        const empTitle = emp.job_title || emp.role || 'Nhân viên';
+        const empEmail = emp.email || '';
+
+        const uCheckIns = allCheckIns.filter((c: any) => Number(c.user_id) === uid);
+        const uLeaves = allLeaves.filter((l: any) => Number(l.user_id) === uid);
+        const uShifts = allShifts.filter((s: any) => Number(s.user_id) === uid);
+
+        // A. Leaves calculation
+        let annualDays = 0;
+        let compDays = 0;
+        let specialDays = 0;
+        let wfhDays = 0;
+        let unpaidDays = 0;
+
+        const waivedDates: string[] = [];
+        const halfLeaveDates = new Set<string>();
+
+        uLeaves.forEach((lv: any) => {
+          const isApproved = lv.status === 'approved' || lv.approved === 1;
+          if (!isApproved) return;
+
+          const days = Number(lv.total_days) || 1;
+          const type = lv.leave_type;
+          const sDate = lv.start_date_only || String(lv.start_date).slice(0, 10);
+          const eDate = lv.end_date_only || String(lv.end_date).slice(0, 10);
+
+          if (type === 'annual') {
+            annualDays += days;
+          } else if (type === 'compensatory') {
+            compDays += days;
+          } else if (type === 'remote_work') {
+            wfhDays += days;
+          } else if (type === 'unpaid') {
+            unpaidDays += days;
+          } else if (['special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'].includes(type)) {
+            specialDays += days;
+          } else if (type === 'late_early') {
+            waivedDates.push(sDate);
+          }
+
+          if (Number(lv.total_days) === 0.5) {
+            halfLeaveDates.add(sDate);
+          }
+
+          detailLeaveRows.push([
+            uid,
+            empName,
+            empDept,
+            type === 'annual' ? 'Phép năm' : (type === 'compensatory' ? 'Nghỉ bù' : (type === 'remote_work' ? 'WFH' : (type === 'unpaid' ? 'Không lương' : (type === 'late_early' ? 'Đi muộn/về sớm' : 'Chế độ/Khác')))),
+            sDate,
+            eDate,
+            days,
+            lv.status,
+            lv.reason || ''
+          ]);
+        });
+
+        // B. Check-ins & Work days
+        let actualDays = 0;
+        let lateCount = 0;
+        let lateMins = 0;
+        let earlyMins = 0;
+        let suppCount = 0;
+        const checkedDates = new Set<string>();
+
+        uCheckIns.forEach((ci: any) => {
+          const cDate = ci.check_in_date;
+          const isAppr = ci.status === 'approved';
+
+          if (isAppr && !checkedDates.has(cDate)) {
+            checkedDates.add(cDate);
+            if (halfLeaveDates.has(cDate)) {
+              actualDays += 0.5;
+            } else {
+              actualDays += 1.0;
+            }
+          }
+
+          const lMin = Number(ci.late_minutes) || 0;
+          const eMin = Number(ci.early_minutes) || 0;
+
+          if (lMin > 0 && !waivedDates.includes(cDate)) {
+            lateCount += 1;
+            lateMins += lMin;
+          }
+          if (eMin > 0) {
+            earlyMins += eMin;
+          }
+          if (!ci.selfie_url) {
+            suppCount += 1;
+          }
+
+          const checkOutStr = ci.check_out_time ? (ci.check_out_time.length > 8 ? ci.check_out_time.substring(11, 19) : ci.check_out_time) : '—';
+          detailCheckInRows.push([
+            cDate,
+            uid,
+            empName,
+            empDept,
+            ci.work_start_time || '08:00',
+            ci.check_in_time || '—',
+            checkOutStr,
+            ci.status === 'approved' ? 'Hợp lệ' : (ci.status === 'pending_approval' ? 'Chờ duyệt' : 'Từ chối'),
+            lMin,
+            eMin,
+            !ci.selfie_url ? 'Bổ sung công' : 'Chấm công GPS/Ảnh',
+            ci.reason || ''
+          ]);
+        });
+
+        // C. Shifts & OT
+        let otHours = 0;
+        let nightShifts = 0;
+        let weekendShifts = 0;
+
+        uShifts.forEach((s: any) => {
+          const isAppr = s.approved === 1 || s.status === 'approved';
+          if (!isAppr) return;
+
+          if (s.shift_type === 'overtime') {
+            otHours += Number(s.total_days) || 1;
+          } else if (s.shift_type === 'night') {
+            nightShifts += 1;
+          } else if (s.shift_type === 'weekend' || s.shift_type === 'holiday') {
+            weekendShifts += 1;
+          }
+        });
+
+        // D. Totals
+        const stdDays = exportStandardDays;
+        const totalPaidDays = Number((actualDays + annualDays + compDays + specialDays + wfhDays).toFixed(1));
+        const diffDays = Number((totalPaidDays - stdDays).toFixed(1));
+
+        sumStdDays += stdDays;
+        sumActDays += actualDays;
+        sumAnnualLeave += annualDays;
+        sumCompLeave += compDays;
+        sumSpecialLeave += specialDays;
+        sumWfhDays += wfhDays;
+        sumUnpaidLeave += unpaidDays;
+        sumLateCount += lateCount;
+        sumLateMins += lateMins;
+        sumEarlyMins += earlyMins;
+        sumSuppCount += suppCount;
+        sumOtHours += otHours;
+        sumNightShifts += nightShifts;
+        sumWeekendShifts += weekendShifts;
+        sumTotalPaidDays += totalPaidDays;
+
+        summaryRows.push([
+          index + 1,
+          uid,
+          empName,
+          empDept,
+          empTitle,
+          empEmail,
+          stdDays,
+          actualDays,
+          annualDays,
+          compDays,
+          specialDays,
+          wfhDays,
+          unpaidDays,
+          lateCount,
+          lateMins,
+          earlyMins,
+          suppCount,
+          otHours,
+          nightShifts,
+          weekendShifts,
+          totalPaidDays,
+          diffDays >= 0 ? `+${diffDays}` : `${diffDays}`,
+          diffDays >= 0 ? 'Đủ công' : `Thiếu ${Math.abs(diffDays)} công`
+        ]);
+      });
+
+      // 5. Create Workbook & Sheets
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Bảng tổng hợp công
+      const sheet1Data = [
+        ['CÔNG TY CỔ PHẦN ĐÀO TẠO & PHÁT TRIỂN NGUỒN NHÂN LỰC Ý TƯỞNG (IDEAS)'],
+        ['BẢNG TỔNG HỢP CÔNG VÀ BIẾN ĐỘNG NHÂN SỰ TOÀN CÔNG TY'],
+        [`Kỳ thống kê: ${periodTitle} | Phòng ban: ${exportDepartment === 'all' ? 'Toàn bộ công ty' : exportDepartment} | Ngày xuất: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')}`],
+        [],
+        [
+          'STT',
+          'Mã NV',
+          'Họ và tên',
+          'Phòng ban / Team',
+          'Chức vụ',
+          'Email',
+          'Công chuẩn',
+          'Công thực tế',
+          'Nghỉ phép năm',
+          'Nghỉ bù',
+          'Nghỉ chế độ',
+          'Làm việc WFH',
+          'Nghỉ không lương',
+          'Số lần trễ',
+          'Tổng phút trễ',
+          'Phút về sớm',
+          'Bổ sung công (lần)',
+          'Tăng ca OT (giờ)',
+          'Trực đêm (ca)',
+          'Trực tuần/lễ (ca)',
+          'TỔNG CÔNG TÍNH LƯƠNG',
+          'Chênh lệch',
+          'Đánh giá'
+        ],
+        ...summaryRows,
+        [
+          'TỔNG CỘNG',
+          '',
+          '',
+          '',
+          '',
+          '',
+          sumStdDays,
+          Number(sumActDays.toFixed(1)),
+          Number(sumAnnualLeave.toFixed(1)),
+          Number(sumCompLeave.toFixed(1)),
+          Number(sumSpecialLeave.toFixed(1)),
+          Number(sumWfhDays.toFixed(1)),
+          Number(sumUnpaidLeave.toFixed(1)),
+          sumLateCount,
+          sumLateMins,
+          sumEarlyMins,
+          sumSuppCount,
+          Number(sumOtHours.toFixed(1)),
+          sumNightShifts,
+          sumWeekendShifts,
+          Number(sumTotalPaidDays.toFixed(1)),
+          '',
+          ''
+        ]
+      ];
+
+      const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+      ws1['!cols'] = [
+        { wch: 6 },  // STT
+        { wch: 8 },  // Mã NV
+        { wch: 24 }, // Họ tên
+        { wch: 20 }, // Phòng ban
+        { wch: 18 }, // Chức vụ
+        { wch: 26 }, // Email
+        { wch: 12 }, // Công chuẩn
+        { wch: 14 }, // Công thực tế
+        { wch: 14 }, // Phép năm
+        { wch: 12 }, // Nghỉ bù
+        { wch: 14 }, // Nghỉ chế độ
+        { wch: 14 }, // WFH
+        { wch: 16 }, // Không lương
+        { wch: 12 }, // Lần trễ
+        { wch: 14 }, // Phút trễ
+        { wch: 14 }, // Về sớm
+        { wch: 18 }, // Bổ sung công
+        { wch: 16 }, // OT
+        { wch: 14 }, // Trực đêm
+        { wch: 16 }, // Trực tuần
+        { wch: 22 }, // TỔNG CÔNG TÍNH LƯƠNG
+        { wch: 14 }, // Chênh lệch
+        { wch: 18 }  // Đánh giá
+      ];
+      XLSX.utils.book_append_sheet(wb, ws1, 'Tổng hợp công');
+
+      // Sheet 2: Chi tiết Check-in
+      const sheet2Data = [
+        ['CHI TIẾT LƯỢT CHẤM CÔNG (CHECK-IN / OUT)'],
+        [`Kỳ thống kê: ${periodTitle}`],
+        [],
+        ['Ngày', 'Mã NV', 'Họ và tên', 'Phòng ban', 'Giờ quy định', 'Giờ check-in', 'Giờ check-out', 'Trạng thái', 'Phút trễ', 'Phút về sớm', 'Phương thức', 'Lý do'],
+        ...detailCheckInRows
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+      ws2['!cols'] = [
+        { wch: 14 }, { wch: 8 }, { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 30 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Chi tiết Check-in');
+
+      // Sheet 3: Chi tiết Đơn từ & Biến động
+      const sheet3Data = [
+        ['CHI TIẾT ĐƠN NGHỈ PHÉP, WFH, BIẾN ĐỘNG & CA TRỰC'],
+        [`Kỳ thống kê: ${periodTitle}`],
+        [],
+        ['Mã NV', 'Họ và tên', 'Phòng ban', 'Loại biến động / Đơn', 'Từ ngày', 'Đến ngày', 'Số ngày / công', 'Trạng thái', 'Lý do / Nội dung'],
+        ...detailLeaveRows
+      ];
+      const ws3 = XLSX.utils.aoa_to_sheet(sheet3Data);
+      ws3['!cols'] = [
+        { wch: 8 }, { wch: 24 }, { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 35 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws3, 'Chi tiết Đơn & Ca');
+
+      // Download file
+      const safePeriodName = exportMode === 'month' ? `Thang_${exportMonth}_${exportYear}` : `${exportFromDate}_den_${exportToDate}`;
+      const fileName = `Bang_Tong_Hop_Cong_IDEAS_${safePeriodName}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success(t('Đã tải xuống bảng tổng hợp công Excel thành công!'), { id: toastId });
+      setShowExportSummaryModal(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(t('Lỗi khi xuất file Excel: ') + (err?.message || ''), { id: toastId });
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   const handleGoToToday = () => {
@@ -4250,6 +4696,351 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       </CustomModal>
     );
   };
+
+  const departmentList = useMemo(() => {
+    const depts = new Set<string>();
+    usersList.forEach((u: any) => {
+      if (u.department && String(u.department).trim()) depts.add(String(u.department).trim());
+      if (u.team_name && String(u.team_name).trim()) depts.add(String(u.team_name).trim());
+    });
+    teamsList.forEach((t: any) => {
+      if (t.name && String(t.name).trim()) depts.add(String(t.name).trim());
+    });
+    return Array.from(depts).sort();
+  }, [usersList, teamsList]);
+
+  const renderExportSummaryModal = () => {
+    if (!showExportSummaryModal) return null;
+
+    return (
+      <CustomModal
+        isOpen={showExportSummaryModal}
+        onClose={() => setShowExportSummaryModal(false)}
+        title={t('Xuất Bảng Công Tổng Hợp Toàn Công Ty')}
+        width="600px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '4px 0' }}>
+          {/* Top Banner */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%)',
+            border: '1px solid rgba(5, 150, 105, 0.2)',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '8px',
+              background: '#059669',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <FileSpreadsheet size={22} />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                {t('Tổng Hợp Dữ Liệu Công & Biến Động Nhân Sự')}
+              </h4>
+              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                {t('Xuất file Excel (.xlsx) gồm công thực tế, đủ/thiếu công, phép năm, nghỉ bù, đi trễ, OT, trực ca để nhân sự tính lương.')}
+              </p>
+            </div>
+          </div>
+
+          {/* Time mode selection tabs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              {t('Phương thức chọn thời gian')}
+            </label>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              background: 'var(--color-bg-light)',
+              padding: '3px',
+              borderRadius: '10px',
+              border: '1px solid var(--color-border)',
+              gap: '4px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setExportMode('month')}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: exportMode === 'month' ? 'var(--color-surface)' : 'transparent',
+                  color: exportMode === 'month' ? '#059669' : 'var(--color-text-muted)',
+                  fontWeight: exportMode === 'month' ? 700 : 500,
+                  boxShadow: exportMode === 'month' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Calendar size={14} />
+                <span>{t('Theo Tháng')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setExportMode('range')}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: exportMode === 'range' ? 'var(--color-surface)' : 'transparent',
+                  color: exportMode === 'range' ? '#059669' : 'var(--color-text-muted)',
+                  fontWeight: exportMode === 'range' ? 700 : 500,
+                  boxShadow: exportMode === 'range' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.8125rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Clock size={14} />
+                <span>{t('Tùy chỉnh khoảng ngày')}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Time Pickers */}
+          {exportMode === 'month' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Tháng')}
+                </label>
+                <select
+                  className="input"
+                  value={exportMonth}
+                  onChange={(e) => setExportMonth(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem'
+                  }}
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{t('Tháng ')}{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Năm')}
+                </label>
+                <select
+                  className="input"
+                  value={exportYear}
+                  onChange={(e) => setExportYear(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem'
+                  }}
+                >
+                  {[2024, 2025, 2026, 2027, 2028].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Từ ngày')}
+                </label>
+                <input
+                  type="date"
+                  className="input"
+                  value={exportFromDate}
+                  onChange={(e) => setExportFromDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  {t('Đến ngày')}
+                </label>
+                <input
+                  type="date"
+                  className="input"
+                  value={exportToDate}
+                  onChange={(e) => setExportToDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem'
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Department filter & Standard days */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                {t('Phòng ban / Bộ phận')}
+              </label>
+              <select
+                className="input"
+                value={exportDepartment}
+                onChange={(e) => setExportDepartment(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: '0.8125rem'
+                }}
+              >
+                <option value="all">{t('Toàn bộ công ty (Tất cả nhân sự)')}</option>
+                {departmentList.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                {t('Công chuẩn (ngày)')}
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                className="input"
+                value={exportStandardDays}
+                onChange={(e) => setExportStandardDays(Math.max(1, Number(e.target.value) || 26))}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: '0.8125rem'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Info note */}
+          <div style={{
+            background: 'var(--color-bg-light)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            fontSize: '0.75rem',
+            color: 'var(--color-text-muted)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px'
+          }}>
+            <Info size={16} style={{ color: '#059669', marginTop: '1px', flexShrink: 0 }} />
+            <div style={{ lineHeight: 1.45 }}>
+              <strong>{t('Cấu trúc file Excel sẽ gồm 3 Sheet:')}</strong>
+              <div style={{ marginTop: '3px' }}>1. <strong>{t('Tổng hợp công')}</strong>: Bảng tổng kết đầy đủ công, bù, phép, trễ, OT, thiếu/đủ công của từng nhân viên & dòng tổng cộng toàn công ty.</div>
+              <div>2. <strong>{t('Chi tiết Check-in')}</strong>: Dữ liệu giờ vào/ra thực tế, phút trễ, về sớm từng ngày.</div>
+              <div>3. <strong>{t('Chi tiết Đơn & Ca')}</strong>: Danh sách các đơn nghỉ phép, WFH, tăng ca, trực đêm đã duyệt.</div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '12px' }}>
+            <button
+              type="button"
+              onClick={() => setShowExportSummaryModal(false)}
+              disabled={isExportingExcel}
+              className="btn outline"
+              style={{
+                borderRadius: '8px',
+                padding: '8px 16px',
+                fontSize: '0.8125rem',
+                fontWeight: 600
+              }}
+            >
+              {t('Hủy')}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportCompanySummaryExcel}
+              disabled={isExportingExcel}
+              className="btn hover-lift"
+              style={{
+                borderRadius: '8px',
+                padding: '8px 20px',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                backgroundColor: '#059669',
+                color: '#ffffff',
+                border: 'none',
+                cursor: isExportingExcel ? 'not-allowed' : 'pointer',
+                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {isExportingExcel ? (
+                <>
+                  <RefreshCw size={14} className="spin" />
+                  <span>{t('Đang tổng hợp & xuất file...')}</span>
+                </>
+              ) : (
+                <>
+                  <Download size={14} />
+                  <span>{t('Tải Bảng Công Excel (.xlsx)')}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </CustomModal>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: isMobile ? '120px' : '3rem' }}>
       {/* Header */}
@@ -4294,32 +5085,65 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             </button>
           </div>
 
-          {/* Right: Red Standalone Button for Leave/Attendance Requests */}
-          <button
-            onClick={() => setShowMenuModal(true)}
-            className="btn danger hover-lift"
-            style={{
-              borderRadius: '6px',
-              height: isMobile ? '26px' : '34px',
-              padding: isMobile ? '0 7px' : '0 16px',
-              fontWeight: 700,
-              fontSize: isMobile ? '0.68rem' : '0.8125rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '3px',
-              backgroundColor: 'var(--color-danger, #ef4444)',
-              color: '#ffffff',
-              border: 'none',
-              cursor: 'pointer',
-              boxShadow: '0 1px 4px rgba(239, 68, 68, 0.25)',
-              transition: 'all 0.2s',
-              flexShrink: 0,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            <FileText size={isMobile ? 10 : 14} />
-            <span>{t('Đơn xin phép')}</span>
-          </button>
+          {/* Right Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '8px', flexShrink: 0 }}>
+            {canExportSummary && (
+              <button
+                type="button"
+                onClick={() => setShowExportSummaryModal(true)}
+                className="btn hover-lift"
+                style={{
+                  borderRadius: '6px',
+                  height: isMobile ? '26px' : '34px',
+                  padding: isMobile ? '0 7px' : '0 13px',
+                  fontWeight: 700,
+                  fontSize: isMobile ? '0.68rem' : '0.8125rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: isMobile ? '2px' : '5px',
+                  backgroundColor: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(5, 150, 105, 0.25)',
+                  transition: 'all 0.2s',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap'
+                }}
+                title={t('Tải bảng tổng hợp công toàn công ty (Excel)')}
+              >
+                <Download size={isMobile ? 12 : 14} />
+                <span style={{ display: isMobile ? 'none' : 'inline' }}>{t('Xuất bảng công')}</span>
+              </button>
+            )}
+
+            {/* Red Standalone Button for Leave/Attendance Requests */}
+            <button
+              onClick={() => setShowMenuModal(true)}
+              className="btn danger hover-lift"
+              style={{
+                borderRadius: '6px',
+                height: isMobile ? '26px' : '34px',
+                padding: isMobile ? '0 7px' : '0 16px',
+                fontWeight: 700,
+                fontSize: isMobile ? '0.68rem' : '0.8125rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                backgroundColor: 'var(--color-danger, #ef4444)',
+                color: '#ffffff',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px rgba(239, 68, 68, 0.25)',
+                transition: 'all 0.2s',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <FileText size={isMobile ? 10 : 14} />
+              <span>{t('Đơn xin phép')}</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -5877,31 +6701,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           </table>
                         </div>
                       </div>
-
-                      {/* Upload finger-print official log zone */}
-                      <div style={{
-                        border: '2px dashed var(--color-border)',
-                        borderRadius: '10px',
-                        padding: '1rem',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        background: 'var(--color-surface)',
-                        transition: 'all 0.2s'
-                      }}
-                      onClick={() => {
-                        toast.success(t('Đã đồng bộ file chấm công vân tay / Excel của CĐT thành công!'));
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-primary)'}
-                      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border)'}
-                      >
-                        <Upload size={24} style={{ color: 'var(--color-text-muted)', margin: '0 auto 8px', opacity: 0.6 }} />
-                        <h5 style={{ fontWeight: 600, fontSize: '0.8125rem', margin: '0 0 4px', color: 'var(--color-text)' }}>
-                          {t('Đồng bộ File Chấm Công Vân Tay')}
-                        </h5>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--color-text-light)', margin: 0 }}>
-                          {t('Click để chọn hoặc kéo thả file Excel kết quả chấm công từ CĐT')}
-                        </p>
-                      </div>
                     </>
                   )}
                 </div>
@@ -7397,6 +8196,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       {renderLeaveDrawer()}
       {renderCreateLeaveModal()}
       {renderMenuModal()}
+      {renderExportSummaryModal()}
     </div>
   );
 };

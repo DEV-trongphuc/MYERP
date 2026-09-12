@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { fetchAPI } from '../utils/api';
-import { isItemAtMyStepToApprove as checkItemAtMyStepToApprove } from '../utils/approvalPermissions';
+import { isItemAtMyStepToApprove as checkItemAtMyStepToApprove, isMyRequestPendingApproval } from '../utils/approvalPermissions';
 import api from '../api/axios';
 import { 
   FileText, Calendar, CheckCircle2, XCircle, Clock,
@@ -12,7 +12,7 @@ import {
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon, Building2, Truck,
   GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
-  Landmark, Wallet, BarChart2, Palmtree, QrCode
+  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DraftExitConfirmModal } from '../components/ui/DraftExitConfirmModal';
@@ -500,6 +500,16 @@ export default function Approvals() {
     }
   }, [user?.id]);
 
+  const lastSavedSnapshotRef = useRef<string | null>(null);
+
+  const handleDeleteDraft = (draftId: string, silent = false) => {
+    const updated = draftsList.filter(d => d.id !== draftId);
+    setDraftsList(updated);
+    persistApprovalDrafts(updated, user?.id);
+    if (currentDraftId === draftId) setCurrentDraftId(null);
+    if (!silent) toast.success(t('Đã xóa bản nháp!'));
+  };
+
   const [recentWorkflows, setRecentWorkflows] = useState<any[]>([]);
 
   useEffect(() => {
@@ -878,6 +888,8 @@ export default function Approvals() {
     setSelectedWorkflowDef(item);
     setExpenseTitle(item.name);
     setWorkflowTitleSuffix('');
+    lastSavedSnapshotRef.current = null;
+    setCurrentDraftId(null);
     handleSelectWorkflow(item.id);
     if (item.id === 'advance_money') {
       setFormType('expense');
@@ -1020,13 +1032,11 @@ export default function Approvals() {
           continue;
         }
         const fd = new FormData();
-        fd.append('file', file);
-        const res = await api.post('/upload', fd, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        fd.append('file', file, file.name || 'image.png');
+        const res = await api.post('/upload', fd);
         if (res.data && res.data.success && res.data.data?.url) {
           uploaded.push({
-            name: file.name,
+            name: file.name || 'image.png',
             size: file.size,
             type: file.type,
             url: res.data.data.url
@@ -1042,332 +1052,56 @@ export default function Approvals() {
         toast.dismiss(toastId);
       }
     } catch (err: any) {
-      toast.error(t('Lỗi tải tệp lên: ') + (err?.message || ''), { id: toastId });
+      const errMsg = err?.response?.data?.message || err?.message || t('Lỗi kết nối máy chủ');
+      toast.error(t('Lỗi tải tệp lên: ') + errMsg, { id: toastId });
     } finally {
       setUploadingAttachments(false);
     }
   };
 
-  // --- DRAFT & EXIT CONFIRMATION HELPERS ---
-  const isFormDirty = () => {
-    if (!selectedWorkflowDef) return false;
-    if (expenseTitle && expenseTitle.trim() !== '') return true;
-    if (leaveReason && leaveReason.trim() !== '') return true;
-    if (paymentDetails && paymentDetails.trim() !== '') return true;
-    if (paymentBeneficiaryName && paymentBeneficiaryName.trim() !== '') return true;
-    if (paymentBankAccount && paymentBankAccount.trim() !== '') return true;
-    if (paymentAccountName && paymentAccountName.trim() !== '') return true;
-    if (paymentDestination && paymentDestination.trim() !== '') return true;
-    if (meetingClientName && meetingClientName.trim() !== '') return true;
-    if (pssRecipientName && pssRecipientName.trim() !== '') return true;
-    if (pssRecipientAddress && pssRecipientAddress.trim() !== '') return true;
-    if (pssRecipientPhone && pssRecipientPhone.trim() !== '') return true;
-    if (attachments && attachments.length > 0) return true;
-    if (stationeryItems && stationeryItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
-    if (expenseItems && expenseItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
-    if (relatedUserIds && relatedUserIds.length > 0) return true;
-    return false;
-  };
+  // Global / Modal-level paste listener for attachments (Ctrl + V)
+  useEffect(() => {
+    if (!showCreateModal || !selectedWorkflowDef) return;
 
-  const handleSaveCurrentDraft = (andExit = false) => {
-    if (!selectedWorkflowDef) return;
-    const draftId = currentDraftId || `draft_${Date.now()}`;
-    
-    let calcAmount = 0;
-    if (formType === 'general' || formType === 'expense') {
-      if (stationeryItems && stationeryItems.length > 0) {
-        calcAmount = stationeryItems.reduce((acc, it) => acc + ((Number(it.quantity) || 1) * (Number(it.price) || 0)) * (1 + (Number(it.vat !== undefined ? it.vat : 10) / 100)), 0);
-      }
-      if (calcAmount === 0 && expenseItems && expenseItems.length > 0) {
-        calcAmount = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0);
-      }
-    } else if (formType === 'advance') {
-      calcAmount = Number(paymentDetails) || 0;
-    }
+    const handlePaste = async (e: ClipboardEvent) => {
+      if (uploadingAttachments) return;
 
-    const fullDraftTitle = getFullWorkflowTitle();
-    const newDraft: ApprovalDraft = {
-      id: draftId,
-      userId: user?.id || 1003,
-      workflowDefId: selectedWorkflowDef.id,
-      workflowDefName: selectedWorkflowDef.name,
-      formType,
-      title: fullDraftTitle,
-      amount: calcAmount,
-      currency: currencyType || 'VND',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      formData: {
-        selectedWorkflowDef,
-        expenseTitle: fullDraftTitle,
-        workflowTitleSuffix,
-        expenseItems,
-        stationeryItems,
-        attachments,
-        relatedUserIds,
-        jobPosition,
-        departmentName,
-        paymentTarget,
-        paymentMethod,
-        paymentEmployeeId,
-        paymentSupplierId,
-        paymentLecturerId,
-        paymentContactId,
-        paymentBeneficiaryName,
-        paymentBankName,
-        paymentBankAccount,
-        paymentAccountName,
-        paymentBankBranch,
-        paymentPhone,
-        paymentTaxCode,
-        paymentDestination,
-        paymentWalletType,
-        paymentWalletPhone,
-        paymentCorporateCard,
-        paymentDetails,
-        currencyType,
-        formType,
-        leaveType,
-        leaveReason,
-        leaveFrom,
-        leaveTo,
-        leaveSession,
-        intermittentDates,
-        lateEarlyType,
-        lateEarlyMinutes,
-        otType,
-        otRate,
-        otDate,
-        otStart,
-        otEnd,
-        isRecurring,
-        recurringFrequency,
-        recurringEndDate,
-        meetingTargetType,
-        meetingSelectedEntityId,
-        meetingClientName,
-        meetingContactPerson,
-        meetingContactPhone,
-        meetingLocation,
-        meetingDate,
-        meetingTime,
-        meetingClientCount,
-        meetingInternalCount,
-        meetingPurpose,
-        meetingInternalAttendees,
-        meetingReimbursementMethod,
-        pssReqEmployeeId,
-        pssReqDate,
-        pssExecutorId,
-        pssSendMethod,
-        pssSendTimeFrame,
-        pssRecipientName,
-        pssRecipientAddress,
-        pssRecipientPhone,
-        pssRequiredSendDate,
-        advanceType,
-        advanceSettlementDate,
-        expenseCategory,
-        invoiceType,
-        customApprover1,
-        customApprover2,
-        customApprover3,
-        showStepManager,
-        showStepAccountant,
-        showStepDirector,
-        editingItemId,
-        editingItemType
+      // If user is inside MentionInput (comment box), let MentionInput handle comment attachments
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.closest('.mention-input') || activeEl.getAttribute('contenteditable') === 'true' || activeEl.classList.contains('mention-input-textarea'))) {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      const pastedFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+            const ext = item.type.split('/')[1] || 'png';
+            const namedFile = new File([file], file.name && file.name !== 'image.png' ? file.name : `ChungTu_${timestamp}_${i + 1}.${ext}`, { type: file.type });
+            pastedFiles.push(namedFile);
+          }
+        }
+      }
+
+      if (pastedFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        await handleUploadFiles(pastedFiles);
       }
     };
 
-    const updatedDrafts = [newDraft, ...draftsList.filter(d => d.id !== draftId)];
-    setDraftsList(updatedDrafts);
-    persistApprovalDrafts(updatedDrafts, user?.id);
-    setCurrentDraftId(draftId);
-    toast.success(t('Đã lưu bản nháp thành công!'));
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [showCreateModal, selectedWorkflowDef, uploadingAttachments]);
 
-    if (andExit) {
-      setShowExitConfirmModal(false);
-      if (exitTargetAction === 'back') {
-        setSelectedWorkflowDef(null);
-        setCurrentDraftId(null);
-      } else {
-        setShowCreateModal(false);
-        setSelectedWorkflowDef(null);
-        setEditingItemId(null);
-        setEditingItemType(null);
-        setCurrentDraftId(null);
-      }
-      setExitTargetAction(null);
-    }
-  };
+  // Draft and exit confirmation logic relocated below approver state declarations
 
-  const handleDiscardExit = () => {
-    setShowExitConfirmModal(false);
-    if (exitTargetAction === 'back') {
-      setSelectedWorkflowDef(null);
-      setCurrentDraftId(null);
-      setEditingItemId(null);
-      setEditingItemType(null);
-    } else {
-      setShowCreateModal(false);
-      setSelectedWorkflowDef(null);
-      setEditingItemId(null);
-      setEditingItemType(null);
-      setCurrentDraftId(null);
-    }
-    setExitTargetAction(null);
-  };
-
-  const handleRequestExit = (target: 'back' | 'close') => {
-    if (isFormDirty()) {
-      setExitTargetAction(target);
-      setShowExitConfirmModal(true);
-    } else {
-      if (target === 'back') {
-        setSelectedWorkflowDef(null);
-        setCurrentDraftId(null);
-        setEditingItemId(null);
-        setEditingItemType(null);
-      } else {
-        setShowCreateModal(false);
-        setSelectedWorkflowDef(null);
-        setEditingItemId(null);
-        setEditingItemType(null);
-        setCurrentDraftId(null);
-      }
-    }
-  };
-
-  const handleDeleteDraft = (draftId: string, silent = false) => {
-    const updated = draftsList.filter(d => d.id !== draftId);
-    setDraftsList(updated);
-    persistApprovalDrafts(updated, user?.id);
-    if (currentDraftId === draftId) setCurrentDraftId(null);
-    if (!silent) toast.success(t('Đã xóa bản nháp!'));
-  };
-
-  const handleResumeDraft = (draft: ApprovalDraft) => {
-    const fd = draft.formData;
-    if (!fd) return;
-    setCurrentDraftId(draft.id);
-    const curDef = fd.selectedWorkflowDef || workflowList.find(w => w.id === draft.workflowDefId) || workflowList[0];
-    setSelectedWorkflowDef(curDef);
-    if (fd.workflowTitleSuffix !== undefined) {
-      setWorkflowTitleSuffix(fd.workflowTitleSuffix);
-      setExpenseTitle(getFullWorkflowTitle(curDef, fd.workflowTitleSuffix));
-    } else if (fd.expenseTitle) {
-      const s = extractTitleSuffix(fd.expenseTitle, curDef?.name);
-      setWorkflowTitleSuffix(s);
-      setExpenseTitle(fd.expenseTitle);
-    } else {
-      setWorkflowTitleSuffix('');
-      setExpenseTitle(curDef.name);
-    }
-    if (fd.expenseItems) setExpenseItems(fd.expenseItems);
-    if (fd.stationeryItems) setStationeryItems(fd.stationeryItems);
-    if (fd.attachments) setAttachments(fd.attachments);
-    if (fd.relatedUserIds) setRelatedUserIds(fd.relatedUserIds);
-    if (fd.jobPosition) setJobPosition(fd.jobPosition);
-    if (fd.departmentName) setDepartmentName(fd.departmentName);
-    if (fd.paymentTarget) setPaymentTarget(fd.paymentTarget);
-    if (fd.paymentMethod) setPaymentMethod(fd.paymentMethod);
-    if (fd.paymentEmployeeId) setPaymentEmployeeId(fd.paymentEmployeeId);
-    if (fd.paymentSupplierId) setPaymentSupplierId(fd.paymentSupplierId);
-    if (fd.paymentLecturerId) setPaymentLecturerId(fd.paymentLecturerId);
-    if (fd.paymentContactId) setPaymentContactId(fd.paymentContactId);
-    if (fd.paymentBeneficiaryName) setPaymentBeneficiaryName(fd.paymentBeneficiaryName);
-    if (fd.paymentBankName) setPaymentBankName(fd.paymentBankName);
-    if (fd.paymentBankAccount) setPaymentBankAccount(fd.paymentBankAccount);
-    if (fd.paymentAccountName) setPaymentAccountName(fd.paymentAccountName);
-    if (fd.paymentBankBranch) setPaymentBankBranch(fd.paymentBankBranch);
-    if (fd.paymentPhone) setPaymentPhone(fd.paymentPhone);
-    if (fd.paymentTaxCode) setPaymentTaxCode(fd.paymentTaxCode);
-    if (fd.paymentDestination) setPaymentDestination(fd.paymentDestination);
-    if (fd.paymentWalletType) setPaymentWalletType(fd.paymentWalletType);
-    if (fd.paymentWalletPhone) setPaymentWalletPhone(fd.paymentWalletPhone);
-    if (fd.paymentCorporateCard) setPaymentCorporateCard(fd.paymentCorporateCard);
-    if (fd.paymentDetails) setPaymentDetails(fd.paymentDetails);
-    if (fd.currencyType) setCurrencyType(fd.currencyType);
-    if (fd.formType) setFormType(fd.formType);
-    if (fd.leaveType) setLeaveType(fd.leaveType);
-    if (fd.leaveReason) setLeaveReason(fd.leaveReason);
-    if (fd.leaveFrom) setLeaveFrom(fd.leaveFrom);
-    if (fd.leaveTo) setLeaveTo(fd.leaveTo);
-    if (fd.leaveSession) setLeaveSession(fd.leaveSession);
-    if (fd.intermittentDates) setIntermittentDates(fd.intermittentDates);
-    if (fd.lateEarlyType) setLateEarlyType(fd.lateEarlyType);
-    if (fd.lateEarlyMinutes) setLateEarlyMinutes(fd.lateEarlyMinutes);
-    if (fd.otType) setOtType(fd.otType);
-    if (fd.otRate) setOtRate(fd.otRate);
-    if (fd.otDate) setOtDate(fd.otDate);
-    if (fd.otStart) setOtStart(fd.otStart);
-    if (fd.otEnd) setOtEnd(fd.otEnd);
-    if (fd.isRecurring !== undefined) setIsRecurring(fd.isRecurring);
-    if (fd.recurringFrequency) setRecurringFrequency(fd.recurringFrequency);
-    if (fd.recurringEndDate) setRecurringEndDate(fd.recurringEndDate);
-    if (fd.meetingTargetType) setMeetingTargetType(fd.meetingTargetType);
-    if (fd.meetingSelectedEntityId) setMeetingSelectedEntityId(fd.meetingSelectedEntityId);
-    if (fd.meetingClientName) setMeetingClientName(fd.meetingClientName);
-    if (fd.meetingContactPerson) setMeetingContactPerson(fd.meetingContactPerson);
-    if (fd.meetingContactPhone) setMeetingContactPhone(fd.meetingContactPhone);
-    if (fd.meetingLocation) setMeetingLocation(fd.meetingLocation);
-    if (fd.meetingDate) setMeetingDate(fd.meetingDate);
-    if (fd.meetingTime) setMeetingTime(fd.meetingTime);
-    if (fd.meetingClientCount) setMeetingClientCount(fd.meetingClientCount);
-    if (fd.meetingInternalCount) setMeetingInternalCount(fd.meetingInternalCount);
-    if (fd.meetingPurpose) setMeetingPurpose(fd.meetingPurpose);
-    if (fd.meetingInternalAttendees) setMeetingInternalAttendees(fd.meetingInternalAttendees);
-    if (fd.meetingReimbursementMethod) setMeetingReimbursementMethod(fd.meetingReimbursementMethod);
-    if (fd.pssReqEmployeeId) setPssReqEmployeeId(fd.pssReqEmployeeId);
-    if (fd.pssReqDate) setPssReqDate(fd.pssReqDate);
-    if (fd.pssExecutorId) setPssExecutorId(fd.pssExecutorId);
-    if (fd.pssSendMethod) setPssSendMethod(fd.pssSendMethod);
-    if (fd.pssSendTimeFrame) setPssSendTimeFrame(fd.pssSendTimeFrame);
-    if (fd.pssRecipientName) setPssRecipientName(fd.pssRecipientName);
-    if (fd.pssRecipientAddress) setPssRecipientAddress(fd.pssRecipientAddress);
-    if (fd.pssRecipientPhone) setPssRecipientPhone(fd.pssRecipientPhone);
-    if (fd.pssRequiredSendDate) setPssRequiredSendDate(fd.pssRequiredSendDate);
-    if (fd.advanceType) setAdvanceType(fd.advanceType);
-    if (fd.advanceSettlementDate) setAdvanceSettlementDate(fd.advanceSettlementDate);
-    if (fd.expenseCategory) setExpenseCategory(fd.expenseCategory);
-    if (fd.invoiceType) setInvoiceType(fd.invoiceType);
-    if (fd.customApprover1) setCustomApprover1(fd.customApprover1);
-    if (fd.customApprover2) setCustomApprover2(fd.customApprover2);
-    if (fd.customApprover3) setCustomApprover3(fd.customApprover3);
-    if (fd.showStepManager !== undefined) setShowStepManager(fd.showStepManager);
-    if (fd.showStepAccountant !== undefined) setShowStepAccountant(fd.showStepAccountant);
-    if (fd.showStepDirector !== undefined) setShowStepDirector(fd.showStepDirector);
-    if (fd.editingItemId !== undefined) setEditingItemId(fd.editingItemId);
-    if (fd.editingItemType !== undefined) setEditingItemType(fd.editingItemType);
-
-    setShowCreateModal(true);
-    toast.success(t('Đã mở bản nháp để tiếp tục!'));
-  };
-
-  const draftApprovalItems: ApprovalItem[] = useMemo(() => {
-    return draftsList.map(d => ({
-      id: -Math.abs(d.id.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0) || 9999),
-      type: (d.formType === 'leave' || d.formType === 'advance' || d.formType === 'checkin' || d.formType === 'attendance_bulk') ? d.formType : 'expense',
-      user_id: Number(user?.id) || 1003,
-      created_by: Number(user?.id) || 1003,
-      employee_name: (user as any)?.full_name || (user as any)?.name || t('Tôi'),
-      title: d.title || d.workflowDefName,
-      description: `[Bản nháp] ${d.workflowDefName}${d.amount > 0 ? ` • ${new Intl.NumberFormat('vi-VN').format(d.amount)} ${d.currency || 'đ'}` : ''}`,
-      status: 'draft',
-      created_at: d.createdAt,
-      updated_at: d.updatedAt,
-      currency: d.currency || 'VND',
-      amount: d.amount,
-      is_draft: true,
-      draft_id: d.id
-    }));
-  }, [draftsList, user, t]);
-
-  const activeDraftForWf = useMemo(() => {
-    if (!selectedWorkflowDef) return null;
-    return draftsList.find(d => d.workflowDefId === selectedWorkflowDef.id && d.id !== currentDraftId);
-  }, [selectedWorkflowDef, draftsList, currentDraftId]);
 
   const handleCreateSubmit = async () => {
     setSubmitting(true);
@@ -1784,7 +1518,7 @@ export default function Approvals() {
           return;
         }
         if (totalAmt >= 5000000 && !appVal3) {
-          toast.error(t('Chi phí từ 5.000.000 đ trở lên bắt buộc phê duyệt đủ 3 cấp: Leader -> Ban Giám đốc (Phạm Quang Vinh) -> Kế toán.'));
+          toast.error(t('Chi phí từ 5.000.000 đ trở lên bắt buộc phê duyệt đủ 3 cấp: Leader -> Giám đốc -> Kế toán.'));
           setSubmitting(false);
           return;
         }
@@ -2153,6 +1887,15 @@ export default function Approvals() {
 
     const currentUserId = p?.id || (user as any)?.id;
     const proposerInUsers = users.find(u => Number(u.id) === Number(currentUserId) || (p?.email && u.email === p.email) || (p?.username && u.username === p.username));
+
+    // Ngoại lệ: Với quy trình chấm công / cập nhật công (attendance_bulk), nếu người đề xuất là Trưởng phòng/Quản lý:
+    // Tự tạo và tự phê duyệt cho chính mình (Bước 2 duyệt là chính người đề xuất)
+    const isAttendance = workflowDef?.id === 'attendance_bulk' || formType === 'attendance_bulk';
+    const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(p?.role || user?.role).toLowerCase()) || Boolean(p?.is_team_leader || (user as any)?.is_team_leader);
+    if (isAttendance && isProposerManagerOrLeader) {
+      return proposerInUsers || p;
+    }
+
     const teamId = p.team_id || proposerInUsers?.team_id || (user as any)?.team_id;
     const myTeam = teams.find(t => Number(t.id) === Number(teamId));
 
@@ -2361,7 +2104,11 @@ export default function Approvals() {
   // Mặc định tự động chọn Leader / Trưởng phòng HR vào danh sách Người liên quan (theo dõi) cho đề xuất công / HR
   useEffect(() => {
     const isHrWf = selectedWorkflowDef?.category === 'hr' || ['leave', 'late_early', 'overtime', 'remote_work', 'attendance_bulk'].includes(formType);
-    if (isHrWf && users.length > 0) {
+    const isProposerManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(proposerUser?.role || user?.role).toLowerCase()) || Boolean(proposerUser?.is_team_leader || (user as any)?.is_team_leader);
+
+    // QUY TẮC: Nếu là Trưởng phòng/Quản lý đề xuất cập nhật công (attendance_bulk):
+    // Tự tạo, tự duyệt cho mình mà KHÔNG cần ai liên quan (để trống).
+    if (isHrWf && users.length > 0 && !(formType === 'attendance_bulk' && isProposerManagerOrLeader)) {
       const hrLeader = getDefaultHrLeader();
       const currentApprover = customApprover1 || getDefaultManagerApprover(proposerUser || user, selectedWorkflowDef);
       
@@ -2370,8 +2117,573 @@ export default function Approvals() {
         const hrId = Number(hrLeader.id);
         setRelatedUserIds(prev => prev.includes(hrId) ? prev : [...prev, hrId]);
       }
+    } else if (formType === 'attendance_bulk' && isProposerManagerOrLeader) {
+      // Dọn sạch HR leader nếu đã bị tự động thêm trước đó khi chuyển tab
+      const hrLeader = getDefaultHrLeader();
+      if (hrLeader) {
+        const hrId = Number(hrLeader.id);
+        setRelatedUserIds(prev => prev.filter(id => id !== hrId));
+      }
     }
   }, [formType, selectedWorkflowDef, proposerUser, customApprover1?.id, users, teams]);
+
+  // --- DRAFT & EXIT CONFIRMATION HELPERS ---
+  const getFormSnapshot = () => {
+    return JSON.stringify({
+      workflowDefId: selectedWorkflowDef?.id || '',
+      formType: formType || 'expense',
+      expenseTitle: expenseTitle || '',
+      workflowTitleSuffix: workflowTitleSuffix || '',
+      expenseItems: (expenseItems || []).map(it => ({
+        name: it.name || '',
+        quantity: Number(it.quantity) || 0,
+        price: Number(it.price) || 0,
+        vat: Number(it.vat) || 0,
+        note: it.note || ''
+      })),
+      stationeryItems: (stationeryItems || []).map(it => ({
+        name: it.name || '',
+        quantity: Number(it.quantity) || 0,
+        unit: it.unit || '',
+        notes: it.notes || ''
+      })),
+      attachmentsCount: (attachments || []).length,
+      attachmentsUrls: (attachments || []).map(a => a.url || a.name),
+      relatedUserIds: [...(relatedUserIds || [])].sort(),
+      jobPosition: jobPosition || '',
+      departmentName: departmentName || '',
+      paymentTarget: paymentTarget || '',
+      paymentMethod: paymentMethod || '',
+      paymentEmployeeId: paymentEmployeeId || '',
+      paymentSupplierId: paymentSupplierId || '',
+      paymentLecturerId: paymentLecturerId || '',
+      paymentContactId: paymentContactId || '',
+      paymentBeneficiaryName: paymentBeneficiaryName || '',
+      paymentBankName: paymentBankName || '',
+      paymentBankAccount: paymentBankAccount || '',
+      paymentAccountName: paymentAccountName || '',
+      paymentBankBranch: paymentBankBranch || '',
+      paymentPhone: paymentPhone || '',
+      paymentTaxCode: paymentTaxCode || '',
+      paymentDestination: paymentDestination || '',
+      paymentWalletType: paymentWalletType || '',
+      paymentWalletPhone: paymentWalletPhone || '',
+      paymentCorporateCard: paymentCorporateCard || '',
+      paymentDetails: paymentDetails || '',
+      currencyType: currencyType || 'VND',
+      leaveType: leaveType || '',
+      leaveReason: leaveReason || '',
+      leaveFrom: leaveFrom || '',
+      leaveTo: leaveTo || '',
+      leaveSession: leaveSession || '',
+      intermittentDates: intermittentDates || [],
+      lateEarlyType: lateEarlyType || '',
+      lateEarlyMinutes: lateEarlyMinutes || 0,
+      otType: otType || '',
+      otRate: otRate || 1.5,
+      otDate: otDate || '',
+      otStart: otStart || '',
+      otEnd: otEnd || '',
+      isRecurring: isRecurring || false,
+      meetingClientName: meetingClientName || '',
+      meetingPurpose: meetingPurpose || '',
+      pssRecipientName: pssRecipientName || '',
+      pssRecipientAddress: pssRecipientAddress || '',
+      pssRecipientPhone: pssRecipientPhone || '',
+      advanceType: advanceType || '',
+      advanceSettlementDate: advanceSettlementDate || '',
+      expenseCategory: expenseCategory || '',
+      invoiceType: invoiceType || '',
+      customApprover1Id: customApprover1?.id || defaultApp1?.id || null,
+      customApprover2Id: customApprover2?.id || defaultAccountant?.id || null,
+      customApprover3Id: customApprover3?.id || defaultDirector?.id || null,
+      showStepManager,
+      showStepAccountant,
+      showStepDirector,
+    });
+  };
+
+  // Track baseline snapshot when editing an existing item so closing without edits doesn't warn
+  useEffect(() => {
+    if (showCreateModal && editingItemId) {
+      const timer = setTimeout(() => {
+        lastSavedSnapshotRef.current = getFormSnapshot();
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [showCreateModal, editingItemId]);
+
+  const isFormDirty = () => {
+    if (!selectedWorkflowDef) return false;
+
+    // In edit mode for an existing approval item:
+    if (editingItemId !== null) {
+      if (lastSavedSnapshotRef.current !== null) {
+        return getFormSnapshot() !== lastSavedSnapshotRef.current;
+      }
+      // If baseline snapshot has not been captured yet, no user edits occurred
+      return false;
+    }
+
+    // If draft was saved or loaded in this session, compare with saved snapshot
+    if (lastSavedSnapshotRef.current !== null) {
+      return getFormSnapshot() !== lastSavedSnapshotRef.current;
+    }
+
+    // Otherwise, check if user entered any meaningful data
+    if (workflowTitleSuffix && workflowTitleSuffix.trim() !== '') return true;
+    if (expenseTitle && expenseTitle.trim() !== '' && expenseTitle.trim() !== selectedWorkflowDef?.name) return true;
+    if (leaveReason && leaveReason.trim() !== '') return true;
+    if (paymentDetails && paymentDetails.trim() !== '') return true;
+    if (paymentBeneficiaryName && paymentBeneficiaryName.trim() !== '') return true;
+    if (paymentBankAccount && paymentBankAccount.trim() !== '') return true;
+    if (paymentAccountName && paymentAccountName.trim() !== '') return true;
+    if (paymentDestination && paymentDestination.trim() !== '') return true;
+    if (meetingClientName && meetingClientName.trim() !== '') return true;
+    if (pssRecipientName && pssRecipientName.trim() !== '') return true;
+    if (pssRecipientAddress && pssRecipientAddress.trim() !== '') return true;
+    if (pssRecipientPhone && pssRecipientPhone.trim() !== '') return true;
+    if (attachments && attachments.length > 0) return true;
+    if (stationeryItems && stationeryItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
+    if (expenseItems && expenseItems.some(i => (i.name && i.name.trim() !== '') || (i.price && Number(i.price) > 0))) return true;
+    if (relatedUserIds && relatedUserIds.length > 0) return true;
+    return false;
+  };
+
+  const handleSaveCurrentDraft = (andExit = false) => {
+    if (!selectedWorkflowDef) return;
+    const draftId = currentDraftId || `draft_${Date.now()}`;
+    
+    let calcAmount = 0;
+    if (formType === 'general' || formType === 'expense') {
+      if (stationeryItems && stationeryItems.length > 0) {
+        calcAmount = stationeryItems.reduce((acc, it) => acc + ((Number(it.quantity) || 1) * (Number(it.price) || 0)) * (1 + (Number(it.vat !== undefined ? it.vat : 10) / 100)), 0);
+      }
+      if (calcAmount === 0 && expenseItems && expenseItems.length > 0) {
+        calcAmount = expenseItems.reduce((acc, it) => acc + (it.quantity * it.price) * (1 + it.vat / 100), 0);
+      }
+    } else if (formType === 'advance') {
+      calcAmount = Number(paymentDetails) || 0;
+    }
+
+    const fullDraftTitle = getFullWorkflowTitle();
+    const resolvedApp1 = customApprover1 || defaultApp1;
+    const resolvedApp2 = customApprover2 || defaultAccountant;
+    const resolvedApp3 = customApprover3 || defaultDirector;
+
+    const newDraft: ApprovalDraft = {
+      id: draftId,
+      userId: user?.id || 1003,
+      workflowDefId: selectedWorkflowDef.id,
+      workflowDefName: selectedWorkflowDef.name,
+      formType,
+      title: fullDraftTitle,
+      amount: calcAmount,
+      currency: currencyType || 'VND',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      formData: {
+        selectedWorkflowDef: {
+          id: selectedWorkflowDef.id,
+          name: selectedWorkflowDef.name,
+          description: selectedWorkflowDef.description,
+          category: selectedWorkflowDef.category,
+          bg: selectedWorkflowDef.bg,
+          color: selectedWorkflowDef.color
+        },
+        expenseTitle: fullDraftTitle,
+        workflowTitleSuffix,
+        expenseItems,
+        stationeryItems,
+        attachments,
+        relatedUserIds,
+        jobPosition,
+        departmentName,
+        paymentTarget,
+        paymentMethod,
+        paymentEmployeeId,
+        paymentSupplierId,
+        paymentLecturerId,
+        paymentContactId,
+        paymentBeneficiaryName,
+        paymentBankName,
+        paymentBankAccount,
+        paymentAccountName,
+        paymentBankBranch,
+        paymentPhone,
+        paymentTaxCode,
+        paymentDestination,
+        paymentWalletType,
+        paymentWalletPhone,
+        paymentCorporateCard,
+        paymentDetails,
+        currencyType,
+        formType,
+        leaveType,
+        leaveReason,
+        leaveFrom,
+        leaveTo,
+        leaveSession,
+        intermittentDates,
+        lateEarlyType,
+        lateEarlyMinutes,
+        otType,
+        otRate,
+        otDate,
+        otStart,
+        otEnd,
+        isRecurring,
+        recurringFrequency,
+        recurringEndDate,
+        meetingTargetType,
+        meetingSelectedEntityId,
+        meetingClientName,
+        meetingContactPerson,
+        meetingContactPhone,
+        meetingLocation,
+        meetingDate,
+        meetingTime,
+        meetingClientCount,
+        meetingInternalCount,
+        meetingPurpose,
+        meetingInternalAttendees,
+        meetingReimbursementMethod,
+        pssReqEmployeeId,
+        pssReqDate,
+        pssExecutorId,
+        pssSendMethod,
+        pssSendTimeFrame,
+        pssRecipientName,
+        pssRecipientAddress,
+        pssRecipientPhone,
+        pssRequiredSendDate,
+        advanceType,
+        advanceSettlementDate,
+        expenseCategory,
+        invoiceType,
+        customApprover1: resolvedApp1,
+        customApprover2: resolvedApp2,
+        customApprover3: resolvedApp3,
+        showStepManager,
+        showStepAccountant,
+        showStepDirector,
+        editingItemId,
+        editingItemType
+      }
+    };
+
+    const updatedDrafts = [newDraft, ...draftsList.filter(d => d.id !== draftId)];
+    setDraftsList(updatedDrafts);
+    persistApprovalDrafts(updatedDrafts, user?.id);
+    setCurrentDraftId(draftId);
+    lastSavedSnapshotRef.current = getFormSnapshot();
+    toast.success(t('Đã lưu bản nháp thành công!'));
+
+    if (andExit) {
+      setShowExitConfirmModal(false);
+      lastSavedSnapshotRef.current = null;
+      if (exitTargetAction === 'back') {
+        setSelectedWorkflowDef(null);
+        setCurrentDraftId(null);
+      } else {
+        setShowCreateModal(false);
+        setSelectedWorkflowDef(null);
+        setEditingItemId(null);
+        setEditingItemType(null);
+        setCurrentDraftId(null);
+      }
+      setExitTargetAction(null);
+    }
+  };
+
+  const handleDiscardExit = () => {
+    setShowExitConfirmModal(false);
+    lastSavedSnapshotRef.current = null;
+    if (exitTargetAction === 'back') {
+      setSelectedWorkflowDef(null);
+      setCurrentDraftId(null);
+      setEditingItemId(null);
+      setEditingItemType(null);
+    } else {
+      setShowCreateModal(false);
+      setSelectedWorkflowDef(null);
+      setEditingItemId(null);
+      setEditingItemType(null);
+      setCurrentDraftId(null);
+    }
+    setExitTargetAction(null);
+  };
+
+  const handleRequestExit = (target: 'back' | 'close') => {
+    if (isFormDirty()) {
+      setExitTargetAction(target);
+      setShowExitConfirmModal(true);
+    } else {
+      lastSavedSnapshotRef.current = null;
+      if (target === 'back') {
+        setSelectedWorkflowDef(null);
+        setCurrentDraftId(null);
+        setEditingItemId(null);
+        setEditingItemType(null);
+      } else {
+        setShowCreateModal(false);
+        setSelectedWorkflowDef(null);
+        setEditingItemId(null);
+        setEditingItemType(null);
+        setCurrentDraftId(null);
+      }
+    }
+  };
+
+  const handleResumeDraft = (draft: ApprovalDraft) => {
+    const fd = draft.formData;
+    if (!fd) return;
+    setCurrentDraftId(draft.id);
+    const wfId = draft.workflowDefId || fd.selectedWorkflowDef?.id;
+    const baseDef = workflowList.find(w => w.id === wfId) || workflowList[0];
+    const curDef = {
+      ...baseDef,
+      ...(fd.selectedWorkflowDef || {}),
+      icon: baseDef.icon,
+      bg: baseDef.bg,
+      color: baseDef.color
+    };
+    setSelectedWorkflowDef(curDef);
+    if (fd.workflowTitleSuffix !== undefined) {
+      setWorkflowTitleSuffix(fd.workflowTitleSuffix);
+      setExpenseTitle(getFullWorkflowTitle(curDef, fd.workflowTitleSuffix));
+    } else if (fd.expenseTitle) {
+      const s = extractTitleSuffix(fd.expenseTitle, curDef?.name);
+      setWorkflowTitleSuffix(s);
+      setExpenseTitle(fd.expenseTitle);
+    } else {
+      setWorkflowTitleSuffix('');
+      setExpenseTitle(curDef.name);
+    }
+    if (fd.expenseItems) setExpenseItems(fd.expenseItems);
+    if (fd.stationeryItems) setStationeryItems(fd.stationeryItems);
+    if (fd.attachments) setAttachments(fd.attachments);
+    if (fd.relatedUserIds) setRelatedUserIds(fd.relatedUserIds);
+    if (fd.jobPosition) setJobPosition(fd.jobPosition);
+    if (fd.departmentName) setDepartmentName(fd.departmentName);
+    if (fd.paymentTarget) setPaymentTarget(fd.paymentTarget);
+    if (fd.paymentMethod) setPaymentMethod(fd.paymentMethod);
+    if (fd.paymentEmployeeId) setPaymentEmployeeId(fd.paymentEmployeeId);
+    if (fd.paymentSupplierId) setPaymentSupplierId(fd.paymentSupplierId);
+    if (fd.paymentLecturerId) setPaymentLecturerId(fd.paymentLecturerId);
+    if (fd.paymentContactId) setPaymentContactId(fd.paymentContactId);
+    if (fd.paymentBeneficiaryName) setPaymentBeneficiaryName(fd.paymentBeneficiaryName);
+    if (fd.paymentBankName) setPaymentBankName(fd.paymentBankName);
+    if (fd.paymentBankAccount) setPaymentBankAccount(fd.paymentBankAccount);
+    if (fd.paymentAccountName) setPaymentAccountName(fd.paymentAccountName);
+    if (fd.paymentBankBranch) setPaymentBankBranch(fd.paymentBankBranch);
+    if (fd.paymentPhone) setPaymentPhone(fd.paymentPhone);
+    if (fd.paymentTaxCode) setPaymentTaxCode(fd.paymentTaxCode);
+    if (fd.paymentDestination) setPaymentDestination(fd.paymentDestination);
+    if (fd.paymentWalletType) setPaymentWalletType(fd.paymentWalletType);
+    if (fd.paymentWalletPhone) setPaymentWalletPhone(fd.paymentWalletPhone);
+    if (fd.paymentCorporateCard) setPaymentCorporateCard(fd.paymentCorporateCard);
+    if (fd.paymentDetails) setPaymentDetails(fd.paymentDetails);
+    if (fd.currencyType) setCurrencyType(fd.currencyType);
+    if (fd.formType) setFormType(fd.formType);
+    if (fd.leaveType) setLeaveType(fd.leaveType);
+    if (fd.leaveReason) setLeaveReason(fd.leaveReason);
+    if (fd.leaveFrom) setLeaveFrom(fd.leaveFrom);
+    if (fd.leaveTo) setLeaveTo(fd.leaveTo);
+    if (fd.leaveSession) setLeaveSession(fd.leaveSession);
+    if (fd.intermittentDates) setIntermittentDates(fd.intermittentDates);
+    if (fd.lateEarlyType) setLateEarlyType(fd.lateEarlyType);
+    if (fd.lateEarlyMinutes) setLateEarlyMinutes(fd.lateEarlyMinutes);
+    if (fd.otType) setOtType(fd.otType);
+    if (fd.otRate) setOtRate(fd.otRate);
+    if (fd.otDate) setOtDate(fd.otDate);
+    if (fd.otStart) setOtStart(fd.otStart);
+    if (fd.otEnd) setOtEnd(fd.otEnd);
+    if (fd.isRecurring !== undefined) setIsRecurring(fd.isRecurring);
+    if (fd.recurringFrequency) setRecurringFrequency(fd.recurringFrequency);
+    if (fd.recurringEndDate) setRecurringEndDate(fd.recurringEndDate);
+    if (fd.meetingTargetType) setMeetingTargetType(fd.meetingTargetType);
+    if (fd.meetingSelectedEntityId) setMeetingSelectedEntityId(fd.meetingSelectedEntityId);
+    if (fd.meetingClientName) setMeetingClientName(fd.meetingClientName);
+    if (fd.meetingContactPerson) setMeetingContactPerson(fd.meetingContactPerson);
+    if (fd.meetingContactPhone) setMeetingContactPhone(fd.meetingContactPhone);
+    if (fd.meetingLocation) setMeetingLocation(fd.meetingLocation);
+    if (fd.meetingDate) setMeetingDate(fd.meetingDate);
+    if (fd.meetingTime) setMeetingTime(fd.meetingTime);
+    if (fd.meetingClientCount) setMeetingClientCount(fd.meetingClientCount);
+    if (fd.meetingInternalCount) setMeetingInternalCount(fd.meetingInternalCount);
+    if (fd.meetingPurpose) setMeetingPurpose(fd.meetingPurpose);
+    if (fd.meetingInternalAttendees) setMeetingInternalAttendees(fd.meetingInternalAttendees);
+    if (fd.meetingReimbursementMethod) setMeetingReimbursementMethod(fd.meetingReimbursementMethod);
+    if (fd.pssReqEmployeeId) setPssReqEmployeeId(fd.pssReqEmployeeId);
+    if (fd.pssReqDate) setPssReqDate(fd.pssReqDate);
+    if (fd.pssExecutorId) setPssExecutorId(fd.pssExecutorId);
+    if (fd.pssSendMethod) setPssSendMethod(fd.pssSendMethod);
+    if (fd.pssSendTimeFrame) setPssSendTimeFrame(fd.pssSendTimeFrame);
+    if (fd.pssRecipientName) setPssRecipientName(fd.pssRecipientName);
+    if (fd.pssRecipientAddress) setPssRecipientAddress(fd.pssRecipientAddress);
+    if (fd.pssRecipientPhone) setPssRecipientPhone(fd.pssRecipientPhone);
+    if (fd.pssRequiredSendDate) setPssRequiredSendDate(fd.pssRequiredSendDate);
+    if (fd.advanceType) setAdvanceType(fd.advanceType);
+    if (fd.advanceSettlementDate) setAdvanceSettlementDate(fd.advanceSettlementDate);
+    if (fd.expenseCategory) setExpenseCategory(fd.expenseCategory);
+    if (fd.invoiceType) setInvoiceType(fd.invoiceType);
+    if (fd.customApprover1) setCustomApprover1(fd.customApprover1);
+    if (fd.customApprover2) setCustomApprover2(fd.customApprover2);
+    if (fd.customApprover3) setCustomApprover3(fd.customApprover3);
+    if (fd.showStepManager !== undefined) setShowStepManager(fd.showStepManager);
+    if (fd.showStepAccountant !== undefined) setShowStepAccountant(fd.showStepAccountant);
+    if (fd.showStepDirector !== undefined) setShowStepDirector(fd.showStepDirector);
+    if (fd.editingItemId !== undefined) setEditingItemId(fd.editingItemId);
+    if (fd.editingItemType !== undefined) setEditingItemType(fd.editingItemType);
+
+    // Record snapshot of loaded draft so closing immediately without edits will not prompt
+    lastSavedSnapshotRef.current = JSON.stringify({
+      workflowDefId: curDef?.id || '',
+      formType: fd.formType || 'expense',
+      expenseTitle: fd.expenseTitle || curDef?.name || '',
+      workflowTitleSuffix: fd.workflowTitleSuffix !== undefined ? fd.workflowTitleSuffix : (fd.expenseTitle ? extractTitleSuffix(fd.expenseTitle, curDef?.name) : ''),
+      expenseItems: (fd.expenseItems || []).map((it: any) => ({
+        name: it.name || '',
+        quantity: Number(it.quantity) || 0,
+        price: Number(it.price) || 0,
+        vat: Number(it.vat) || 0,
+        note: it.note || ''
+      })),
+      stationeryItems: (fd.stationeryItems || []).map((it: any) => ({
+        name: it.name || '',
+        quantity: Number(it.quantity) || 0,
+        unit: it.unit || '',
+        notes: it.notes || ''
+      })),
+      attachmentsCount: (fd.attachments || []).length,
+      attachmentsUrls: (fd.attachments || []).map((a: any) => a.url || a.name),
+      relatedUserIds: [...(fd.relatedUserIds || [])].sort(),
+      jobPosition: fd.jobPosition || '',
+      departmentName: fd.departmentName || '',
+      paymentTarget: fd.paymentTarget || '',
+      paymentMethod: fd.paymentMethod || '',
+      paymentEmployeeId: fd.paymentEmployeeId || '',
+      paymentSupplierId: fd.paymentSupplierId || '',
+      paymentLecturerId: fd.paymentLecturerId || '',
+      paymentContactId: fd.paymentContactId || '',
+      paymentBeneficiaryName: fd.paymentBeneficiaryName || '',
+      paymentBankName: fd.paymentBankName || '',
+      paymentBankAccount: fd.paymentBankAccount || '',
+      paymentAccountName: fd.paymentAccountName || '',
+      paymentBankBranch: fd.paymentBankBranch || '',
+      paymentPhone: fd.paymentPhone || '',
+      paymentTaxCode: fd.paymentTaxCode || '',
+      paymentDestination: fd.paymentDestination || '',
+      paymentWalletType: fd.paymentWalletType || '',
+      paymentWalletPhone: fd.paymentWalletPhone || '',
+      paymentCorporateCard: fd.paymentCorporateCard || '',
+      paymentDetails: fd.paymentDetails || '',
+      currencyType: fd.currencyType || 'VND',
+      leaveType: fd.leaveType || '',
+      leaveReason: fd.leaveReason || '',
+      leaveFrom: leaveFrom || '',
+      leaveTo: leaveTo || '',
+      leaveSession: leaveSession || '',
+      intermittentDates: intermittentDates || [],
+      lateEarlyType: lateEarlyType || '',
+      lateEarlyMinutes: lateEarlyMinutes || 0,
+      otType: otType || '',
+      otRate: otRate || 1.5,
+      otDate: otDate || '',
+      otStart: otStart || '',
+      otEnd: otEnd || '',
+      isRecurring: isRecurring || false,
+      meetingClientName: meetingClientName || '',
+      meetingPurpose: meetingPurpose || '',
+      pssRecipientName: pssRecipientName || '',
+      pssRecipientAddress: pssRecipientAddress || '',
+      pssRecipientPhone: pssRecipientPhone || '',
+      advanceType: advanceType || '',
+      advanceSettlementDate: advanceSettlementDate || '',
+      expenseCategory: expenseCategory || '',
+      invoiceType: invoiceType || '',
+      customApprover1Id: fd.customApprover1?.id || defaultApp1?.id || null,
+      customApprover2Id: fd.customApprover2?.id || defaultAccountant?.id || null,
+      customApprover3Id: fd.customApprover3?.id || defaultDirector?.id || null,
+      showStepManager: fd.showStepManager !== false,
+      showStepAccountant: fd.showStepAccountant !== false,
+      showStepDirector: Boolean(fd.showStepDirector),
+    });
+
+    setShowCreateModal(true);
+    toast.success(t('Đã mở bản nháp để tiếp tục!'));
+  };
+
+  const draftApprovalItems: ApprovalItem[] = useMemo(() => {
+    return draftsList.map(d => {
+      const fd = d.formData || {};
+      const wfDef = workflowList.find(w => w.id === d.workflowDefId) || (fd.selectedWorkflowDef ? workflowList.find(w => w.id === fd.selectedWorkflowDef.id) : null) || workflowList[0];
+
+      // 1. Resolve Approver 1 (Direct Manager / Leader / HR)
+      let app1 = fd.customApprover1;
+      if (!app1) {
+        if (d.workflowDefId === 'stationery') {
+          app1 = getDefaultHrLeader();
+        } else {
+          app1 = getDefaultManagerApprover(user, wfDef);
+        }
+      }
+
+      // 2. Resolve Approver 2 (Accountant or HR)
+      let app2 = fd.customApprover2;
+      const isHrWf = wfDef?.category === 'hr' || ['leave', 'late_early', 'remote_work'].includes(d.formType) || (d.formType === 'overtime' && fd.otType === 'compensatory');
+      if (!app2 && (['expense', 'advance', 'general'].includes(d.formType) || isHrWf)) {
+        if (d.formType === 'overtime' && fd.otType === 'compensatory') {
+          app2 = getDefaultHrLeader();
+        } else if (['expense', 'advance', 'general'].includes(d.formType)) {
+          app2 = defaultAccountant;
+        }
+      }
+
+      // 3. Resolve Approver 3 (Director)
+      let app3 = fd.customApprover3;
+      if (!app3 && d.formType === 'expense' && (d.amount >= 5000000 || fd.showStepDirector)) {
+        app3 = defaultDirector;
+      }
+
+      const showStep1 = fd.showStepManager !== false;
+      const showStep2 = fd.showStepAccountant !== false && (['expense', 'advance', 'general'].includes(d.formType) || (d.formType === 'overtime' && fd.otType === 'compensatory'));
+      const showStep3 = Boolean(fd.showStepDirector || (d.formType === 'expense' && d.amount >= 5000000));
+
+      return {
+        id: -Math.abs(d.id.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0) || 9999),
+        type: (d.formType === 'leave' || d.formType === 'advance' || d.formType === 'checkin' || d.formType === 'attendance_bulk') ? d.formType : 'expense',
+        user_id: Number(user?.id) || 1003,
+        created_by: Number(user?.id) || 1003,
+        employee_name: (user as any)?.full_name || (user as any)?.name || t('Tôi'),
+        title: d.title || d.workflowDefName,
+        description: `[Bản nháp] ${d.workflowDefName}${d.amount > 0 ? ` • ${new Intl.NumberFormat('vi-VN').format(d.amount)} ${d.currency || 'đ'}` : ''}`,
+        status: 'draft',
+        created_at: d.createdAt,
+        updated_at: d.updatedAt,
+        currency: d.currency || 'VND',
+        amount: d.amount,
+        is_draft: true,
+        draft_id: d.id,
+        approver_id: showStep1 && app1 ? Number(app1.id) : undefined,
+        approver_name: showStep1 && app1 ? (app1.full_name || app1.name) : undefined,
+        approver_id_2: showStep2 && app2 ? Number(app2.id) : undefined,
+        approver_name_2: showStep2 && app2 ? (app2.full_name || app2.name) : undefined,
+        approver_id_3: showStep3 && app3 ? Number(app3.id) : undefined,
+        approver_name_3: showStep3 && app3 ? (app3.full_name || app3.name) : undefined,
+        status_level_1: 'draft',
+        status_level_2: showStep2 ? 'draft' : 'none',
+        status_level_3: showStep3 ? 'draft' : 'none',
+        related_user_ids: fd.relatedUserIds || [],
+      };
+    });
+  }, [draftsList, user, t, workflowList, users, teams, defaultAccountant, defaultDirector]);
+
+  const activeDraftForWf = useMemo(() => {
+    if (!selectedWorkflowDef) return null;
+    return draftsList.find(d => d.workflowDefId === selectedWorkflowDef.id && d.id !== currentDraftId);
+  }, [selectedWorkflowDef, draftsList, currentDraftId]);
 
   useEffect(() => {
     fetchAPI('users?all=1').then(res => {
@@ -2581,6 +2893,11 @@ export default function Approvals() {
         setSelectedWorkflowDef(def);
         setFormType('attendance_bulk');
         setExpenseTitle(def.name);
+        const isManager = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(user?.role).toLowerCase()) || Boolean((user as any)?.is_team_leader);
+        if (isManager) {
+          setRelatedUserIds([]);
+          setCustomApprover1(user);
+        }
         const reqDate = params.get('date');
         const shouldScan = params.get('scan') === '1';
         const initMonth = reqDate ? reqDate.substring(0, 7) : getDefaultBulkMonth();
@@ -2727,10 +3044,16 @@ export default function Approvals() {
       setFollowingList(fList);
       setAllList(aList);
 
-      window.dispatchEvent(new CustomEvent('approval-badge-updated', { detail: { count: pList.length } }));
+      // Đếm badge ở sidebar: gồm các đề xuất chờ tôi duyệt + các đề xuất của tôi đang chờ duyệt
+      const badgeKeys = new Set<string>();
+      pList.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+      mList.filter(it => isMyRequestPendingApproval(it, user, true)).forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+      const totalBadgeCount = badgeKeys.size;
+
+      window.dispatchEvent(new CustomEvent('approval-badge-updated', { detail: { count: totalBadgeCount } }));
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem('pending_approvals_count', String(pList.length));
-        localStorage.setItem('pending_approvals_count', String(pList.length));
+        sessionStorage.setItem('pending_approvals_count', String(totalBadgeCount));
+        localStorage.setItem('pending_approvals_count', String(totalBadgeCount));
       }
 
       // Tự động active tab 'all' (Tất cả đề xuất) nếu tab 'pending' đang trống
@@ -2905,8 +3228,14 @@ export default function Approvals() {
   };
 
   const handleEditRequest = async (item: ApprovalItem) => {
+    const isCreator = Number(user?.id) === Number(item.created_by || item.user_id);
+    if (!isCreator) {
+      toast.error(t('Chỉ người tạo đề xuất mới có quyền chỉnh sửa'));
+      return;
+    }
     setSelectedTimelineItem(null);
     setSelectedItem(null);
+    lastSavedSnapshotRef.current = null;
     setEditingItemId(item.id);
     setEditingItemType(item.type);
 
@@ -3639,10 +3968,10 @@ export default function Approvals() {
     let badgeClass = 'badge warning';
     let icon = <Clock size={10} />;
 
-    const status1 = (item as any).status_level_1 || 'pending';
-    const status2 = (item as any).status_level_2 || 'none';
-    const status3 = (item as any).status_level_3 || 'none';
     const overallStatus = (item.status || 'pending').toLowerCase();
+    const status1 = String((item as any).status_level_1 || (overallStatus === 'level1_approved' ? 'approved' : 'pending')).toLowerCase();
+    const status2 = String((item as any).status_level_2 || 'none').toLowerCase();
+    const status3 = String((item as any).status_level_3 || 'none').toLowerCase();
 
     // 00. If draft:
     if (overallStatus === 'draft') {
@@ -3743,22 +4072,25 @@ export default function Approvals() {
     let targetApproverId = 0;
     let targetApproverName = '';
 
-    if (status1 === 'pending') {
-      targetApproverId = Number((item as any).approver_id || (item as any).manager_id || 0);
-      targetApproverName = (item as any).approver_name || '';
-      stepLabel = (item as any).approver_id_2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt');
-      badgeClass = 'badge warning';
-      icon = <Clock size={10} />;
-    } else if (status1 === 'approved' && status2 === 'pending') {
+    const hasLevel2 = Boolean((item as any).approver_id_2 || (item as any).approver_name_2 || (status2 !== 'none' && status2 !== ''));
+    const hasLevel3 = Boolean((item as any).approver_id_3 || (item as any).approver_name_3 || (status3 !== 'none' && status3 !== ''));
+
+    if (status1 === 'approved' && hasLevel2 && status2 !== 'approved' && status2 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_2 || 0);
       targetApproverName = (item as any).approver_name_2 || '';
       stepLabel = t('Chờ duyệt Cấp 2');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
-    } else if (status1 === 'approved' && status2 === 'approved' && status3 === 'pending') {
+    } else if (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && hasLevel3 && status3 !== 'approved' && status3 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_3 || 0);
       targetApproverName = (item as any).approver_name_3 || '';
       stepLabel = t('Chờ duyệt Cấp 3');
+      badgeClass = 'badge warning';
+      icon = <Clock size={10} />;
+    } else if (status1 === 'pending' || overallStatus === 'pending') {
+      targetApproverId = Number((item as any).approver_id || (item as any).manager_id || 0);
+      targetApproverName = (item as any).approver_name || '';
+      stepLabel = hasLevel2 ? t('Chờ duyệt Cấp 1') : t('Chờ duyệt');
       badgeClass = 'badge warning';
       icon = <Clock size={10} />;
     } else {
@@ -3816,16 +4148,18 @@ export default function Approvals() {
 
     const steps: StepInfo[] = [];
     const overall = (item.status || 'pending').toLowerCase();
-    const s1 = (item as any).status_level_1 || (overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending');
-    const s2 = (item as any).status_level_2 || 'none';
-    const s3 = (item as any).status_level_3 || 'none';
+    const isDraft = overall === 'draft' || Boolean(item.is_draft);
+    const s1 = String((item as any).status_level_1 || (overall === 'level1_approved' || overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')).toLowerCase();
+    const s2 = String((item as any).status_level_2 || 'none').toLowerCase();
+    const s3 = String((item as any).status_level_3 || 'none').toLowerCase();
 
     // Step 1
     const app1Id = Number((item as any).approver_id || (item as any).manager_id || 0);
     const app1Name = (item as any).approver_name || '';
     if (app1Id > 0 || app1Name || (item as any).approver_id_2) {
       let stepStatus: StepInfo['status'] = 'pending';
-      if (s1 === 'approved') stepStatus = 'approved';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s1 === 'approved' || overall === 'approved' || overall === 'level1_approved') stepStatus = 'approved';
       else if (s1 === 'rejected' || (overall === 'rejected' && s1 !== 'approved')) stepStatus = 'rejected';
       else stepStatus = 'pending';
 
@@ -3841,11 +4175,12 @@ export default function Approvals() {
     // Step 2
     const app2Id = Number((item as any).approver_id_2 || 0);
     const app2Name = (item as any).approver_name_2 || '';
-    if (app2Id > 0 || app2Name || s2 !== 'none') {
+    if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
-      if (s2 === 'approved') stepStatus = 'approved';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s2 === 'approved') stepStatus = 'approved';
       else if (s2 === 'rejected') stepStatus = 'rejected';
-      else if (s1 === 'approved' && s2 === 'pending') stepStatus = 'pending';
+      else if (s1 === 'approved' && s2 !== 'approved' && s2 !== 'rejected') stepStatus = 'pending';
       else stepStatus = 'waiting';
 
       steps.push({
@@ -3860,11 +4195,12 @@ export default function Approvals() {
     // Step 3
     const app3Id = Number((item as any).approver_id_3 || 0);
     const app3Name = (item as any).approver_name_3 || '';
-    if (app3Id > 0 || app3Name || s3 !== 'none') {
+    if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
-      if (s3 === 'approved') stepStatus = 'approved';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s3 === 'approved') stepStatus = 'approved';
       else if (s3 === 'rejected') stepStatus = 'rejected';
-      else if (s1 === 'approved' && s2 === 'approved' && s3 === 'pending') stepStatus = 'pending';
+      else if (s1 === 'approved' && (s2 === 'approved' || s2 === 'none') && s3 !== 'approved' && s3 !== 'rejected') stepStatus = 'pending';
       else stepStatus = 'waiting';
 
       steps.push({
@@ -3882,7 +4218,7 @@ export default function Approvals() {
         title: 'Duyệt',
         userId: Number((item as any).approver_id || 0),
         userName: (item as any).approver_name || '',
-        status: overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending'
+        status: isDraft ? 'waiting' : (overall === 'approved' ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')
       });
     }
 
@@ -3919,12 +4255,12 @@ export default function Approvals() {
             const displayName = uObj?.full_name || uObj?.name || st.userName || st.title;
             const avatarUrl = uObj?.avatar_url || uObj?.avatar;
 
-            const isApproved = st.status === 'approved';
-            const isRejected = st.status === 'rejected';
-            const isPending = st.status === 'pending';
+            const isApproved = !isDraft && st.status === 'approved';
+            const isRejected = !isDraft && st.status === 'rejected';
+            const isPending = !isDraft && st.status === 'pending';
 
             const borderColor = isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : 'var(--color-border)';
-            const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : 'Chưa đến lượt';
+            const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : isDraft ? 'Dự kiến duyệt (Bản nháp)' : 'Chưa đến lượt';
 
             return (
               <React.Fragment key={`step-${st.stepIndex}`}>
@@ -3948,7 +4284,7 @@ export default function Approvals() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     background: 'var(--color-surface, #ffffff)',
-                    opacity: st.status === 'waiting' ? 0.6 : 1
+                    opacity: isDraft ? 0.95 : (st.status === 'waiting' ? 0.6 : 1)
                   }}>
                     <Avatar src={avatarUrl} name={displayName} size={24} />
                   </div>
@@ -3959,7 +4295,7 @@ export default function Approvals() {
                     width: '12px',
                     height: '12px',
                     borderRadius: '50%',
-                    background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : '#8E8E93',
+                    background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : isDraft ? '#64748B' : '#8E8E93',
                     border: '1.5px solid #ffffff',
                     display: 'flex',
                     alignItems: 'center',
@@ -4730,7 +5066,7 @@ export default function Approvals() {
                               </>
                             ) : (
                               <>
-                                {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                                {Number(user?.id) === Number(item.created_by || item.user_id) && ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
                                   <button
                                     onClick={() => handleEditRequest(item)}
                                     className="btn secondary"
@@ -4948,7 +5284,7 @@ export default function Approvals() {
                                   </>
                                 ) : (
                                   <>
-                                    {['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
+                                    {Number(user?.id) === Number(item.created_by || item.user_id) && ['pending', 'pending_approval', 'pending_manager', 'pending_hr'].includes(item.status) && (
                                       <button
                                         onClick={() => handleEditRequest(item)}
                                         className="btn secondary"
@@ -5697,6 +6033,11 @@ export default function Approvals() {
                                   setFormType('leave');
                                 } else if (item.id === 'attendance_bulk') {
                                   setFormType('attendance_bulk');
+                                  const isManager = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(String(user?.role).toLowerCase()) || Boolean((user as any)?.is_team_leader);
+                                  if (isManager) {
+                                    setRelatedUserIds([]);
+                                    setCustomApprover1(user);
+                                  }
                                   const initMonth = getDefaultBulkMonth();
                                   setBulkMonth(initMonth);
                                   const userDefaultIn = (user as any)?.work_start_time ? String((user as any).work_start_time).substring(0, 5) : '08:00';
@@ -5989,7 +6330,7 @@ export default function Approvals() {
                                 padding: '2px 12px',
                                 fontSize: isMobile ? '0.85rem' : '0.92rem',
                                 fontWeight: 700,
-                                color: 'var(--color-primary)',
+                                color: 'var(--color-text, #0f172a)',
                                 background: 'var(--color-bg-secondary, #f8fafc)',
                                 border: '1.5px solid var(--color-border)',
                                 borderRadius: '8px',
@@ -6011,43 +6352,11 @@ export default function Approvals() {
                             {editingItemId ? t('CHỈNH SỬA') : t('MỚI')}
                           </span>
                         </div>
-                        {!isMobile && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px', fontSize: '0.73rem', color: 'var(--color-text-muted)' }}>
-                            <span>{editingItemId ? t('Cập nhật nội dung chi tiết của quy trình đề xuất') : t('Thiết lập quy trình đề xuất vận hành mới')}</span>
-                            <span>•</span>
-                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-                              {t('Nội dung PO:')} {getFullWorkflowTitle(selectedWorkflowDef, workflowTitleSuffix)}
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </div>
 
                     {!isMobile ? (
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
-                        <button 
-                          type="button" 
-                          onClick={() => handleRequestExit('back')}
-                          className="hover-lift"
-                          style={{
-                            background: 'var(--color-bg)',
-                            border: '1px solid var(--color-border)',
-                            padding: '8px 12px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            color: 'var(--color-text-muted)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            height: '36px',
-                            fontSize: '0.85rem',
-                            fontWeight: 700
-                          }}
-                        >
-                          <ArrowLeft size={16} />
-                          <span>{t('Quay lại')}</span>
-                        </button>
-
                         <button 
                           type="button" 
                           onClick={() => handleSaveCurrentDraft(false)}
@@ -7080,9 +7389,6 @@ export default function Approvals() {
                                   <span>{t('Tiêu đề đề xuất / Nội dung tạm ứng')}</span>
                                   <span style={{ color: 'var(--color-danger)' }}>*</span>
                                 </label>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                  {t('Tên loại quy trình cố định khúc đầu, nhập nội dung chi tiết ở khúc sau')}
-                                </span>
                               </div>
                               
                               <div style={{
@@ -7134,13 +7440,6 @@ export default function Approvals() {
                                   }}
                                   required
                                 />
-                              </div>
-
-                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>{t('Hiển thị trên phiếu:')}</span>
-                                <strong style={{ color: 'var(--color-primary)' }}>
-                                  {getFullWorkflowTitle(selectedWorkflowDef, workflowTitleSuffix)}
-                                </strong>
                               </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
@@ -7252,17 +7551,42 @@ export default function Approvals() {
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
                                   {t('Hồ sơ cần đóng dấu và gửi đi')} <span style={{ color: 'red' }}>*</span>
                                 </label>
-                                <div style={{
-                                  border: '2px dashed var(--color-border)',
-                                  borderRadius: '12px',
-                                  padding: '1.5rem',
-                                  textAlign: 'center',
-                                  background: 'var(--color-bg-secondary)',
-                                  cursor: 'pointer'
-                                }} onClick={() => {
-                                  const fileEl = document.getElementById('print-stamp-send-file-upload');
-                                  if (fileEl) fileEl.click();
-                                }}>
+                                <div 
+                                  tabIndex={0}
+                                  onPaste={async (e) => {
+                                    const items = e.clipboardData?.items;
+                                    if (!items) return;
+                                    const pastedFiles: File[] = [];
+                                    for (let i = 0; i < items.length; i++) {
+                                      if (items[i].type?.startsWith('image/')) {
+                                        const f = items[i].getAsFile();
+                                        if (f) {
+                                          const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                                          const ext = items[i].type.split('/')[1] || 'png';
+                                          pastedFiles.push(new File([f], `ChungTu_${timestamp}_${i + 1}.${ext}`, { type: f.type }));
+                                        }
+                                      }
+                                    }
+                                    if (pastedFiles.length > 0) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      await handleUploadFiles(pastedFiles);
+                                    }
+                                  }}
+                                  style={{
+                                    border: '2px dashed var(--color-border)',
+                                    borderRadius: '12px',
+                                    padding: '1.5rem',
+                                    textAlign: 'center',
+                                    background: 'var(--color-bg-secondary)',
+                                    cursor: 'pointer',
+                                    outline: 'none'
+                                  }} 
+                                  onClick={() => {
+                                    const fileEl = document.getElementById('print-stamp-send-file-upload');
+                                    if (fileEl) fileEl.click();
+                                  }}
+                                >
                                   <input
                                     id="print-stamp-send-file-upload"
                                     type="file"
@@ -7271,31 +7595,13 @@ export default function Approvals() {
                                     onChange={async (e) => {
                                       const files = Array.from(e.target.files || []);
                                       if (files.length === 0) return;
-                                      const toastId = toast.loading(t('Đang tải tài liệu lên...'));
-                                      try {
-                                        const uploaded = [];
-                                        for (const file of files) {
-                                          const fd = new FormData();
-                                          fd.append('file', file);
-                                          const res = await api.post('/upload', fd, {
-                                            headers: { 'Content-Type': 'multipart/form-data' }
-                                          });
-                                          if (res.data && res.data.success && res.data.data?.url) {
-                                            uploaded.push({ name: file.name, size: file.size, url: res.data.data.url });
-                                          } else {
-                                            throw new Error(res.data?.message || t('Tải lên thất bại'));
-                                          }
-                                        }
-                                        setAttachments([...attachments, ...uploaded]);
-                                        toast.success(t('Tải tài liệu lên thành công!'), { id: toastId });
-                                      } catch (err: any) {
-                                        toast.error(t('Lỗi tải tài liệu lên: ') + (err.message || ''), { id: toastId });
-                                      }
+                                      await handleUploadFiles(files);
+                                      e.target.value = '';
                                     }}
                                   />
                                   <Paperclip size={24} style={{ color: 'var(--color-primary)', marginBottom: '8px' }} />
                                   <p style={{ fontSize: '0.8rem', color: 'var(--color-text)', margin: '0 0 4px 0', fontWeight: 650 }}>
-                                    {t('Tải lên hoặc kéo thả tài liệu vào đây')}
+                                    {t('Nhấn để tải tài liệu lên, kéo thả hoặc nhấn Ctrl+V để dán ảnh')}
                                   </p>
                                 </div>
                                 {attachments.length > 0 && (
@@ -8007,7 +8313,12 @@ export default function Approvals() {
                                   alignItems: 'center',
                                   justifyContent: 'center'
                                 }}>
-                                  <selectedWorkflowDef.icon size={18} />
+                                  {(() => {
+                                    const IconComp = (typeof selectedWorkflowDef?.icon === 'function' || (typeof selectedWorkflowDef?.icon === 'object' && (selectedWorkflowDef?.icon as any)?.$$typeof))
+                                      ? selectedWorkflowDef.icon
+                                      : (workflowList.find(w => w.id === selectedWorkflowDef?.id)?.icon || FileSignature);
+                                    return <IconComp size={18} />;
+                                  })()}
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                                   <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>{selectedWorkflowDef.name}</span>
@@ -8023,9 +8334,6 @@ export default function Approvals() {
                                   <span>{t('Tiêu đề đề xuất / Nội dung chi')}</span>
                                   <span style={{ color: 'var(--color-danger)' }}>*</span>
                                 </label>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                  {t('Tên loại quy trình cố định khúc đầu, nhập nội dung chi tiết ở khúc sau')}
-                                </span>
                               </div>
                               
                               <div style={{
@@ -8091,13 +8399,6 @@ export default function Approvals() {
                                   }}
                                   required
                                 />
-                              </div>
-
-                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>{t('Hiển thị trên phiếu chi & quy trình:')}</span>
-                                <strong style={{ color: 'var(--color-primary)' }}>
-                                  {getFullWorkflowTitle(selectedWorkflowDef, workflowTitleSuffix)}
-                                </strong>
                               </div>
                             </div>
 
@@ -8486,7 +8787,7 @@ export default function Approvals() {
                                   </span>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('Chu kỳ / Tần suất lặp lại')} <span style={{ color: 'var(--color-danger)' }}>*</span>
@@ -8778,38 +9079,63 @@ export default function Approvals() {
                             {/* DEDICATED BLOCK 5: ĐỀ XUẤT CHI PHÍ / HOÀN ỨNG / THANH TOÁN */}
                             {(selectedWorkflowDef?.id === 'expense_claim' || selectedWorkflowDef?.id === 'payment' || formType === 'expense') && (
                               <div style={{
-                                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.05), rgba(8, 145, 178, 0.02))',
-                                border: '1px solid rgba(6, 182, 212, 0.25)',
+                                background: 'var(--color-card, #ffffff)',
+                                border: '1px solid var(--color-border)',
                                 borderRadius: '14px',
                                 padding: '1.25rem',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: '12px'
                               }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0891b2' }}>
-                                  <Receipt size={18} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                                  <Receipt size={18} style={{ color: 'var(--color-primary)' }} />
                                   <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     {t('Hồ sơ chi phí & Chứng từ hóa đơn')}
                                   </span>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('Phân loại chi phí')}
                                     </label>
-                                    <CustomSelect
-                                      value={expenseCategory}
-                                      onChange={val => setExpenseCategory(val)}
-                                      options={[
-                                        { value: 'client_meeting', label: t('Chi phí tiếp khách / Ngoại giao đối tác') },
-                                        { value: 'travel', label: t('Công tác phí / Vé xe / Đi lại') },
-                                        { value: 'stationery', label: t('Văn phòng phẩm & Mua sắm vặt') },
-                                        { value: 'marketing', label: t('Tiếp thị / Sự kiện / Quảng cáo') },
-                                        { value: 'general', label: t('Chi phí nghiệp vụ khác') }
-                                      ]}
-                                      width="100%"
-                                    />
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '2px' }}>
+                                      {[
+                                        { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
+                                        { value: 'client_meeting', label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
+                                        { value: 'general', label: 'Vận hành', icon: Home, color: '#10b981' },
+                                        { value: 'marketing', label: 'Marketing', icon: Briefcase, color: '#ef4444' },
+                                        { value: 'stationery', label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
+                                        { value: 'hr', label: 'Nhân sự', icon: Tag, color: '#06b6d4' }
+                                      ].map(c => {
+                                        const Icon = c.icon;
+                                        const isSelected = expenseCategory === c.value || (c.value === 'general' && !expenseCategory);
+                                        return (
+                                          <button
+                                            key={c.value}
+                                            type="button"
+                                            onClick={() => setExpenseCategory(c.value)}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '6px',
+                                              padding: '5px 12px',
+                                              borderRadius: 'var(--radius-full)',
+                                              border: `1.5px solid ${isSelected ? c.color : 'var(--color-border)'}`,
+                                              background: isSelected ? `${c.color}18` : 'transparent',
+                                              color: isSelected ? c.color : 'var(--color-text-light)',
+                                              fontSize: '0.78rem',
+                                              fontWeight: isSelected ? 750 : 600,
+                                              cursor: 'pointer',
+                                              transition: 'all 0.18s ease'
+                                            }}
+                                          >
+                                            <Icon size={13} />
+                                            <span>{t(c.label)}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
 
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -9630,7 +9956,7 @@ export default function Approvals() {
                                   <DollarSign size={16} />
                                   <span>{t('Hình thức nhận: Tiền mặt (Bàn giao trực tiếp tại quầy / thủ quỹ)')}</span>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('Người nhận tiền mặt')}
@@ -9737,7 +10063,7 @@ export default function Approvals() {
                                   <CreditCard size={16} />
                                   <span>{t('Hình thức nhận: Thẻ tín dụng doanh nghiệp (Corporate Card)')}</span>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
                                       {t('4 số cuối thẻ tín dụng')}
@@ -9768,26 +10094,11 @@ export default function Approvals() {
                               </div>
                             )}
 
-                            {/* PURPOSE & DETAILS */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-                                {t('Mục đích & Nội dung thanh toán')} <span style={{ color: 'var(--color-danger)' }}>*</span>
-                              </label>
-
-                              <textarea
-                                className="form-input"
-                                value={paymentDetails}
-                                onChange={e => setPaymentDetails(e.target.value)}
-                                placeholder={t('Giải trình chi tiết mục đích chi tiêu và căn cứ đề xuất...')}
-                                style={{ height: '76px', resize: 'vertical', fontSize: '0.8rem', padding: '8px' }}
-                                required
-                              />
-                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Card 3: Bảng chi tiết thanh toán (only for expense/payment) */}
+                      {/* Card: Bảng chi tiết thanh toán & Mục đích thanh toán (only for expense/payment) */}
                       {formType === 'expense' && (
                         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -9827,8 +10138,8 @@ export default function Approvals() {
                                   const lineTotal = (Number(item.quantity) || 0) * (Number(item.price) || 0);
                                   return (
                                     <tr key={item.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                      <td style={{ padding: '8px', textAlign: 'center', width: '45px', minWidth: '45px' }}>{idx + 1}</td>
-                                      <td style={{ padding: '8px', minWidth: '200px' }}>
+                                      <td style={{ padding: '8px', textAlign: 'center', width: '45px', minWidth: '45px', verticalAlign: 'top', lineHeight: '28px' }}>{idx + 1}</td>
+                                      <td style={{ padding: '8px', minWidth: '200px', verticalAlign: 'top' }}>
                                         <input
                                           type="text"
                                           className="form-input"
@@ -9843,7 +10154,7 @@ export default function Approvals() {
                                           required
                                         />
                                       </td>
-                                      <td style={{ padding: '8px', width: '95px', minWidth: '95px' }}>
+                                      <td style={{ padding: '8px', width: '95px', minWidth: '95px', verticalAlign: 'top' }}>
                                         <input
                                           type="number"
                                           className="form-input"
@@ -9858,7 +10169,7 @@ export default function Approvals() {
                                           required
                                         />
                                       </td>
-                                      <td style={{ padding: '8px', width: '160px', minWidth: '160px' }}>
+                                      <td style={{ padding: '8px', width: '160px', minWidth: '160px', verticalAlign: 'top' }}>
                                         <input
                                           type="text"
                                           className="form-input"
@@ -9876,14 +10187,14 @@ export default function Approvals() {
                                         {item.price > 0 && (
                                           <div 
                                             style={{ 
-                                              fontSize: '0.7rem', 
+                                              fontSize: '0.68rem', 
                                               color: 'var(--color-primary)', 
                                               fontWeight: 600, 
-                                              marginTop: '3px', 
+                                              marginTop: '4px', 
                                               fontStyle: 'italic', 
                                               whiteSpace: 'normal', 
                                               wordBreak: 'break-word', 
-                                              lineHeight: 1.35 
+                                              lineHeight: 1.25 
                                             }} 
                                             title={docSoTiengViet(item.price)}
                                           >
@@ -9891,8 +10202,8 @@ export default function Approvals() {
                                           </div>
                                         )}
                                       </td>
-                                      <td style={{ padding: '8px', fontWeight: 600, width: '120px', minWidth: '120px' }}>{formatApprovalCurrency(lineTotal, currencyType)}</td>
-                                      <td style={{ padding: '8px', width: '95px', minWidth: '95px' }}>
+                                      <td style={{ padding: '8px', fontWeight: 600, width: '120px', minWidth: '120px', verticalAlign: 'top', lineHeight: '28px' }}>{formatApprovalCurrency(lineTotal, currencyType)}</td>
+                                      <td style={{ padding: '8px', width: '95px', minWidth: '95px', verticalAlign: 'top' }}>
                                         <select
                                           className="form-input"
                                           value={item.vat}
@@ -9920,14 +10231,14 @@ export default function Approvals() {
                                           <option value={10}>10%</option>
                                         </select>
                                       </td>
-                                      <td style={{ padding: '8px', textAlign: 'center', width: '36px', minWidth: '36px' }}>
+                                      <td style={{ padding: '8px', textAlign: 'center', width: '36px', minWidth: '36px', verticalAlign: 'top', lineHeight: '28px' }}>
                                         {expenseItems.length > 1 && (
                                           <button
                                             type="button"
                                             onClick={() => {
                                               setExpenseItems(expenseItems.filter(x => x.id !== item.id));
                                             }}
-                                            style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '1.1rem' }}
+                                            style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '1.1rem', height: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                                           >
                                             &times;
                                           </button>
@@ -9960,8 +10271,24 @@ export default function Approvals() {
                               </div>
                             )}
                           </div>
+
+                          {/* PURPOSE & DETAILS (Đem xuống dưới bảng chi tiết thanh toán, không require, không có dấu *) */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                              {t('Mục đích & Nội dung thanh toán')}
+                            </label>
+
+                            <textarea
+                              className="form-input"
+                              value={paymentDetails}
+                              onChange={e => setPaymentDetails(e.target.value)}
+                              placeholder={t('Giải trình chi tiết mục đích chi tiêu và căn cứ đề xuất (nếu có)...')}
+                              style={{ height: '76px', resize: 'vertical', fontSize: '0.8rem', padding: '8px' }}
+                            />
+                          </div>
                         </div>
                       )}
+
 
                       {/* Card 4: Document Attachments dropzone */}
                       {selectedWorkflowDef?.id !== 'print_stamp_send' && (
@@ -9975,6 +10302,7 @@ export default function Approvals() {
                             )}
                           </div>
                           <div
+                            tabIndex={0}
                             onDragOver={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -9999,6 +10327,26 @@ export default function Approvals() {
                                 await handleUploadFiles(files);
                               }
                             }}
+                            onPaste={async (e) => {
+                              const items = e.clipboardData?.items;
+                              if (!items) return;
+                              const pastedFiles: File[] = [];
+                              for (let i = 0; i < items.length; i++) {
+                                if (items[i].type?.startsWith('image/')) {
+                                  const f = items[i].getAsFile();
+                                  if (f) {
+                                    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                                    const ext = items[i].type.split('/')[1] || 'png';
+                                    pastedFiles.push(new File([f], `ChungTu_${timestamp}_${i + 1}.${ext}`, { type: f.type }));
+                                  }
+                                }
+                              }
+                              if (pastedFiles.length > 0) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                await handleUploadFiles(pastedFiles);
+                              }
+                            }}
                             style={{
                               border: isDraggingAttachments ? '2px dashed var(--color-primary)' : '2px dashed var(--color-border)',
                               borderRadius: '12px',
@@ -10006,7 +10354,8 @@ export default function Approvals() {
                               textAlign: 'center',
                               background: isDraggingAttachments ? 'rgba(163, 20, 34, 0.06)' : 'var(--color-bg-secondary)',
                               cursor: uploadingAttachments ? 'wait' : 'pointer',
-                              transition: 'all 0.2s ease'
+                              transition: 'all 0.2s ease',
+                              outline: 'none'
                             }}
                             onClick={() => {
                               if (uploadingAttachments) return;
@@ -10038,10 +10387,10 @@ export default function Approvals() {
                               <>
                                 <Paperclip size={24} style={{ color: 'var(--color-primary)', marginBottom: '8px' }} />
                                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text)', margin: '0 0 4px 0', fontWeight: 650 }}>
-                                  {t('Nhấn để tải nhiều tệp lên hoặc kéo thả tệp vào đây')}
+                                  {t('Nhấn để tải nhiều tệp lên, kéo thả hoặc nhấn Ctrl+V để dán ảnh')}
                                 </p>
                                 <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)' }}>
-                                  {t('Hỗ trợ gửi nhiều file cùng lúc: PDF, PNG, JPG, XLSX, DOCX (tối đa 25MB/tệp)')}
+                                  {t('Hỗ trợ gửi nhiều file cùng lúc: PDF, PNG, JPG, XLSX, DOCX (tối đa 25MB/tệp) • Dán ảnh trực tiếp từ Clipboard (Ctrl+V)')}
                                 </span>
                               </>
                             )}
@@ -10092,147 +10441,149 @@ export default function Approvals() {
                         </div>
                       )}
 
-                      {/* Card 5: Thảo luận & Hoạt động (Bình luận như bên workspace) */}
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)', marginTop: '1.25rem' }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {t('Thảo luận & Hoạt động')}
-                        </div>
-
-                        {/* List of comments */}
-                        <div 
-                          style={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '10px',
-                            maxHeight: '240px',
-                            overflowY: 'auto',
-                            paddingRight: '6px'
-                          }}
-                          className="custom-scrollbar"
-                        >
-                          {createComments.length === 0 ? (
-                            <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                              {t('Chưa có bình luận nào.')}
-                            </span>
-                          ) : (
-                            createComments.map((c: any) => (
-                              <div key={c.id} style={{
-                                display: 'flex',
-                                gap: '12px',
-                                padding: '12px 16px',
-                                background: 'var(--color-bg)',
-                                borderRadius: '14px',
-                                border: '1px solid var(--color-border-light)',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.01)'
-                              }}>
-                                          <Avatar name={c.author} size={28} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                                    <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', fontWeight: 700 }}>{c.author}</strong>
-                                    <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)' }}>{c.time}</span>
-                                  </div>
-                                  <p 
-                                    style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-light)', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}
-                                    dangerouslySetInnerHTML={{ __html: c.text }}
-                                  />
-                                  
-                                  {c.attachments && c.attachments.length > 0 && (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                                      {c.attachments.map((att: any, idx: number) => (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', padding: '3px 8px', borderRadius: '8px', fontSize: '0.72rem', color: 'var(--color-text)' }}>
-                                          <Paperclip size={11} style={{ color: 'var(--color-text-muted)' }} />
-                                          <span>{att.name}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-
-                        {/* Comment input box */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                          <div style={{ position: 'relative' }}>
-                            <MentionInput
-                              value={newCreateComment}
-                              onChange={e => setNewCreateComment(e.target.value)}
-                              placeholder={t('Viết bình luận... Gõ @ để nhắc tên')}
-                              style={{ minHeight: '65px', fontSize: '0.8rem', paddingRight: '40px' }}
-                              users={users}
-                              disabled={createUploadingFile}
-                            />
-                            <label style={{ position: 'absolute', right: '10px', bottom: '10px', cursor: createUploadingFile ? 'not-allowed' : 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('Đính kèm file')}>
-                              <input 
-                                type="file" 
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  setCreateUploadingFile(true);
-                                  try {
-                                    const fd = new FormData();
-                                    fd.append('file', file);
-                                    const res = await api.post('/upload', fd, {
-                                      headers: { 'Content-Type': 'multipart/form-data' }
-                                    });
-                                    if (res.data && res.data.success && res.data.data?.url) {
-                                      setCreateCommentAttachments([...createCommentAttachments, { name: file.name, url: res.data.data.url }]);
-                                      toast.success(t('Đã đính kèm tệp!'));
-                                    } else {
-                                      throw new Error(res.data?.message || t('Tải lên thất bại'));
-                                    }
-                                  } catch (err: any) {
-                                    toast.error(t('Lỗi tải tệp: ') + (err.message || ''));
-                                  } finally {
-                                    setCreateUploadingFile(false);
-                                  }
-                                }} 
-                                style={{ display: 'none' }} 
-                                disabled={createUploadingFile} 
-                              />
-                              {createUploadingFile ? <Clock className="spin" size={16} /> : <Paperclip size={16} />}
-                            </label>
+                      {/* Card 5: Thảo luận & Hoạt động (Bình luận như bên workspace) - Only when editing existing request */}
+                      {editingItemId && (
+                        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)', marginTop: '1.25rem' }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {t('Thảo luận & Hoạt động')}
                           </div>
 
-                          {/* Uploaded comment attachments list */}
-                          {createCommentAttachments.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {createCommentAttachments.map((file, idx) => (
-                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', color: 'var(--color-primary)' }}>
-                                  <Paperclip size={11} />
-                                  <span>{file.name}</span>
-                                  <button type="button" onClick={() => setCreateCommentAttachments(createCommentAttachments.filter((_, i) => i !== idx))} style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', paddingLeft: '4px', fontWeight: 700 }}>&times;</button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!newCreateComment.trim() && createCommentAttachments.length === 0) return;
-                              const commentObj = {
-                                id: Date.now(),
-                                author: t('Tôi'),
-                                time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                                text: newCreateComment,
-                                attachments: createCommentAttachments
-                              };
-                              setCreateComments([...createComments, commentObj]);
-                              setNewCreateComment('');
-                              setCreateCommentAttachments([]);
-                              toast.success(t('Đã thêm bình luận!'));
+                          {/* List of comments */}
+                          <div 
+                            style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '10px',
+                              maxHeight: '240px',
+                              overflowY: 'auto',
+                              paddingRight: '6px'
                             }}
-                            className="btn primary"
-                            style={{ alignSelf: 'flex-end', height: '30px', padding: '0 14px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            className="custom-scrollbar"
                           >
-                            <Send size={12} />
-                            <span>{t('Gửi')}</span>
-                          </button>
+                            {createComments.length === 0 ? (
+                              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                {t('Chưa có bình luận nào.')}
+                              </span>
+                            ) : (
+                              createComments.map((c: any) => (
+                                <div key={c.id} style={{
+                                  display: 'flex',
+                                  gap: '12px',
+                                  padding: '12px 16px',
+                                  background: 'var(--color-bg)',
+                                  borderRadius: '14px',
+                                  border: '1px solid var(--color-border-light)',
+                                  boxShadow: '0 2px 6px rgba(0,0,0,0.01)'
+                                }}>
+                                            <Avatar name={c.author} size={28} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                                      <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', fontWeight: 700 }}>{c.author}</strong>
+                                      <span style={{ fontSize: '0.675rem', color: 'var(--color-text-muted)' }}>{c.time}</span>
+                                    </div>
+                                    <p 
+                                      style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-light)', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}
+                                      dangerouslySetInnerHTML={{ __html: c.text }}
+                                    />
+                                    
+                                    {c.attachments && c.attachments.length > 0 && (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                                        {c.attachments.map((att: any, idx: number) => (
+                                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', padding: '3px 8px', borderRadius: '8px', fontSize: '0.72rem', color: 'var(--color-text)' }}>
+                                            <Paperclip size={11} style={{ color: 'var(--color-text-muted)' }} />
+                                            <span>{att.name}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          {/* Comment input box */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <MentionInput
+                                value={newCreateComment}
+                                onChange={e => setNewCreateComment(e.target.value)}
+                                placeholder={t('Viết bình luận... Gõ @ để nhắc tên')}
+                                style={{ minHeight: '65px', fontSize: '0.8rem', paddingRight: '40px' }}
+                                users={users}
+                                disabled={createUploadingFile}
+                              />
+                              <label style={{ position: 'absolute', right: '10px', bottom: '10px', cursor: createUploadingFile ? 'not-allowed' : 'pointer', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('Đính kèm file')}>
+                                <input 
+                                  type="file" 
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    setCreateUploadingFile(true);
+                                    try {
+                                      const fd = new FormData();
+                                      fd.append('file', file);
+                                      const res = await api.post('/upload', fd, {
+                                        headers: { 'Content-Type': 'multipart/form-data' }
+                                      });
+                                      if (res.data && res.data.success && res.data.data?.url) {
+                                        setCreateCommentAttachments([...createCommentAttachments, { name: file.name, url: res.data.data.url }]);
+                                        toast.success(t('Đã đính kèm tệp!'));
+                                      } else {
+                                        throw new Error(res.data?.message || t('Tải lên thất bại'));
+                                      }
+                                    } catch (err: any) {
+                                      toast.error(t('Lỗi tải tệp: ') + (err.message || ''));
+                                    } finally {
+                                      setCreateUploadingFile(false);
+                                    }
+                                  }} 
+                                  style={{ display: 'none' }} 
+                                  disabled={createUploadingFile} 
+                                />
+                                {createUploadingFile ? <Clock className="spin" size={16} /> : <Paperclip size={16} />}
+                              </label>
+                            </div>
+
+                            {/* Uploaded comment attachments list */}
+                            {createCommentAttachments.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {createCommentAttachments.map((file, idx) => (
+                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', color: 'var(--color-primary)' }}>
+                                    <Paperclip size={11} />
+                                    <span>{file.name}</span>
+                                    <button type="button" onClick={() => setCreateCommentAttachments(createCommentAttachments.filter((_, i) => i !== idx))} style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', paddingLeft: '4px', fontWeight: 700 }}>&times;</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!newCreateComment.trim() && createCommentAttachments.length === 0) return;
+                                const commentObj = {
+                                  id: Date.now(),
+                                  author: t('Tôi'),
+                                  time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                                  text: newCreateComment,
+                                  attachments: createCommentAttachments
+                                };
+                                setCreateComments([...createComments, commentObj]);
+                                setNewCreateComment('');
+                                setCreateCommentAttachments([]);
+                                toast.success(t('Đã thêm bình luận!'));
+                              }}
+                              className="btn primary"
+                              style={{ alignSelf: 'flex-end', height: '30px', padding: '0 14px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Send size={12} />
+                              <span>{t('Gửi')}</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Spacer at the bottom to prevent sticking to edge */}
                       <div style={{ height: '80px', flexShrink: 0 }} />
@@ -10631,18 +10982,20 @@ export default function Approvals() {
                           </div>
                         )}
 
-                        <div style={{
-                          marginTop: '0.75rem',
-                          padding: '10px',
-                          background: 'rgba(245, 158, 11, 0.06)',
-                          border: '1px solid rgba(245, 158, 11, 0.15)',
-                          borderRadius: '8px',
-                          fontSize: '0.72rem',
-                          color: 'var(--color-text-muted)',
-                          lineHeight: '1.4'
-                        }}>
-                          <strong>{t('Lưu ý:')}</strong> {t('Mặc định chi phí dưới 5.000.000 đ áp dụng 2 cấp duyệt (Tạo -> Leader -> Kế toán). Từ 5.000.000 đ trở lên hệ thống tự động bổ sung phê duyệt của Ban Giám đốc (Tạo -> Leader -> Ban Giám đốc Phạm Quang Vinh -> Kế toán). Bạn có thể thay đổi người phụ trách ở mỗi bước.')}
-                        </div>
+                        {formType === 'expense' && currentExpenseTotal >= 5000000 && (
+                          <div style={{
+                            marginTop: '0.75rem',
+                            padding: '10px',
+                            background: 'rgba(245, 158, 11, 0.06)',
+                            border: '1px solid rgba(245, 158, 11, 0.15)',
+                            borderRadius: '8px',
+                            fontSize: '0.72rem',
+                            color: 'var(--color-text-muted)',
+                            lineHeight: '1.4'
+                          }}>
+                            <strong>{t('Lưu ý:')}</strong> {t('Chi phí từ 5.000.000 đ trở lên hệ thống tự động bổ sung phê duyệt của Giám đốc (Tạo -> Leader -> Giám đốc -> Kế toán). Bạn có thể thay đổi người phụ trách ở mỗi bước.')}
+                          </div>
+                        )}
                       </div>
 
                       {/* Card 2: Người liên quan (Theo dõi) */}
@@ -10880,29 +11233,31 @@ export default function Approvals() {
                       zIndex: 100,
                       boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.08)'
                     }}>
-                      <button 
-                        type="button" 
-                        onClick={() => handleRequestExit('back')}
-                        style={{
-                          background: 'var(--color-bg)',
-                          border: '1px solid var(--color-border)',
-                          padding: '0 14px',
-                          borderRadius: '10px',
-                          cursor: 'pointer',
-                          color: 'var(--color-text)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          height: '42px',
-                          fontSize: '0.85rem',
-                          fontWeight: 700,
-                          flexShrink: 0
-                        }}
-                      >
-                        <ArrowLeft size={16} />
-                        <span>{t('Quay lại')}</span>
-                      </button>
+                      {!editingItemId && (
+                        <button 
+                          type="button" 
+                          onClick={() => handleRequestExit('back')}
+                          style={{
+                            background: 'var(--color-bg)',
+                            border: '1px solid var(--color-border)',
+                            padding: '0 14px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            color: 'var(--color-text)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            height: '42px',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            flexShrink: 0
+                          }}
+                        >
+                          <ArrowLeft size={16} />
+                          <span>{t('Quay lại')}</span>
+                        </button>
+                      )}
 
                       <button 
                         type="button" 
@@ -11148,6 +11503,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
 
     if (item.type === 'attendance_bulk' || item.type === 'checkin') {
       const targetApproverId = Number(detail?.approver_id || detail?.manager_id || (item as any)?.approver_id || (item as any)?.manager_id || 0);
+      const creatorId = Number(item.user_id || item.created_by || detail?.user_id || detail?.created_by || 0);
+      const isManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(role) || Boolean((user as any)?.is_team_leader);
+
+      // Trưởng phòng / Quản lý tự duyệt cho chính mình
+      if (creatorId === userId && isManagerOrLeader) {
+        return true;
+      }
       if (targetApproverId > 0) {
         if (targetApproverId === userId) return true;
         if (['superadmin', 'super_admin'].includes(role)) return true;
@@ -12195,8 +12557,19 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       (detail?.expense_title || detail?.name || '')
     );
 
-    const cleanHeaderTitle = (rawTitle || `IDEAS - ${t('Quy trình')} #${item.id}`)
+    let cleanHeaderTitle = (rawTitle || `IDEAS - ${t('Quy trình')} #${item.id}`)
       .replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '');
+
+    // Nếu tiêu đề bị cắt lửng bởi dấu ... ở cuối nhưng có lý do chi tiết thì hiển thị trọn vẹn
+    if (cleanHeaderTitle.endsWith('...')) {
+      const fullReason = (detail?.reason || (item as any)?.reason || detail?.description || item?.description || '').trim();
+      if (fullReason) {
+        const lastDashIndex = cleanHeaderTitle.lastIndexOf(' - ');
+        if (lastDashIndex !== -1) {
+          cleanHeaderTitle = cleanHeaderTitle.substring(0, lastDashIndex) + ' - ' + fullReason;
+        }
+      }
+    }
 
     const cleanNoteText = (detail?.reason || detail?.notes || detail?.description || rawDesc || '')
       .replace(/^\[.*?\]\s*Thời gian:.*?\.\s*Lý do:\s*/i, '')
@@ -12213,7 +12586,16 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         
         {/* Proposal Title Header */}
         <div style={{ padding: isMobile ? '0.25rem 0' : '0.5rem 0.25rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <h2 style={{ fontSize: isMobile ? '0.95rem' : '1.15rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', lineHeight: isMobile ? 1.35 : 1.3 }}>
+          <h2 style={{
+            fontSize: isMobile ? '0.95rem' : '1.15rem',
+            fontWeight: 800,
+            margin: 0,
+            color: 'var(--color-text)',
+            lineHeight: isMobile ? 1.4 : 1.35,
+            wordBreak: 'break-word',
+            whiteSpace: 'normal',
+            overflow: 'visible'
+          }}>
             {cleanHeaderTitle}
           </h2>
           <div style={{ display: 'flex', gap: isMobile ? '8px' : '12px', alignItems: 'center', fontSize: isMobile ? '0.725rem' : '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
@@ -12462,25 +12844,34 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const durationLabel = isWFH ? t('Thời lượng làm việc') : (isOT ? t('Số ngày công quy đổi') : (isBusinessTrip ? t('Số ngày công tác') : t('Số ngày nghỉ')));
             const periodLabel = isWFH ? t('Thời gian làm việc từ xa') : (isOT ? t('Thời gian tăng ca') : (isBusinessTrip ? t('Thời gian công tác') : t('Thời gian nghỉ')));
 
+            const leaveTypeMap: Record<string, string> = {
+              annual: t('Nghỉ phép năm'),
+              sick: t('Nghỉ ốm / thai sản'),
+              compensatory: t('Nghỉ bù'),
+              special_paid: t('Nghỉ chế độ (Hiếu/Hỉ theo luật)'),
+              unpaid: t('Nghỉ việc riêng (không lương)'),
+              overtime: t('Đăng ký tăng ca (OT)'),
+              remote_work: t('Làm việc từ xa (WFH)'),
+              business_trip: t('Đi công tác')
+            };
+            const currentLeaveType = detail?.leave_type || (item as any)?.leave_type || 'annual';
+            const leaveTypeDisplayText = leaveTypeMap[currentLeaveType] || (isWFH ? t('Làm việc từ xa (WFH)') : (isOT ? t('Đăng ký tăng ca (OT)') : (isBusinessTrip ? t('Đi công tác') : t('Nghỉ phép năm'))));
+
             return (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: isMobile ? '0.75rem' : '1rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{typeLabel}</label>
-                  <CustomSelect
-                    value={detail?.leave_type || 'annual'}
-                    onChange={() => {}}
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={leaveTypeDisplayText}
                     disabled
-                    options={[
-                      { value: 'annual', label: t('Nghỉ phép năm') },
-                      { value: 'sick', label: t('Nghỉ ốm / thai sản') },
-                      { value: 'compensatory', label: t('Nghỉ bù') },
-                      { value: 'special_paid', label: t('Nghỉ chế độ (Hiếu/Hỉ theo luật)') },
-                      { value: 'unpaid', label: t('Nghỉ việc riêng (không lương)') },
-                      { value: 'overtime', label: t('Đăng ký tăng ca (OT)') },
-                      { value: 'remote_work', label: t('Làm việc từ xa (WFH)') },
-                      { value: 'business_trip', label: t('Đi công tác') }
-                    ]}
-                    width="100%"
+                    style={{
+                      width: '100%',
+                      fontSize: isMobile ? '0.8125rem' : '0.875rem',
+                      fontWeight: 700,
+                      color: 'var(--color-text)'
+                    }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -12714,12 +13105,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                       <div style={{
                         marginTop: '6px',
                         padding: '10px 14px',
-                        background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.03), rgba(59, 130, 246, 0.06))',
-                        border: '1px solid rgba(37, 99, 235, 0.18)',
+                        background: '#ffffff',
+                        border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                         borderRadius: '10px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '6px'
+                        gap: '6px',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary, #2563eb)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -13435,11 +13827,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '14px',
-                background: 'linear-gradient(145deg, var(--color-surface) 0%, rgba(240, 249, 255, 0.45) 100%)',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
+                background: '#ffffff',
+                border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                 borderRadius: '16px',
                 padding: isMobile ? '1.1rem' : '1.5rem',
-                boxShadow: '0 4px 20px rgba(37, 99, 235, 0.04)'
+                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -13598,15 +13990,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     }}>
                       {/* Executive Brand Light Bank Card */}
                       <div style={{
-                        background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
-                        border: '1px solid #fecaca',
+                        background: '#ffffff',
+                        border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                         borderRadius: '14px',
                         padding: '12px 14px',
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'space-between',
                         gap: '10px',
-                        boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                         position: 'relative',
                         overflow: 'hidden'
                       }}>
@@ -13616,7 +14008,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                               bank={bInfo.bankName}
                               width={38}
                               height={26}
-                              style={{ borderRadius: '6px', border: '1px solid #fecaca', background: '#ffffff', padding: '2px 4px' }}
+                              style={{ borderRadius: '6px', border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))', background: '#ffffff', padding: '2px 4px' }}
                             />
                             <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={bInfo.bankName || t('Chuyển khoản Ngân hàng')}>
                               {bInfo.bankName || t('Chuyển khoản Ngân hàng')}
@@ -13629,9 +14021,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                             letterSpacing: '0.04em',
                             padding: '2px 6px',
                             borderRadius: '5px',
-                            background: '#ffffff',
+                            background: 'rgba(220, 38, 38, 0.06)',
                             color: '#dc2626',
-                            border: '1px solid #fecaca',
+                            border: '1px solid rgba(220, 38, 38, 0.15)',
                             flexShrink: 0
                           }}>
                             {t('Chuyển khoản 24/7')}
@@ -13642,11 +14034,11 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          background: '#ffffff',
+                          background: '#f8fafc',
                           padding: '7px 10px',
                           borderRadius: '8px',
-                          border: '1px solid #fecaca',
-                          boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                          border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
                         }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                             <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
@@ -13713,13 +14105,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                           title={t('Bấm để phóng to mã QR')}
                           style={{
                             background: '#ffffff',
-                            border: '1px solid #fecaca',
+                            border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
                             borderRadius: '14px',
                             padding: '6px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
                             cursor: 'pointer',
                             transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                           }}
@@ -14423,7 +14815,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               </>
             )}
 
-            {onEdit && (item.status === 'pending' || item.status === 'pending_approval' || item.status === 'rejected') && (
+            {onEdit && Number(user?.id) === Number(item.created_by || item.user_id || detail?.created_by || detail?.user_id) && (item.status === 'pending' || item.status === 'pending_approval' || item.status === 'rejected') && (
               <button
                 onClick={() => {
                   onEdit(item);
@@ -14683,3 +15075,6 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     document.body
   );
 }
+
+
+

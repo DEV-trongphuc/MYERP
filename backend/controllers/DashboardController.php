@@ -417,14 +417,7 @@ class DashboardController {
             LEFT JOIN users u ON a.user_id = u.id
             WHERE a.tenant_id=?";
         $p = [$tid];
-        if ($isSale) {
-            $sql .= " AND a.user_id = ?";
-            $p[] = $uid;
-        } else if ($isManager) {
-            $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-            $sql .= " AND a.user_id IN ($placeholders)";
-            $p = array_merge($p, $userIds);
-        } else if (!in_array($auth['role'], ['super_admin', 'superadmin', 'director'], true)) {
+        if (!in_array($auth['role'] ?? '', ['super_admin', 'superadmin', 'admin'], true)) {
             $sql .= " AND (a.user_id = ? OR a.created_by = ? OR a.approver_id = ? OR FIND_IN_SET(?, a.participant_ids))";
             $p[] = $uid;
             $p[] = $uid;

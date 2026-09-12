@@ -37,6 +37,7 @@ interface CustomSelectProps {
   align?: 'left' | 'right';
   size?: 'xs' | 'sm' | 'md';
   disabled?: boolean;
+  hideSelectedSublabel?: boolean;
   onSearchChange?: (search: string) => void;
 }
 
@@ -66,6 +67,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   align = 'left',
   size = 'sm',
   disabled = false,
+  hideSelectedSublabel = false,
   onSearchChange
 }) => {
   const { t } = useLanguage();
@@ -337,7 +339,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           {!showAvatars && selectedOption.icon && <span style={{ display: 'flex' }}>{selectedOption.icon}</span>}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: size === 'xs' ? 4 : 6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, fontSize: size === 'xs' ? '0.75rem' : undefined }}>{t(selectedOption.label)}</span>
-            {selectedOption.sublabel && <span style={{ fontSize: size === 'xs' ? '0.65rem' : '0.75rem', color: 'var(--color-text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>({t(selectedOption.sublabel)})</span>}
+            {!hideSelectedSublabel && selectedOption.sublabel && <span style={{ fontSize: size === 'xs' ? '0.65rem' : '0.75rem', color: 'var(--color-text-muted)', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>({t(selectedOption.sublabel)})</span>}
           </span>
         </span>
         {selectedOption.badge && selectedOption.badge.count > 0 && (

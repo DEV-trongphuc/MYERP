@@ -450,6 +450,8 @@ export const MentionInput: React.FC<MentionInputProps> = ({
             chip.contentEditable = 'false';
             chip.setAttribute('data-file-url', resolvedUrl);
             chip.setAttribute('data-file-name', file.name);
+            chip.setAttribute('download', file.name);
+            chip.setAttribute('title', `Tải về: ${file.name}`);
             chip.innerHTML = `<span style="font-size: 1rem;">${getFileIcon(file.name)}</span><span>${file.name}</span> <span style="font-size: 0.7rem; opacity: 0.7;">(${formatFileSize(file.size)})</span>`;
             nodeToInsert = chip;
           }

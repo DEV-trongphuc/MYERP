@@ -20,11 +20,11 @@ interface Props {
 }
 
 const CATEGORIES = [
-  { id: 'Di chuyển', label: 'Di chuyển', icon: Car, color: '#3b82f6' },
+  { id: 'Vận Chuyển', label: 'Vận Chuyển', icon: Car, color: '#3b82f6' },
   { id: 'Ăn uống', label: 'Ăn uống', icon: UtensilsCrossed, color: '#f59e0b' },
   { id: 'Vận hành', label: 'Vận hành', icon: Settings, color: '#BD1D2D' },
   { id: 'Marketing', label: 'Marketing', icon: Briefcase, color: '#ec4899' },
-  { id: 'Công cụ', label: 'Công cụ', icon: Wrench, color: '#10b981' },
+  { id: 'Văn phòng phẩm', label: 'Văn phòng phẩm', icon: Wrench, color: '#10b981' },
   { id: 'Nhân sự', label: 'Nhân sự', icon: User, color: '#f97316' },
   { id: 'Quà tặng', label: 'Quà tặng', icon: Gift, color: '#ef4444' },
   { id: 'Khác', label: 'Khác', icon: FileText, color: '#6b7280' },

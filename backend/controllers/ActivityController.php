@@ -232,16 +232,16 @@ class ActivityController {
             if ($ownerId === $userId || in_array($role, ['super_admin', 'superadmin', 'admin'], true)) {
                 return true;
             }
-            // Leader (manager), director, and anyone else CANNOT access
             return false;
         }
 
-        if (in_array($role, ['super_admin', 'superadmin', 'director', 'admin', 'accountant'], true)) {
+        // Only super_admin, superadmin, admin have company-wide broad access
+        if (in_array($role, ['super_admin', 'superadmin', 'admin'], true)) {
             return true;
         }
 
-        // 1. Check Creator/Assignee
-        if ((int)$activity['user_id'] === $userId) {
+        // 1. Check Assignee / Creator
+        if ((int)($activity['user_id'] ?? 0) === $userId) {
             return true;
         }
         if (isset($activity['created_by']) && (int)$activity['created_by'] === $userId) {
@@ -253,30 +253,56 @@ class ActivityController {
             return true;
         }
         
-        // 3. Check Participant
-        if (isset($activity['participant_ids'])) {
-            $pIds = array_filter(array_map('intval', explode(',', $activity['participant_ids'])));
+        // 3. Check Participant (Người liên quan)
+        if (!empty($activity['participant_ids'])) {
+            $pIds = $this->parseUserIds($activity['participant_ids']);
             if (in_array($userId, $pIds, true)) {
                 return true;
             }
         }
 
-        // 4. Check Team Manager access to team member tasks
-        if ($role === 'manager' || in_array($role, ['sale_admin', 'saleadmin'], true)) {
-            if (!empty($activity['user_id'])) {
-                $stmt = $this->db->prepare("
-                    SELECT 1 FROM users u 
-                    JOIN teams t ON u.team_id = t.id 
-                    WHERE u.id = ? AND FIND_IN_SET(?, CONCAT(t.leader_id, CHAR(44), COALESCE(t.co_leader_ids, leader_id)))
-                ");
-                $stmt->execute([(int)$activity['user_id'], $userId]);
-                if ($stmt->fetch()) {
-                    return true;
-                }
+        // 4. Check Mention/Tag in task body or tags
+        $body = (string)($activity['body'] ?? '');
+        $tags = (string)($activity['tags'] ?? '');
+        if (str_contains($body, "data-user-id=\"{$userId}\"") || str_contains($body, "data-user-id='{$userId}'") || str_contains($body, "data-user-id={$userId}")) {
+            return true;
+        }
+        if (!empty($auth['full_name']) && str_contains($body, "@" . $auth['full_name'])) {
+            return true;
+        }
+        if (!empty($auth['username']) && (str_contains($body, "@" . $auth['username']) || str_contains($tags, "@" . $auth['username']))) {
+            return true;
+        }
+
+        // 5. Check Mention or participation in Comments
+        $actId = (int)($activity['id'] ?? 0);
+        if ($actId > 0) {
+            $fullName = $auth['full_name'] ?? '';
+            $userName = $auth['username'] ?? '';
+            $cCheck = $this->db->prepare("
+                SELECT 1 FROM activity_comments 
+                WHERE activity_id = ? AND tenant_id = ? AND (
+                    user_id = ? 
+                    OR content LIKE ? 
+                    OR content LIKE ?
+                    OR (? != '' AND content LIKE ?)
+                ) LIMIT 1
+            ");
+            $cCheck->execute([
+                $actId,
+                $auth['tenant_id'],
+                $userId,
+                "%data-user-id=\"{$userId}\"%",
+                "%" . ($fullName !== '' ? "@{$fullName}" : "data-user-id=\"{$userId}\"") . "%",
+                $userName,
+                "%" . ($userName !== '' ? "@{$userName}" : "") . "%"
+            ]);
+            if ($cCheck->fetch()) {
+                return true;
             }
         }
 
-        // 5. Check Contact/Deal relation
+        // 6. Check Contact/Deal relation
         if (!empty($activity['related_type']) && !empty($activity['related_id'])) {
             if ($activity['related_type'] === 'contact') {
                 $chk = $this->db->prepare("SELECT 1 FROM contacts WHERE id = ? AND (owner_id = ? OR FIND_IN_SET(?, collaborator_ids))");
@@ -285,6 +311,14 @@ class ActivityController {
             } elseif ($activity['related_type'] === 'deal') {
                 $chk = $this->db->prepare("SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = ? AND (d.owner_id = ? OR ct.owner_id = ? OR FIND_IN_SET(?, ct.collaborator_ids))");
                 $chk->execute([(int)$activity['related_id'], $userId, $userId, (string)$userId]);
+                if ($chk->fetch()) return true;
+            } elseif ($activity['related_type'] === 'project') {
+                $chk = $this->db->prepare("SELECT 1 FROM project_roster WHERE project_id = ? AND user_id = ?");
+                $chk->execute([(int)$activity['related_id'], $userId]);
+                if ($chk->fetch()) return true;
+            } elseif ($activity['related_type'] === 'campaign') {
+                $chk = $this->db->prepare("SELECT 1 FROM marketing_campaigns WHERE id = ? AND (FIND_IN_SET(?, user_ids) OR FIND_IN_SET(?, manager_ids) OR created_by = ?)");
+                $chk->execute([(int)$activity['related_id'], (string)$userId, (string)$userId, $userId]);
                 if ($chk->fetch()) return true;
             }
         }
@@ -342,83 +376,37 @@ class ActivityController {
         }
 
         $userRole = strtolower($auth['role'] ?? '');
-        $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin', 'accountant'], true);
+        // "chỉ admin đổ lên mới thấy các task thôi. Còn lại sửa lại quyền director trở xuống chỉ thấy các thứ mình tạo, tag, metion, liên quan và thực hiện thôi."
+        $hasBroadOversight = in_array($userRole, ['super_admin', 'superadmin', 'admin'], true);
 
         if ($hasBroadOversight) {
-            // Super Admin / Admin / Accountant: broad oversight, can filter by team_id or user_id
-        } else if (in_array($userRole, ['director'], true)) {
-            // Director: oversight of company-wide tasks except private personal tasks
-            $where[] = '(
-                NOT (
-                    (
-                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = \'\' OR a.participant_ids = CONCAT(a.user_id, \'\')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = \'\' OR a.related_type = \'personal\' OR a.related_id IS NULL OR a.related_id = 0))
-                        OR (COALESCE(a.tags, \'\') LIKE \'%ca_nhan%\' OR COALESCE(a.tags, \'\') LIKE \'%personal%\')
-                    )
-                    AND a.user_id != ? AND a.created_by != ?
-                )
-            )';
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-        } else if ($auth['role'] === 'manager' || (!empty($managedUserIds) && in_array($auth['role'], ['sale_admin', 'saleadmin'], true))) {
-            $teamUserClause = !empty($managedUserIds) ? "a.user_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "1=0";
-            $teamCtClause = !empty($managedUserIds) ? "OR ct.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "";
-            $teamDClause = !empty($managedUserIds) ? "OR d.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ") OR ct.owner_id IN (" . implode(',', array_map('intval', $managedUserIds)) . ")" : "";
-
-            $where[] = "(
-                a.user_id = ? 
-                OR a.created_by = ?
-                OR a.approver_id = ?
-                OR FIND_IN_SET(?, a.participant_ids)
-                OR (
-                    $teamUserClause
-                    AND NOT (
-                        (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = '' OR a.participant_ids = CONCAT(a.user_id, '')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = '' OR a.related_type = 'personal' OR a.related_id IS NULL OR a.related_id = 0))
-                        OR (COALESCE(a.tags, '') LIKE '%ca_nhan%' OR COALESCE(a.tags, '') LIKE '%personal%')
-                    )
-                )
-                OR (((a.related_type IN ('contact', 'lead') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
-                    SELECT 1 FROM contacts ct WHERE (ct.id = a.related_id OR ct.id = a.contact_id) AND (ct.owner_id = ? $teamCtClause)
-                )) 
-                OR (a.related_type = 'deal' AND EXISTS (
-                    SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
-                        d.owner_id = ? OR ct.owner_id = ? $teamDClause
-                    )
-                ))
-                OR (a.related_type = 'project' AND EXISTS (
-                    SELECT 1 FROM project_roster pr WHERE pr.project_id = a.related_id AND pr.user_id = ?
-                ))
-                OR (a.related_type = 'campaign' AND EXISTS (
-                    SELECT 1 FROM marketing_campaigns mc WHERE mc.id = a.related_id AND (FIND_IN_SET(?, mc.user_ids) OR FIND_IN_SET(?, mc.manager_ids) OR mc.created_by = ?)
-                ))
-                OR (a.tags LIKE 'internal_%' AND (
-                    (
-                        $teamUserClause
-                        AND NOT (
-                            (a.user_id = a.created_by AND (a.participant_ids IS NULL OR a.participant_ids = '' OR a.participant_ids = CONCAT(a.user_id, '')) AND (a.approver_id IS NULL OR a.approver_id = 0 OR a.approver_id = a.user_id) AND (a.related_type IS NULL OR a.related_type = '' OR a.related_type = 'personal' OR a.related_id IS NULL OR a.related_id = 0))
-                            OR (COALESCE(a.tags, '') LIKE '%ca_nhan%' OR COALESCE(a.tags, '') LIKE '%personal%')
-                        )
-                    )
-                ))
-            )";
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = (string)$auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = (string)$auth['user_id'];
-            $params[] = (string)$auth['user_id'];
-            $params[] = $auth['user_id'];
+            // Super Admin / Admin: broad oversight across company tasks, can filter by team_id or user_id
         } else {
-            // STRICT ISOLATION: For sales, academic, teacher, hoc_vu, tro_giang, giang_vien, marketing, accountant, staff, etc.
-            // "Của ai thấy người đó hoặc có liên quan thì mới thấy thôi ko được thấy mà ko có liên quan nhé"
+            // ALL roles from director down (director, manager, sales, sale_admin, accountant, academic, teacher, staff, etc.)
+            // Only see tasks: created, assigned, approved, participant (liên quan), mentioned/tagged in body/tags, or mentioned/commented in comments
+            $authUserId = (int)$auth['user_id'];
+            $authFullName = trim($auth['full_name'] ?? '');
+            $authUserName = trim($auth['username'] ?? '');
+
             $where[] = '(
                 a.user_id = ? 
                 OR a.created_by = ?
                 OR a.approver_id = ?
                 OR FIND_IN_SET(?, a.participant_ids)
+                OR a.body LIKE ?
+                OR a.body LIKE ?
+                OR (? != \'\' AND (a.body LIKE ? OR a.tags LIKE ?))
+                OR EXISTS (
+                    SELECT 1 FROM activity_comments ac 
+                    WHERE ac.activity_id = a.id 
+                      AND ac.tenant_id = ? 
+                      AND (
+                          ac.user_id = ? 
+                          OR ac.content LIKE ? 
+                          OR ac.content LIKE ? 
+                          OR (? != \'\' AND ac.content LIKE ?)
+                      )
+                )
                 OR (((a.related_type IN (\'contact\', \'lead\') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
                     SELECT 1 FROM contacts ct WHERE (ct.id = a.related_id OR ct.id = a.contact_id) AND (
                         ct.owner_id = ? 
@@ -447,23 +435,37 @@ class ActivityController {
                     SELECT 1 FROM marketing_campaigns mc WHERE mc.id = a.related_id AND (FIND_IN_SET(?, mc.user_ids) OR FIND_IN_SET(?, mc.manager_ids) OR mc.created_by = ?)
                 ) AND (a.user_id IS NULL OR a.user_id = 0 OR a.user_id = ?))
             )';
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = $auth['user_id'];
-            $params[] = (string)$auth['user_id'];
-            $params[] = $auth['user_id']; // ct.owner_id
-            $params[] = (string)$auth['user_id']; // ct.collaborator_ids
-            $params[] = $auth['user_id']; // coop slips
-            $params[] = $auth['user_id']; // d.owner_id
-            $params[] = $auth['user_id']; // ct.owner_id
-            $params[] = (string)$auth['user_id']; // ct.collaborator_ids
-            $params[] = $auth['user_id']; // coop slips
-            $params[] = $auth['user_id']; // project_roster user_id
-            $params[] = $auth['user_id']; // a.user_id
-            $params[] = (string)$auth['user_id']; // campaign user_ids
-            $params[] = (string)$auth['user_id']; // campaign manager_ids
-            $params[] = $auth['user_id']; // campaign created_by
-            $params[] = $auth['user_id']; // a.user_id
+
+            $params[] = $authUserId; // a.user_id
+            $params[] = $authUserId; // a.created_by
+            $params[] = $authUserId; // a.approver_id
+            $params[] = (string)$authUserId; // FIND_IN_SET participant_ids
+            $params[] = '%data-user-id="' . $authUserId . '"%'; // a.body data-user-id
+            $params[] = '%' . ($authFullName !== '' ? '@' . $authFullName : 'data-user-id="' . $authUserId . '"') . '%'; // a.body @FullName
+            $params[] = $authUserName;
+            $params[] = '%' . ($authUserName !== '' ? '@' . $authUserName : '') . '%'; // a.body @Username
+            $params[] = '%' . ($authUserName !== '' ? '@' . $authUserName : '') . '%'; // a.tags @Username
+
+            $params[] = (int)$auth['tenant_id']; // ac.tenant_id
+            $params[] = $authUserId; // ac.user_id
+            $params[] = '%data-user-id="' . $authUserId . '"%'; // ac.content data-user-id
+            $params[] = '%' . ($authFullName !== '' ? '@' . $authFullName : 'data-user-id="' . $authUserId . '"') . '%'; // ac.content @FullName
+            $params[] = $authUserName;
+            $params[] = '%' . ($authUserName !== '' ? '@' . $authUserName : '') . '%'; // ac.content @Username
+
+            $params[] = $authUserId; // ct.owner_id
+            $params[] = (string)$authUserId; // ct.collaborator_ids
+            $params[] = $authUserId; // coop slips
+            $params[] = $authUserId; // d.owner_id
+            $params[] = $authUserId; // ct.owner_id
+            $params[] = (string)$authUserId; // ct.collaborator_ids
+            $params[] = $authUserId; // coop slips
+            $params[] = $authUserId; // project_roster user_id
+            $params[] = $authUserId; // a.user_id
+            $params[] = (string)$authUserId; // campaign user_ids
+            $params[] = (string)$authUserId; // campaign manager_ids
+            $params[] = $authUserId; // campaign created_by
+            $params[] = $authUserId; // a.user_id
         }
         if ($type)     { 
             if (strpos($type, ',') !== false) {
@@ -478,7 +480,14 @@ class ActivityController {
                 $params[]=$type;
             }
         }
-        if ($status)   { $where[]='a.status=?';  $params[]=$status; }
+        if ($status) {
+            if (in_array($status, ['planned', 'not_done', 'open', 'active'], true)) {
+                $where[] = "(a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL))";
+            } else {
+                $where[] = 'a.status=?';
+                $params[] = $status;
+            }
+        }
         if ($uid)      { $where[]='a.user_id=?'; $params[]=(int)$uid; }
         if ($teamId)   { 
             $where[] = '(a.user_id IN (SELECT id FROM users WHERE team_id = ?) OR (a.related_type = \'team\' AND a.related_id = ?))'; 
@@ -608,7 +617,18 @@ class ActivityController {
             }
         }
 
-        $targetUserId = $b['user_id'] ?? $auth['user_id'];
+        $targetUserId = !empty($b['user_id']) ? (int)$b['user_id'] : (int)$auth['user_id'];
+        
+        // Auto-add mentioned users in body to participant_ids if not already related
+        // "Khi công việc ko có người đó liên quan nhưng trong mention, comment có nhắc thì tự động add liên quan luôn."
+        $bodyMentions = $this->extractMentionUserIds($b['body'] ?? '', (int)$auth['tenant_id']);
+        $pids = $this->parseUserIds($b['participant_ids'] ?? '');
+        foreach ($bodyMentions as $mUid) {
+            if ($mUid > 0 && $mUid !== $targetUserId && !in_array($mUid, $pids, true)) {
+                $pids[] = $mUid;
+            }
+        }
+        $participantIdsStr = !empty($pids) ? implode(',', $pids) : null;
         
         $due_date = $this->normalizeDueDate($b['due_date'] ?? null);
         $start_date = empty($b['start_date']) ? null : $b['start_date'];
@@ -627,7 +647,7 @@ class ActivityController {
             $b['subject'], $b['body']??null, $status, $b['priority']??'medium',
             $start_date, $due_date, $done_at, $b['related_type']??null, $b['related_id']??null,
             $contactId,
-            $b['tags']??null, $b['participant_ids']??null,
+            $b['tags']??null, $participantIdsStr,
             (int)($b['progress']??0), (int)($b['require_approval']??0),
             empty($b['approver_id']) ? null : (int)$b['approver_id'],
             $b['approval_status']??null,
@@ -944,6 +964,49 @@ class ActivityController {
             $cleanSubject = html_entity_decode(strip_tags((string)$b['subject']), ENT_QUOTES | ENT_HTML5, 'UTF-8');
             $cleanSubject = str_replace(["\xc2\xa0", "&nbsp;"], ' ', $cleanSubject);
             $b['subject'] = trim(preg_replace('/\s+/', ' ', $cleanSubject));
+        }
+
+        // Auto extend main task due_date if any subtask in checklist has a later due_date
+        if (isset($b['body']) && is_string($b['body'])) {
+            $parsedBody = json_decode($b['body'], true);
+            if (is_array($parsedBody) && !empty($parsedBody['erp_task']['checklist']) && is_array($parsedBody['erp_task']['checklist'])) {
+                $maxSubtaskDeadline = null;
+                foreach ($parsedBody['erp_task']['checklist'] as $subItem) {
+                    if (!empty($subItem['due_date'])) {
+                        $subD = substr((string)$subItem['due_date'], 0, 10);
+                        if (!$maxSubtaskDeadline || $subD > $maxSubtaskDeadline) {
+                            $maxSubtaskDeadline = $subD;
+                        }
+                    }
+                }
+                if ($maxSubtaskDeadline) {
+                    $currentMainDue = isset($b['due_date']) ? substr((string)$b['due_date'], 0, 10) : (!empty($activity['due_date']) ? substr((string)$activity['due_date'], 0, 10) : null);
+                    if (!$currentMainDue || $maxSubtaskDeadline > $currentMainDue) {
+                        $b['due_date'] = $maxSubtaskDeadline . ' 18:00:00';
+                    }
+                }
+            }
+        }
+        // Auto-add mentioned users in body to participant_ids if not already related
+        // "Khi công việc ko có người đó liên quan nhưng trong mention, comment có nhắc thì tự động add liên quan luôn."
+        if (isset($b['body']) && is_string($b['body'])) {
+            $bodyMentions = $this->extractMentionUserIds($b['body'], (int)$auth['tenant_id']);
+            if (!empty($bodyMentions)) {
+                $targetUid = isset($b['user_id']) ? (int)$b['user_id'] : (int)($activity['user_id'] ?? 0);
+                $pids = isset($b['participant_ids']) 
+                    ? $this->parseUserIds($b['participant_ids']) 
+                    : $this->parseUserIds($activity['participant_ids'] ?? '');
+                $pidsModified = false;
+                foreach ($bodyMentions as $mUid) {
+                    if ($mUid > 0 && $mUid !== $targetUid && !in_array($mUid, $pids, true)) {
+                        $pids[] = $mUid;
+                        $pidsModified = true;
+                    }
+                }
+                if ($pidsModified) {
+                    $b['participant_ids'] = implode(',', $pids);
+                }
+            }
         }
 
         $fields=['user_id','type','subject','body','status','priority','start_date','due_date','done_at','related_type','related_id','contact_id','tags','participant_ids','progress','require_approval','approver_id','approval_status','link'];
@@ -1498,6 +1561,26 @@ class ActivityController {
             }
         }
 
+        // Auto-add mentioned users to participant_ids if not already related
+        // "Khi công việc ko có người đó liên quan nhưng trong mention, comment có nhắc thì tự động add liên quan luôn."
+        $currentPids = $this->parseUserIds($activity['participant_ids'] ?? '');
+        $pidsChanged = false;
+        if (!empty($mentions)) {
+            foreach (array_keys($mentions) as $mentionedUid) {
+                $mentionedUid = (int)$mentionedUid;
+                if ($mentionedUid > 0 && $mentionedUid !== (int)$activity['user_id'] && !in_array($mentionedUid, $currentPids, true)) {
+                    $currentPids[] = $mentionedUid;
+                    $pidsChanged = true;
+                }
+            }
+        }
+        if ($pidsChanged) {
+            $newPidsStr = implode(',', $currentPids);
+            $this->db->prepare("UPDATE activities SET participant_ids = ? WHERE id = ? AND tenant_id = ?")
+                     ->execute([$newPidsStr, $id, $auth['tenant_id']]);
+            $activity['participant_ids'] = $newPidsStr;
+        }
+
         require_once __DIR__ . '/../NotificationService.php';
 
         // 1. Notify ALL directly mentioned users (priority 1: MENTION_TAGGED)
@@ -1541,28 +1624,81 @@ class ActivityController {
             }
         }
 
-        // 3. If NO users were mentioned in the comment: Notify other task stakeholders
-        $taskStakeholders = array_unique(array_merge(
-            [(int)($activity['user_id'] ?? 0), (int)($activity['created_by'] ?? 0)],
-            $this->parseUserIds($activity['participant_ids'] ?? null)
-        ));
-
-        if (empty($mentions)) {
-            $cleanCommentText = mb_substr(strip_tags($content), 0, 120);
-            foreach ($taskStakeholders as $stkId) {
-                if (in_array($stkId, $notifiedUserIds, true)) continue;
-                $notifiedUserIds[] = $stkId;
-                if ($this->isTaskMuted($id, $stkId)) continue;
-                
+        // 3. Notify Task Owner / Assignee (if not the commenter and not already notified)
+        $taskOwnerId = (int)$activity['user_id'];
+        if ($taskOwnerId > 0 && !in_array($taskOwnerId, $notifiedUserIds, true)) {
+            $notifiedUserIds[] = $taskOwnerId;
+            // Auto unhide task for owner
+            $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id = ?")->execute([$id, $taskOwnerId]);
+            
+            if (!$this->isTaskMuted($id, $taskOwnerId)) {
                 NotificationService::send($this->db, $auth['tenant_id'], 'TASK_COMMENT_NEW', [
-                    'user_id' => $stkId,
+                    'user_id' => $taskOwnerId,
                     'author_name' => $commenterName,
                     'task_title' => $taskSubject,
-                    'comment' => $cleanCommentText,
+                    'comment' => $content,
                     'link' => $targetLink
                 ]);
             }
         }
+
+        // 4. Notify Task Creator (if different from owner & commenter and not already notified)
+        $creatorId = isset($activity['created_by']) ? (int)$activity['created_by'] : 0;
+        if ($creatorId > 0 && !in_array($creatorId, $notifiedUserIds, true)) {
+            $notifiedUserIds[] = $creatorId;
+            // Auto unhide task for creator
+            $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id = ?")->execute([$id, $creatorId]);
+            
+            if (!$this->isTaskMuted($id, $creatorId)) {
+                NotificationService::send($this->db, $auth['tenant_id'], 'TASK_COMMENT_NEW', [
+                    'user_id' => $creatorId,
+                    'author_name' => $commenterName,
+                    'task_title' => $taskSubject,
+                    'comment' => $content,
+                    'link' => $targetLink
+                ]);
+            }
+        }
+
+        // 5. Notify Collaborators / Participants (if not already notified)
+        if (!empty($activity['participant_ids'])) {
+            $collaboratorIds = array_filter(array_map('intval', explode(',', $activity['participant_ids'])));
+            foreach ($collaboratorIds as $collabId) {
+                if ($collabId > 0 && !in_array($collabId, $notifiedUserIds, true)) {
+                    $notifiedUserIds[] = $collabId;
+                    // Auto unhide task for collaborator
+                    $this->db->prepare("DELETE FROM task_hidden_users WHERE task_id = ? AND user_id = ?")->execute([$id, $collabId]);
+                    
+                    if (!$this->isTaskMuted($id, $collabId)) {
+                        NotificationService::send($this->db, $auth['tenant_id'], 'TASK_COMMENT_NEW', [
+                            'user_id' => $collabId,
+                            'author_name' => $commenterName,
+                            'task_title' => $taskSubject,
+                            'comment' => $content,
+                            'link' => $targetLink
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // 6. Push In-App Realtime Notification Broadcast via Redis / DB
+        try {
+            $realtimePayload = [
+                'event' => 'activity_comment_added',
+                'activity_id' => $id,
+                'comment_id' => $commentId,
+                'subtask_id' => $subtaskId,
+                'user_id' => $auth['user_id'],
+                'user_name' => $commenterName,
+                'created_at' => date('Y-m-d H:i:s'),
+                'participant_ids' => $activity['participant_ids'] ?? null
+            ];
+            // If redis is enabled, publish
+            if (function_exists('broadcastRealtimeEvent')) {
+                broadcastRealtimeEvent('activity_' . $id, $realtimePayload);
+            }
+        } catch (Throwable $e) {}
 
         // 4. If linked to contact: notify owner ONLY IF not already notified
         if ($activity['related_type'] === 'contact' && $activity['related_id']) {
@@ -1612,7 +1748,7 @@ class ActivityController {
 
         // logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'ADD_COMMENT', 'activity', $id);
 
-        respond(200, ['id' => $commentId], 'Đã thêm bình luận');
+        respond(200, ['id' => $commentId, 'participant_ids' => $activity['participant_ids'] ?? null], 'Đã thêm bình luận');
     }
 
     public function destroy(array $auth, int $id): void {

@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { CustomModal } from '../ui/CustomModal';
 import { NotificationSettingsModal } from '../ui/NotificationSettingsModal';
 import { fetchAPI } from '../../utils/api';
+import { cleanNotificationText } from '../../utils/textUtils';
 import { prewarmSmartCheckInGPS } from '../ui/SmartCheckInModal';
 import vnFlag from '../../assets/vn.svg';
 import usFlag from '../../assets/us.svg';
@@ -969,7 +970,7 @@ export const Header = ({
               wordBreak: 'break-word'
             }}
           >
-            {item.title || 'Thông báo mới'}
+            {cleanNotificationText(item.title) || 'Thông báo mới'}
           </div>
           {item.body && (
             <div
@@ -985,7 +986,7 @@ export const Header = ({
                 wordBreak: 'break-word'
               }}
             >
-              {item.body}
+              {cleanNotificationText(item.body)}
             </div>
           )}
         </div>
@@ -3735,7 +3736,7 @@ export const Header = ({
                                   display: 'flex',
                                   alignItems: 'center'
                                 }}>
-                                  {notif.title}
+                                  {cleanNotificationText(notif.title)}
                                   {!notif.is_read && (
                                     <span style={{
                                       width: 6,
@@ -3787,7 +3788,7 @@ export const Header = ({
                                 WebkitBoxOrient: 'vertical',
                                 overflow: 'hidden'
                               }}>
-                                {notif.body}
+                                {cleanNotificationText(notif.body)}
                               </p>
                             </div>
 

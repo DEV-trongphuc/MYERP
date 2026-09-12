@@ -27,7 +27,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
   saveDraftText = 'Lưu nháp',
   discardText = 'Rời khỏi',
   continueText = 'Tiếp tục chỉnh sửa',
-  zIndex = 99999999
+  zIndex = 2147483647
 }) => {
   const { t } = useLanguage();
   const [isSaving, setIsSaving] = useState(false);
@@ -163,19 +163,18 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons: Rời khỏi, Lưu nháp, Tiếp tục chỉnh sửa (Không rớt dòng, Tiếp tục chỉnh sửa là chính) */}
+              {/* Action Buttons: Rời khỏi bên trái, Lưu nháp & Tiếp tục chỉnh sửa bên phải */}
               <div
                 style={{
                   display: 'flex',
                   flexDirection: isMobile ? 'column' : 'row',
-                  flexWrap: 'nowrap',
-                  gap: '10px',
+                  gap: '12px',
                   marginTop: '1.5rem',
-                  justifyContent: 'flex-end',
-                  alignItems: 'center'
+                  justifyContent: 'space-between',
+                  alignItems: isMobile ? 'stretch' : 'center'
                 }}
               >
-                {/* 1. Discard & exit (Rời khỏi không lưu) */}
+                {/* 1. Discard & exit (Rời khỏi không lưu - bên trái) */}
                 <button
                   type="button"
                   onClick={onDiscard}
@@ -199,67 +198,79 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                     order: isMobile ? 3 : 1
                   }}
                 >
-                  <LogOut size={15} style={{ flexShrink: 0 }} />
+                  <LogOut size={15} style={{ flexShrink: 0, transform: 'scaleX(-1)' }} />
                   <span style={{ whiteSpace: 'nowrap' }}>{t(discardText)}</span>
                 </button>
 
-                {/* 2. Save draft & exit (Lưu bản nháp) */}
-                <button
-                  type="button"
-                  onClick={handleSaveDraftClick}
-                  disabled={isSaving}
-                  className="hover-lift"
+                {/* 2 & 3. Bên phải: Lưu nháp + Tiếp tục chỉnh sửa */}
+                <div
                   style={{
-                    padding: '10px 16px',
-                    borderRadius: '9px',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    background: 'var(--color-bg, #f8fafc)',
-                    border: '1px solid var(--color-border)',
-                    color: 'var(--color-text)',
-                    cursor: 'pointer',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: 'var(--shadow-sm)',
-                    order: isMobile ? 2 : 2
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: '10px',
+                    alignItems: isMobile ? 'stretch' : 'center',
+                    justifyContent: 'flex-end',
+                    order: isMobile ? 1 : 2
                   }}
                 >
-                  {isSaving ? <RefreshCw size={15} className="spin" style={{ flexShrink: 0 }} /> : <Bookmark size={15} style={{ flexShrink: 0 }} />}
-                  <span style={{ whiteSpace: 'nowrap' }}>{isSaving ? `${t('Đang lưu nháp')}...` : t(saveDraftText)}</span>
-                </button>
+                  {/* Save draft & exit (Lưu bản nháp) */}
+                  <button
+                    type="button"
+                    onClick={handleSaveDraftClick}
+                    disabled={isSaving}
+                    className="hover-lift"
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: '9px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      background: 'var(--color-bg, #f8fafc)',
+                      border: '1px solid var(--color-border)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: 'var(--shadow-sm)',
+                      order: isMobile ? 2 : 1
+                    }}
+                  >
+                    {isSaving ? <RefreshCw size={15} className="spin" style={{ flexShrink: 0 }} /> : <Bookmark size={15} style={{ flexShrink: 0 }} />}
+                    <span style={{ whiteSpace: 'nowrap' }}>{isSaving ? `${t('Đang lưu nháp')}...` : t(saveDraftText)}</span>
+                  </button>
 
-                {/* 3. Continue editing (Tiếp tục chỉnh sửa - Nút chính quan trọng nhất) */}
-                <button
-                  type="button"
-                  onClick={onContinue}
-                  disabled={isSaving}
-                  className="hover-lift btn primary"
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '9px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    background: 'var(--color-primary)',
-                    borderColor: 'var(--color-primary)',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(163, 20, 34, 0.25)',
-                    order: isMobile ? 1 : 3
-                  }}
-                >
-                  <Edit3 size={15} style={{ flexShrink: 0 }} />
-                  <span style={{ whiteSpace: 'nowrap' }}>{t(continueText)}</span>
-                </button>
+                  {/* Continue editing (Tiếp tục chỉnh sửa - Nút chính quan trọng nhất) */}
+                  <button
+                    type="button"
+                    onClick={onContinue}
+                    disabled={isSaving}
+                    className="hover-lift btn primary"
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '9px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      background: 'var(--color-primary)',
+                      borderColor: 'var(--color-primary)',
+                      color: '#ffffff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 12px rgba(163, 20, 34, 0.25)',
+                      order: isMobile ? 1 : 2
+                    }}
+                  >
+                    <Edit3 size={15} style={{ flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap' }}>{t(continueText)}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

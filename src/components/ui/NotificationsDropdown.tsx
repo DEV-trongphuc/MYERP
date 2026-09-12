@@ -4,6 +4,7 @@ import { Bell, Check, CheckCheck, X, Info, AlertTriangle, CheckCircle2, XCircle 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Skeleton } from './Skeleton';
 import api from '../../api/axios';
+import { cleanNotificationText } from '../../utils/textUtils';
 
 interface Notification {
   id: number;
@@ -182,8 +183,8 @@ export const NotificationsDropdown: React.FC = () => {
                     {typeIcon[n.type] || typeIcon.info}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: '0.8125rem', fontWeight: n.is_read ? 400 : 600, color: 'var(--color-text)', lineHeight: 1.4 }}>{n.title}</p>
-                    {n.body && <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.body}</p>}
+                    <p style={{ fontSize: '0.8125rem', fontWeight: n.is_read ? 400 : 600, color: 'var(--color-text)', lineHeight: 1.4 }}>{cleanNotificationText(n.title)}</p>
+                    {n.body && <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cleanNotificationText(n.body)}</p>}
                     <p style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>{fmtTime(n.created_at)}</p>
                   </div>
                   {!n.is_read && (

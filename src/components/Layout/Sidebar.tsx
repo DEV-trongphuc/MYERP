@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
-import { hasModuleApprovalAccess, isItemAtMyStepToApprove } from '../../utils/approvalPermissions';
+import { hasModuleApprovalAccess, isItemAtMyStepToApprove, isMyRequestPendingApproval } from '../../utils/approvalPermissions';
 import { isMarketing } from '../../utils/roleUtils';
 
 export interface SidebarItem {
@@ -348,31 +348,50 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
           setPendingDepositsCount(0);
         }
 
-        // Fetch pending approvals for ALL roles (strictly matching "Chờ tôi duyệt")
+        // Fetch pending approvals for ALL roles (strictly matching "Chờ tôi duyệt" + "Yêu cầu của tôi đang chờ duyệt")
         try {
           const resApps = await fetchAPI('hrm/approvals/overview');
           if (resApps && resApps.success && resApps.data) {
             const allItems = Array.isArray(resApps.data.all) ? resApps.data.all : [];
             const pItems = Array.isArray(resApps.data.pending) ? resApps.data.pending : [];
+            const myItems = Array.isArray(resApps.data.my_requests) ? resApps.data.my_requests : [];
+
             const candidateMap = new Map<string, any>();
             [...allItems, ...pItems].forEach((it: any) => {
               const key = `${it.type}-${it.id}`;
               if (!candidateMap.has(key)) candidateMap.set(key, it);
             });
-            const myPendingCount = Array.from(candidateMap.values()).filter(it => isItemAtMyStepToApprove(it, user)).length;
-            setPendingApprovalsCount(myPendingCount);
+            const allCandidates = Array.from(candidateMap.values());
+            const toApproveItems = allCandidates.filter(it => isItemAtMyStepToApprove(it, user));
+
+            const badgeKeys = new Set<string>();
+            toApproveItems.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+            // Items from my_requests endpoint (assumeMine = true)
+            myItems.filter(it => isMyRequestPendingApproval(it, user, true)).forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+            // Also check all candidates in case user has items not in my_requests
+            allCandidates.filter(it => isMyRequestPendingApproval(it, user, false)).forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+            const totalPendingCount = badgeKeys.size;
+
+            setPendingApprovalsCount(totalPendingCount);
             if (typeof window !== 'undefined') {
-              sessionStorage.setItem('pending_approvals_count', String(myPendingCount));
-              localStorage.setItem('pending_approvals_count', String(myPendingCount));
+              sessionStorage.setItem('pending_approvals_count', String(totalPendingCount));
+              localStorage.setItem('pending_approvals_count', String(totalPendingCount));
             }
           } else {
             const fallbackApps = await fetchAPI('hrm/approvals/all');
             const items = Array.isArray(fallbackApps?.data) ? fallbackApps.data : [];
-            const myPendingCount = items.filter((it: any) => isItemAtMyStepToApprove(it, user)).length;
-            setPendingApprovalsCount(myPendingCount);
+            const toApproveItems = items.filter((it: any) => isItemAtMyStepToApprove(it, user));
+            const myPendingItems = items.filter((it: any) => isMyRequestPendingApproval(it, user, false));
+
+            const badgeKeys = new Set<string>();
+            toApproveItems.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+            myPendingItems.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
+            const totalPendingCount = badgeKeys.size;
+
+            setPendingApprovalsCount(totalPendingCount);
             if (typeof window !== 'undefined') {
-              sessionStorage.setItem('pending_approvals_count', String(myPendingCount));
-              localStorage.setItem('pending_approvals_count', String(myPendingCount));
+              sessionStorage.setItem('pending_approvals_count', String(totalPendingCount));
+              localStorage.setItem('pending_approvals_count', String(totalPendingCount));
             }
           }
         } catch {

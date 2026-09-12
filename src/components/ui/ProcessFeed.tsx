@@ -312,9 +312,11 @@ export const ProcessFeed: React.FC<ProcessFeedProps> = ({
                               target={fileUrl ? "_blank" : undefined}
                               rel="noopener noreferrer"
                               download={file.name || true}
+                              data-file-url={fileUrl}
+                              data-file-name={file.name || ''}
                               className="comment-attachment-chip"
                               style={{ margin: 0 }}
-                              title={fileUrl ? "Bấm để mở / tải về tệp" : undefined}
+                              title={fileUrl ? `Bấm để tải về: ${file.name || 'tệp tin'}` : undefined}
                             >
                               <span>{getFileIcon(file.name || '')}</span>
                               <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

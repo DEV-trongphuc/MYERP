@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Plus, Search, Phone, PhoneOff, Mail, Eye, EyeOff, Clock, Ban, CheckCircle2, Trash2, X, Download, Users, Tag as TagIcon, UserCheck, RefreshCw, Filter, LayoutGrid, List, ArrowDownUp, Columns, Building2, Briefcase, Loader2, User, UserPlus, Calendar, AlertTriangle, AlertCircle, CheckSquare, Layers, MoreHorizontal, ChevronRight, ChevronLeft, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Avatar } from '../components/ui/Avatar';
+import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { useUIStore } from '../store/uiStore';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
@@ -2974,7 +2974,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                 <p style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={fullName}>{fullName}</span>
                                   {isReferred ? (
-                                    <span title={refName ? `Khách hàng giới thiệu bởi: ${refName}` : 'Khách hàng được giới thiệu (Ref)'} style={{ display: 'inline-flex', marginLeft: '5px', color: 'var(--color-primary, #BD1D2D)', flexShrink: 0 }}>
+                                    <span title={refName ? `Khách hàng giới thiệu bởi: ${refName}` : 'Khách hàng được giới thiệu (Ref)'} style={{ display: 'inline-flex', marginLeft: '5px', color: refName ? getColorFromName(refName) : '#0284c7', flexShrink: 0 }}>
                                       <UserPlus size={13} />
                                     </span>
                                   ) : c.dl_status === 'databank_claim' || c.source === 'databank' ? (
@@ -3006,7 +3006,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                       }}
                                     >
                                       <Layers size={10} />
-                                      {c.linked_profiles_count} CT
+                                      {c.linked_profiles_count}
                                     </span>
                                   )}
                                 </p>
@@ -3020,24 +3020,107 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                           </td>
                           );
                         })()}
-                        {(columns.find(col => col.id === 'email')?.visible || columns.find(col => col.id === 'phone')?.visible) && (
+                        {(columns.find(col => col.id === 'email')?.visible || columns.find(col => col.id === 'phone')?.visible) && (() => {
+                          const refName = c.referrer_name 
+                            || (c.company_tier === 'referrer' ? c.company_name : '')
+                            || ((c.source === 'gioi_thieu' || c.source === 'ref' || c.source === 'referral') ? c.company_name : '')
+                            || c.partner_name 
+                            || '';
+                          const refAvatar = c.referrer_avatar || c.partner_avatar || '';
+                          const isReferred = Boolean(c.partner_id || c.referrer_name || c.referrer_id || c.source === 'ref' || c.source === 'referral' || c.source === 'gioi_thieu' || refName);
+                          const hasPhone = Boolean(columns.find(col => col.id === 'phone')?.visible && (c.phone || c.mobile || c.phone2));
+                          const hasEmail = Boolean(columns.find(col => col.id === 'email')?.visible && c.email);
+
+                          return (
                           <td style={{ width: '260px', maxWidth: '320px', padding: '0.85rem 0.75rem', borderBottom: '1px solid var(--color-border)' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '310px', overflow: 'hidden' }}>
-                              {columns.find(col => col.id === 'phone')?.visible && (c.phone || c.mobile || c.phone2) ? (
+                              {hasPhone && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                     <PhoneLink phone={c.phone || c.mobile || c.phone2} style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)' }} />
                                   </div>
                                 </div>
-                              ) : null}
-                              {columns.find(col => col.id === 'email')?.visible && c.email ? (
+                              )}
+                              {hasEmail && (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
                                   <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.email}>{c.email}</span>
                                 </div>
-                              ) : null}
+                              )}
+                              {isReferred && (() => {
+                                const refColor = refName ? getColorFromName(refName) : '#0284c7';
+                                return (
+                                  <div 
+                                    style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '4px', 
+                                      marginTop: (hasPhone || hasEmail) ? '3px' : '0',
+                                      padding: '1px 6px 1px 2px',
+                                      borderRadius: '12px',
+                                      background: `${refColor}12`,
+                                      border: `1px solid ${refColor}33`,
+                                      width: 'fit-content',
+                                      maxWidth: '100%',
+                                      boxSizing: 'border-box'
+                                    }} 
+                                    title={refName ? `Người giới thiệu: ${refName}` : 'Khách hàng được giới thiệu (Ref)'}
+                                  >
+                                    {refName ? (
+                                      <>
+                                        <Avatar name={refName} src={refAvatar} size={16} />
+                                        <span style={{ 
+                                          fontSize: '0.6rem', 
+                                          fontWeight: 700, 
+                                          color: refColor, 
+                                          opacity: 0.85, 
+                                          transform: 'scale(0.82)', 
+                                          transformOrigin: 'left center', 
+                                          display: 'inline-block', 
+                                          flexShrink: 0,
+                                          lineHeight: 1,
+                                          marginRight: '-2px'
+                                        }}>
+                                          REF:
+                                        </span>
+                                        <span style={{ 
+                                          fontSize: '0.72rem', 
+                                          fontWeight: 550, 
+                                          color: 'var(--color-text)', 
+                                          overflow: 'hidden', 
+                                          textOverflow: 'ellipsis', 
+                                          whiteSpace: 'nowrap',
+                                          lineHeight: 1.2
+                                        }}>
+                                          {refName}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <UserPlus size={11} style={{ color: refColor, flexShrink: 0, marginLeft: '2px' }} />
+                                        <span style={{ 
+                                          fontSize: '0.6rem', 
+                                          fontWeight: 700, 
+                                          color: refColor, 
+                                          opacity: 0.85, 
+                                          transform: 'scale(0.82)', 
+                                          transformOrigin: 'left center', 
+                                          display: 'inline-block', 
+                                          lineHeight: 1 
+                                        }}>
+                                          REF
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                              {!hasPhone && !hasEmail && !isReferred && (
+                                <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                              )}
                             </div>
                           </td>
-                        )}
+                          );
+                        })()}
 
                         {columns.find(col => col.id === 'company')?.visible && !columns.find(col => col.id === 'name')?.visible && (
                           <td style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
@@ -3588,7 +3671,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                     }}
                                   >
                                     <Layers size={10} />
-                                    {c.linked_profiles_count} CT
+                                    {c.linked_profiles_count}
                                   </span>
                                 )}
                               </div>
@@ -3653,7 +3736,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
                                         }}
                                       >
                                         <Layers size={10} />
-                                        {c.linked_profiles_count} CT
+                                        {c.linked_profiles_count}
                                       </span>
                                     )}
                                   </h3>

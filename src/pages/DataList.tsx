@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { CustomModal } from '../components/ui/CustomModal';
 import { CustomSelect } from '../components/ui/CustomSelect';
-import { Avatar } from '../components/ui/Avatar';
+import { Avatar, getColorFromName } from '../components/ui/Avatar';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { useNavigate } from 'react-router-dom';
@@ -2291,11 +2291,15 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                             <Avatar name={lead.full_name || t('Khách hàng')} size={32} />
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>{lead.full_name || t('Khách hàng')}</span>
-                              {(lead.is_referral || lead.referrer_name || lead.partner_id || lead.original_source === 'ref' || lead.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu') && (
-                                <span title={lead.referrer_name ? `Khách hàng giới thiệu bởi: ${lead.referrer_name}` : 'Khách hàng giới thiệu (Ref)'} style={{ display: 'inline-flex', color: 'var(--color-primary, #BD1D2D)' }}>
-                                  <UserPlus size={13} />
-                                </span>
-                              )}
+                              {(lead.is_referral || lead.referrer_name || lead.partner_id || lead.original_source === 'ref' || lead.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu') && (() => {
+                                const refName = lead.referrer_name || lead.partner_name || '';
+                                const refColor = refName ? getColorFromName(refName) : '#0284c7';
+                                return (
+                                  <span title={refName ? `Khách hàng giới thiệu bởi: ${refName}` : 'Khách hàng giới thiệu (Ref)'} style={{ display: 'inline-flex', color: refColor }}>
+                                    <UserPlus size={13} />
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </div>
                         </td>
@@ -2304,46 +2308,92 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                             const isRef = Boolean(lead.is_referral || lead.referrer_name || lead.partner_id || lead.original_source === 'ref' || lead.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu');
                             const hasPhone = Boolean(lead.phone && lead.phone !== '-');
                             const hasEmail = Boolean(lead.email && lead.email !== '-');
-                            if (!hasPhone && !hasEmail && isRef) {
-                              const refName = lead.referrer_name || lead.partner_name || '';
-                              const refAvatar = lead.referrer_avatar || lead.partner_avatar || '';
-                              return (
-                                <div 
-                                  style={{ 
-                                    display: 'inline-flex', 
-                                    alignItems: 'center', 
-                                    gap: '5px', 
-                                    background: 'rgba(59, 130, 246, 0.08)', 
-                                    border: '1px solid rgba(59, 130, 246, 0.2)', 
-                                    borderRadius: '14px', 
-                                    padding: '2px 8px', 
-                                    fontSize: '0.75rem', 
-                                    maxWidth: '100%', 
-                                    overflow: 'hidden' 
-                                  }} 
-                                  title={refName ? `Được giới thiệu bởi: ${refName}` : 'Khách hàng có nguồn giới thiệu'}
-                                >
-                                  {refName ? (
-                                    <>
-                                      <Avatar name={refName} src={refAvatar} size={18} />
-                                      <span style={{ color: 'var(--color-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{refName}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <UserPlus size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
-                                      <span style={{ color: '#2563eb', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Được giới thiệu</span>
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            }
+                            const refName = lead.referrer_name || lead.partner_name || '';
+                            const refAvatar = lead.referrer_avatar || lead.partner_avatar || '';
                             return (
-                              <>
-                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                                  {lead.phone || '-'}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{lead.email || '-'}</div>
-                              </>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                {hasPhone && (
+                                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                                    {lead.phone}
+                                  </div>
+                                )}
+                                {hasEmail && (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: hasPhone ? 2 : 0 }}>{lead.email}</div>
+                                )}
+                                {isRef && (() => {
+                                  const refColor = refName ? getColorFromName(refName) : '#0284c7';
+                                  return (
+                                    <div 
+                                      style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '4px', 
+                                        background: `${refColor}12`, 
+                                        border: `1px solid ${refColor}33`, 
+                                        borderRadius: '12px', 
+                                        padding: '1px 6px 1px 2px', 
+                                        fontSize: '0.72rem', 
+                                        maxWidth: '100%', 
+                                        overflow: 'hidden',
+                                        marginTop: (hasPhone || hasEmail) ? '3px' : 0,
+                                        width: 'fit-content',
+                                        boxSizing: 'border-box'
+                                      }} 
+                                      title={refName ? `Được giới thiệu bởi: ${refName}` : 'Khách hàng có nguồn giới thiệu (Ref)'}
+                                    >
+                                      {refName ? (
+                                        <>
+                                          <Avatar name={refName} src={refAvatar} size={16} />
+                                          <span style={{ 
+                                            fontSize: '0.6rem', 
+                                            fontWeight: 700, 
+                                            color: refColor, 
+                                            opacity: 0.85, 
+                                            transform: 'scale(0.82)', 
+                                            transformOrigin: 'left center', 
+                                            display: 'inline-block', 
+                                            flexShrink: 0,
+                                            lineHeight: 1,
+                                            marginRight: '-2px'
+                                          }}>
+                                            REF:
+                                          </span>
+                                          <span style={{ 
+                                            fontSize: '0.72rem', 
+                                            fontWeight: 550, 
+                                            color: 'var(--color-text)', 
+                                            overflow: 'hidden', 
+                                            textOverflow: 'ellipsis', 
+                                            whiteSpace: 'nowrap',
+                                            lineHeight: 1.2
+                                          }}>
+                                            {refName}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserPlus size={11} style={{ color: refColor, flexShrink: 0, marginLeft: '2px' }} />
+                                          <span style={{ 
+                                            fontSize: '0.6rem', 
+                                            fontWeight: 700, 
+                                            color: refColor, 
+                                            opacity: 0.85, 
+                                            transform: 'scale(0.82)', 
+                                            transformOrigin: 'left center', 
+                                            display: 'inline-block', 
+                                            lineHeight: 1 
+                                          }}>
+                                            REF
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                {!hasPhone && !hasEmail && !isRef && (
+                                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>-</span>
+                                )}
+                              </div>
                             );
                           })()}
                         </td>
@@ -2747,46 +2797,92 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                             const isRef = Boolean(leadAny.is_referral || leadAny.referrer_name || leadAny.partner_id || leadAny.original_source === 'ref' || leadAny.original_source === 'referral' || lead.source === 'ref' || lead.source === 'referral' || lead.source === 'gioi_thieu');
                             const hasPhone = Boolean(lead.phone && lead.phone !== '-');
                             const hasEmail = Boolean(lead.email && lead.email !== '-');
-                            if (!hasPhone && !hasEmail && isRef) {
-                              const refName = leadAny.referrer_name || leadAny.partner_name || '';
-                              const refAvatar = leadAny.referrer_avatar || leadAny.partner_avatar || '';
-                              return (
-                                <div 
-                                  style={{ 
-                                    display: 'inline-flex', 
-                                    alignItems: 'center', 
-                                    gap: '5px', 
-                                    background: 'rgba(59, 130, 246, 0.08)', 
-                                    border: '1px solid rgba(59, 130, 246, 0.2)', 
-                                    borderRadius: '14px', 
-                                    padding: '2px 8px', 
-                                    fontSize: '0.75rem', 
-                                    maxWidth: '100%', 
-                                    overflow: 'hidden' 
-                                  }} 
-                                  title={refName ? `Được giới thiệu bởi: ${refName}` : 'Khách hàng có nguồn giới thiệu'}
-                                >
-                                  {refName ? (
-                                    <>
-                                      <Avatar name={refName} src={refAvatar} size={18} />
-                                      <span style={{ color: 'var(--color-text)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{refName}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <UserPlus size={13} style={{ color: '#2563eb', flexShrink: 0 }} />
-                                      <span style={{ color: '#2563eb', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Được giới thiệu</span>
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            }
+                            const refName = leadAny.referrer_name || leadAny.partner_name || '';
+                            const refAvatar = leadAny.referrer_avatar || leadAny.partner_avatar || '';
                             return (
-                              <>
-                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                                  {maskPhone(lead.phone)}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{maskEmail(lead.email)}</div>
-                              </>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                {hasPhone && (
+                                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                                    {maskPhone(lead.phone)}
+                                  </div>
+                                )}
+                                {hasEmail && (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: hasPhone ? 2 : 0 }}>{maskEmail(lead.email)}</div>
+                                )}
+                                {isRef && (() => {
+                                  const refColor = refName ? getColorFromName(refName) : '#0284c7';
+                                  return (
+                                    <div 
+                                      style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '4px', 
+                                        background: `${refColor}12`, 
+                                        border: `1px solid ${refColor}33`, 
+                                        borderRadius: '12px', 
+                                        padding: '1px 6px 1px 2px', 
+                                        fontSize: '0.72rem', 
+                                        maxWidth: '100%', 
+                                        overflow: 'hidden',
+                                        marginTop: (hasPhone || hasEmail) ? '3px' : 0,
+                                        width: 'fit-content',
+                                        boxSizing: 'border-box'
+                                      }} 
+                                      title={refName ? `Được giới thiệu bởi: ${refName}` : 'Khách hàng có nguồn giới thiệu (Ref)'}
+                                    >
+                                      {refName ? (
+                                        <>
+                                          <Avatar name={refName} src={refAvatar} size={16} />
+                                          <span style={{ 
+                                            fontSize: '0.6rem', 
+                                            fontWeight: 700, 
+                                            color: refColor, 
+                                            opacity: 0.85, 
+                                            transform: 'scale(0.82)', 
+                                            transformOrigin: 'left center', 
+                                            display: 'inline-block', 
+                                            flexShrink: 0,
+                                            lineHeight: 1,
+                                            marginRight: '-2px'
+                                          }}>
+                                            REF:
+                                          </span>
+                                          <span style={{ 
+                                            fontSize: '0.72rem', 
+                                            fontWeight: 550, 
+                                            color: 'var(--color-text)', 
+                                            overflow: 'hidden', 
+                                            textOverflow: 'ellipsis', 
+                                            whiteSpace: 'nowrap',
+                                            lineHeight: 1.2
+                                          }}>
+                                            {refName}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserPlus size={11} style={{ color: refColor, flexShrink: 0, marginLeft: '2px' }} />
+                                          <span style={{ 
+                                            fontSize: '0.6rem', 
+                                            fontWeight: 700, 
+                                            color: refColor, 
+                                            opacity: 0.85, 
+                                            transform: 'scale(0.82)', 
+                                            transformOrigin: 'left center', 
+                                            display: 'inline-block', 
+                                            lineHeight: 1 
+                                          }}>
+                                            REF
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                {!hasPhone && !hasEmail && !isRef && (
+                                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>-</span>
+                                )}
+                              </div>
                             );
                           })()}
                         </td>

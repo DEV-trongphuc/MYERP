@@ -120,9 +120,16 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
 
   const itemUid = Number(item.user_id || item.created_by || 0);
   const itEmpName = (item.employee_name || '').toLowerCase().trim();
-  // Người tạo KHÔNG BAO GIỜ tự phê duyệt yêu cầu của chính mình trong "Chờ duyệt"
+
+  const isAttendance = item.type === 'attendance_bulk' || item.type === 'checkin' || item.type === 'late_early';
+  const isManagerOrLeader = ['manager', 'director', 'admin', 'superadmin', 'super_admin', 'leader', 'truongphong', 'head_of_department'].includes(currentRole) || Boolean((user as any)?.is_team_leader);
+
+  // Người tạo KHÔNG tự phê duyệt yêu cầu của chính mình trong "Chờ duyệt"
+  // NGOẠI LỆ: Trưởng phòng / Quản lý được quyền tự tạo, tự duyệt chấm công cho mình
   if ((currentUid > 0 && itemUid === currentUid) || (currentUserName && itEmpName === currentUserName)) {
-    return false;
+    if (!isAttendance || !isManagerOrLeader) {
+      return false;
+    }
   }
 
   const rawStatus = (item.status || 'pending').toLowerCase();
@@ -197,5 +204,43 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
     return isUserMatch(app1, appName1);
   }
   return isExecutive(user);
+}
+
+/**
+ * Checks whether an item was created by or belongs to the current user and is currently pending approval.
+ */
+export function isMyRequestPendingApproval(item: any, user: any, assumeMine = false): boolean {
+  if (!item || !user) return false;
+  if (!assumeMine) {
+    const currentUid = Number(user?.id || 0);
+    const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
+
+    const itemUid = Number(item.user_id || item.created_by || item.creator_id || 0);
+    const itEmpName = (item.employee_name || item.created_by_name || item.user_name || '').toLowerCase().trim();
+    const isMine = (currentUid > 0 && itemUid === currentUid) || (currentUserName && (itEmpName === currentUserName || itEmpName.includes(currentUserName) || currentUserName.includes(itEmpName)));
+    if (!isMine) return false;
+  }
+
+  const rawStatus = (item.status || 'pending').toLowerCase();
+  if (['approved', 'rejected', 'failed', 'cancelled', 'confirmed', 'paid', 'completed', 'draft'].includes(rawStatus)) {
+    return false;
+  }
+  if (item.is_draft || item.isDraft) return false;
+
+  const s1 = (item.status_level_1 || '').toLowerCase();
+  const s2 = (item.status_level_2 || '').toLowerCase();
+  const s3 = (item.status_level_3 || '').toLowerCase();
+  if (s1 === 'rejected' || s2 === 'rejected' || s3 === 'rejected') return false;
+
+  // Check multi-level completion:
+  if (s1 === 'approved') {
+    if (!s2 || s2 === 'none' || s2 === 'null') return false; // Fully approved at level 1
+    if (s2 === 'approved') {
+      if (!s3 || s3 === 'none' || s3 === 'null') return false; // Fully approved at level 2
+      if (s3 === 'approved') return false; // Fully approved at level 3
+    }
+  }
+
+  return true;
 }
 

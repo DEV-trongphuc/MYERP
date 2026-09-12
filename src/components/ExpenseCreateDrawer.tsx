@@ -1,30 +1,57 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Wallet, Upload, Loader2, Truck, Coffee, Home, Briefcase, CreditCard, Tag, CheckCircle2, Building2, ChevronDown, ChevronLeft, FileText, Plus, Search, Check, Users, User, Landmark, Zap, Bookmark } from 'lucide-react';
+import {
+  X,
+  Wallet,
+  Upload,
+  Loader2,
+  Truck,
+  Coffee,
+  Home,
+  Briefcase,
+  CreditCard,
+  Tag,
+  CheckCircle2,
+  Building2,
+  ChevronDown,
+  ChevronLeft,
+  FileText,
+  Plus,
+  Search,
+  Check,
+  Users,
+  User,
+  Landmark,
+  Zap,
+  Bookmark,
+  Receipt,
+  Trash2,
+  Copy,
+  FileSignature
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../api/axios';
 import { useUIStore } from '../store/uiStore';
 import { CustomSelect } from './ui/CustomSelect';
-import { CustomCheckbox } from './ui/CustomCheckbox';
 import { Avatar } from './ui/Avatar';
-import { ToggleSwitch } from './ui/ToggleSwitch';
 import { compressToWebP } from '../utils/imageCompress';
-import { numberToVietnameseText } from '../utils/numberToText';
 import { PasteDropzoneArea } from './ui/PasteDropzoneArea';
 import { resolveTeamLeaderId } from '../utils/teamLeader';
 import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
+import { BankSelect } from './ui/BankSelect';
+import { getVietQrUrl, findBank } from '../utils/vietnamBanks';
 
 const CATEGORIES = [
-  { label: 'Di chuyển', icon: Truck, color: '#3b82f6' },
-  { label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
-  { label: 'Vận hành', icon: Home, color: '#10b981' },
-  { label: 'Marketing', icon: Briefcase, color: '#ef4444' },
-  { label: 'Công cụ', icon: CreditCard, color: '#BD1D2D' },
-  { label: 'Nhân sự', icon: Tag, color: '#06b6d4' },
+  { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
+  { value: 'client_meeting', label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
+  { value: 'general', label: 'Vận hành', icon: Home, color: '#10b981' },
+  { value: 'marketing', label: 'Marketing', icon: Briefcase, color: '#ef4444' },
+  { value: 'stationery', label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
+  { value: 'hr', label: 'Nhân sự', icon: Tag, color: '#06b6d4' },
 ];
 
 const EMPTY_FORM = {
   title: '',
-  category: 'Khác',
+  category: 'Vận hành',
   amount: '',
   currency: 'VND',
   vat_amount: '',
@@ -35,14 +62,15 @@ const EMPTY_FORM = {
   approver_id_3: null as number | null,
   related_user_ids: [] as number[],
   vendor_name: '',
-  has_vat_invoice: false,
-  is_vat_inclusive: false,
+  has_vat_invoice: true,
+  is_vat_inclusive: true,
   entities: [] as any[],
   image_url: '',
-  request_bank_transfer: false,
+  request_bank_transfer: true,
   bank_name: '',
   bank_account_number: '',
-  bank_account_name: ''
+  bank_account_name: '',
+  bank_branch: ''
 };
 
 const extractExpenseTitleSuffix = (rawTitle: string) => {
@@ -63,6 +91,94 @@ const extractExpenseTitleSuffix = (rawTitle: string) => {
   }
   return trimmed;
 };
+
+export interface ExpenseItemRow {
+  id: number | string;
+  content: string;
+  quantity: number | string;
+  price: number;
+  vat: number;
+}
+
+const formatNumberWithDots = (val: string | number) => {
+  if (val === undefined || val === null || val === '') return '';
+  const numStr = String(val).replace(/\D/g, '');
+  if (!numStr) return '';
+  return new Intl.NumberFormat('vi-VN').format(Number(numStr));
+};
+
+const formatApprovalCurrency = (amount: number | string, currency: string = 'VND') => {
+  const num = Number(amount) || 0;
+  if (currency === 'USD') return `$${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  if (currency === 'EURO' || currency === 'EUR') return `€${num.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return `${num.toLocaleString('vi-VN')} ₫`;
+};
+
+function docSoTiengViet(num: number): string {
+  if (num === 0) return 'Không đồng';
+  if (num < 0) return 'Âm ' + docSoTiengViet(Math.abs(num)).toLowerCase();
+
+  const units = ['', ' nghìn', ' triệu', ' tỷ', ' nghìn tỷ', ' triệu tỷ'];
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+
+  const readThreeDigits = (n: number, isFirst: boolean): string => {
+    let hundred = Math.floor(n / 100);
+    let ten = Math.floor((n % 100) / 10);
+    let single = n % 10;
+    let res = '';
+
+    if (hundred > 0 || !isFirst) {
+      res += digits[hundred] + ' trăm ';
+    }
+
+    if (ten > 0) {
+      if (ten === 1) {
+        res += 'mười ';
+      } else {
+        res += digits[ten] + ' mươi ';
+      }
+    } else if (hundred > 0 && single > 0) {
+      res += 'lẻ ';
+    }
+
+    if (single > 0) {
+      if (single === 1 && ten > 1) {
+        res += 'mốt';
+      } else if (single === 5 && ten > 0) {
+        res += 'lăm';
+      } else if (single === 4 && ten > 1) {
+        res += 'tư';
+      } else {
+        res += digits[single];
+      }
+    }
+
+    return res.trim();
+  };
+
+  let cleanNum = Math.floor(num);
+  let groups = [];
+  while (cleanNum > 0) {
+    groups.push(cleanNum % 1000);
+    cleanNum = Math.floor(cleanNum / 1000);
+  }
+
+  let result = '';
+  for (let i = groups.length - 1; i >= 0; i--) {
+    let groupVal = groups[i];
+    if (groupVal === 0) {
+      continue;
+    }
+    
+    let isFirst = (i === groups.length - 1);
+    let groupStr = readThreeDigits(groupVal, isFirst);
+    result += groupStr + units[i] + ' ';
+  }
+
+  result = result.trim();
+  if (!result) return 'Không đồng';
+  return result.charAt(0).toUpperCase() + result.slice(1) + ' đồng';
+}
 
 interface ExpenseCreateDrawerProps {
   isOpen: boolean;
@@ -90,12 +206,72 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const [titleSuffix, setTitleSuffix] = useState<string>('');
 
+  // Multi-line payment breakdown table
+  const [expenseItems, setExpenseItems] = useState<ExpenseItemRow[]>([
+    { id: Date.now(), content: '', quantity: 1, price: 0, vat: 10 }
+  ]);
+
+  // Classification & Payment Targets
+  const [expenseCategory, setExpenseCategory] = useState<string>('general');
+  const [invoiceType, setInvoiceType] = useState<string>('vat_10');
+  const [paymentTarget, setPaymentTarget] = useState<string>('Nội bộ');
+  const [paymentMethod, setPaymentMethod] = useState<string>('Chuyển khoản');
+  const [currencyType, setCurrencyType] = useState<string>('VND');
+
+  // Dynamic Beneficiary States
+  const [paymentEmployeeId, setPaymentEmployeeId] = useState<string>('');
+  const [paymentSupplierId, setPaymentSupplierId] = useState<string>('');
+  const [paymentLecturerId, setPaymentLecturerId] = useState<string>('');
+  const [paymentContactId, setPaymentContactId] = useState<string>('');
+  const [paymentBeneficiaryName, setPaymentBeneficiaryName] = useState<string>('');
+  const [paymentBankName, setPaymentBankName] = useState<string>('');
+  const [paymentBankAccount, setPaymentBankAccount] = useState<string>('');
+  const [paymentAccountName, setPaymentAccountName] = useState<string>('');
+  const [paymentBankBranch, setPaymentBankBranch] = useState<string>('');
+  const [paymentPhone, setPaymentPhone] = useState<string>('');
+  const [paymentTaxCode, setPaymentTaxCode] = useState<string>('');
+
+  // Cash / Wallet / Credit card / Gov Agency states
+  const [paymentDestination, setPaymentDestination] = useState<string>('');
+  const [paymentWalletType, setPaymentWalletType] = useState<'momo' | 'zalopay' | 'viettel_money'>('momo');
+  const [paymentWalletPhone, setPaymentWalletPhone] = useState<string>('');
+  const [paymentCorporateCard, setPaymentCorporateCard] = useState<string>('');
+  const [paymentGovAgencyType, setPaymentGovAgencyType] = useState<'tax' | 'social_insurance' | 'treasury' | 'other'>('tax');
+  const [paymentGovDecisionNumber, setPaymentGovDecisionNumber] = useState<string>('');
+
+  // QR Modal preview
+  const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
+
+  // Totals calculations
+  const itemsTotalBeforeTax = useMemo(() => {
+    return expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 1) * (Number(it.price) || 0), 0);
+  }, [expenseItems]);
+
+  const itemsTotalVat = useMemo(() => {
+    return expenseItems.reduce((acc, it) => acc + (Number(it.quantity) || 1) * (Number(it.price) || 0) * (Number(it.vat) || 0) / 100, 0);
+  }, [expenseItems]);
+
+  const itemsGrandTotal = useMemo(() => {
+    return itemsTotalBeforeTax + itemsTotalVat;
+  }, [itemsTotalBeforeTax, itemsTotalVat]);
+
+  useEffect(() => {
+    if (!isInitializedRef.current) return;
+    setForm((prev: any) => ({
+      ...prev,
+      amount: String(itemsGrandTotal),
+      vat_amount: itemsTotalVat > 0 ? String(itemsTotalVat) : '0',
+      has_vat_invoice: itemsTotalVat > 0
+    }));
+  }, [itemsGrandTotal, itemsTotalVat]);
+
   const handleSuffixChange = (val: string) => {
     setTitleSuffix(val);
     const trimmed = val.trim();
     const combined = trimmed ? `Đề nghị thanh toán — ${trimmed}` : 'Đề nghị thanh toán';
     setForm((prev: any) => ({ ...prev, title: combined }));
   };
+
   const [threshold, setThreshold] = useState<number>(5000000);
   const [saving, setSaving] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -105,26 +281,39 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   const [users, setUsers] = useState<any[]>(propUsers && propUsers.length > 0 ? propUsers : []);
   const [contacts, setContacts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [vendorSearch, setVendorSearch] = useState('');
-  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
-  const vendorRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [vatPercent, setVatPercent] = useState('10');
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Security guard: Only creator can edit
+  useEffect(() => {
+    if (isOpen && editItem && editItem.id && !editItem.isClone) {
+      const creatorId = Number(editItem.created_by || editItem.user_id);
+      const currentUserId = Number(user?.id);
+      if (creatorId && currentUserId && creatorId !== currentUserId) {
+        addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
+        onClose();
+      }
+    }
+  }, [isOpen, editItem, user?.id]);
+
   const isInitializedRef = useRef(false);
   const prevOpenRef = useRef(false);
   const prevEditItemRef = useRef<any>(null);
-  const [companies, setCompanies] = useState<any[]>([]);
   const [allocationType, setAllocationType] = useState<'contact' | 'company'>('contact');
   const [showParticipantDropdown, setShowParticipantDropdown] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
-  const [beneficiaryType, setBeneficiaryType] = useState<'vendor' | 'employee'>('vendor');
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
 
   const EXPENSE_DRAFT_KEY = 'myerp_expense_create_draft';
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [existingDraft, setExistingDraft] = useState<any>(null);
 
-  // Check for saved draft when opening create drawer
+  // Check for saved draft
   useEffect(() => {
     if (isOpen && !editItem) {
       try {
@@ -155,10 +344,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       (Number(form.amount) || 0) > 0 ||
       form.notes?.trim() ||
       images.length > 0 ||
-      vendorSearch?.trim() ||
-      form.bank_account_number?.trim() ||
-      form.bank_name?.trim() ||
-      (form.items && form.items.length > 0)
+      paymentBeneficiaryName?.trim() ||
+      paymentBankAccount?.trim() ||
+      (expenseItems && expenseItems.some(i => i.content?.trim() || (Number(i.price) || 0) > 0))
     );
   };
 
@@ -166,11 +354,24 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     const payload = {
       form,
       titleSuffix,
+      expenseItems,
       images,
-      vendorSearch,
-      vatPercent,
-      beneficiaryType,
-      selectedEmployeeId,
+      expenseCategory,
+      invoiceType,
+      paymentTarget,
+      paymentMethod,
+      currencyType,
+      paymentEmployeeId,
+      paymentSupplierId,
+      paymentLecturerId,
+      paymentContactId,
+      paymentBeneficiaryName,
+      paymentBankName,
+      paymentBankAccount,
+      paymentAccountName,
+      paymentBankBranch,
+      paymentPhone,
+      paymentTaxCode,
       savedAt: new Date().toISOString()
     };
     try {
@@ -218,11 +419,26 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     } else if (existingDraft.form?.title) {
       setTitleSuffix(extractExpenseTitleSuffix(existingDraft.form.title));
     }
+    if (Array.isArray(existingDraft.expenseItems) && existingDraft.expenseItems.length > 0) {
+      setExpenseItems(existingDraft.expenseItems);
+    }
     if (Array.isArray(existingDraft.images)) setImages(existingDraft.images);
-    if (existingDraft.vendorSearch) setVendorSearch(existingDraft.vendorSearch);
-    if (existingDraft.vatPercent) setVatPercent(existingDraft.vatPercent);
-    if (existingDraft.beneficiaryType) setBeneficiaryType(existingDraft.beneficiaryType);
-    if (existingDraft.selectedEmployeeId) setSelectedEmployeeId(existingDraft.selectedEmployeeId);
+    if (existingDraft.expenseCategory) setExpenseCategory(existingDraft.expenseCategory);
+    if (existingDraft.invoiceType) setInvoiceType(existingDraft.invoiceType);
+    if (existingDraft.paymentTarget) setPaymentTarget(existingDraft.paymentTarget);
+    if (existingDraft.paymentMethod) setPaymentMethod(existingDraft.paymentMethod);
+    if (existingDraft.currencyType) setCurrencyType(existingDraft.currencyType);
+    if (existingDraft.paymentEmployeeId) setPaymentEmployeeId(existingDraft.paymentEmployeeId);
+    if (existingDraft.paymentSupplierId) setPaymentSupplierId(existingDraft.paymentSupplierId);
+    if (existingDraft.paymentLecturerId) setPaymentLecturerId(existingDraft.paymentLecturerId);
+    if (existingDraft.paymentContactId) setPaymentContactId(existingDraft.paymentContactId);
+    if (existingDraft.paymentBeneficiaryName) setPaymentBeneficiaryName(existingDraft.paymentBeneficiaryName);
+    if (existingDraft.paymentBankName) setPaymentBankName(existingDraft.paymentBankName);
+    if (existingDraft.paymentBankAccount) setPaymentBankAccount(existingDraft.paymentBankAccount);
+    if (existingDraft.paymentAccountName) setPaymentAccountName(existingDraft.paymentAccountName);
+    if (existingDraft.paymentBankBranch) setPaymentBankBranch(existingDraft.paymentBankBranch);
+    if (existingDraft.paymentPhone) setPaymentPhone(existingDraft.paymentPhone);
+    if (existingDraft.paymentTaxCode) setPaymentTaxCode(existingDraft.paymentTaxCode);
     addToast('Đã khôi phục dữ liệu bản nháp chi phí', 'info');
     setExistingDraft(null);
   };
@@ -235,148 +451,124 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     addToast('Đã xóa bản nháp', 'info');
   };
 
-  // Combine and filter suppliers and companies/partners for vendor search
-  const filteredVendors = useMemo(() => {
-    const searchLower = vendorSearch.toLowerCase();
-    
-    const matchedSuppliers = (Array.isArray(suppliers) ? suppliers : [])
-      .filter(s => (s.name || s.company_name || '').toLowerCase().includes(searchLower))
-      .map(s => ({
-        id: `supplier-${s.id}`,
-        type: 'supplier',
-        name: s.name || s.company_name || '',
-        phone: s.phone || '',
-        raw: s
-      }));
-      
-    const matchedCompanies = (Array.isArray(companies) ? companies : [])
-      .filter(c => (c.name || c.company_name || '').toLowerCase().includes(searchLower))
-      .map(c => ({
-        id: `company-${c.id}`,
-        type: 'company',
-        name: c.name || c.company_name || '',
-        phone: c.phone || '',
-        raw: c
-      }));
-      
-    return [...matchedSuppliers, ...matchedCompanies].slice(0, 8);
-  }, [suppliers, companies, vendorSearch]);
+  // Lecturer options from companies + users
+  const lecturerOptions = useMemo(() => {
+    const list: any[] = [];
+    const seenNames = new Set<string>();
+    const safeCompanies = Array.isArray(companies) ? companies : ((companies as any)?.items || []);
+    const safeUsers = Array.isArray(users) ? users : ((users as any)?.items || []);
 
-  const handleSelectVendor = (vendor: any) => {
-    const name = vendor.name;
-    setVendorSearch(name);
-    
-    let bankUpdate: any = {};
-    if (vendor.type === 'company') {
-      const co = vendor.raw;
-      if (co.bank_name || co.bank_account_number || co.bank_account_name) {
-        bankUpdate = {
-          request_bank_transfer: true,
+    safeCompanies.forEach((co: any) => {
+      const coType = String(co.type || co.category || '').toLowerCase();
+      const name = co.name || '';
+      if (coType.includes('lecturer') || coType.includes('giảng viên') || coType.includes('chuyên gia') || name.toLowerCase().includes('giảng viên')) {
+        seenNames.add(name.toLowerCase());
+        list.push({
+          value: `company_${co.id}`,
+          label: name,
+          source: 'company',
+          raw: co,
           bank_name: co.bank_name || '',
-          bank_account_number: co.bank_account_number || '',
-          bank_account_name: co.bank_account_name || ''
-        };
+          bank_account: co.bank_account_number || co.bank_account || '',
+          bank_account_name: co.bank_account_name || name,
+          phone: co.phone || '',
+          sublabel: `Giảng viên B2B • ${co.bank_name ? `${co.bank_name}: ${co.bank_account_number || co.bank_account}` : 'Chưa có STK'}`
+        });
       }
-    } else if (vendor.type === 'supplier') {
-      const sup = vendor.raw;
-      if (sup.bank_account) {
-        const match = sup.bank_account.match(/(.*?)\s+(\d+)\s+-\s+(.*)/) || sup.bank_account.match(/(.*?)\s+(\d+)/);
-        if (match) {
-          bankUpdate = {
-            request_bank_transfer: true,
-            bank_name: match[1].trim(),
-            bank_account_number: match[2].trim(),
-            bank_account_name: match[3] ? match[3].trim() : ''
-          };
-        } else {
-          bankUpdate = {
-            request_bank_transfer: true,
-            bank_account_number: sup.bank_account
-          };
-        }
+    });
+
+    safeUsers.forEach((u: any) => {
+      const role = String(u.role || '').toLowerCase();
+      const job = String(u.job_title || '').toLowerCase();
+      const isLec = role.includes('teacher') || role.includes('giang_vien') || role.includes('tro_giang') || job.includes('giảng viên') || job.includes('học thuật');
+      const uName = u.full_name || u.name || '';
+      if (isLec && uName && !seenNames.has(uName.toLowerCase())) {
+        list.push({
+          value: `user_${u.id}`,
+          label: uName,
+          source: 'user',
+          raw: u,
+          avatar: u.avatar_url || u.avatar,
+          bank_name: u.bank_name || '',
+          bank_account: u.bank_account || '',
+          bank_account_name: uName,
+          phone: u.phone || '',
+          sublabel: `Giảng viên nội bộ • ${u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'}`
+        });
       }
-    }
-    
-    setForm((prev: any) => ({
-      ...prev,
-      vendor_name: name,
-      ...bankUpdate
-    }));
-    setShowVendorDropdown(false);
-  };
+    });
 
-  useEffect(() => {
-    if (isOpen && editItem) {
-      if (Array.isArray(editItem.entities) && editItem.entities.length > 0) {
-        const hasCompany = editItem.entities.some((e: any) => e.entity_type === 'company');
-        setAllocationType(hasCompany ? 'company' : 'contact');
-      } else {
-        setAllocationType('contact');
+    return list;
+  }, [companies, users]);
+
+  // Partners: unified suppliers + companies
+  const partnerOptions = useMemo(() => {
+    const list: any[] = [];
+    const seenNames = new Set<string>();
+    const safeSuppliers = Array.isArray(suppliers) ? suppliers : ((suppliers as any)?.items || (suppliers as any)?.suppliers || []);
+    const safeCompanies = Array.isArray(companies) ? companies : ((companies as any)?.items || []);
+
+    safeSuppliers.forEach((s: any) => {
+      if (s.name) {
+        seenNames.add(s.name.toLowerCase());
+        list.push({
+          value: `sup_${s.id}`,
+          label: s.name,
+          source: 'supplier',
+          raw: s,
+          bank_name: s.bank_name || '',
+          bank_account: s.bank_account || '',
+          bank_account_name: s.bank_account_name || s.name || '',
+          tax_code: s.tax_code || '',
+          phone: s.phone || '',
+          sublabel: `Nhà cung cấp • MST: ${s.tax_code || 'N/A'}${s.bank_name ? ` • ${s.bank_name}` : ''}`
+        });
       }
-    } else if (isOpen) {
-      setAllocationType('contact');
-    }
-  }, [isOpen, editItem]);
+    });
 
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) {
-      isInitializedRef.current = false;
-      setShowParticipantDropdown(false);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && editItem) {
-      if (editItem.amount && editItem.vat_amount) {
-        const amt = Number(editItem.amount);
-        const vAmt = Number(editItem.vat_amount);
-        let pct = 10;
-        if (amt > vAmt && vAmt > 0) {
-          const rateInclusive = Math.round((vAmt / (amt - vAmt)) * 100);
-          const rateExclusive = Math.round((vAmt / amt) * 100);
-          if ([0, 5, 8, 10].includes(rateInclusive)) {
-            pct = rateInclusive;
-          } else if ([0, 5, 8, 10].includes(rateExclusive)) {
-            pct = rateExclusive;
-          } else {
-            pct = rateInclusive;
-          }
-        }
-        setVatPercent(String(pct));
-      } else {
-        setVatPercent('10');
+    safeCompanies.forEach((co: any) => {
+      const name = co.name || '';
+      if (name && !seenNames.has(name.toLowerCase())) {
+        const tier = String(co.tier || '').toUpperCase();
+        list.push({
+          value: `company_${co.id}`,
+          label: name,
+          source: 'company',
+          raw: co,
+          bank_name: co.bank_name || '',
+          bank_account: co.bank_account_number || co.bank_account || '',
+          bank_account_name: co.bank_account_name || name,
+          tax_code: co.tax_id || '',
+          phone: co.phone || '',
+          sublabel: `Đối tác ${tier || 'B2B'}${co.tax_id ? ` • MST: ${co.tax_id}` : ''}${co.bank_name ? ` • ${co.bank_name}` : ''}`
+        });
       }
-    } else if (isOpen) {
-      setVatPercent('10');
-    }
-  }, [isOpen, editItem]);
+    });
 
-  // Automatic VAT calculation
-  useEffect(() => {
-    if (!isInitializedRef.current) return;
-    
-    if (form.has_vat_invoice) {
-      const amountVal = parseFloat(form.amount) || 0;
-      const pct = parseFloat(vatPercent) || 0;
-      let calculatedVat = 0;
-      if (form.is_vat_inclusive) {
-        calculatedVat = Math.round(amountVal - (amountVal / (1 + (pct / 100))));
-      } else {
-        calculatedVat = Math.round(amountVal * (pct / 100));
-      }
-      setForm(prev => ({ ...prev, vat_amount: calculatedVat > 0 ? String(calculatedVat) : '0' }));
-    } else {
-      setForm(prev => ({ ...prev, vat_amount: '0' }));
-    }
-  }, [form.amount, form.has_vat_invoice, form.is_vat_inclusive, vatPercent]);
+    return list;
+  }, [suppliers, companies]);
 
-  // Fetch initial data
+  // Contacts (Clients / Students)
+  const contactOptions = useMemo(() => {
+    const safeContacts = Array.isArray(contacts) ? contacts : ((contacts as any)?.items || []);
+    return safeContacts.map((c: any) => {
+      const name = c.full_name || c.name || `Khách hàng #${c.id}`;
+      return {
+        value: String(c.id),
+        label: name,
+        raw: c,
+        avatar: c.avatar_url || c.avatar,
+        phone: c.phone || '',
+        email: c.email || '',
+        bank_name: c.bank_name || '',
+        bank_account: c.bank_account || '',
+        bank_account_name: c.bank_account_name || name,
+        sublabel: [c.phone, c.email].filter(Boolean).join(' • ')
+      };
+    });
+  }, [contacts]);
+
+  // Fetch initial system settings & dependencies
   useEffect(() => {
     if (isOpen) {
       if (propUsers && propUsers.length > 0) {
@@ -422,7 +614,23 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     }
   }, [isOpen, propUsers]);
 
-  // Initialize form state - ONLY when drawer freshly opens or editItem changes
+  // Auto-fill logged in user's bank details if target is 'Nội bộ'
+  useEffect(() => {
+    if (isOpen && !editItem && user && paymentTarget === 'Nội bộ' && !paymentEmployeeId) {
+      const currentEmp = users.find(u => Number(u.id) === Number(user.id)) || user;
+      if (currentEmp) {
+        setPaymentEmployeeId(String(currentEmp.id));
+        setPaymentBeneficiaryName(currentEmp.full_name || currentEmp.name || '');
+        if (currentEmp.bank_name) setPaymentBankName(currentEmp.bank_name);
+        if (currentEmp.bank_account) setPaymentBankAccount(currentEmp.bank_account);
+        const accName = currentEmp.full_name || currentEmp.name || '';
+        if (accName) setPaymentAccountName(accName.toUpperCase());
+        if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
+      }
+    }
+  }, [isOpen, editItem, user, paymentTarget, paymentEmployeeId, users]);
+
+  // Initialize form state when opening or when editItem changes
   useEffect(() => {
     if (isOpen) {
       const isNewlyOpened = !prevOpenRef.current;
@@ -433,31 +641,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         prevEditItemRef.current = editItem;
 
         if (editItem) {
-          setVendorSearch(editItem.vendor_name || '');
-          // Extract all existing images
-          const getCleanFileName = (raw: string) => {
-            if (!raw) return '';
-            return raw.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
-          };
-          const normalizeImgPath = (raw: string) => {
-            if (!raw) return '';
-            return raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
-          };
-
+          // Extract existing images
           const existingImages: string[] = [];
-          const isImgDuplicate = (candidate: string) => {
-            const candFile = getCleanFileName(candidate);
-            const candNorm = normalizeImgPath(candidate);
-            return existingImages.some(existing => {
-              if (existing === candidate) return true;
-              const exFile = getCleanFileName(existing);
-              const exNorm = normalizeImgPath(existing);
-              if (candFile && exFile && candFile === exFile) return true;
-              if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
-              return false;
-            });
-          };
-
           if (editItem.image_url) {
             existingImages.push(editItem.image_url);
           }
@@ -465,81 +650,59 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             const matches = editItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
             for (const m of matches) {
               const url = m[2].trim();
-              if (url && !isImgDuplicate(url)) {
+              if (url && !existingImages.includes(url)) {
                 existingImages.push(url);
               }
             }
           }
           setImages(existingImages);
 
-          const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n]+)/;
+          // Bank details parsing
+          const bankRegex = /\[Thông tin chuyển khoản\]:\s*([^\-]+)\s*-\s*STK:\s*([^\-]+)\s*-\s*Chủ TK:\s*([^\n-]+)(?:\s*-\s*Chi nhánh:\s*([^\n]+))?/;
           const match = editItem.notes?.match(bankRegex);
-          let request_bank_transfer = false;
-          let bank_name = '';
-          let bank_account_number = '';
-          let bank_account_name = '';
-          let cleanNotes = '';
-          const detailMatch = editItem.notes?.match(/Chi tiết:\s*([^\n]+(?:\n(?!\[|\bPhòng ban:|\bĐối tượng:|\bThụ hưởng:|\bHình thức:)[^\n]+)*)/i);
-          if (detailMatch) {
-            cleanNotes = detailMatch[1].trim();
-          } else {
-            cleanNotes = editItem.notes ? editItem.notes
-              .replace(bankRegex, '')
-              .replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '')
-              .replace(/Phòng ban:[^\n]*/gi, '')
-              .replace(/Đối tượng:[^\n]*/gi, '')
-              .replace(/Thụ hưởng[^\n]*/gi, '')
-              .replace(/Hình thức:[^\n]*/gi, '')
-              .replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
-              .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
-              .trim() : '';
-          }
+          let parsedBankName = editItem.bank_name || '';
+          let parsedBankAccount = editItem.bank_account_number || editItem.bank_account || '';
+          let parsedAccountName = editItem.bank_account_name || '';
+          let parsedBranch = '';
+
           if (match) {
-            request_bank_transfer = true;
-            bank_name = match[1].trim();
-            bank_account_number = match[2].trim();
-            bank_account_name = match[3].trim();
+            parsedBankName = match[1].trim();
+            parsedBankAccount = match[2].trim();
+            parsedAccountName = match[3].trim();
+            if (match[4]) parsedBranch = match[4].trim();
           }
 
-          let initialEntities: any[] = [];
-          if (Array.isArray(editItem.entities) && editItem.entities.length > 0) {
-            initialEntities = editItem.entities;
-          } else if (editItem.contact_id || (editItem.entity_type === 'contact' && editItem.entity_id)) {
-            const cId = Number(editItem.contact_id || editItem.entity_id);
-            const matchedContact = contacts.find((c: any) => Number(c.id) === cId);
-            initialEntities = [{
-              entity_type: 'contact',
-              entity_id: cId,
-              name: editItem.contact_name || (matchedContact ? (matchedContact.full_name || '').trim() : `Khách hàng #${cId}`),
-              avatar_url: matchedContact?.avatar_url || matchedContact?.avatar
-            }];
-          } else if (editItem.company_id || (editItem.entity_type === 'company' && editItem.entity_id)) {
-            const compId = Number(editItem.company_id || editItem.entity_id);
-            const matchedComp = companies.find((c: any) => Number(c.id) === compId);
-            initialEntities = [{
-              entity_type: 'company',
-              entity_id: compId,
-              name: editItem.company_name || matchedComp?.name || `Đối tác #${compId}`
-            }];
-          }
-
-          // Check if vendor matches an employee name
-          const matchedUser = users.find((u: any) => (u.full_name && u.full_name.trim().toLowerCase() === (editItem.vendor_name || '').trim().toLowerCase()));
-          if (matchedUser) {
-            setBeneficiaryType('employee');
-            setSelectedEmployeeId(String(matchedUser.id));
-          } else {
-            setBeneficiaryType('vendor');
-            setSelectedEmployeeId('');
-          }
+          setPaymentBankName(parsedBankName);
+          setPaymentBankAccount(parsedBankAccount);
+          setPaymentAccountName(parsedAccountName);
+          setPaymentBankBranch(parsedBranch);
 
           const initialSuffix = extractExpenseTitleSuffix(editItem.title || '');
           setTitleSuffix(initialSuffix);
           const fullTitle = initialSuffix ? `Đề nghị thanh toán — ${initialSuffix}` : (editItem.title || '');
 
+          let initialCategory = editItem.category || 'Vận hành';
+          if (initialCategory === 'Di chuyển' || initialCategory === 'Vận chuyển') initialCategory = 'travel';
+          else if (initialCategory === 'Ăn uống') initialCategory = 'client_meeting';
+          else if (initialCategory === 'Vận hành') initialCategory = 'general';
+          else if (initialCategory === 'Marketing') initialCategory = 'marketing';
+          else if (initialCategory === 'Văn phòng phẩm' || initialCategory === 'Công cụ') initialCategory = 'stationery';
+          else if (initialCategory === 'Nhân sự') initialCategory = 'hr';
+          setExpenseCategory(initialCategory);
+
+          setPaymentBeneficiaryName(editItem.vendor_name || '');
+          setCurrencyType(editItem.currency || 'VND');
+
+          let cleanNotes = editItem.notes ? editItem.notes
+            .replace(/\[Chi tiết các khoản chi\]:[^\n]*(\n[•\-*][^\n]*)*\s*/gi, '')
+            .replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '')
+            .replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '')
+            .replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '')
+            .trim() : '';
+
           setForm({
             title: fullTitle,
-            category: editItem.category || 'Khác',
+            category: initialCategory,
             amount: String(editItem.amount || 0),
             currency: editItem.currency || 'VND',
             vat_amount: editItem.vat_amount ? String(editItem.vat_amount) : '',
@@ -548,44 +711,72 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
             approver_id: editItem.approver_id ? Number(editItem.approver_id) : null,
             approver_id_2: editItem.approver_id_2 ? Number(editItem.approver_id_2) : null,
             approver_id_3: editItem.approver_id_3 ? Number(editItem.approver_id_3) : null,
-            related_user_ids: (() => {
-              const raw = editItem.related_user_ids;
-              if (Array.isArray(raw)) return raw.map(Number).filter(Boolean);
-              if (typeof raw === 'string' && raw.trim()) {
-                try {
-                  const p = JSON.parse(raw);
-                  if (Array.isArray(p)) return p.map(Number).filter(Boolean);
-                } catch {}
-                return raw.split(',').map(s => Number(s.trim())).filter(Boolean);
-              }
-              return [];
-            })(),
+            related_user_ids: Array.isArray(editItem.related_user_ids) ? editItem.related_user_ids.map(Number) : [],
             vendor_name: editItem.vendor_name || '',
             has_vat_invoice: !!editItem.has_vat_invoice,
             is_vat_inclusive: !!editItem.is_vat_inclusive,
-            entities: initialEntities,
+            entities: Array.isArray(editItem.entities) ? editItem.entities : [],
             image_url: editItem.image_url || '',
-            request_bank_transfer,
-            bank_name,
-            bank_account_number,
-            bank_account_name
+            request_bank_transfer: true,
+            bank_name: parsedBankName,
+            bank_account_number: parsedBankAccount,
+            bank_account_name: parsedAccountName
           });
+
+          // Expense items breakdown parsing
+          if (Array.isArray(editItem.items) && editItem.items.length > 0) {
+            setExpenseItems(editItem.items.map((it: any, idx: number) => ({
+              id: it.id || Date.now() + idx,
+              content: it.content || it.name || '',
+              quantity: Number(it.quantity) || 1,
+              price: Number(it.price) || 0,
+              vat: Number(it.vat !== undefined ? it.vat : 10)
+            })));
+          } else {
+            const rawNotes = editItem.notes || editItem.description || '';
+            const itemMatches = Array.from(rawNotes.matchAll(/[•\-*]?\s*\[?(\d+)\]?\s*([^\-\n]+?)\s*-\s*SL:\s*(\d+(?:\.\d+)?)\s*-\s*Đơn giá:\s*([0-9.,]+)[^\-]*-\s*VAT:\s*(\d+)%/gi));
+            if (itemMatches.length > 0) {
+              const parsed = itemMatches.map((m: any, idx: number) => ({
+                id: Date.now() + idx,
+                content: m[2].trim(),
+                quantity: Number(m[3]) || 1,
+                price: Number(m[4].replace(/\D/g, '')) || 0,
+                vat: Number(m[5]) || 0
+              }));
+              setExpenseItems(parsed);
+            } else {
+              setExpenseItems([
+                {
+                  id: Date.now(),
+                  content: initialSuffix || editItem.title || '',
+                  quantity: 1,
+                  price: Number(editItem.amount) || 0,
+                  vat: editItem.vat_amount ? 10 : 0
+                }
+              ]);
+            }
+          }
         } else {
-          // Find default manager approver based on team leader
+          // Fresh create mode
           const defaultApproverId = resolveTeamLeaderId(user, users, teams) || (users[0]?.id || null);
 
           setImages([]);
-          setBeneficiaryType('vendor');
-          setSelectedEmployeeId('');
           setTitleSuffix('');
+          setExpenseCategory('general');
+          setInvoiceType('vat_10');
+          setPaymentTarget('Nội bộ');
+          setPaymentMethod('Chuyển khoản');
+          setCurrencyType('VND');
+          setExpenseItems([{ id: Date.now(), content: '', quantity: 1, price: 0, vat: 10 }]);
+
           setForm({
             ...EMPTY_FORM,
             title: '',
             date: initialDate || new Date().toISOString().split('T')[0],
             approver_id: defaultApproverId
           });
-          setVendorSearch('');
         }
+
         setTimeout(() => {
           isInitializedRef.current = true;
         }, 50);
@@ -597,7 +788,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     }
   }, [isOpen, editItem, initialDate]);
 
-  // Default Director (Phạm Quang Vinh) and default Accountant
+  // Default Director & Accountant for 3-step routing
   const defaultDirector = useMemo(() => {
     const businessUsers = users.filter((u: any) => 
       !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && 
@@ -627,10 +818,10 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       || null;
   }, [users]);
 
-  // Dynamic 5M routing effect
+  // Dynamic threshold routing effect
   useEffect(() => {
     if (isOpen && !editItem && users.length > 0) {
-      const amt = Number(form.amount || 0);
+      const amt = Number(itemsGrandTotal || 0);
       if (amt >= threshold) {
         setForm((prev: any) => ({
           ...prev,
@@ -645,9 +836,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
         }));
       }
     }
-  }, [form.amount, threshold, isOpen, editItem, defaultDirector, defaultAccountant, users]);
+  }, [itemsGrandTotal, threshold, isOpen, editItem, defaultDirector, defaultAccountant, users]);
 
-  // Keep approver_id updated with team leader once users and teams finish loading
+  // Keep approver_id updated with team leader
   useEffect(() => {
     if (isOpen && !editItem && !form.approver_id && (users.length > 0 || teams.length > 0)) {
       const leaderId = resolveTeamLeaderId(user, users, teams) || users[0]?.id || null;
@@ -657,27 +848,32 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
     }
   }, [isOpen, editItem, users, teams, user, form.approver_id]);
 
-  // Close vendor dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (vendorRef.current && !vendorRef.current.contains(e.target as Node)) {
-        setShowVendorDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const isAutoApprove = form.approver_id !== null && user?.id !== undefined && Number(form.approver_id) === Number(user.id);
 
+  // Handle Save
   const handleSave = async () => {
-    const finalTitle = titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : (form.title?.trim() || '');
-    if (!titleSuffix.trim() && (!finalTitle || finalTitle === 'Đề nghị thanh toán')) {
-      addToast('Vui lòng nhập chi tiết nội dung chi (ví dụ: In ấn, Tiền thuê văn phòng...)', 'error');
-      return;
+    if (editItem && editItem.id && !editItem.isClone) {
+      const creatorId = Number(editItem.created_by || editItem.user_id);
+      const currentUserId = Number(user?.id);
+      if (creatorId && currentUserId && creatorId !== currentUserId) {
+        addToast('Chỉ người tạo phiếu mới có quyền chỉnh sửa', 'error');
+        return;
+      }
     }
-    if (!form.amount) {
-      addToast('Điền đầy đủ số tiền chi', 'error');
+
+    let finalTitle = titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : (form.title?.trim() || '');
+    const validItems = expenseItems.filter(it => it.content?.trim());
+    if (!titleSuffix.trim() && (!finalTitle || finalTitle === 'Đề nghị thanh toán')) {
+      if (validItems.length > 0) {
+        const autoSuffix = validItems.map(it => it.content.trim()).join(', ');
+        finalTitle = `Đề nghị thanh toán — ${autoSuffix}`;
+      } else {
+        addToast('Vui lòng nhập chi tiết nội dung chi trong bảng kê hoặc tiêu đề', 'error');
+        return;
+      }
+    }
+    if (itemsGrandTotal <= 0) {
+      addToast('Vui lòng nhập đầy đủ số tiền chi trong bảng chi tiết', 'error');
       return;
     }
     if (form.approver_id === null) {
@@ -685,89 +881,106 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
       return;
     }
     if (form.approver_id_2 === null) {
-      addToast(Number(form.amount || 0) >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
+      addToast(itemsGrandTotal >= threshold ? 'Vui lòng chọn người duyệt Cấp 2 (Ban Giám đốc)' : 'Vui lòng chọn người duyệt Cấp 2 (Kế toán)', 'error');
       return;
     }
-    if (Number(form.amount || 0) >= threshold && form.approver_id_3 === null) {
-      addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc (Phạm Quang Vinh) -> Kế toán!`, 'error');
+    if (itemsGrandTotal >= threshold && form.approver_id_3 === null) {
+      addToast(`Khoản chi từ ${threshold.toLocaleString('vi-VN')}đ trở lên bắt buộc phê duyệt 3 cấp: Leader -> Ban Giám đốc -> Kế toán!`, 'error');
       return;
     }
+
     setSaving(true);
     try {
       let payloadEntities = form.entities;
       if (form.entities.length > 0) {
-        const splitAmt = Number(form.amount) / form.entities.length;
+        const splitAmt = itemsGrandTotal / form.entities.length;
         payloadEntities = form.entities.map((e: any) => ({ ...e, amount: splitAmt }));
       }
 
       let finalNotes = form.notes || '';
-      // Strip any previous [Tài liệu đính kèm...] or duplicate bank info to prevent duplication
+      finalNotes = finalNotes.replace(/\[Chi tiết các khoản chi\]:[^\n]*(\n[•\-*][^\n]*)*\s*/gi, '').trim();
+      finalNotes = finalNotes.replace(/\[Hồ sơ chi phí[^\]]*\]:[^\n]*/gi, '').trim();
+      finalNotes = finalNotes.replace(/\[Thông tin chuyển khoản[^\]]*\]:[^\n]*/gi, '').trim();
+      finalNotes = finalNotes.replace(/\[Thông tin nhận tiền[^\]]*\]:[^\n]*/gi, '').trim();
       finalNotes = finalNotes.replace(/\[Tài liệu đính kèm[^\]]*\]:[^\n]*(\n•[^\n]*)*\s*/gi, '').trim();
 
-      if (form.request_bank_transfer && form.bank_name && form.bank_account_number && form.bank_account_name) {
-        finalNotes = finalNotes.replace(/\[Thông tin chuyển khoản\]:[^\n]*/g, '').trim();
-        finalNotes = `${finalNotes}\n[Thông tin chuyển khoản]: ${form.bank_name} - STK: ${form.bank_account_number} - Chủ TK: ${form.bank_account_name}`.trim();
+      const matchedCat = CATEGORIES.find(c => c.value === expenseCategory);
+      finalNotes = `[Hồ sơ chi phí]: ${matchedCat?.label || expenseCategory}\n${finalNotes}`.trim();
+
+      if (paymentMethod === 'Chuyển khoản' && paymentBankAccount) {
+        finalNotes = `${finalNotes}\n[Thông tin chuyển khoản]: ${paymentBankName || 'Ngân hàng'} - STK: ${paymentBankAccount} - Chủ TK: ${paymentAccountName || paymentBeneficiaryName}${paymentBankBranch ? ` - Chi nhánh: ${paymentBankBranch}` : ''}`.trim();
+      } else if (paymentMethod === 'Tiền mặt') {
+        finalNotes = `${finalNotes}\n[Thông tin nhận tiền]: Tiền mặt - Người nhận: ${paymentBeneficiaryName || 'Người nhận'} - Quầy bàn giao: ${paymentDestination || 'Thủ quỹ'}`.trim();
+      } else if (paymentMethod === 'Ví điện tử') {
+        finalNotes = `${finalNotes}\n[Thông tin nhận tiền]: Ví điện tử (${paymentWalletType}) - SĐT: ${paymentWalletPhone || paymentPhone} - Chủ ví: ${paymentBeneficiaryName}`.trim();
+      } else if (paymentMethod === 'Thẻ tín dụng') {
+        finalNotes = `${finalNotes}\n[Thông tin nhận tiền]: Thẻ tín dụng - 4 số cuối: ${paymentCorporateCard || 'N/A'} - Người quẹt: ${paymentBeneficiaryName}`.trim();
       }
 
-      // Deduplicate images before saving
+      if (expenseItems && expenseItems.length > 0) {
+        const itemRowsStr = expenseItems.map((it, idx) => {
+          const sub = (Number(it.quantity) || 1) * (Number(it.price) || 0);
+          return `• [${idx + 1}] ${it.content || 'Hạng mục chi'} - SL: ${it.quantity} - Đơn giá: ${Number(it.price || 0).toLocaleString('vi-VN')} đ - VAT: ${it.vat || 0}% - Thành tiền: ${Number(sub).toLocaleString('vi-VN')} đ`;
+        }).join('\n');
+        finalNotes = `${finalNotes}\n\n[Chi tiết các khoản chi]:\n${itemRowsStr}`.trim();
+      }
+
+      // Deduplicate images
       const uniqueImages: string[] = [];
       for (const img of images) {
-        if (!img) continue;
-        const candFile = img.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
-        const candNorm = img.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
-        const isDup = uniqueImages.some(ex => {
-          if (ex === img) return true;
-          const exFile = ex.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
-          const exNorm = ex.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
-          if (candFile && exFile && candFile === exFile) return true;
-          if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
-          return false;
-        });
-        if (!isDup) uniqueImages.push(img);
+        if (img && !uniqueImages.includes(img)) {
+          uniqueImages.push(img);
+        }
       }
 
       if (uniqueImages.length > 0) {
         const baseUrl = import.meta.env.VITE_API_URL || '/backend';
         const attsStr = uniqueImages.map(url => `• ${url.split('/').pop()} (${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')})`).join('\n');
-        finalNotes = `${finalNotes}\n[Tài liệu đính kèm (${uniqueImages.length} tệp)]:\n${attsStr}`.trim();
+        finalNotes = `${finalNotes}\n\n[Tài liệu đính kèm (${uniqueImages.length} tệp)]:\n${attsStr}`.trim();
       }
 
       const statusVal = isAutoApprove ? 'approved' : 'pending';
 
+      const payload = {
+        ...form,
+        title: finalTitle,
+        vendor_name: paymentBeneficiaryName || form.vendor_name || '',
+        bank_name: paymentBankName,
+        bank_account_number: paymentBankAccount,
+        bank_account_name: paymentAccountName,
+        request_bank_transfer: paymentMethod === 'Chuyển khoản',
+        category: matchedCat?.label || 'Vận hành',
+        currency: currencyType,
+        amount: Number(itemsGrandTotal),
+        vat_amount: Number(itemsTotalVat),
+        has_vat_invoice: invoiceType.startsWith('vat_'),
+        is_vat_inclusive: true,
+        image_url: uniqueImages[0] || null,
+        notes: finalNotes,
+        items: expenseItems,
+        entities: payloadEntities
+      };
+
       if (editItem && editItem.id && !editItem.isClone) {
-        await api.put(`/expenses/${editItem.id}`, {
-          ...form,
-          title: finalTitle,
-          image_url: uniqueImages[0] || null,
-          notes: finalNotes,
-          amount: Number(form.amount),
-          entities: payloadEntities
-        });
+        const { created_by, ...updatePayload } = payload;
+        await api.put(`/expenses/${editItem.id}`, updatePayload);
         addToast('Đã cập nhật chi phí thành công!', 'success');
       } else {
         await api.post('/expenses', {
-          ...form,
-          title: finalTitle,
-          image_url: uniqueImages[0] || null,
-          notes: finalNotes,
-          amount: Number(form.amount),
-          status: statusVal,
-          entities: payloadEntities
+          ...payload,
+          status: statusVal
         });
-        if (isAutoApprove) {
-          addToast('Đã tạo và duyệt chi phí thành công!', 'success');
-        } else {
-          addToast('Đã nhập chi phí mới – chờ phê duyệt', 'success');
-        }
+        addToast('Đã tạo đề xuất thanh toán thành công!', 'success');
+        try {
+          localStorage.removeItem(EXPENSE_DRAFT_KEY);
+        } catch {}
       }
-      try {
-        localStorage.removeItem(EXPENSE_DRAFT_KEY);
-      } catch {}
-      setExistingDraft(null);
+
       onSaveSuccess();
       onClose();
-    } catch (e: any) {
-      addToast(e.response?.data?.message || 'Lỗi khi lưu chi phí', 'error');
+    } catch (err: any) {
+      console.error('Error saving expense:', err);
+      addToast(err.response?.data?.message || err.message || 'Lỗi khi lưu đề xuất', 'error');
     } finally {
       setSaving(false);
     }
@@ -776,89 +989,87 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex }}>
           <motion.div
             className="drawer-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => !saving && handleRequestClose()}
+            transition={{ duration: 0.25 }}
+            onClick={handleRequestClose}
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: baseZIndex + 5,
+              zIndex: baseZIndex,
               background: 'rgba(0, 0, 0, 0.45)',
               backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              cursor: 'pointer'
+              WebkitBackdropFilter: 'blur(8px)'
             }}
           />
 
-          {/* Drawer Sheet Panel */}
           <motion.div
-            initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-            animate={{ y: 0, x: 0, opacity: 1 }}
-            exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
-            onClick={e => e.stopPropagation()}
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             style={{
               position: 'fixed',
+              left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+              right: 0,
               top: 0,
               bottom: 0,
-              left: 0,
-              right: 0,
-              width: '100vw',
+              width: isMobile ? '100vw' : 'auto',
+              maxWidth: 'none',
               height: isMobile ? '100dvh' : '100vh',
-              background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
+              background: 'var(--color-surface)',
               boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
               display: 'flex',
               flexDirection: 'column',
-              boxSizing: 'border-box',
-              overflow: 'hidden',
-              zIndex: baseZIndex + 10
+              zIndex: baseZIndex + 1,
+              overflow: 'hidden'
             }}
           >
-            {/* Header with Cancel and Save buttons at the top right */}
-            <div className="modal-header" style={{
-              padding: isMobile ? '0.75rem 1rem' : '0.75rem 1.5rem',
-              background: 'linear-gradient(to right, var(--color-bg), var(--color-surface))',
-              borderBottom: '1px solid var(--color-border)',
-              flexShrink: 0,
+            {/* Drawer Header */}
+            <div style={{
+              padding: isMobile ? '0.75rem 1rem' : '1rem 1.75rem',
+              borderBottom: '1px solid var(--color-border-light)',
               display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '0.75rem' : 'normal',
+              alignItems: 'center',
               justifyContent: 'space-between',
-              alignItems: isMobile ? 'stretch' : 'center'
+              background: 'var(--color-surface)',
+              flexShrink: 0,
+              gap: '1rem',
+              flexWrap: isMobile ? 'wrap' : 'nowrap'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-                {/* Close Button as "<" ChevronLeft on the Left */}
-                <button 
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                <button
                   type="button"
                   onClick={handleRequestClose}
                   style={{
-                    padding: '8px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: 'var(--color-text)',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border-light)',
+                    background: 'var(--color-bg-secondary)',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    transition: 'all 0.15s ease'
                   }}
-                  className="hover-bg-muted"
                   title="Quay lại"
                 >
-                  <ChevronLeft size={20} />
+                  <ChevronLeft size={22} />
                 </button>
 
                 <div style={{ minWidth: 0 }}>
                   <h3 style={{ fontWeight: 800, fontSize: '1.15rem', margin: 0 }}>
-                    {editItem ? 'Cập nhật khoản chi' : 'Nhập chi phí mới'}
+                    {editItem ? 'Cập nhật đề xuất thanh toán (PO)' : 'Lập đề nghị thanh toán mới (PO)'}
                   </h3>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', marginTop: 2, marginBottom: 0 }}>
-                    Vui lòng điền thông tin chi tiết và người phê duyệt.
+                  <p style={{ fontSize: '0.78rem', color: 'var(--color-text-light)', marginTop: 2, marginBottom: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '560px' }} title={form.title || editItem?.title || undefined}>
+                    {form.title || editItem?.title || 'Biểu mẫu quy trình đề xuất thanh toán & giải ngân Purchase Order chuẩn hóa.'}
                   </p>
                 </div>
               </div>
@@ -872,22 +1083,6 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 width: isMobile ? '100%' : 'auto',
                 flexWrap: isMobile ? 'wrap' : 'nowrap'
               }}>
-                <button
-                  type="button"
-                  className="btn outline"
-                  onClick={handleRequestClose}
-                  disabled={saving}
-                  style={{
-                    height: '34px',
-                    flex: isMobile ? 1 : 'none',
-                    minWidth: isMobile ? 'none' : '80px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    borderRadius: '10px'
-                  }}
-                >
-                  Hủy
-                </button>
                 {!editItem && (
                   <button
                     type="button"
@@ -905,7 +1100,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       gap: '6px',
                       borderRadius: '10px'
                     }}
-                    title="Lưu bản nháp để hoàn thiện sau"
+                    title="Lưu bản nháp để tiếp tục hoàn thiện sau"
                   >
                     <Bookmark size={14} />
                     <span>Lưu nháp</span>
@@ -936,9 +1131,11 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               </div>
             </div>
 
+            {/* Drawer Body: 2 Columns Matching Approvals.tsx */}
             <div className="modal-body custom-scrollbar" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '1.5rem', padding: '1.5rem', flex: 1, overflowY: 'auto', maxHeight: 'calc(100vh - 65px)', WebkitOverflowScrolling: 'touch' }}>
-              {/* Left Column: Main form details */}
-              <div style={{ flex: isMobile ? 'none' : 7, display: 'flex', flexDirection: 'column', gap: '1.25rem', borderRight: isMobile ? 'none' : '1px solid var(--color-border-light)', paddingRight: isMobile ? '0' : '1.5rem', paddingBottom: '180px' }}>
+              
+              {/* Left Column (Main Form - 7/10) */}
+              <div style={{ flex: isMobile ? 'none' : 7, display: 'flex', flexDirection: 'column', gap: '1.25rem', minWidth: 0, width: '100%', paddingBottom: '140px' }}>
                 
                 {/* Draft Notification Banner */}
                 {existingDraft && !editItem && (
@@ -998,198 +1195,274 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   </div>
                 )}
 
-                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '4px' }}>
-                    <label className="form-label" style={{ fontWeight: 700, margin: 0, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      Nội dung chi <span style={{ color: 'var(--color-danger)' }}>*</span>
-                    </label>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                      Tên loại quy trình cố định khúc đầu, nhập nội dung chi tiết khúc sau
-                    </span>
-                  </div>
+                {/* CARD 1: THÔNG TIN CHI TIẾT ĐỀ XUẤT & TIÊU ĐỀ */}
+                <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
                   
+                  {/* Workflow Banner Highlight */}
                   <div style={{
                     display: 'flex',
-                    alignItems: 'stretch',
-                    borderRadius: '10px',
-                    border: '1.5px solid var(--color-border)',
-                    background: 'var(--color-surface)',
-                    overflow: 'hidden',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)'
                   }}>
-                    {/* Fixed Prefix */}
                     <div style={{
-                      padding: '0 14px',
-                      background: 'var(--color-bg-secondary, #f1f5f9)',
-                      borderRight: '1.5px solid var(--color-border)',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#10b981',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '0.85rem',
-                      fontWeight: 700,
-                      color: 'var(--color-text)',
-                      whiteSpace: 'nowrap',
-                      userSelect: 'none',
-                      flexShrink: 0
+                      justifyContent: 'center'
                     }}>
-                      <span style={{ color: '#10b981', fontSize: '0.9rem' }}>●</span>
-                      <span>Đề nghị thanh toán</span>
-                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                      <FileSignature size={18} />
                     </div>
-
-                    {/* Editable Suffix */}
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={titleSuffix}
-                      onChange={e => handleSuffixChange(e.target.value)}
-                      placeholder="Nhập nội dung chi cụ thể (VD: In ấn, thi công Lễ tốt nghiệp, Tiền thuê văn phòng...) *"
-                      style={{
-                        flex: 1,
-                        border: 'none',
-                        borderRadius: 0,
-                        height: '42px',
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        background: 'transparent',
-                        padding: '0 14px'
-                      }}
-                      required
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.875rem' }}>Đề nghị thanh toán (PO)</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác & cán bộ nhân viên.</span>
+                    </div>
                   </div>
 
-                  <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>Hiển thị trên phiếu chi & quy trình:</span>
-                    <strong style={{ color: 'var(--color-primary)' }}>
-                      {titleSuffix.trim() ? `Đề nghị thanh toán — ${titleSuffix.trim()}` : 'Đề nghị thanh toán'}
-                    </strong>
+                  {/* Tiêu đề quy trình / Nội dung chi (Fix prefix + editable suffix) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Tiêu đề đề xuất / Nội dung chi</span>
+                        <span style={{ color: 'var(--color-danger)' }}>*</span>
+                      </label>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      borderRadius: '10px',
+                      border: '1.5px solid var(--color-border)',
+                      background: 'var(--color-surface)',
+                      overflow: 'hidden',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                    }}>
+                      {/* Fixed Prefix Box */}
+                      <div style={{
+                        padding: '0 14px',
+                        background: 'var(--color-bg-secondary, #f1f5f9)',
+                        borderRight: '1.5px solid var(--color-border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        color: 'var(--color-text)',
+                        whiteSpace: 'nowrap',
+                        userSelect: 'none',
+                        flexShrink: 0
+                      }}>
+                        <span style={{ color: '#10b981', fontSize: '0.9rem' }}>●</span>
+                        <span>Đề nghị thanh toán</span>
+                        <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                      </div>
+
+                      {/* Suffix Input */}
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={titleSuffix}
+                        onChange={e => handleSuffixChange(e.target.value)}
+                        placeholder="Nhập nội dung chi cụ thể (VD: In ấn, thi công Lễ tốt nghiệp, Tiền điện nước tháng 9...) *"
+                        style={{
+                          flex: 1,
+                          border: 'none',
+                          borderRadius: 0,
+                          height: '42px',
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                          background: 'transparent',
+                          padding: '0 14px'
+                        }}
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                    <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
-                      Đơn vị thụ hưởng <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>(Thanh toán cho ai?)</span>
-                    </label>
+                {/* CARD 2: THÔNG TIN CHI TIẾT ĐỀ XUẤT & ĐỐI TƯỢNG THỤ HƯỞNG */}
+                <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text)' }}>
+                    <Receipt size={18} style={{ color: 'var(--color-primary)' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Thông tin chi tiết đề xuất (Hồ sơ chi phí & Đối tượng thụ hưởng)
+                    </span>
+                  </div>
 
-                    {/* Toggle: Nhà cung cấp vs Nhân viên */}
-                    <div style={{
-                      display: 'inline-flex',
-                      padding: '4px',
-                      background: 'var(--color-bg-secondary, #f1f5f9)',
-                      borderRadius: '12px',
-                      border: '1.5px solid var(--color-border)',
-                      gap: '4px',
-                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)'
-                    }}>
-                      <button
-                        type="button"
-                        onClick={() => setBeneficiaryType('vendor')}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 14px',
-                          borderRadius: '8px',
-                          fontSize: '0.8125rem',
-                          fontWeight: beneficiaryType === 'vendor' ? 750 : 600,
-                          border: beneficiaryType === 'vendor' ? '1px solid var(--color-border-light)' : '1px solid transparent',
-                          background: beneficiaryType === 'vendor' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                          color: beneficiaryType === 'vendor' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                          boxShadow: beneficiaryType === 'vendor' ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' : 'none',
-                          cursor: 'pointer',
-                          transition: 'all 0.18s ease'
-                        }}
-                      >
-                        <Building2 size={14} style={{ color: beneficiaryType === 'vendor' ? 'var(--color-primary)' : 'inherit' }} />
-                        <span>Nhà cung cấp / Đối tác</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBeneficiaryType('employee')}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 14px',
-                          borderRadius: '8px',
-                          fontSize: '0.8125rem',
-                          fontWeight: beneficiaryType === 'employee' ? 750 : 600,
-                          border: beneficiaryType === 'employee' ? '1px solid var(--color-border-light)' : '1px solid transparent',
-                          background: beneficiaryType === 'employee' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                          color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                          boxShadow: beneficiaryType === 'employee' ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)' : 'none',
-                          cursor: 'pointer',
-                          transition: 'all 0.18s ease'
-                        }}
-                      >
-                        <Users size={14} style={{ color: beneficiaryType === 'employee' ? 'var(--color-primary)' : 'inherit' }} />
-                        <span>Nhân viên</span>
-                      </button>
+                  {/* Phân loại chi phí */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      Phân loại chi phí
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {CATEGORIES.map(c => {
+                        const Icon = c.icon;
+                        const isSelected = expenseCategory === c.value;
+                        return (
+                          <button
+                            key={c.value}
+                            type="button"
+                            onClick={() => {
+                              setExpenseCategory(c.value);
+                              setForm((prev: any) => ({ ...prev, category: c.label }));
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 12px',
+                              borderRadius: 'var(--radius-full)',
+                              border: `1.5px solid ${isSelected ? c.color : 'var(--color-border)'}`,
+                              background: isSelected ? `${c.color}18` : 'transparent',
+                              color: isSelected ? c.color : 'var(--color-text-light)',
+                              fontSize: '0.78rem',
+                              fontWeight: isSelected ? 750 : 600,
+                              cursor: 'pointer',
+                              transition: 'all 0.18s ease'
+                            }}
+                          >
+                            <Icon size={13} />
+                            <span>{c.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {beneficiaryType === 'vendor' ? (
-                    <div style={{ position: 'relative' }} ref={vendorRef}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0 1rem', height: '44px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)' }}>
-                        <input
-                          style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontSize: '0.875rem', color: 'var(--color-text)' }}
-                          placeholder="Tìm NCC hoặc nhập tự do..."
-                          value={vendorSearch}
-                          onChange={e => { setVendorSearch(e.target.value); setForm({ ...form, vendor_name: e.target.value }); setShowVendorDropdown(true); }}
-                          onFocus={() => setShowVendorDropdown(true)}
-                        />
-                        {vendorSearch && <button type="button" onClick={() => { setVendorSearch(''); setForm({ ...form, vendor_name: '' }); }} style={{ color: 'var(--color-text-muted)', display: 'flex' }}><X size={14} /></button>}
-                        <Building2 size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                        <ChevronDown size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                      </div>
+                  {/* Loại chứng từ hóa đơn */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      Loại chứng từ hóa đơn
+                    </label>
+                    <CustomSelect
+                      value={invoiceType}
+                      onChange={val => {
+                        setInvoiceType(val as any);
+                        const vatNum = val === 'vat_10' ? 10 : val === 'vat_8' ? 8 : val === 'vat_5' ? 5 : val === 'vat_0' ? 0 : null;
+                        if (vatNum !== null) {
+                          setExpenseItems(prev => prev.map(it => ({ ...it, vat: vatNum })));
+                        }
+                      }}
+                      options={[
+                        { value: 'vat_10', label: 'Hóa đơn điện tử VAT 10%' },
+                        { value: 'vat_8', label: 'Hóa đơn điện tử VAT 8%' },
+                        { value: 'vat_5', label: 'Hóa đơn điện tử VAT 5%' },
+                        { value: 'vat_0', label: 'Hóa đơn điện tử VAT 0% / Không chịu thuế' },
+                        { value: 'retail', label: 'Hóa đơn bán lẻ / Biên lai thu tiền' },
+                        { value: 'none', label: 'Không có hóa đơn (Giải trình nội bộ)' }
+                      ]}
+                      width="100%"
+                    />
+                  </div>
 
-                      {showVendorDropdown && (
-                        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-surface)', borderRadius: '14px', border: '1px solid var(--color-border-light)', boxShadow: '0 16px 32px -8px rgba(0,0,0,0.12)', zIndex: 200, overflow: 'hidden' }}>
-                          {filteredVendors.map(v => (
-                            <div
-                              key={v.id}
-                              onMouseDown={() => handleSelectVendor(v)}
-                              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', cursor: 'pointer', transition: 'background 0.15s' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-primary-light)')}
-                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                            >
-                              <div style={{ 
-                                width: 30, 
-                                height: 30, 
-                                borderRadius: '8px', 
-                                background: v.type === 'company' ? 'rgba(59, 130, 246, 0.1)' : 'var(--color-primary-light)', 
-                                color: v.type === 'company' ? '#3b82f6' : 'var(--color-primary)', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center', 
-                                fontWeight: 800, 
-                                fontSize: '0.8rem', 
-                                flexShrink: 0 
-                              }}>
-                                {v.name[0] || '?'}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</p>
-                                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                                  {v.type === 'company' ? 'Đối tác' : 'Nhà cung cấp'} {v.phone ? `· ${v.phone}` : ''}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                          {vendorSearch && !filteredVendors.find(v => v.name === vendorSearch) && (
-                            <div
-                              onMouseDown={() => { setForm({ ...form, vendor_name: vendorSearch }); setShowVendorDropdown(false); }}
-                              style={{ padding: '9px 14px', cursor: 'pointer', borderTop: '1px solid var(--color-border-light)', fontSize: '0.8125rem', color: 'var(--color-primary)', fontWeight: 700 }}
-                            >
-                              + Dùng "{vendorSearch}" (nhập tự do)
-                            </div>
-                          )}
-                        </div>
-                      )}
+                  {/* PAYMENT TARGET, METHOD & CURRENCY ROW */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 0.8fr', gap: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                        Đối tượng thụ hưởng <span style={{ color: 'var(--color-danger)' }}>*</span>
+                      </label>
+                      <CustomSelect
+                        value={paymentTarget}
+                        onChange={val => {
+                          setPaymentTarget(val);
+                          if (val === 'Nội bộ') {
+                            const currentEmp = users.find(u => Number(u.id) === Number(user?.id)) || user;
+                            if (currentEmp) {
+                              setPaymentEmployeeId(String(currentEmp.id));
+                              setPaymentBeneficiaryName(currentEmp.full_name || currentEmp.name || '');
+                              if (currentEmp.bank_name) setPaymentBankName(currentEmp.bank_name);
+                              if (currentEmp.bank_account) setPaymentBankAccount(currentEmp.bank_account);
+                              const accName = currentEmp.full_name || currentEmp.name || '';
+                              if (accName) setPaymentAccountName(accName.toUpperCase());
+                              if (currentEmp.phone) setPaymentPhone(currentEmp.phone);
+                            }
+                          } else {
+                            setPaymentEmployeeId('');
+                            setPaymentSupplierId('');
+                            setPaymentLecturerId('');
+                            setPaymentContactId('');
+                            setPaymentBeneficiaryName('');
+                            setPaymentBankName('');
+                            setPaymentBankAccount('');
+                            setPaymentAccountName('');
+                            setPaymentPhone('');
+                            setPaymentTaxCode('');
+                          }
+                        }}
+                        options={[
+                          { value: 'Nội bộ', label: 'Nội bộ (Cán bộ nhân viên)' },
+                          { value: 'Giảng viên', label: 'Giảng viên / Chuyên gia' },
+                          { value: 'Đối tác', label: 'Đối tác / Vendor / Nhà cung cấp' },
+                          { value: 'Khách hàng', label: 'Khách hàng / Học viên CRM' },
+                          { value: 'Cộng tác viên', label: 'Cộng tác viên (CTV Tuyển sinh / Marketing)' },
+                          { value: 'Cơ quan Nhà nước', label: 'Cơ quan Nhà nước / Thuế / BHXH / Kho bạc' },
+                          { value: 'Cá nhân khác', label: 'Cá nhân khác / Khách vãng lai' }
+                        ]}
+                        width="100%"
+                      />
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                        Hình thức nhận tiền
+                      </label>
+                      <CustomSelect
+                        value={paymentMethod}
+                        onChange={val => setPaymentMethod(val)}
+                        options={[
+                          { value: 'Chuyển khoản', label: 'Chuyển khoản (Ngân hàng)' },
+                          { value: 'Tiền mặt', label: 'Tiền mặt (Thủ quỹ bàn giao)' },
+                          { value: 'Ví điện tử', label: 'Ví điện tử (MoMo / ZaloPay / Viettel Money)' },
+                          { value: 'Thẻ tín dụng', label: 'Thẻ tín dụng doanh nghiệp (Corporate Card)' }
+                        ]}
+                        width="100%"
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                        Loại tiền tệ
+                      </label>
+                      <CustomSelect
+                        value={currencyType}
+                        onChange={val => {
+                          setCurrencyType(val);
+                          setForm((prev: any) => ({ ...prev, currency: val }));
+                        }}
+                        options={[
+                          { value: 'VND', label: 'VND (₫)' },
+                          { value: 'USD', label: 'USD ($)' },
+                          { value: 'EURO', label: 'EUR (€)' },
+                          { value: 'GBP', label: 'GBP (£)' },
+                          { value: 'JPY', label: 'JPY (¥)' },
+                          { value: 'SGD', label: 'SGD (S$)' },
+                          { value: 'AUD', label: 'AUD (A$)' },
+                          { value: 'CAD', label: 'CAD (C$)' },
+                          { value: 'CHF', label: 'CHF (Fr)' }
+                        ]}
+                        width="100%"
+                      />
+                    </div>
+                  </div>
+
+                  {/* BENEFICIARY DYNAMIC SELECTORS */}
+                  {paymentTarget === 'Nội bộ' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Nhân viên thụ hưởng <span style={{ color: 'var(--color-danger)' }}>*</span>
+                        </label>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                          (Tự động trích xuất STK ngân hàng từ hồ sơ nhân sự)
+                        </span>
+                      </div>
                       <CustomSelect
                         options={users.map((u: any) => ({
                           value: String(u.id),
@@ -1200,35 +1473,32 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                             u.bank_name ? `${u.bank_name}: ${u.bank_account}` : 'Chưa có STK'
                           ].filter(Boolean).join(' • ')
                         }))}
-                        value={selectedEmployeeId}
-                        onChange={(val) => {
+                        value={paymentEmployeeId}
+                        onChange={val => {
                           const empId = String(val);
-                          setSelectedEmployeeId(empId);
+                          setPaymentEmployeeId(empId);
                           const emp = users.find((u: any) => String(u.id) === empId);
                           if (emp) {
                             const empName = emp.full_name || emp.name || emp.username || '';
-                            const hasBank = !!(emp.bank_name || emp.bank_account);
-                            setForm((prev: any) => ({
-                              ...prev,
-                              vendor_name: empName,
-                              request_bank_transfer: true,
-                              bank_name: emp.bank_name || prev.bank_name || '',
-                              bank_account_number: emp.bank_account || prev.bank_account_number || '',
-                              bank_account_name: empName.toUpperCase()
-                            }));
-                            if (hasBank) {
-                              addToast(`Đã tự động điền STK ngân hàng của ${empName}`, 'success');
+                            setPaymentBeneficiaryName(empName);
+                            if (emp.bank_name) setPaymentBankName(emp.bank_name);
+                            if (emp.bank_account) setPaymentBankAccount(emp.bank_account);
+                            if (empName) setPaymentAccountName(empName.toUpperCase());
+                            if (emp.phone) setPaymentPhone(emp.phone);
+                            if (emp.bank_account) {
+                              addToast(`Đã trích xuất STK ngân hàng của ${empName}`, 'success');
                             } else {
-                              addToast(`Nhân viên ${empName} chưa lưu STK trong hồ sơ. Vui lòng nhập STK ở bên dưới.`, 'info');
+                              addToast(`Nhân viên ${empName} chưa lưu STK trong hồ sơ. Vui lòng nhập STK bên dưới.`, 'info');
                             }
                           }
                         }}
-                        placeholder="-- Chọn nhân viên cần thanh toán --"
+                        placeholder="-- Chọn nhân viên nhận thanh toán --"
                         searchable
                         showAvatars
+                        width="100%"
                       />
-                      {selectedEmployeeId && (() => {
-                        const emp = users.find((u: any) => String(u.id) === selectedEmployeeId);
+                      {paymentEmployeeId && (() => {
+                        const emp = users.find((u: any) => String(u.id) === paymentEmployeeId);
                         if (!emp) return null;
                         return (
                           <div style={{
@@ -1243,8 +1513,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           }}>
                             <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
                               {emp.bank_account 
-                                ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account}` 
-                                : '⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân'}
+                                ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
+                                : '⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân. Vui lòng nhập STK bên dưới.'}
                             </span>
                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
                               {emp.role || 'Nhân viên'}
@@ -1254,50 +1524,804 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       })()}
                     </div>
                   )}
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.8fr 1.1fr 1.1fr', gap: '1rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600 }}>Số tiền ({form.currency || 'VND'}) *</label>
-                    <div style={{ position: 'relative' }}>
-                      <input 
-                        className="form-input" 
-                        type="text" 
-                        style={{ paddingRight: '2.5rem', fontWeight: 800, color: 'var(--color-danger)', fontSize: '1.1rem' }} 
-                        value={form.amount ? Number(form.amount).toLocaleString('en-US') : ''} 
-                        onChange={e => {
-                          const rawDigits = e.target.value.replace(/\D/g, '');
-                          setForm({ ...form, amount: rawDigits });
-                        }} 
-                        placeholder="0" 
-                      />
-                      <Wallet size={16} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                  {paymentTarget === 'Giảng viên' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Chọn giảng viên / chuyên gia trong hệ thống
+                          </label>
+                          <CustomSelect
+                            options={[
+                              { value: '', label: '-- Chọn giảng viên đã có (hoặc nhập mới bên cạnh) --' },
+                              ...lecturerOptions
+                            ]}
+                            value={paymentLecturerId}
+                            onChange={val => {
+                              const lecId = String(val);
+                              setPaymentLecturerId(lecId);
+                              const lec = lecturerOptions.find(l => l.value === lecId);
+                              if (lec) {
+                                setPaymentBeneficiaryName(lec.label);
+                                if (lec.bank_name) setPaymentBankName(lec.bank_name);
+                                if (lec.bank_account) setPaymentBankAccount(lec.bank_account);
+                                if (lec.bank_account_name || lec.label) setPaymentAccountName((lec.bank_account_name || lec.label).toUpperCase());
+                                if (lec.phone) setPaymentPhone(lec.phone);
+                                if (lec.bank_account) {
+                                  addToast(`Đã trích xuất STK của giảng viên: ${lec.label}`, 'success');
+                                } else {
+                                  addToast(`Giảng viên ${lec.label} chưa lưu STK. Vui lòng nhập thông tin bên dưới.`, 'info');
+                                }
+                              }
+                            }}
+                            placeholder="-- Tìm kiếm giảng viên / chuyên gia --"
+                            searchable
+                            width="100%"
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Họ và tên giảng viên <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBeneficiaryName}
+                            onChange={e => {
+                              setPaymentBeneficiaryName(e.target.value);
+                              if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                            }}
+                            placeholder="Họ và tên giảng viên nhận thù lao..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                      {paymentBeneficiaryName && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderRadius: '10px',
+                          background: paymentBankAccount ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                          border: `1px solid ${paymentBankAccount ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                          fontSize: '0.78rem'
+                        }}>
+                          <span style={{ color: paymentBankAccount ? '#059669' : '#d97706', fontWeight: 650 }}>
+                            {paymentBankAccount 
+                              ? `✓ STK Giảng viên: ${paymentBankName || 'Ngân hàng'} - ${paymentBankAccount} (Chủ TK: ${paymentAccountName})` 
+                              : 'ℹ️ Giảng viên chưa có STK trong hệ thống. Vui lòng nhập số tài khoản ở bên dưới.'}
+                          </span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                            Giảng viên / Chuyên gia
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    {form.amount && Number(form.amount) > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                        style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700, marginTop: '6px', fontStyle: 'italic', paddingLeft: '4px' }}
-                      >
-                        Bằng chữ: {numberToVietnameseText(form.amount, form.currency || 'VND')}
-                      </motion.div>
-                    )}
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600 }}>Loại tiền tệ</label>
-                    <CustomSelect
-                      options={[
-                        { value: 'VND', label: 'VND' },
-                        { value: 'USD', label: 'USD' },
-                        { value: 'EURO', label: 'EURO' },
-                        { value: 'CHF', label: 'CHF' }
-                      ]}
-                      value={form.currency || 'VND'}
-                      onChange={val => setForm({ ...form, currency: val })}
-                      width="100%"
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600 }}>Ngày chi *</label>
+                  )}
+
+                  {paymentTarget === 'Đối tác' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 1fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Chọn đối tác / nhà cung cấp đã lưu
+                          </label>
+                          <CustomSelect
+                            options={[
+                              { value: '', label: '-- Chọn đối tác trong danh bạ (hoặc nhập tay) --' },
+                              ...partnerOptions
+                            ]}
+                            value={paymentSupplierId}
+                            onChange={val => {
+                              const sId = String(val);
+                              setPaymentSupplierId(sId);
+                              const sup = partnerOptions.find(s => s.value === sId);
+                              if (sup) {
+                                setPaymentBeneficiaryName(sup.label);
+                                if (sup.bank_name) setPaymentBankName(sup.bank_name);
+                                if (sup.bank_account) setPaymentBankAccount(sup.bank_account);
+                                if (sup.bank_account_name || sup.label) setPaymentAccountName((sup.bank_account_name || sup.label).toUpperCase());
+                                if (sup.tax_code) setPaymentTaxCode(sup.tax_code);
+                                if (sup.phone) setPaymentPhone(sup.phone);
+                                if (sup.bank_account) {
+                                  addToast(`Đã trích xuất STK của đối tác: ${sup.label}`, 'success');
+                                } else {
+                                  addToast(`Đối tác ${sup.label} chưa lưu STK. Vui lòng điền thông tin bên dưới.`, 'info');
+                                }
+                              }
+                            }}
+                            placeholder="-- Tìm đối tác / nhà cung cấp --"
+                            searchable
+                            width="100%"
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Tên đơn vị thụ hưởng <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBeneficiaryName}
+                            onChange={e => {
+                              setPaymentBeneficiaryName(e.target.value);
+                              if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                            }}
+                            placeholder="Tên công ty / nhà cung cấp nhận tiền..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Mã số thuế (MST)
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentTaxCode}
+                            onChange={e => setPaymentTaxCode(e.target.value)}
+                            placeholder="Mã số thuế doanh nghiệp..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                      {paymentBeneficiaryName && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderRadius: '10px',
+                          background: paymentBankAccount ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                          border: `1px solid ${paymentBankAccount ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                          fontSize: '0.78rem'
+                        }}>
+                          <span style={{ color: paymentBankAccount ? '#059669' : '#d97706', fontWeight: 650 }}>
+                            {paymentBankAccount 
+                              ? `✓ STK Đối tác: ${paymentBankName || 'Ngân hàng'} - ${paymentBankAccount} (Chủ TK: ${paymentAccountName})` 
+                              : 'ℹ️ Đối tác chưa lưu STK trong danh bạ. Vui lòng nhập số tài khoản ở ô bên dưới.'}
+                          </span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
+                            {paymentTaxCode ? `MST: ${paymentTaxCode}` : 'Đối tác / Vendor'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {paymentTarget === 'Khách hàng' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 1fr', gap: '1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Chọn khách hàng / học viên (CRM)
+                        </label>
+                        <CustomSelect
+                          options={[
+                            { value: '', label: '-- Chọn khách hàng trong CRM (hoặc nhập bên cạnh) --' },
+                            ...contactOptions
+                          ]}
+                          value={paymentContactId}
+                          onChange={val => {
+                            const cId = String(val);
+                            setPaymentContactId(cId);
+                            const con = contactOptions.find(c => c.value === cId);
+                            if (con) {
+                              setPaymentBeneficiaryName(con.label);
+                              if (con.bank_name) setPaymentBankName(con.bank_name);
+                              if (con.bank_account) setPaymentBankAccount(con.bank_account);
+                              if (con.bank_account_name || con.label) setPaymentAccountName((con.bank_account_name || con.label).toUpperCase());
+                              if (con.phone) setPaymentPhone(con.phone);
+                              if (con.bank_account) {
+                                addToast(`Đã trích xuất STK khách hàng: ${con.label}`, 'success');
+                              }
+                            }
+                          }}
+                          placeholder="-- Tìm khách hàng / học viên --"
+                          searchable
+                          width="100%"
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Tên khách hàng thụ hưởng <span style={{ color: 'var(--color-danger)' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={paymentBeneficiaryName}
+                          onChange={e => {
+                            setPaymentBeneficiaryName(e.target.value);
+                            if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                          }}
+                          placeholder="Họ và tên khách hàng hoặc mã hồ sơ..."
+                          style={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Số điện thoại liên hệ
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={paymentPhone}
+                          onChange={e => setPaymentPhone(e.target.value)}
+                          placeholder="Ví dụ: 0912345678..."
+                          style={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentTarget === 'Cộng tác viên' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1fr', gap: '1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Họ và tên Cộng tác viên <span style={{ color: 'var(--color-danger)' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={paymentBeneficiaryName}
+                          onChange={e => {
+                            setPaymentBeneficiaryName(e.target.value);
+                            if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                          }}
+                          placeholder="Họ và tên CTV tuyển sinh / Marketing..."
+                          style={{ height: '36px', fontSize: '0.8rem' }}
+                          required
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Số điện thoại / CCCD của CTV
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={paymentPhone}
+                          onChange={e => setPaymentPhone(e.target.value)}
+                          placeholder="Số điện thoại hoặc số CCCD..."
+                          style={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentTarget === 'Cơ quan Nhà nước' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.4fr 1fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Loại cơ quan / Ngân sách
+                          </label>
+                          <CustomSelect
+                            value={paymentGovAgencyType}
+                            onChange={val => setPaymentGovAgencyType(val as any)}
+                            options={[
+                              { value: 'tax', label: 'Cơ quan Thuế (GTGT, TNDN, Môn bài)' },
+                              { value: 'social_insurance', label: 'Cơ quan Bảo hiểm Xã hội (BHXH)' },
+                              { value: 'treasury', label: 'Kho bạc Nhà nước (Ngân sách / Lệ phí)' },
+                              { value: 'other', label: 'Sở Ban ngành / Cơ quan hành chính' }
+                            ]}
+                            width="100%"
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Tên cơ quan thụ hưởng <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBeneficiaryName}
+                            onChange={e => {
+                              setPaymentBeneficiaryName(e.target.value);
+                              if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                            }}
+                            placeholder="VD: Chi cục Thuế Quận 1, Kho bạc Nhà nước..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                            Số QĐ / Mã chương tiểu mục
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentGovDecisionNumber}
+                            onChange={e => setPaymentGovDecisionNumber(e.target.value)}
+                            placeholder="Số thông báo nộp thuế..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentTarget === 'Cá nhân khác' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1fr', gap: '1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Họ và tên người nhận <span style={{ color: 'var(--color-danger)' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={paymentBeneficiaryName}
+                          onChange={e => {
+                            setPaymentBeneficiaryName(e.target.value);
+                            if (!paymentAccountName) setPaymentAccountName(e.target.value.toUpperCase());
+                          }}
+                          placeholder="Họ và tên người nhận thanh toán vãng lai..."
+                          style={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                          Số điện thoại / CCCD
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={paymentPhone}
+                          onChange={e => setPaymentPhone(e.target.value)}
+                          placeholder="Số điện thoại hoặc CCCD/CMND..."
+                          style={{ height: '36px', fontSize: '0.8rem' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BANK TRANSFER DETAILS (When paymentMethod === 'Chuyển khoản') */}
+                  {paymentMethod === 'Chuyển khoản' && (
+                    <div style={{
+                      background: 'var(--color-bg-secondary, #f8fafc)',
+                      padding: '1.25rem',
+                      borderRadius: '14px',
+                      border: '1px solid var(--color-border-light)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <CreditCard size={17} style={{ color: 'var(--color-primary)' }} />
+                          <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)', letterSpacing: '0.03em' }}>
+                            Thông tin tài khoản ngân hàng nhận chuyển khoản
+                          </span>
+                        </div>
+
+                        {user && (user.bank_name || user.bank_account) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const myName = (user.full_name || user.name || '').toUpperCase();
+                              if (user.bank_name) setPaymentBankName(user.bank_name);
+                              if (user.bank_account) setPaymentBankAccount(user.bank_account);
+                              if (myName) setPaymentAccountName(myName);
+                              addToast(`Đã điền thông tin tài khoản của ${user.full_name || user.name}`, 'success');
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              background: 'rgba(59, 130, 246, 0.08)',
+                              border: '1px solid rgba(59, 130, 246, 0.2)',
+                              color: '#2563eb',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Zap size={13} />
+                            <span>⚡ Dùng STK của tôi</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.2fr 1.4fr 1fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Tên ngân hàng <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                          <BankSelect
+                            value={paymentBankName}
+                            onChange={val => setPaymentBankName(val)}
+                            placeholder="Chọn ngân hàng..."
+                            size="sm"
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Số tài khoản (STK) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBankAccount}
+                            onChange={e => setPaymentBankAccount(e.target.value.replace(/\s+/g, ''))}
+                            placeholder="Số tài khoản"
+                            style={{ height: '36px', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.5px' }}
+                            required
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Tên chủ tài khoản <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentAccountName}
+                            onChange={e => setPaymentAccountName(e.target.value.toUpperCase())}
+                            placeholder="TÊN CHỦ TÀI KHOẢN (IN HOA)..."
+                            style={{ height: '36px', fontSize: '0.8rem', fontWeight: 700 }}
+                            required
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Chi nhánh
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBankBranch}
+                            onChange={e => setPaymentBankBranch(e.target.value)}
+                            placeholder="VD: CN Hội sở, Ba Đình..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Bank Card Preview & VietQR Card */}
+                      {paymentBankAccount && paymentBankName && (() => {
+                        const vietQrUrl = getVietQrUrl({
+                          bankBinOrCode: paymentBankName,
+                          accountNumber: paymentBankAccount,
+                          accountName: paymentAccountName,
+                          amount: itemsGrandTotal > 0 ? itemsGrandTotal : undefined,
+                          memo: form.title || 'Thanh toan PO'
+                        });
+
+                        return (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 155px',
+                            gap: '12px',
+                            marginTop: '6px',
+                            alignItems: 'stretch'
+                          }}>
+                            {/* Executive Brand Light Bank Card */}
+                            <div style={{
+                              background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 50%, #fee2e2 100%)',
+                              border: '1px solid #fecaca',
+                              borderRadius: '14px',
+                              padding: '12px 14px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              gap: '10px',
+                              boxShadow: '0 4px 16px rgba(220, 38, 38, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                              position: 'relative',
+                              overflow: 'hidden'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                  <div style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '6px',
+                                    background: '#ffffff',
+                                    border: '1px solid #fecaca',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    {findBank(paymentBankName)?.logo ? (
+                                      <img
+                                        src={findBank(paymentBankName)!.logo}
+                                        alt=""
+                                        style={{ width: '18px', height: '18px', objectFit: 'contain' }}
+                                      />
+                                    ) : (
+                                      <Landmark size={14} style={{ color: '#dc2626' }} />
+                                    )}
+                                  </div>
+                                  <span style={{ fontWeight: 750, fontSize: '0.8rem', letterSpacing: '0.01em', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={paymentBankName}>
+                                    {paymentBankName}
+                                  </span>
+                                </div>
+                                <span style={{
+                                  fontSize: '0.6rem',
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.04em',
+                                  padding: '2px 6px',
+                                  borderRadius: '5px',
+                                  background: '#ffffff',
+                                  color: '#dc2626',
+                                  border: '1px solid #fecaca',
+                                  flexShrink: 0
+                                }}>
+                                  Napas 247
+                                </span>
+                              </div>
+
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: '#ffffff',
+                                padding: '7px 10px',
+                                borderRadius: '8px',
+                                border: '1px solid #fecaca',
+                                boxShadow: '0 1px 3px rgba(220, 38, 38, 0.03)'
+                              }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                  <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                                    Số tài khoản (STK)
+                                  </span>
+                                  <span style={{
+                                    fontSize: '1.05rem',
+                                    fontWeight: 800,
+                                    fontFamily: 'monospace',
+                                    letterSpacing: '0.06em',
+                                    color: '#dc2626'
+                                  }}>
+                                    {paymentBankAccount}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(paymentBankAccount);
+                                    addToast('Đã sao chép số tài khoản!', 'success');
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '5px 9px',
+                                    borderRadius: '6px',
+                                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.7rem',
+                                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <Copy size={12} />
+                                  <span>Sao chép</span>
+                                </button>
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '4px' }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <span style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                                    Chủ tài khoản
+                                  </span>
+                                  <div style={{ fontSize: '0.78rem', fontWeight: 750, letterSpacing: '0.01em', color: '#0f172a', marginTop: '1px', textTransform: 'uppercase', lineHeight: 1.25 }}>
+                                    {paymentAccountName || paymentBeneficiaryName || 'CHƯA ĐIỀN'}
+                                  </div>
+                                </div>
+                                {paymentBankBranch && (
+                                  <div style={{ fontSize: '0.65rem', color: '#64748b', textAlign: 'right', flexShrink: 0 }}>
+                                    CN: <span style={{ color: '#1e293b', fontWeight: 600 }}>{paymentBankBranch}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* VietQR Card: Click to zoom in */}
+                            <div
+                              onClick={() => vietQrUrl && setPreviewQrModalUrl(vietQrUrl)}
+                              title={vietQrUrl ? 'Bấm để phóng to mã QR' : undefined}
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #fecaca',
+                                borderRadius: '14px',
+                                padding: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 4px 16px rgba(220, 38, 38, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                                cursor: vietQrUrl ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              {vietQrUrl ? (
+                                <img
+                                  src={vietQrUrl}
+                                  alt="Mã VietQR"
+                                  style={{
+                                    width: '100%',
+                                    maxWidth: '140px',
+                                    maxHeight: '140px',
+                                    objectFit: 'contain'
+                                  }}
+                                />
+                              ) : (
+                                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Chưa có mã QR</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* CASH DETAILS */}
+                  {paymentMethod === 'Tiền mặt' && (
+                    <div style={{
+                      background: 'var(--color-bg-secondary, #f8fafc)',
+                      padding: '1rem 1.25rem',
+                      borderRadius: '14px',
+                      border: '1px solid var(--color-border-light)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontWeight: 750, fontSize: '0.8rem' }}>
+                        <Receipt size={16} />
+                        <span>Hình thức nhận: Tiền mặt (Bàn giao trực tiếp tại quầy / thủ quỹ)</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Người nhận tiền mặt
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBeneficiaryName}
+                            onChange={e => setPaymentBeneficiaryName(e.target.value)}
+                            placeholder="Họ và tên người nhận tiền..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Địa điểm / Quầy bàn giao tiền
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentDestination}
+                            onChange={e => setPaymentDestination(e.target.value)}
+                            placeholder="Ví dụ: Quầy Thủ quỹ Hội sở / Phòng Kế toán..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* WALLET DETAILS */}
+                  {paymentMethod === 'Ví điện tử' && (
+                    <div style={{
+                      background: 'var(--color-bg-secondary, #f8fafc)',
+                      padding: '1rem 1.25rem',
+                      borderRadius: '14px',
+                      border: '1px solid var(--color-border-light)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a21caf', fontWeight: 750, fontSize: '0.8rem' }}>
+                        <Wallet size={16} />
+                        <span>Hình thức nhận: Ví điện tử di động</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr 1fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Loại ví điện tử
+                          </label>
+                          <CustomSelect
+                            value={paymentWalletType}
+                            onChange={val => setPaymentWalletType(val as any)}
+                            options={[
+                              { value: 'momo', label: 'MoMo' },
+                              { value: 'zalopay', label: 'ZaloPay' },
+                              { value: 'viettel_money', label: 'Viettel Money' }
+                            ]}
+                            width="100%"
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Số điện thoại liên kết ví
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentWalletPhone || paymentPhone}
+                            onChange={e => setPaymentWalletPhone(e.target.value)}
+                            placeholder="Nhập SĐT đăng ký ví..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Tên chủ ví
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBeneficiaryName}
+                            onChange={e => setPaymentBeneficiaryName(e.target.value)}
+                            placeholder="Họ và tên chủ ví..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CORPORATE CARD DETAILS */}
+                  {paymentMethod === 'Thẻ tín dụng' && (
+                    <div style={{
+                      background: 'var(--color-bg-secondary, #f8fafc)',
+                      padding: '1rem 1.25rem',
+                      borderRadius: '14px',
+                      border: '1px solid var(--color-border-light)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d4ed8', fontWeight: 750, fontSize: '0.8rem' }}>
+                        <CreditCard size={16} />
+                        <span>Hình thức nhận: Thẻ tín dụng doanh nghiệp (Corporate Card)</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.5fr', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            4 số cuối thẻ tín dụng
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentCorporateCard}
+                            onChange={e => setPaymentCorporateCard(e.target.value)}
+                            placeholder="Ví dụ: 8899"
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            Cán bộ phụ trách giữ thẻ / Quẹt thẻ
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={paymentBeneficiaryName}
+                            onChange={e => setPaymentBeneficiaryName(e.target.value)}
+                            placeholder="Họ và tên người quẹt thẻ..."
+                            style={{ height: '36px', fontSize: '0.8rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ngày chi */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                      Ngày đề xuất chi *
+                    </label>
                     <input 
                       className="form-input" 
                       type="date" 
@@ -1309,223 +2333,200 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   </div>
                 </div>
 
-                {/* VAT Settings Panel */}
-                <div style={{ 
-                  background: 'var(--color-surface)', 
-                  padding: '1.25rem', 
-                  borderRadius: '16px', 
-                  border: '1px solid var(--color-border-light)', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: '1rem',
-                  boxShadow: 'var(--shadow-sm)',
-                  marginBottom: '1.25rem'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(189, 29, 45, 0.08)', color: 'var(--color-primary)', display: 'grid', placeItems: 'center' }}>
-                      <FileText size={16} />
+                {/* CARD 3: BẢNG CHI TIẾT THANH TOÁN & MỤC ĐÍCH */}
+                <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Bảng chi tiết thanh toán
                     </div>
-                    <span style={{ fontWeight: 750, fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--color-text)' }}>Hóa đơn & Thuế VAT</span>
-                  </div>
-
-                  <div style={{ background: 'var(--color-bg-light)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <CustomCheckbox
-                        checked={form.has_vat_invoice}
-                        onChange={() => {
-                          const nextHasVat = !form.has_vat_invoice;
-                          setForm({
-                            ...form,
-                            has_vat_invoice: nextHasVat,
-                            is_vat_inclusive: nextHasVat ? form.is_vat_inclusive : false
-                          });
-                        }}
-                        label="Có hóa đơn VAT"
-                      />
-                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '26px' }}>Chứng từ thuế</span>
-                    </div>
-                  </div>
-
-                  {form.has_vat_invoice && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -8 }} 
-                      animate={{ opacity: 1, y: 0 }} 
-                      style={{ 
-                        display: 'flex', 
-                        flexDirection: 'column',
-                        gap: '1.25rem',
-                        padding: '1.25rem',
-                        background: 'rgba(59, 130, 246, 0.02)',
-                        border: '1px dashed rgba(59, 130, 246, 0.2)',
-                        borderRadius: '12px'
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpenseItems([
+                          ...expenseItems,
+                          { id: Date.now(), content: '', quantity: 1, price: 0, vat: 10 }
+                        ]);
                       }}
+                      className="btn secondary"
+                      style={{ height: '28px', padding: '0 10px', fontSize: '0.75rem', color: 'var(--color-primary)' }}
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderBottom: '1px dashed var(--color-border-light)', paddingBottom: '12px' }}>
-                        <CustomCheckbox
-                          checked={form.is_vat_inclusive}
-                          onChange={() => setForm({ ...form, is_vat_inclusive: !form.is_vat_inclusive })}
-                          label="Bao gồm VAT (Giá sau thuế)"
-                        />
-                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '26px' }}>Đơn giá nhập phía trên đã bao gồm thuế VAT</span>
-                      </div>
+                      + Thêm dòng
+                    </button>
+                  </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1rem' }}>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: '6px', display: 'block' }}>Thuế %</label>
-                          <CustomSelect
-                            options={[
-                              { value: '0', label: '0%' },
-                              { value: '5', label: '5%' },
-                              { value: '8', label: '8%' },
-                              { value: '10', label: '10%' }
-                            ]}
-                            value={vatPercent}
-                            onChange={val => setVatPercent(val.toString())}
-                            placeholder="Thuế %"
-                          />
-                        </div>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--color-primary)', marginBottom: '6px', display: 'block' }}>Tiền thuế VAT ({form.currency || 'VND'})</label>
-                          <input
-                            className="form-input"
-                            type="text"
-                            value={form.vat_amount ? Number(form.vat_amount).toLocaleString('en-US') : ''}
-                            onChange={e => {
-                              const rawDigits = e.target.value.replace(/\D/g, '');
-                              setForm({ ...form, vat_amount: rawDigits });
-                            }}
-                            placeholder="Nhập số tiền thuế..."
-                            style={{ height: '38px', borderRadius: '8px', fontSize: '0.85rem' }}
-                          />
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
+                  <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)' }}>
+                          <th style={{ padding: '8px', width: '45px', minWidth: '45px', textAlign: 'center', fontWeight: 700 }}>STT</th>
+                          <th style={{ padding: '8px', minWidth: '200px', fontWeight: 700 }}>Nội dung chi</th>
+                          <th style={{ padding: '8px', width: '95px', minWidth: '95px', textAlign: 'center', fontWeight: 700 }}>SL</th>
+                          <th style={{ padding: '8px', width: '160px', minWidth: '160px', fontWeight: 700 }}>Đơn giá ({currencyType})</th>
+                          <th style={{ padding: '8px', width: '120px', minWidth: '120px', fontWeight: 700 }}>Thành tiền</th>
+                          <th style={{ padding: '8px', width: '95px', minWidth: '95px', fontWeight: 700 }}>VAT (%)</th>
+                          <th style={{ padding: '8px', width: '36px', minWidth: '36px' }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expenseItems.map((item, idx) => {
+                          const lineTotal = (Number(item.quantity) || 0) * (Number(item.price) || 0);
+                          return (
+                            <tr key={item.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                              <td style={{ padding: '8px', textAlign: 'center', width: '45px', minWidth: '45px', verticalAlign: 'top', lineHeight: '28px' }}>{idx + 1}</td>
+                              <td style={{ padding: '8px', minWidth: '200px', verticalAlign: 'top' }}>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={item.content}
+                                  onChange={e => {
+                                    const updated = [...expenseItems];
+                                    updated[idx].content = e.target.value;
+                                    setExpenseItems(updated);
+                                  }}
+                                  placeholder="Nội dung chi tiêu"
+                                  style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem', width: '100%' }}
+                                  required
+                                />
+                              </td>
+                              <td style={{ padding: '8px', width: '95px', minWidth: '95px', verticalAlign: 'top' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  value={item.quantity}
+                                  onChange={e => {
+                                    const updated = [...expenseItems];
+                                    updated[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
+                                    setExpenseItems(updated);
+                                  }}
+                                  style={{ padding: '4px 6px', height: '28px', fontSize: '0.825rem', width: '100%', minWidth: '70px', textAlign: 'center', fontWeight: 600 }}
+                                  min="1"
+                                  required
+                                />
+                              </td>
+                              <td style={{ padding: '8px', width: '160px', minWidth: '160px', verticalAlign: 'top' }}>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={formatNumberWithDots(item.price)}
+                                  onChange={e => {
+                                    const rawVal = e.target.value.replace(/\D/g, '');
+                                    const updated = [...expenseItems];
+                                    updated[idx].price = Number(rawVal);
+                                    setExpenseItems(updated);
+                                  }}
+                                  style={{ padding: '4px 8px', height: '28px', fontSize: '0.8rem', width: '100%' }}
+                                  placeholder="0"
+                                  required
+                                />
+                                {item.price > 0 && (
+                                  <div 
+                                    style={{ 
+                                      fontSize: '0.68rem', 
+                                      color: 'var(--color-primary)', 
+                                      fontWeight: 600, 
+                                      marginTop: '4px', 
+                                      fontStyle: 'italic', 
+                                      whiteSpace: 'normal', 
+                                      wordBreak: 'break-word', 
+                                      lineHeight: 1.25 
+                                    }} 
+                                    title={docSoTiengViet(item.price)}
+                                  >
+                                    {docSoTiengViet(item.price)}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={{ padding: '8px', fontWeight: 600, width: '120px', minWidth: '120px', verticalAlign: 'top', lineHeight: '28px' }}>
+                                {formatApprovalCurrency(lineTotal, currencyType)}
+                              </td>
+                              <td style={{ padding: '8px', width: '95px', minWidth: '95px', verticalAlign: 'top' }}>
+                                <select
+                                  className="form-input"
+                                  value={item.vat}
+                                  onChange={e => {
+                                    const updated = [...expenseItems];
+                                    updated[idx].vat = Number(e.target.value);
+                                    setExpenseItems(updated);
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    height: '28px',
+                                    fontSize: '0.8rem',
+                                    width: '85px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    background: 'var(--color-bg-primary, #ffffff)',
+                                    color: 'var(--color-text-primary, #1e293b)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: '6px'
+                                  }}
+                                >
+                                  <option value={0}>0%</option>
+                                  <option value={5}>5%</option>
+                                  <option value={8}>8%</option>
+                                  <option value={10}>10%</option>
+                                </select>
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'center', width: '36px', minWidth: '36px', verticalAlign: 'top', lineHeight: '28px' }}>
+                                {expenseItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExpenseItems(expenseItems.filter(x => x.id !== item.id));
+                                    }}
+                                    style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '1.1rem', height: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                  >
+                                    &times;
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
-                {/* Bank Transfer Details Panel */}
-                <div style={{ background: 'var(--color-bg)', padding: '1.25rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                        Yêu cầu thanh toán chuyển khoản
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        Nhập thông tin số tài khoản và ngân hàng thụ hưởng nếu cần chuyển khoản
-                      </span>
+                  {/* Totals Summary */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignSelf: 'flex-end', width: isMobile ? '100%' : '280px', marginTop: '4px', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--color-text-muted)' }}>Tổng tiền chưa thuế:</span>
+                      <strong style={{ color: 'var(--color-text)' }}>{formatApprovalCurrency(itemsTotalBeforeTax, currencyType)}</strong>
                     </div>
-                    <ToggleSwitch
-                      checked={form.request_bank_transfer}
-                      onChange={(checked) => setForm({ ...form, request_bank_transfer: checked })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--color-text-muted)' }}>Tiền thuế VAT:</span>
+                      <strong style={{ color: 'var(--color-text)' }}>{formatApprovalCurrency(itemsTotalVat, currencyType)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--color-border)', paddingTop: '6px', fontSize: '0.9rem' }}>
+                      <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>Tổng thanh toán:</span>
+                      <strong style={{ color: 'var(--color-primary)' }}>{formatApprovalCurrency(itemsGrandTotal, currencyType)}</strong>
+                    </div>
+                    {itemsGrandTotal > 0 && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600, fontStyle: 'italic', textAlign: 'right', marginTop: '2px', lineHeight: 1.35 }}>
+                        ({docSoTiengViet(itemsGrandTotal)})
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PURPOSE & DETAILS */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-light)' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                      Mục đích & Nội dung thanh toán
+                    </label>
+                    <textarea
+                      className="form-input"
+                      value={form.notes}
+                      onChange={e => setForm({ ...form, notes: e.target.value })}
+                      placeholder="Giải trình chi tiết mục đích chi tiêu và căn cứ đề xuất (nếu có)..."
+                      style={{ height: '76px', resize: 'vertical', fontSize: '0.8rem', padding: '8px' }}
                     />
                   </div>
-
-                  {form.request_bank_transfer && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      style={{ borderTop: '1px solid var(--color-border-light)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '12px' }}
-                    >
-                      {/* Quick Auto-Fill Helpers */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        {user && (user.bank_name || user.bank_account) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const myName = (user.full_name || user.name || '').toUpperCase();
-                              setForm({
-                                ...form,
-                                bank_name: user.bank_name || form.bank_name,
-                                bank_account_number: user.bank_account || form.bank_account_number,
-                                bank_account_name: myName || form.bank_account_name
-                              });
-                              addToast(`Đã điền thông tin tài khoản của ${user.full_name || user.name}`, 'success');
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '5px 10px',
-                              borderRadius: '8px',
-                              background: 'rgba(59, 130, 246, 0.08)',
-                              border: '1px solid rgba(59, 130, 246, 0.2)',
-                              color: '#2563eb',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Zap size={13} />
-                            Dùng STK của tôi ({user.bank_name || 'Ngân hàng'})
-                          </button>
-                        )}
-                        <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Landmark size={13} />
-                          <span>Hoặc nhập thông tin thụ hưởng bên dưới:</span>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1rem' }}>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--color-text-light)' }}>Tên ngân hàng *</label>
-                          <input
-                            className="form-input"
-                            type="text"
-                            value={form.bank_name || ''}
-                            onChange={e => setForm({ ...form, bank_name: e.target.value })}
-                            placeholder="Ví dụ: MB Bank, VCB..."
-                            required
-                          />
-                        </div>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--color-text-light)' }}>Số tài khoản (STK) *</label>
-                          <input
-                            className="form-input"
-                            type="text"
-                            value={form.bank_account_number || ''}
-                            onChange={e => setForm({ ...form, bank_account_number: e.target.value })}
-                            placeholder="Nhập số tài khoản..."
-                            required
-                          />
-                        </div>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--color-text-light)' }}>Chủ tài khoản *</label>
-                          <input
-                            className="form-input"
-                            type="text"
-                            value={form.bank_account_name || ''}
-                            onChange={e => setForm({ ...form, bank_account_name: e.target.value.toUpperCase() })}
-                            placeholder="TÊN CHỦ TÀI KHOẢN..."
-                            required
-                          />
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
                 </div>
 
-                {/* Danh mục chi phí */}
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Danh mục chi phí</label>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {CATEGORIES.map(c => {
-                      const Icon = c.icon;
-                      return (
-                        <button key={c.label} type="button" onClick={() => setForm({ ...form, category: c.label })}
-                          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: 'var(--radius-full)', border: `2px solid ${form.category === c.label ? c.color : 'var(--color-border)'}`, background: form.category === c.label ? `${c.color}15` : 'transparent', color: form.category === c.label ? c.color : 'var(--color-text-light)', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s' }}>
-                          <Icon size={13} /> {c.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Đính kèm hóa đơn / chứng từ */}
-                <div className="form-group">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <label className="form-label" style={{ fontWeight: 600, margin: 0 }}>
-                      Đính kèm hóa đơn / chứng từ {images.length > 0 && `(${images.length})`}
-                    </label>
+                {/* CARD 4: TÀI LIỆU CHỨNG TỪ ĐÍNH KÈM */}
+                <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>Tài liệu chứng từ đính kèm {images.length > 0 && `(${images.length} tệp)`}</span>
                     <button
                       type="button"
                       onClick={() => fileInputMultiRef.current?.click()}
@@ -1544,7 +2545,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       }}
                     >
                       <Upload size={13} />
-                      <span>Chọn nhiều tệp / ảnh</span>
+                      <span>Tải nhiều file / ảnh</span>
                     </button>
                     <input
                       type="file"
@@ -1624,11 +2625,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           if (res.data && res.data.success && res.data.data?.url) {
                             const newUrl = res.data.data.url;
                             setImages(prev => {
-                              const isAlreadyIn = prev.some(existing => {
-                                const exName = existing.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
-                                const newName = newUrl.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
-                                return existing === newUrl || (exName && newName && exName === newName);
-                              });
+                              const isAlreadyIn = prev.some(existing => existing === newUrl);
                               return isAlreadyIn ? prev : [...prev, newUrl];
                             });
                             setForm((prev: any) => ({ ...prev, image_url: prev.image_url || newUrl }));
@@ -1652,7 +2649,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     </div>
                   )}
 
-                  {/* Multi-attachment thumbnail & file gallery */}
+                  {/* Attachment gallery */}
                   {images.length > 0 && (
                     <div style={{ marginTop: '10px' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
@@ -1733,22 +2730,9 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   )}
                 </div>
 
-                {/* Ghi chú chi tiết */}
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600 }}>Ghi chú chi tiết</label>
-                  <textarea
-                    className="form-input"
-                    rows={3}
-                    value={form.notes}
-                    onChange={e => setForm({ ...form, notes: e.target.value })}
-                    placeholder="Mô tả thêm nếu cần..."
-                    style={{ resize: 'vertical' }}
-                  />
-                </div>
-
               </div>
 
-              {/* Right Column: Sidebar (Phê duyệt & Vận hành) - Sticky on Desktop */}
+              {/* Right Column (Sidebar - 3/10) */}
               <div 
                 className="custom-scrollbar"
                 style={{ 
@@ -1765,7 +2749,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 }}
               >
                 
-                {/* Áp dụng cho (Chia bill) */}
+                {/* Áp dụng cho (Khách / Đối tác) */}
                 <div style={{ 
                   background: 'var(--color-surface)',
                   padding: '1.25rem',
@@ -1791,7 +2775,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         onClick={() => {
                           if (allocationType !== 'contact') {
                             setAllocationType('contact');
-                            setForm(prev => ({ ...prev, entities: [] }));
+                            setForm((prev: any) => ({ ...prev, entities: [] }));
                           }
                         }}
                         style={{
@@ -1813,7 +2797,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                         onClick={() => {
                           if (allocationType !== 'company') {
                             setAllocationType('company');
-                            setForm(prev => ({ ...prev, entities: [] }));
+                            setForm((prev: any) => ({ ...prev, entities: [] }));
                           }
                         }}
                         style={{
@@ -1880,27 +2864,20 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       onChange={(val) => {
                         const found = companies.find(c => String(c.id) === val);
                         if (found) {
-                          const bankUpdate = (found.bank_name || found.bank_account_number || found.bank_account_name) && !form.bank_account_number ? {
-                            request_bank_transfer: true,
-                            bank_name: found.bank_name || form.bank_name || '',
-                            bank_account_number: found.bank_account_number || form.bank_account_number || '',
-                            bank_account_name: found.bank_account_name || form.bank_account_name || ''
-                          } : {};
-
-                          setForm(prev => ({ 
+                          setForm((prev: any) => ({ 
                             ...prev, 
-                            entities: [...prev.entities, { entity_type: 'company', entity_id: found.id, name: found.name || found.company_name || 'Không tên', avatar_url: found.logo_url || found.logo }],
-                            ...bankUpdate
+                            entities: [...prev.entities, { entity_type: 'company', entity_id: found.id, name: found.name || found.company_name || 'Không tên', avatar_url: found.logo_url || found.logo }]
                           }));
                         }
                       }}
-                      placeholder="+ Thêm đối tác / giảng viên..."
+                      placeholder="+ Thêm đối tác..."
                       searchable
                       showAvatars
                     />
                   )}
                 </div>
 
+                {/* Phê duyệt & Vận hành */}
                 <div style={{ 
                   background: 'var(--color-surface)',
                   padding: '1.25rem',
@@ -1913,18 +2890,21 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                 }}>
                   <div style={{ borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
                     <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                      Phê duyệt & Vận hành
+                      Các bước duyệt áp dụng
                     </h4>
-                    {Number(form.amount || 0) >= threshold && (
+                    {Number(itemsGrandTotal || 0) >= threshold ? (
                       <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#ef4444', marginTop: '4px' }}>
-                        Tiền trên {threshold.toLocaleString('vi-VN')}đ phê duyệt 2 cấp
+                        Khoản chi từ {threshold.toLocaleString('vi-VN')}đ duyệt 3 cấp (Leader → Giám đốc → Kế toán)
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.72rem', fontWeight: 650, color: '#10b981', marginTop: '4px' }}>
+                        Khoản chi dưới {threshold.toLocaleString('vi-VN')}đ duyệt 2 cấp (Leader → Kế toán)
                       </div>
                     )}
                   </div>
 
                   {/* Vertical Timeline Stepper */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '12px', position: 'relative', paddingLeft: '30px' }}>
-                    {/* Vertical timeline line */}
                     <div style={{ position: 'absolute', left: '10px', top: '10px', bottom: '10px', width: '2px', background: 'var(--color-border-light)' }} />
 
                     {/* Step 1: Creator */}
@@ -2036,7 +3016,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       </div>
                       <div>
                         <strong style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
-                          {Number(form.amount || 0) >= threshold ? (
+                          {Number(itemsGrandTotal || 0) >= threshold ? (
                             <>Người duyệt Cấp 2: Ban Giám đốc <span style={{ color: 'var(--color-danger)' }}>*</span></>
                           ) : (
                             <>Người duyệt Cấp 2: Kế toán <span style={{ color: 'var(--color-danger)' }}>*</span></>
@@ -2065,57 +3045,55 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                       </div>
                     </div>
 
-                    {/* Step 4: Level 3 Approver */}
-                    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                      <div style={{
-                        position: 'absolute',
-                        left: '-30px',
-                        top: '0px',
-                        width: '22px',
-                        height: '22px',
-                        borderRadius: '50%',
-                        background: form.approver_id_3 ? 'var(--color-primary)' : 'var(--color-surface)',
-                        border: `2px solid ${form.approver_id_3 ? 'var(--color-primary)' : 'var(--color-border-light)'}`,
-                        color: form.approver_id_3 ? '#ffffff' : 'var(--color-text-light)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.72rem',
-                        fontWeight: 800,
-                        zIndex: 2
-                      }}>
-                        4
+                    {/* Step 4: Level 3 Approver (Only if >= 5M) */}
+                    {Number(itemsGrandTotal || 0) >= threshold && (
+                      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{
+                          position: 'absolute',
+                          left: '-30px',
+                          top: '0px',
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '50%',
+                          background: form.approver_id_3 ? 'var(--color-primary)' : 'var(--color-surface)',
+                          border: `2px solid ${form.approver_id_3 ? 'var(--color-primary)' : 'var(--color-border-light)'}`,
+                          color: form.approver_id_3 ? '#ffffff' : 'var(--color-text-light)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          zIndex: 2
+                        }}>
+                          4
+                        </div>
+                        <div>
+                          <strong style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
+                            Người duyệt Cấp 3: Kế toán <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </strong>
+                          <CustomSelect
+                            options={users.map((u: any) => ({
+                              value: u.id,
+                              label: u.full_name,
+                              avatar: u.avatar_url,
+                              sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
+                            }))}
+                            value={form.approver_id_3}
+                            onChange={val => {
+                              const numVal = Number(val);
+                              setForm({
+                                ...form,
+                                approver_id_3: numVal,
+                                related_user_ids: form.related_user_ids.filter((x: number) => x !== numVal)
+                              });
+                            }}
+                            placeholder="Chọn người duyệt Cấp 3..."
+                            searchable
+                            showAvatars
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <strong style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', display: 'block', marginBottom: '6px' }}>
-                          {Number(form.amount || 0) >= threshold ? (
-                            <>Người duyệt Cấp 3: Kế toán <span style={{ color: 'var(--color-danger)' }}>*</span></>
-                          ) : (
-                            <>Người duyệt Cấp 3 <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>(Chỉ trên 5tr)</span></>
-                          )}
-                        </strong>
-                        <CustomSelect
-                          options={users.map((u: any) => ({
-                            value: u.id,
-                            label: u.full_name,
-                            avatar: u.avatar_url,
-                            sublabel: [u.phone, u.email, u.role].filter(Boolean).join(' - ')
-                          }))}
-                          value={form.approver_id_3}
-                          onChange={val => {
-                            const numVal = Number(val);
-                            setForm({
-                              ...form,
-                              approver_id_3: numVal,
-                              related_user_ids: form.related_user_ids.filter((x: number) => x !== numVal)
-                            });
-                          }}
-                          placeholder="Chọn người duyệt Cấp 3..."
-                          searchable
-                          showAvatars
-                        />
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 
@@ -2131,7 +3109,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                   boxShadow: 'var(--shadow-sm)'
                 }}>
                   <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
-                    Người liên quan
+                    Người liên quan (Theo dõi)
                   </h4>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', position: 'relative' }}>
@@ -2285,8 +3263,64 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
+
+            {/* QR Code Zoom Preview Modal */}
+            {previewQrModalUrl && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0,0,0,0.75)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: baseZIndex + 100,
+                  padding: '20px'
+                }}
+                onClick={() => setPreviewQrModalUrl(null)}
+              >
+                <div
+                  style={{
+                    background: '#fff',
+                    borderRadius: '16px',
+                    padding: '20px',
+                    maxWidth: '380px',
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '12px',
+                    position: 'relative'
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setPreviewQrModalUrl(null)}
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#64748b'
+                    }}
+                  >
+                    <X size={20} />
+                  </button>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Mã VietQR Thanh Toán</h4>
+                  <img src={previewQrModalUrl} alt="VietQR" style={{ width: '100%', borderRadius: '12px' }} />
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Quét mã bằng app ngân hàng để chuyển khoản nhanh 24/7</span>
+                </div>
+              </div>
+            )}
 
             {/* Draft Exit Confirmation Modal */}
             <DraftExitConfirmModal
@@ -2294,8 +3328,8 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
               onSaveDraft={handleSaveDraftAndExit}
               onDiscard={handleDiscardAndExit}
               onContinue={() => setShowExitConfirm(false)}
-              title="Lưu bản nháp khoản chi?"
-              message="Bạn có các thông tin khoản chi đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
+              title="Lưu bản nháp đề xuất thanh toán?"
+              message="Bạn có thông tin đề xuất đang nhập dở dang. Bạn có muốn lưu bản nháp để tiếp tục hoàn thiện sau không?"
               zIndex={baseZIndex + 50}
             />
           </motion.div>

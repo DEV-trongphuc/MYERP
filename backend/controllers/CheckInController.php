@@ -679,7 +679,23 @@ class CheckInController {
 
         // Check-in status: All real-time check-ins are recorded directly as approved (no late approval needed)
         // Only manual supplementary requests (cập nhật công bù) require manager approval.
-        $status = $isSupplementary ? 'pending_approval' : 'approved';
+        // NẾU LÀ TRƯỞNG PHÒNG / QUẢN LÝ: Được tự tạo và tự phê duyệt chấm công cho chính mình
+        $userRole = strtolower($auth['role'] ?? '');
+        $isLeaderOrManager = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], true);
+        if (!$isLeaderOrManager) {
+            $stmtIsLeader = $this->db->prepare("
+                SELECT 1 FROM users WHERE id = ? AND is_team_leader = 1
+                UNION
+                SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))
+            ");
+            $stmtIsLeader->execute([$auth['user_id'], $auth['user_id'], $auth['user_id']]);
+            $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+        }
+
+        $status = ($isSupplementary && !$isLeaderOrManager) ? 'pending_approval' : 'approved';
+        if ($isSupplementary && $isLeaderOrManager) {
+            $lateMinutes = 0;
+        }
 
         $inTimeStr = $today . ' ' . $currentTime;
 
@@ -1193,33 +1209,66 @@ class CheckInController {
                 }
             }
 
-            // Ensure HR / Hành chính is ALWAYS included in related_user_ids (Người liên quan)
+            // Kiểm tra người tạo có phải là Trưởng phòng / Quản lý / Ban giám đốc / Trưởng nhóm hay không
+            $userRole = strtolower($auth['role'] ?? '');
+            $isLeaderOrManager = in_array($userRole, ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'leader', 'truongphong', 'head_of_department'], true);
+            if (!$isLeaderOrManager) {
+                $stmtIsLeader = $this->db->prepare("
+                    SELECT 1 FROM users WHERE id = ? AND is_team_leader = 1
+                    UNION
+                    SELECT 1 FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, ''))
+                ");
+                $stmtIsLeader->execute([$userId, $userId, $userId]);
+                $isLeaderOrManager = (bool)$stmtIsLeader->fetch();
+            }
+
+            // Nếu là Trưởng phòng/Quản lý: người duyệt Bước 2 mặc định là chính họ (tự duyệt)
+            if ($isLeaderOrManager) {
+                $approverId = $userId;
+            }
+
+            // Xử lý Người liên quan (theo dõi)
             $relArr = !empty($b['related_user_ids']) ? (is_array($b['related_user_ids']) ? $b['related_user_ids'] : json_decode($b['related_user_ids'], true)) : [];
             if (!is_array($relArr)) $relArr = [];
-            $stmtHrLead = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
-            $stmtHrLead->execute([$userId]);
-            $hrLeaderId = (int)$stmtHrLead->fetchColumn();
-            if ($hrLeaderId > 0 && $hrLeaderId !== (int)$approverId && !in_array($hrLeaderId, $relArr, true)) {
-                $relArr[] = $hrLeaderId;
+
+            // QUY TẮC:
+            // Nếu là Trưởng phòng/Quản lý: Tự tạo, tự duyệt chấm công cho mình mà KHÔNG cần ai liên quan (giữ rỗng nếu user không tự chọn ai).
+            // Nếu là nhân viên thông thường: Tự động bổ sung HR / Hành chính (Nguyễn Thị Duy Phương) vào người liên quan.
+            if (!$isLeaderOrManager) {
+                $stmtHrLead = $this->db->prepare("SELECT id FROM users WHERE (full_name LIKE '%Duy Phương%' OR username = 'phuongntd' OR role = 'hr') AND id != ? LIMIT 1");
+                $stmtHrLead->execute([$userId]);
+                $hrLeaderId = (int)$stmtHrLead->fetchColumn();
+                if ($hrLeaderId > 0 && $hrLeaderId !== (int)$approverId && !in_array($hrLeaderId, $relArr, true)) {
+                    $relArr[] = $hrLeaderId;
+                }
             }
             $relatedUserIds = !empty($relArr) ? json_encode(array_values(array_unique($relArr))) : null;
 
-            // Creator CANNOT self-approve their own request
-            $isSelfApproved = false;
-            $initialStatus = 'pending_manager';
-            $approvedBy = null;
-            $approvedAt = null;
-            $adminNote = null;
+            // QUY TẮC PHÊ DUYỆT:
+            // Trưởng phòng / Quản lý: TỰ TẠO VÀ TỰ PHÊ DUYỆT NGAY LẬP TỨC CHO MÌNH
+            if ($isLeaderOrManager) {
+                $isSelfApproved = true;
+                $initialStatus = 'approved';
+                $approvedBy = $userId;
+                $approvedAt = date('Y-m-d H:i:s');
+                $adminNote = 'Trưởng phòng tự tạo và tự phê duyệt chấm công';
+            } else {
+                $isSelfApproved = false;
+                $initialStatus = 'pending_manager';
+                $approvedBy = null;
+                $approvedAt = null;
+                $adminNote = null;
+            }
             $isUpdate = false;
 
             if (!empty($existingReq['id'])) {
                 $requestId = (int)$existingReq['id'];
                 $stmtUpdate = $this->db->prepare("
                     UPDATE attendance_bulk_requests 
-                    SET manager_id = ?, related_user_ids = ?, updated_at = CURRENT_TIMESTAMP
+                    SET manager_id = ?, related_user_ids = ?, status = ?, approved_by = ?, approved_at = ?, admin_note = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 ");
-                $stmtUpdate->execute([$approverId, $relatedUserIds, $requestId]);
+                $stmtUpdate->execute([$approverId, $relatedUserIds, $initialStatus, $approvedBy, $approvedAt, $adminNote, $requestId]);
 
                 // Xóa chi tiết cũ để cập nhật danh sách ngày mới
                 $this->db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$requestId]);

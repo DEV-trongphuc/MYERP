@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 254;
+$targetVersion = 256;
 $currentVersion = 186;
 
 // Query current DB version
@@ -2838,8 +2838,75 @@ try {
         $logMsg("Nâng cấp lên phiên bản 254 hoàn tất.", "success");
     }
 
+    if ($currentVersion < 255) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 255: Xóa hoàn toàn PO / Phiếu chi #EXP-10...", "info");
+        try {
+            $conn->query("DELETE FROM expense_entities WHERE expense_id = 10");
+            $conn->query("DELETE FROM expense_items WHERE expense_id = 10");
+            $conn->query("DELETE FROM comments WHERE target_type IN ('expense', 'expenses', 'procedure_expense') AND target_id = 10");
+            $conn->query("DELETE FROM attachments WHERE target_type IN ('expense', 'expenses') AND target_id = 10");
+            $conn->query("DELETE FROM approval_logs WHERE request_type IN ('expense', 'expenses', 'procedure_expense') AND request_id = 10");
+            $conn->query("DELETE FROM hrm_approval_requests WHERE (request_type IN ('expense', 'procedure_expense') AND id = 10) OR request_id = 10");
+            $conn->query("DELETE FROM expenses WHERE id = 10");
+            $logMsg("Đã xóa hoàn toàn phiếu chi #EXP-10 khỏi cơ sở dữ liệu.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 255: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 255 hoàn tất.", "success");
+    }
+
+    if ($currentVersion < 256) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 256: Tự động đồng bộ các user được mention trong activity_comments vào participant_ids của activities...", "info");
+        try {
+            $qComments = $conn->query("
+                SELECT ac.activity_id, ac.content, a.user_id, a.participant_ids 
+                FROM activity_comments ac 
+                JOIN activities a ON ac.activity_id = a.id 
+                WHERE ac.content LIKE '%data-user-id%' OR ac.content LIKE '%@%'
+            ");
+            if ($qComments && $qComments->num_rows > 0) {
+                $taskPidsMap = [];
+                while ($c = $qComments->fetch_assoc()) {
+                    $actId = (int)$c['activity_id'];
+                    $content = $c['content'];
+                    $mainUid = (int)$c['user_id'];
+                    if (!isset($taskPidsMap[$actId])) {
+                        $pids = array_filter(array_map('intval', explode(',', (string)$c['participant_ids'])));
+                        $taskPidsMap[$actId] = ['pids' => $pids, 'main' => $mainUid, 'changed' => false];
+                    }
+                    if (preg_match_all('/data-user-id=(?:&quot;|["\']|\\\\+["\'])?(\d+)/i', $content, $m)) {
+                        foreach ($m[1] as $uid) {
+                            $uid = (int)$uid;
+                            if ($uid > 0 && $uid !== $mainUid && !in_array($uid, $taskPidsMap[$actId]['pids'], true)) {
+                                $taskPidsMap[$actId]['pids'][] = $uid;
+                                $taskPidsMap[$actId]['changed'] = true;
+                            }
+                        }
+                    }
+                }
+                $syncedCount = 0;
+                foreach ($taskPidsMap as $actId => $info) {
+                    if ($info['changed']) {
+                        $newPidsStr = implode(',', $info['pids']);
+                        $uStmt = $conn->prepare("UPDATE activities SET participant_ids = ? WHERE id = ?");
+                        if ($uStmt) {
+                            $uStmt->bind_param("si", $newPidsStr, $actId);
+                            $uStmt->execute();
+                            $uStmt->close();
+                            $syncedCount++;
+                        }
+                    }
+                }
+                $logMsg("Đã đồng bộ thành công participant_ids cho $syncedCount công việc từ các bình luận chứa mention.", "success");
+            }
+        } catch (Throwable $e) {
+            $logMsg("Lỗi nâng cấp CSDL phiên bản 256: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 256 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '254') ON DUPLICATE KEY UPDATE setting_value = '254'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '256') ON DUPLICATE KEY UPDATE setting_value = '256'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

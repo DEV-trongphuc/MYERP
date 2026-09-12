@@ -97,7 +97,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
     <AnimatePresence>
       {isOpen && (
         disableAnimation ? (
-          <div className={overlayClass} style={{ zIndex: zIndex || 2147483640 }}>
+          <div className={overlayClass} style={{ zIndex: zIndex || 2000000000 }}>
             <div
               className={styles.backdrop}
               onClick={onClose}
@@ -133,7 +133,7 @@ export const CustomModal: React.FC<CustomModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className={overlayClass} style={{ zIndex: zIndex || 2147483640 }}>
+          <div className={overlayClass} style={{ zIndex: zIndex || 2000000000 }}>
             <motion.div
               className={styles.backdrop}
               initial={{ opacity: 0 }}

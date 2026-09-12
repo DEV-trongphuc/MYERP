@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   X, CheckSquare, Check, Paperclip, Link2, MessageSquare, Calendar, User, Clock, 
   Settings, AlertCircle, Trash2, Plus, Send, Share2, FileText, Globe,
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2
 } from 'lucide-react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
@@ -25,6 +25,7 @@ import { useUploadProgress } from '../contexts/UploadProgressContext';
 import { PasteDropzoneArea } from '../components/ui/PasteDropzoneArea';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
+import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 
 interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
@@ -39,11 +40,26 @@ interface WorkspaceTaskDrawerProps {
   focusTasksCount?: number;
   onNextFocusTask?: () => void;
   zIndex?: number;
+  isFromCustomerDrawer?: boolean;
+  onOpenFocusMode?: () => void;
 }
 
 const getRoleDisplayName = (user: any) => {
   if (!user) return '';
   return getUserDisplayRoleOrTitle(user);
+};
+
+export const getParticipantIds = (ids: any): string[] => {
+  if (Array.isArray(ids)) {
+    return ids.map(String).filter(Boolean);
+  }
+  if (typeof ids === 'string') {
+    return ids.split(',').filter(Boolean);
+  }
+  if (typeof ids === 'number') {
+    return [String(ids)];
+  }
+  return [];
 };
 
 // Module-level metadata cache to eliminate redundant network requests on every drawer open
@@ -59,6 +75,71 @@ let cachedTeams: CacheEntry<any[]> | null = null;
 let cachedContacts: CacheEntry<any[]> | null = null;
 const METADATA_CACHE_TTL = 3 * 60 * 1000; // 3 minutes cache
 
+// Helper to automatically recognize URLs and wrap them in <a> tags
+export const linkifyHtml = (html: string): string => {
+  if (!html || typeof html !== 'string' || !html.trim()) return html || '';
+  if (!/https?:\/\/|www\./i.test(html)) return html;
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${html}</body>`, 'text/html');
+
+    const walk = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tagName = (node as Element).tagName.toUpperCase();
+        if (tagName === 'A' || tagName === 'SCRIPT' || tagName === 'STYLE') {
+          return;
+        }
+      }
+
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue) {
+        const text = node.nodeValue;
+        const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
+        if (urlRegex.test(text)) {
+          const frag = doc.createDocumentFragment();
+          let lastIdx = 0;
+          let match;
+          urlRegex.lastIndex = 0;
+          while ((match = urlRegex.exec(text)) !== null) {
+            const rawUrl = match[0];
+            const startIdx = match.index;
+            if (startIdx > lastIdx) {
+              frag.appendChild(doc.createTextNode(text.substring(lastIdx, startIdx)));
+            }
+            const a = doc.createElement('a');
+            const href = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+            a.href = href;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.style.color = 'var(--color-primary, #bd1d2d)';
+            a.style.textDecoration = 'underline';
+            a.style.wordBreak = 'break-all';
+            a.style.cursor = 'pointer';
+            a.textContent = rawUrl;
+            frag.appendChild(a);
+            lastIdx = startIdx + rawUrl.length;
+          }
+          if (lastIdx < text.length) {
+            frag.appendChild(doc.createTextNode(text.substring(lastIdx)));
+          }
+          node.parentNode?.replaceChild(frag, node);
+        }
+      } else {
+        const children = Array.from(node.childNodes);
+        for (const child of children) {
+          walk(child);
+        }
+      }
+    };
+
+    walk(doc.body);
+    return doc.body.innerHTML;
+  } catch (e) {
+    console.error('linkifyHtml error:', e);
+    return html;
+  }
+};
+
 export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({ 
   isOpen, 
   onClose, 
@@ -71,7 +152,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   focusTaskIndex = 0,
   focusTasksCount = 1,
   onNextFocusTask,
-  zIndex
+  zIndex,
+  isFromCustomerDrawer = false,
+  onOpenFocusMode
 }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -109,6 +192,47 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     checklist: [],
     links: []
   });
+
+  const hasLinkedCustomer = Boolean(
+    formData.contact_id || 
+    (formData.related_type === 'contact' && formData.related_id) || 
+    (erpMeta?.related_contact_ids && erpMeta.related_contact_ids.length > 0)
+  );
+  const shouldShowCustomerCard = Boolean(hasLinkedCustomer || isFromCustomerDrawer || task?.from_customer_drawer);
+
+  const currentUid = Number(currentUser?.id || (currentUser as any)?.user_id || 0);
+  const taskUid = Number(formData.user_id || 0);
+  const taskCreatedBy = Number(formData.created_by || task?.created_by || currentUid);
+
+  const isPersonalTask = useMemo(() => {
+    const tagsStr = String(formData.tags || '');
+    const isPersonalTag = tagsStr.includes('ca_nhan') || tagsStr.includes('personal');
+    if (isPersonalTag) return true;
+
+    if (taskUid > 0 && taskUid === taskCreatedBy) {
+      const pIds = getParticipantIds(formData.participant_ids).filter(id => Number(id) !== taskUid);
+      const hasOtherParticipants = pIds.length > 0;
+      const hasApprover = Number(formData.approver_id || 0) > 0 && Number(formData.approver_id) !== taskUid;
+      const hasRelEntity = (Number(formData.related_id || 0) > 0 && formData.related_type !== 'personal') || Number(formData.contact_id || 0) > 0;
+      return !hasOtherParticipants && !hasApprover && !hasRelEntity;
+    }
+    return false;
+  }, [formData.tags, formData.user_id, formData.created_by, task?.created_by, formData.participant_ids, formData.approver_id, formData.related_id, formData.related_type, formData.contact_id, taskUid, taskCreatedBy]);
+
+  const personalUser = useMemo(() => {
+    const pId = taskUid || taskCreatedBy || currentUid;
+    const found = users.find(u => Number(u.id) === pId);
+    if (found) return found;
+    const name = formData.user_name || formData.created_by_name || currentUser?.name || (currentUser as any)?.full_name || 'Tôi';
+    const avatar = formData.created_by_avatar || currentUser?.avatar || (currentUser as any)?.avatar_url || '';
+    return {
+      id: pId,
+      name,
+      full_name: name,
+      avatar,
+      avatar_url: avatar
+    };
+  }, [users, taskUid, taskCreatedBy, currentUid, formData.user_name, formData.created_by_name, formData.created_by_avatar, currentUser]);
 
   const [comments, setComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -285,6 +409,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [editingChecklistDeadline, setEditingChecklistDeadline] = useState<string>('');
   const [activeAssigneeDropdownId, setActiveAssigneeDropdownId] = useState<string | null>(null);
   const [deleteSubtaskTarget, setDeleteSubtaskTarget] = useState<{ id: string; title: string } | null>(null);
+  const [checklistPage, setChecklistPage] = useState<number>(1);
+  const CHECKLIST_PAGE_SIZE = 20;
   const [showParticipantDropdown, setShowParticipantDropdown] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
   const [participantModalSearch, setParticipantModalSearch] = useState('');
@@ -424,7 +550,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   // Sync description from backend ONLY when user is not actively typing/focused
   useEffect(() => {
     if (!isFocusedRef.current && editorRef.current) {
-      editorRef.current.innerHTML = erpMeta?.description || '';
+      editorRef.current.innerHTML = linkifyHtml(erpMeta?.description || '');
     }
   }, [erpMeta?.description, task?.id]);
 
@@ -590,6 +716,81 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       } catch (err) {
         toast.error(t('Lỗi kết nối tải tệp: ') + err.message, { id: toastId });
       }
+      return;
+    }
+
+    // Intercept plain text paste with URL(s)
+    const text = e.clipboardData?.getData('text/plain');
+    if (text && /https?:\/\/|www\./i.test(text)) {
+      e.preventDefault();
+      const htmlToInsert = linkifyHtml(text.replace(/\r\n|\r|\n/g, '<br/>'));
+      document.execCommand('insertHTML', false, htmlToInsert);
+      if (editorRef.current) {
+        const updatedHtml = editorRef.current.innerHTML;
+        setErpMeta((prev: any) => ({ ...prev, description: updatedHtml }));
+        handleSaveMeta({ ...erpMeta, description: updatedHtml });
+      }
+    }
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+
+      const node = sel.anchorNode;
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue) {
+        const textBeforeCursor = node.nodeValue.substring(0, sel.anchorOffset);
+        const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])$/i;
+        const match = textBeforeCursor.match(urlRegex);
+        if (match) {
+          const matchedUrl = match[0];
+          const matchStart = match.index!;
+          const matchEnd = matchStart + matchedUrl.length;
+          
+          e.preventDefault();
+          const textNode = node as Text;
+          const textVal = textNode.nodeValue || '';
+          const afterText = textVal.substring(matchEnd);
+          
+          const a = document.createElement('a');
+          a.href = matchedUrl.startsWith('http') ? matchedUrl : `https://${matchedUrl}`;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.style.color = 'var(--color-primary, #bd1d2d)';
+          a.style.textDecoration = 'underline';
+          a.style.wordBreak = 'break-all';
+          a.style.cursor = 'pointer';
+          a.textContent = matchedUrl;
+          
+          const spaceOrBr = e.key === 'Enter' ? document.createElement('br') : document.createTextNode('\u00A0');
+          
+          const parent = textNode.parentNode;
+          if (parent) {
+            textNode.nodeValue = textVal.substring(0, matchStart);
+            parent.insertBefore(a, textNode.nextSibling);
+            
+            if (afterText) {
+              const remainder = document.createTextNode(afterText);
+              parent.insertBefore(remainder, a.nextSibling);
+              parent.insertBefore(spaceOrBr, remainder);
+            } else {
+              parent.insertBefore(spaceOrBr, a.nextSibling);
+            }
+
+            const range = document.createRange();
+            range.setStartAfter(spaceOrBr);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+
+            if (editorRef.current) {
+              const html = editorRef.current.innerHTML;
+              setErpMeta((prev: any) => ({ ...prev, description: html }));
+            }
+          }
+        }
+      }
     }
   };
   const [isEditingDesc, setIsEditingDesc] = useState(false);
@@ -619,6 +820,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [showAddLink, setShowAddLink] = useState(false);
   const [newLinkLabel, setNewLinkLabel] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [lightboxState, setLightboxState] = useState<{
+    isOpen: boolean;
+    items: AttachmentItem[];
+    initialIndex: number;
+  }>({
+    isOpen: false,
+    items: [],
+    initialIndex: 0
+  });
 
   // Pinned/Campaign specific state
   const [isPinned, setIsPinned] = useState(false);
@@ -873,8 +1083,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     if (task) {
       const isSaleRole = ['sale', 'sales'].includes(String(currentUser?.role || '').toLowerCase());
       const defaultUserId = task.user_id || (isSaleRole ? currentUser.id : null);
+      let initialDueDate = task.due_date;
+      if (task.id === 'new') {
+        if (!initialDueDate) {
+          initialDueDate = `${new Date().toISOString().slice(0, 10)} 18:00:00`;
+        } else if (initialDueDate.length === 10) {
+          initialDueDate = `${initialDueDate} 18:00:00`;
+        }
+      }
       const normalizedTask = {
         ...task,
+        due_date: initialDueDate,
         subject: task.subject || task.title || '',
         body: task.body || task.description || '',
         user_id: defaultUserId ? Number(defaultUserId) : null,
@@ -917,9 +1136,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           }
         }
         if (!wasParsed) {
-          parsedMeta.description = normalizedTask.body;
+          parsedMeta.description = linkifyHtml(normalizedTask.body);
         } else {
-          parsedMeta.description = currentBody;
+          parsedMeta.description = linkifyHtml(currentBody);
         }
       }
 
@@ -934,6 +1153,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
 
       setErpMeta(parsedMeta);
+      setChecklistPage(1);
       setCampaignTarget(parsedMeta.campaign_target || '');
       if (normalizedTask.id !== 'new') {
         loadComments(normalizedTask.id);
@@ -1202,7 +1422,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         : null;
 
       // Sync description
-      const finalDesc = erpMeta.description || '';
+      const finalDesc = linkifyHtml(erpMeta.description || (editorRef.current ? (editorRef.current as any).innerHTML : ''));
       const updatedErpMeta = {
         ...erpMeta,
         description: finalDesc
@@ -1255,8 +1475,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         priority: formData.priority || 'medium',
         status: formData.status || 'planned',
         due_date: formData.due_date 
-          ? (formData.due_date.length === 10 ? formData.due_date + ' 23:59:59' : formData.due_date) 
-          : (new Date().toISOString().slice(0, 10) + ' 23:59:59'),
+          ? (formData.due_date.length === 10 
+              ? `${formData.due_date} 18:00:00` 
+              : formData.due_date.length === 16 
+                ? `${formData.due_date}:00` 
+                : formData.due_date) 
+          : (new Date().toISOString().slice(0, 10) + ' 18:00:00'),
         user_id: formData.user_id ? Number(formData.user_id) : null,
         created_by: formData.created_by ? Number(formData.created_by) : null,
         require_approval: formData.require_approval || 0,
@@ -1422,10 +1646,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     let currentParticipantIds = getParticipantIds(formData.participant_ids);
     const newItems = titles.map((title, idx) => {
       const itemId = 'sub_' + (Date.now() + idx);
-      const assigneeId = newSubAssignee ? Number(newSubAssignee) : null;
-      if (assigneeId) {
+      const assigneeId = newSubAssignee ? Number(newSubAssignee) : (isPersonalTask && personalUser?.id ? Number(personalUser.id) : null);
+      if (assigneeId && !isPersonalTask) {
         const idStr = String(assigneeId);
-        if (!currentParticipantIds.includes(idStr)) {
+        if (!currentParticipantIds.includes(idStr) && Number(idStr) !== Number(formData.user_id)) {
           currentParticipantIds.push(idStr);
         }
       }
@@ -1446,22 +1670,30 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     const newProgress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
     handleSaveMeta(updatedMeta, newProgress);
 
-    const nextString = currentParticipantIds.join(',');
-    if (formData.participant_ids !== nextString) {
-      setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
-      handleUpdateField('participant_ids', nextString);
+    if (!isPersonalTask) {
+      const nextString = currentParticipantIds.join(',');
+      if (formData.participant_ids !== nextString) {
+        setFormData((prev: any) => ({ ...prev, participant_ids: nextString }));
+        handleUpdateField('participant_ids', nextString);
+      }
     }
 
     // Reset input
     setNewSubTitle('');
-    setNewSubAssignee('');
+    setNewSubAssignee(isPersonalTask && personalUser?.id ? String(personalUser.id) : '');
     setNewSubDeadline(getTomorrowString());
     setNewSubPriority('medium');
     setShowAddChecklist(false);
     toast.success(t('Đã thêm việc con'));
 
-    if (formData.due_date && newSubDeadline && newSubDeadline > formData.due_date) {
-      toast(t('Lưu ý: Hạn chót việc con đang trễ hơn hạn chót của nhiệm vụ chính'), { icon: '⚠️' });
+    // Automatically navigate to last page where new items are
+    const newTotalPages = Math.ceil(newChecklist.length / CHECKLIST_PAGE_SIZE);
+    setChecklistPage(newTotalPages);
+
+    if (newSubDeadline && (!formData.due_date || newSubDeadline > formData.due_date)) {
+      setFormData((prev: any) => ({ ...prev, due_date: newSubDeadline }));
+      handleUpdateField('due_date', newSubDeadline);
+      toast.success(t('Đã tự động cập nhật hạn chót nhiệm vụ chính theo việc con'));
     }
   };
 
@@ -1519,8 +1751,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     handleSaveMeta(updatedMeta);
     toast.success(t('Đã cập nhật công việc con'));
 
-    if (formData.due_date && newDeadline && newDeadline > formData.due_date) {
-      toast(t('Lưu ý: Hạn chót việc con đang trễ hơn hạn chót của nhiệm vụ chính'), { icon: '⚠️' });
+    if (newDeadline && (!formData.due_date || newDeadline > formData.due_date)) {
+      setFormData((prev: any) => ({ ...prev, due_date: newDeadline }));
+      handleUpdateField('due_date', newDeadline);
+      toast.success(t('Đã tự động cập nhật hạn chót nhiệm vụ chính theo việc con'));
     }
   };
 
@@ -1767,6 +2001,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       });
 
       if (res.data && (res.data.success || res.status === 200)) {
+        if (res.data.data?.participant_ids !== undefined && res.data.data?.participant_ids !== null) {
+          setFormData((prev: any) => ({ ...prev, participant_ids: res.data.data.participant_ids }));
+        }
         await loadComments(Number(task.id));
         await loadTimeline(Number(task.id));
         if (onUpdate) onUpdate();
@@ -1857,8 +2094,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       });
 
       if (res.data && res.data.success) {
+        if (res.data.data?.participant_ids !== undefined && res.data.data?.participant_ids !== null) {
+          setFormData((prev: any) => ({ ...prev, participant_ids: res.data.data.participant_ids }));
+        }
         loadSubtaskComments(Number(task.id), selectedSubtask.id);
         loadSubtaskCommentCounts();
+        if (onUpdate) onUpdate();
         toast.success(t('Đã thêm bình luận việc con!'));
       }
     } catch (e: any) {
@@ -1867,19 +2108,6 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setIsSubmittingSubtaskComment(false);
       setUploadingFile(false);
     }
-  };
-
-  const getParticipantIds = (ids: any): string[] => {
-    if (Array.isArray(ids)) {
-      return ids.map(String).filter(Boolean);
-    }
-    if (typeof ids === 'string') {
-      return ids.split(',').filter(Boolean);
-    }
-    if (typeof ids === 'number') {
-      return [String(ids)];
-    }
-    return [];
   };
 
   const handleToggleParticipant = (userId: number) => {
@@ -2076,8 +2304,29 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const handleImageClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.tagName === 'IMG' && target.closest('.rich-comment-content')) {
-      target.classList.toggle('zoomed');
+    if (target.tagName === 'IMG') {
+      const src = (target as HTMLImageElement).src;
+      if (src && !target.closest('.avatar') && !target.closest('button')) {
+        const container = target.closest('.rich-comment-content') || target.closest('.rich-text-editor-content');
+        if (container) {
+          const allImgs = Array.from(container.querySelectorAll('img')) as HTMLImageElement[];
+          const imgItems: AttachmentItem[] = allImgs
+            .map(img => ({
+              url: img.src,
+              name: img.alt || 'Hình ảnh',
+              type: 'image' as const
+            }))
+            .filter(x => Boolean(x.url));
+
+          const clickedIdx = imgItems.findIndex(x => x.url === src);
+          setLightboxState({
+            isOpen: true,
+            items: imgItems.length > 0 ? imgItems : [{ url: src, name: 'Hình ảnh', type: 'image' }],
+            initialIndex: Math.max(0, clickedIdx)
+          });
+          return;
+        }
+      }
     }
   };
 
@@ -2413,6 +2662,33 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </button>
             )}
 
+            {/* Focus Mode Button for PC */}
+            {!isMobileOrTablet && !embedMode && onOpenFocusMode && (
+              <button
+                type="button"
+                onClick={onOpenFocusMode}
+                className="hover-lift"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'all 0.2s',
+                  padding: 0
+                }}
+                title={t("Chế độ tập trung (Focus Mode)")}
+              >
+                <Maximize2 size={18} />
+              </button>
+            )}
+
             <button
               onClick={handleManualSave}
               disabled={isSaving}
@@ -2526,6 +2802,17 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   border-radius: 8px !important;
                   margin: 8px 0 !important;
                   display: block !important;
+                }
+                .rich-text-editor-content a {
+                  color: var(--color-primary, #bd1d2d) !important;
+                  text-decoration: underline !important;
+                  word-break: break-all !important;
+                  cursor: pointer !important;
+                  font-weight: 500 !important;
+                  transition: opacity 0.2s ease !important;
+                }
+                .rich-text-editor-content a:hover {
+                  opacity: 0.8 !important;
                 }
                 .rich-comment-content img {
                   max-width: 150px !important;
@@ -2661,15 +2948,24 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   onBlur={(e) => {
                     isFocusedRef.current = false;
                     const html = e.currentTarget.innerHTML;
-                    setErpMeta((prev) => ({ ...prev, description: html }));
-                    handleSaveMeta({ ...erpMeta, description: html });
+                    const linkified = linkifyHtml(html);
+                    if (linkified !== html) {
+                      e.currentTarget.innerHTML = linkified;
+                    }
+                    setErpMeta((prev) => ({ ...prev, description: linkified }));
+                    handleSaveMeta({ ...erpMeta, description: linkified });
                   }}
+                  onKeyDown={handleEditorKeyDown}
                   onPaste={handleEditorPaste}
                   onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    if (target && target.tagName === 'A') {
+                    const link = target?.closest ? target.closest('a') : (target?.tagName === 'A' ? target : null);
+                    if (link) {
                       e.preventDefault();
-                      window.open(target.getAttribute('href') || '', '_blank');
+                      const href = link.getAttribute('href');
+                      if (href) {
+                        window.open(href, '_blank', 'noopener,noreferrer');
+                      }
                     }
                   }}
                   style={{
@@ -2698,7 +2994,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   <button
                     type="button"
                     className="btn outline sm"
-                    onClick={() => setShowAddChecklist(!showAddChecklist)}
+                    onClick={() => {
+                      if (!showAddChecklist && !newSubAssignee && isPersonalTask && personalUser?.id) {
+                        setNewSubAssignee(String(personalUser.id));
+                      }
+                      setShowAddChecklist(!showAddChecklist);
+                    }}
                     style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '4px', borderColor: 'var(--color-border)', color: 'var(--color-text-light)' }}
                   >
                     <Plus size={12} />
@@ -2855,19 +3156,31 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               )}
 
               {/* Sub-tasks list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(!erpMeta.checklist || erpMeta.checklist.length === 0) ? (
-                  <div style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
-                    {t('Chưa có công việc con nào.')}
-                  </div>
-                ) : (
-                  erpMeta.checklist.map((item: any) => {
-                    const assignedIds = item.assignee_id ? String(item.assignee_id).split(',').map(id => id.trim()).filter(Boolean) : [];
-                    const itemUsers = users.filter(u => assignedIds.includes(String(u.id)));
-                    const itemUser = itemUsers[0] || null;
-                    const isEditingThis = editingChecklistId === item.id;
-                    const isAssigneeDropdownOpen = activeAssigneeDropdownId === item.id;
-                    const isCommentsOpen = selectedSubtask?.id === item.id;
+              {(() => {
+                const totalChecklistItems = erpMeta.checklist ? erpMeta.checklist.length : 0;
+                const totalChecklistPages = Math.ceil(totalChecklistItems / CHECKLIST_PAGE_SIZE);
+                const safeChecklistPage = Math.min(Math.max(1, checklistPage), Math.max(1, totalChecklistPages));
+                const checklistStartIndex = (safeChecklistPage - 1) * CHECKLIST_PAGE_SIZE;
+                const checklistEndIndex = safeChecklistPage * CHECKLIST_PAGE_SIZE;
+                const pagedChecklist = (erpMeta.checklist || []).slice(checklistStartIndex, checklistEndIndex);
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {totalChecklistItems === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                        {t('Chưa có công việc con nào.')}
+                      </div>
+                    ) : (
+                      pagedChecklist.map((item: any) => {
+                        const assignedIds = item.assignee_id ? String(item.assignee_id).split(',').map((id: string) => id.trim()).filter(Boolean) : [];
+                        let itemUsers = users.filter(u => assignedIds.includes(String(u.id)));
+                        if (itemUsers.length === 0 && isPersonalTask && personalUser) {
+                          itemUsers = [personalUser];
+                        }
+                        const itemUser = itemUsers[0] || null;
+                        const isEditingThis = editingChecklistId === item.id;
+                        const isAssigneeDropdownOpen = activeAssigneeDropdownId === item.id;
+                        const isCommentsOpen = selectedSubtask?.id === item.id;
 
                     return (
                       <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3482,7 +3795,109 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     );
                   })
                 )}
+
+                {/* Pagination when > 20 subtasks */}
+                {totalChecklistPages > 1 && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    marginTop: '6px',
+                    borderRadius: '10px',
+                    background: 'var(--color-bg)',
+                    border: '1px solid var(--color-border-light)',
+                    fontSize: '0.76rem',
+                    flexWrap: 'wrap',
+                    gap: '8px'
+                  }}>
+                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                      {t('Hiển thị')} <strong style={{ color: 'var(--color-text)' }}>{checklistStartIndex + 1}–{Math.min(checklistEndIndex, totalChecklistItems)}</strong> / {totalChecklistItems} {t('việc con')}
+                    </span>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        type="button"
+                        disabled={safeChecklistPage <= 1}
+                        onClick={() => setChecklistPage(p => Math.max(1, p - 1))}
+                        className="btn outline sm"
+                        style={{
+                          padding: '3px 8px',
+                          height: '26px',
+                          fontSize: '0.72rem',
+                          borderRadius: '6px',
+                          cursor: safeChecklistPage <= 1 ? 'not-allowed' : 'pointer',
+                          opacity: safeChecklistPage <= 1 ? 0.4 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '2px'
+                        }}
+                      >
+                        ‹ {t('Trước')}
+                      </button>
+
+                      {Array.from({ length: totalChecklistPages }, (_, idx) => {
+                        const pNum = idx + 1;
+                        if (totalChecklistPages <= 7 || pNum === 1 || pNum === totalChecklistPages || Math.abs(pNum - safeChecklistPage) <= 1) {
+                          return (
+                            <button
+                              key={pNum}
+                              type="button"
+                              onClick={() => setChecklistPage(pNum)}
+                              style={{
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '6px',
+                                border: pNum === safeChecklistPage ? '1px solid var(--color-primary)' : '1px solid var(--color-border-light)',
+                                background: pNum === safeChecklistPage ? 'var(--color-primary)' : 'var(--color-surface)',
+                                color: pNum === safeChecklistPage ? 'white' : 'var(--color-text)',
+                                fontWeight: pNum === safeChecklistPage ? 700 : 500,
+                                fontSize: '0.72rem',
+                                cursor: 'pointer',
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {pNum}
+                            </button>
+                          );
+                        } else if (
+                          (pNum === 2 && safeChecklistPage > 3) ||
+                          (pNum === totalChecklistPages - 1 && safeChecklistPage < totalChecklistPages - 2)
+                        ) {
+                          return <span key={pNum} style={{ color: 'var(--color-text-muted)', padding: '0 2px' }}>…</span>;
+                        }
+                        return null;
+                      })}
+
+                      <button
+                        type="button"
+                        disabled={safeChecklistPage >= totalChecklistPages}
+                        onClick={() => setChecklistPage(p => Math.min(totalChecklistPages, p + 1))}
+                        className="btn outline sm"
+                        style={{
+                          padding: '3px 8px',
+                          height: '26px',
+                          fontSize: '0.72rem',
+                          borderRadius: '6px',
+                          cursor: safeChecklistPage >= totalChecklistPages ? 'not-allowed' : 'pointer',
+                          opacity: safeChecklistPage >= totalChecklistPages ? 0.4 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '2px'
+                        }}
+                      >
+                        {t('Sau')} ›
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+            );
+          })()}
             </div>
 
             {/* Tài liệu hoặc Link đính kèm */}
@@ -3558,7 +3973,29 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   subtext="Xem trước ảnh/tệp tin trước khi tải lên (Hỗ trợ Ctrl+V từ Clipboard)"
                 />
 
-                {erpMeta.links && erpMeta.links.map((link: any, idx: number) => {
+                {(() => {
+                  const allMediaItems: AttachmentItem[] = (erpMeta.links || [])
+                    .map((linkItem: any) => {
+                      const rUrl = linkItem.url || '';
+                      const fUrl = rUrl.startsWith('http://') || rUrl.startsWith('https://') || rUrl.startsWith('blob:') || rUrl.startsWith('data:')
+                        ? rUrl
+                        : `${window.location.origin}${rUrl.startsWith('/') ? '' : '/'}${rUrl}`;
+                      const ext = (rUrl.split('?')[0].split('.').pop() || '').toLowerCase();
+                      const isImg = Boolean(
+                        linkItem.is_image ||
+                        ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ||
+                        String(linkItem.label || '').toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/)
+                      );
+                      const isP = ext === 'pdf' || String(linkItem.label || '').toLowerCase().endsWith('.pdf');
+                      return {
+                        url: fUrl,
+                        name: linkItem.label || 'Tệp đính kèm',
+                        type: isImg ? ('image' as const) : (isP ? ('pdf' as const) : ('other' as const))
+                      };
+                    })
+                    .filter((item: AttachmentItem) => item.type === 'image' || item.type === 'pdf');
+
+                  return erpMeta.links && erpMeta.links.map((link: any, idx: number) => {
                   const rawUrl = link.url || '';
                   const fullUrl = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')
                     ? rawUrl
@@ -3648,8 +4085,18 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       }}
                       className="hover-lift"
                       onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('.btn-delete-link')) return;
-                        window.open(fullUrl, '_blank');
+                        if ((e.target as HTMLElement).closest('.btn-delete-link') || (e.target as HTMLElement).closest('.btn-external-link')) return;
+                        if (isImage || isPdf) {
+                          e.preventDefault();
+                          const targetIdx = allMediaItems.findIndex(x => x.url === fullUrl);
+                          setLightboxState({
+                            isOpen: true,
+                            items: allMediaItems.length > 0 ? allMediaItems : [{ url: fullUrl, name: link.label || 'Tệp đính kèm', type: isImage ? 'image' : 'pdf' }],
+                            initialIndex: Math.max(0, targetIdx)
+                          });
+                        } else {
+                          window.open(fullUrl, '_blank');
+                        }
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
@@ -3720,11 +4167,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                         {/* Name & Subtext */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                            <a
-                              href={fullUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
+                            <span
+                              onClick={(e) => {
+                                if (isImage || isPdf) {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const targetIdx = allMediaItems.findIndex(x => x.url === fullUrl);
+                                  setLightboxState({
+                                    isOpen: true,
+                                    items: allMediaItems.length > 0 ? allMediaItems : [{ url: fullUrl, name: link.label || 'Tệp đính kèm', type: isImage ? 'image' : 'pdf' }],
+                                    initialIndex: Math.max(0, targetIdx)
+                                  });
+                                }
+                              }}
                               style={{
                                 fontSize: '0.85rem',
                                 fontWeight: 700,
@@ -3733,12 +4188,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
-                                display: 'inline-block'
+                                display: 'inline-block',
+                                cursor: 'pointer'
                               }}
                               className="hover-color-primary"
                             >
                               {link.label || link.url}
-                            </a>
+                            </span>
                             <span style={{
                               fontSize: '0.625rem',
                               fontWeight: 800,
@@ -3778,13 +4234,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             background: 'var(--color-bg-alt)',
                             transition: 'all 0.15s ease'
                           }}
-                          className="hover-bg-primary-light hover-color-primary"
+                          className="hover-bg-primary-light hover-color-primary btn-external-link"
                           title={t('Mở trong tab mới')}
                         >
                           <ExternalLink size={15} />
                         </a>
                         <button
                           type="button"
+                          className="btn-delete-link"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteLink(idx);
@@ -3802,15 +4259,15 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             justifyContent: 'center',
                             transition: 'all 0.15s ease'
                           }}
-                          className="btn-delete-link hover-bg-danger-light"
-                          title={t('Xóa tệp đính kèm')}
+                          title={t('Xóa tệp')}
                         >
                           <Trash2 size={15} />
                         </button>
                       </div>
                     </div>
                   );
-                })}
+                });
+                })()}
               </div>
             </div>
 
@@ -4296,6 +4753,97 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                               const formattedNew = formatValue(k, newVal);
                               const formattedOld = (oldVal !== undefined && oldVal !== null && oldVal !== '') ? formatValue(k, oldVal) : null;
 
+                              // Specific handling for participant_ids: only show who was added and who was removed
+                              if (k === 'participant_ids' && isDiff && oldVal !== undefined && newVal !== undefined) {
+                                const oldIds = String(oldVal || '').split(',').map(s => s.trim()).filter(Boolean);
+                                const newIds = String(newVal || '').split(',').map(s => s.trim()).filter(Boolean);
+
+                                const addedIds = newIds.filter(id => !oldIds.includes(id));
+                                const removedIds = oldIds.filter(id => !newIds.includes(id));
+
+                                if (addedIds.length > 0 || removedIds.length > 0) {
+                                  const addedNames = addedIds.map(id => users.find(u => String(u.id) === String(id))?.full_name || `#${id}`);
+                                  const removedNames = removedIds.map(id => users.find(u => String(u.id) === String(id))?.full_name || `#${id}`);
+
+                                  return (
+                                    <div key={k} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: '1.5' }}>
+                                      <span style={{ fontWeight: 600 }}>• {label}:</span>
+                                      {addedNames.length > 0 && (
+                                        <span style={{ 
+                                          color: '#15803d', 
+                                          background: 'rgba(22, 163, 74, 0.08)', 
+                                          border: '1px solid rgba(22, 163, 74, 0.25)', 
+                                          padding: '2px 8px', 
+                                          borderRadius: '6px', 
+                                          fontWeight: 600,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}>
+                                          + Thêm: <strong style={{ color: '#166534' }}>{addedNames.join(', ')}</strong>
+                                        </span>
+                                      )}
+                                      {removedNames.length > 0 && (
+                                        <span style={{ 
+                                          color: '#b91c1c', 
+                                          background: 'rgba(239, 68, 68, 0.08)', 
+                                          border: '1px solid rgba(239, 68, 68, 0.25)', 
+                                          padding: '2px 8px', 
+                                          borderRadius: '6px', 
+                                          fontWeight: 600,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}>
+                                          - Bớt: <strong style={{ color: '#991b1b', textDecoration: 'line-through' }}>{removedNames.join(', ')}</strong>
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              // Specific handling for tags: only show what was added and removed
+                              if (k === 'tags' && isDiff && oldVal !== undefined && newVal !== undefined) {
+                                const oldTags = String(oldVal || '').split(',').map(s => s.trim()).filter(Boolean);
+                                const newTags = String(newVal || '').split(',').map(s => s.trim()).filter(Boolean);
+
+                                const addedTags = newTags.filter(t => !oldTags.includes(t));
+                                const removedTags = oldTags.filter(t => !newTags.includes(t));
+
+                                if (addedTags.length > 0 || removedTags.length > 0) {
+                                  return (
+                                    <div key={k} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: '1.5' }}>
+                                      <span style={{ fontWeight: 600 }}>• {label}:</span>
+                                      {addedTags.length > 0 && (
+                                        <span style={{ 
+                                          color: '#15803d', 
+                                          background: 'rgba(22, 163, 74, 0.08)', 
+                                          border: '1px solid rgba(22, 163, 74, 0.25)', 
+                                          padding: '2px 8px', 
+                                          borderRadius: '6px', 
+                                          fontWeight: 600 
+                                        }}>
+                                          + Thêm: <strong style={{ color: '#166534' }}>{addedTags.join(', ')}</strong>
+                                        </span>
+                                      )}
+                                      {removedTags.length > 0 && (
+                                        <span style={{ 
+                                          color: '#b91c1c', 
+                                          background: 'rgba(239, 68, 68, 0.08)', 
+                                          border: '1px solid rgba(239, 68, 68, 0.25)', 
+                                          padding: '2px 8px', 
+                                          borderRadius: '6px', 
+                                          fontWeight: 600 
+                                        }}>
+                                          - Bớt: <strong style={{ color: '#991b1b', textDecoration: 'line-through' }}>{removedTags.join(', ')}</strong>
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              }
+
                               if (formattedOld && formattedOld !== formattedNew) {
                                 return (
                                   <div key={k} style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', lineHeight: '1.4' }}>
@@ -4607,6 +5155,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             </div>
 
             {/* Khách hàng liên quan */}
+            {shouldShowCustomerCard && (
             <div className="card" style={cardStyle}>
               
               {/* Primary Contact (if any) */}
@@ -4827,6 +5376,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 );
               })()}
             </div>
+            )}
 
 
             {/* Approval Banner */}
@@ -5127,6 +5677,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                     addedCount++;
                                   }
                                 });
+
                                 if (addedCount > 0) {
                                   const nextPString = nextP.join(',');
                                   setFormData((prev: any) => ({ ...prev, participant_ids: nextPString }));
@@ -5338,43 +5889,23 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 </div>
 
                 {/* Personal Task Privacy Notice */}
-                {(() => {
-                  const currentUid = Number(currentUser?.id || (currentUser as any)?.user_id || 0);
-                  const taskUid = Number(formData.user_id || 0);
-                  const taskCreatedBy = Number(formData.created_by || task.created_by || currentUid);
-                  const tagsStr = String(formData.tags || '');
-                  const isPersonalTag = tagsStr.includes('ca_nhan') || tagsStr.includes('personal');
-
-                  let isPersonal = isPersonalTag;
-                  if (!isPersonal && taskUid > 0 && taskUid === taskCreatedBy) {
-                    const pIds = getParticipantIds(formData.participant_ids).filter(id => Number(id) !== taskUid);
-                    const hasOtherParticipants = pIds.length > 0;
-                    const hasApprover = Number(formData.approver_id || 0) > 0 && Number(formData.approver_id) !== taskUid;
-                    const hasRelEntity = (Number(formData.related_id || 0) > 0 && formData.related_type !== 'personal') || Number(formData.contact_id || 0) > 0;
-                    isPersonal = !hasOtherParticipants && !hasApprover && !hasRelEntity;
-                  }
-
-                  if (isPersonal) {
-                    return (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        background: 'rgba(99, 102, 241, 0.08)',
-                        border: '1px solid rgba(99, 102, 241, 0.22)',
-                        marginTop: '4px'
-                      }}>
-                        <Shield size={15} color="#4f46e5" style={{ flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.76rem', color: '#4338ca', lineHeight: 1.4 }}>
-                          <strong>{t('Công việc cá nhân:')}</strong> {t('Chỉ bạn nhìn thấy')}
-                        </span>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
+                {isPersonalTask && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.22)',
+                    marginTop: '4px'
+                  }}>
+                    <Shield size={15} color="#4f46e5" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.76rem', color: '#4338ca', lineHeight: 1.4 }}>
+                      <strong>{t('Công việc cá nhân:')}</strong> {t('Chỉ bạn nhìn thấy')}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -5404,9 +5935,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             </div>
 
             {/* Độ ưu tiên & Hạn hoàn thành */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="card" style={cardStyle}>
-                <label style={cardLabelStyle}>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '10px' }}>
+              <div className="card" style={{ ...cardStyle, padding: embedMode ? '10px 8px' : '14px 10px' }}>
+                <label style={{ ...cardLabelStyle, whiteSpace: 'nowrap' }}>
                   {t('Độ ưu tiên')}
                 </label>
                 <CustomSelect
@@ -5422,17 +5953,63 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 />
               </div>
 
-              <div className="card" style={cardStyle}>
-                <label style={cardLabelStyle}>
+              <div className="card" style={{ ...cardStyle, padding: embedMode ? '10px 10px' : '14px 12px' }}>
+                <label style={{ ...cardLabelStyle, whiteSpace: 'nowrap' }}>
                   {t('Hạn hoàn thành')}
                 </label>
-                <VietnameseDateInput
-                  value={formData.due_date ? formData.due_date.substring(0, 10) : ''}
-                  onChange={(isoDate) => {
-                    handleUpdateField('due_date', isoDate ? (isoDate + ' 23:59:59') : null);
-                  }}
-                  style={{ height: '36px' }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <VietnameseDateInput
+                      value={formData.due_date ? formData.due_date.substring(0, 10) : ''}
+                      onChange={(isoDate) => {
+                        if (!isoDate) {
+                          handleUpdateField('due_date', null);
+                          return;
+                        }
+                        let curTime = '18:00';
+                        if (formData.due_date && formData.due_date.length >= 16) {
+                          const timePart = formData.due_date.substring(11, 16);
+                          if (timePart) {
+                            curTime = timePart;
+                          }
+                        }
+                        handleUpdateField('due_date', `${isoDate} ${curTime}:00`);
+                      }}
+                      style={{ height: '36px', width: '100%' }}
+                      inputStyle={{ padding: '0 8px', fontSize: '0.82rem' }}
+                    />
+                  </div>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={
+                      formData.due_date && formData.due_date.length >= 16 
+                        ? formData.due_date.substring(11, 16) 
+                        : '18:00'
+                    }
+                    onChange={(e) => {
+                      const newTime = e.target.value || '18:00';
+                      const curDate = formData.due_date && formData.due_date.length >= 10
+                        ? formData.due_date.substring(0, 10)
+                        : new Date().toISOString().substring(0, 10);
+                      handleUpdateField('due_date', `${curDate} ${newTime}:00`);
+                    }}
+                    style={{ 
+                      height: '36px', 
+                      padding: '0 6px', 
+                      fontSize: '0.82rem', 
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-surface, #ffffff)',
+                      color: 'var(--color-text)',
+                      fontWeight: 600,
+                      width: '80px',
+                      flexShrink: 0,
+                      cursor: 'pointer'
+                    }}
+                    title={t('Chọn giờ hạn hoàn thành')}
+                  />
+                </div>
               </div>
             </div>
 
@@ -6048,8 +6625,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               <div style={{ padding: '1.25rem 1.5rem', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {(() => {
-                    const assigneeIds = selectedSubtaskForParticipants.assignee_id ? selectedSubtaskForParticipants.assignee_id.split(',').filter(Boolean) : [];
-                    const subtaskUsers = assigneeIds.map((id: string) => users.find((u: any) => String(u.id) === String(id))).filter(Boolean);
+                    const rawAssigneeId = selectedSubtaskForParticipants.assignee_id || (isPersonalTask && personalUser?.id ? String(personalUser.id) : '');
+                    const assigneeIds = rawAssigneeId ? String(rawAssigneeId).split(',').filter(Boolean) : [];
+                    let subtaskUsers = assigneeIds.map((id: string) => users.find((u: any) => String(u.id) === String(id))).filter(Boolean);
+                    if (subtaskUsers.length === 0 && isPersonalTask && personalUser) {
+                      subtaskUsers = [personalUser];
+                    }
 
                     if (subtaskUsers.length === 0) {
                       return (
@@ -6773,6 +7354,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               </ul>
             </div>
           </ConfirmModal>
+
+          {/* Lightbox Modal for attachments (images & PDF) */}
+          <AttachmentLightboxModal
+            isOpen={lightboxState.isOpen}
+            onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
+            items={lightboxState.items}
+            initialIndex={lightboxState.initialIndex}
+          />
     </>,
     document.body
   );

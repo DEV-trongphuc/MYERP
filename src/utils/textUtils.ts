@@ -27,3 +27,14 @@ export const stripHtml = (html: string): string => {
   const noTags = html.replace(/<[^>]*>/g, ' ');
   return decodeHtmlEntities(noTags).replace(/\s+/g, ' ').trim();
 };
+
+export const cleanNotificationText = (text: string | null | undefined): string => {
+  if (!text) return '';
+  let str = String(text);
+  str = str.replace(/<[^>]*>/g, ' ');
+  str = decodeHtmlEntities(str);
+  str = decodeHtmlEntities(str);
+  str = str.replace(/&nbsp;/gi, ' ');
+  str = str.replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
+  return str.replace(/\s+/g, ' ').trim();
+};

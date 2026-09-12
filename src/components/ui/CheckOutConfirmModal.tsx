@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Clock, MapPin, CheckCircle2, AlertTriangle, X, RefreshCw, Sparkles } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { triggerFullConfetti } from '../../utils/confettiHelper';
 
 interface CheckOutConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => Promise<void> | void;
+  onConfirm: () => Promise<boolean | void> | boolean | void;
   capturedImage?: string | null;
   userName?: string;
   userRole?: string;
@@ -17,6 +18,7 @@ interface CheckOutConfirmModalProps {
   isEarly?: boolean;
   earlyMinutes?: number;
   submitting?: boolean;
+  zIndex?: number;
 }
 
 export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
@@ -31,16 +33,24 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
   address,
   isEarly = false,
   earlyMinutes = 0,
-  submitting = false
+  submitting = false,
+  zIndex = 2147483647
 }) => {
   const { t } = useLanguage();
   const [isMobile, setIsMobile] = React.useState(window.innerWidth <= 768);
+  const [isSuccess, setIsSuccess] = React.useState(false);
 
   React.useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setIsSuccess(false);
+    }
+  }, [isOpen]);
 
   // Format current live time
   const now = new Date();
@@ -70,11 +80,12 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
   }
 
   const handleConfirmAction = async () => {
-    if (submitting) return;
+    if (submitting || isSuccess) return;
     try {
-      const res = onConfirm();
-      if (res && typeof (res as any).then === 'function') {
-        await res;
+      const res = await onConfirm();
+      if (res === true || res === undefined) {
+        setIsSuccess(true);
+        triggerFullConfetti();
       }
     } catch (e) {
       console.error('Error during checkout confirmation:', e);
@@ -94,13 +105,13 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
             backgroundColor: 'rgba(15, 23, 42, 0.75)',
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
-            zIndex: 999999999,
+            zIndex: zIndex || 2147483647,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: isMobile ? '1rem' : '1.5rem'
           }}
-          onClick={submitting ? undefined : onClose}
+          onClick={submitting || isSuccess ? undefined : onClose}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.94, y: 16 }}
@@ -122,33 +133,170 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
             }}
           >
             {/* Close button */}
-            <button
-              onClick={submitting ? undefined : onClose}
-              disabled={submitting}
-              style={{
-                position: 'absolute',
-                top: '16px',
-                right: '16px',
-                border: 'none',
-                background: 'var(--color-bg, #f1f5f9)',
-                color: 'var(--color-text-muted, #64748b)',
-                cursor: submitting ? 'not-allowed' : 'pointer',
-                padding: '6px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
-                zIndex: 10,
-                opacity: submitting ? 0.4 : 1
-              }}
-              title={t('Đóng')}
-            >
-              <X size={16} />
-            </button>
+            {!isSuccess && (
+              <button
+                onClick={submitting ? undefined : onClose}
+                disabled={submitting}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  border: 'none',
+                  background: 'var(--color-bg, #f1f5f9)',
+                  color: 'var(--color-text-muted, #64748b)',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  padding: '6px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease',
+                  zIndex: 10,
+                  opacity: submitting ? 0.4 : 1
+                }}
+                title={t('Đóng')}
+              >
+                <X size={16} />
+              </button>
+            )}
 
-            {/* Modal Body */}
-            <div style={{ padding: isMobile ? '1.5rem 1.25rem' : '2rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {isSuccess ? (
+              /* Success Celebration Screen */
+              <div
+                style={{
+                  padding: isMobile ? '2.5rem 1.25rem' : '3rem 2rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  gap: '1.25rem',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+              >
+                {/* Animated Glowing Ring Aura */}
+                <div style={{ position: 'relative', width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0.25rem 0' }}>
+                  <div className="checkin-pulse-ring" style={{ borderColor: 'rgba(16, 185, 129, 0.55)' }} />
+                  <div
+                    className="checkin-success-badge"
+                    style={{
+                      width: 84,
+                      height: 84,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 12px 30px rgba(16, 185, 129, 0.45)',
+                      border: '3px solid #ffffff',
+                      zIndex: 2
+                    }}
+                  >
+                    <CheckCircle2 size={46} strokeWidth={2.6} />
+                  </div>
+                </div>
+
+                {/* Pill & Title */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 14px',
+                      borderRadius: '20px',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      color: '#059669',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    <Sparkles size={13} />
+                    <span>{t('HOÀN THÀNH CA LÀM VIỆC')}</span>
+                  </div>
+
+                  <h2
+                    style={{
+                      fontSize: isMobile ? '1.35rem' : '1.5rem',
+                      fontWeight: 800,
+                      color: 'var(--color-text, #0f172a)',
+                      margin: 0,
+                      letterSpacing: '-0.02em',
+                      lineHeight: 1.3
+                    }}
+                  >
+                    {t('CHẤM CÔNG RA CA THÀNH CÔNG!')}
+                  </h2>
+
+                  <p
+                    style={{
+                      fontSize: '0.875rem',
+                      color: 'var(--color-text-muted, #64748b)',
+                      margin: '4px auto 0 auto',
+                      maxWidth: '360px',
+                      lineHeight: 1.55
+                    }}
+                  >
+                    {t('Hẹn gặp lại bạn vào ca làm việc tiếp theo. Chúc bạn một buổi tối thật vui vẻ và thư giãn!')}
+                  </p>
+                </div>
+
+                {/* Stats Summary Card */}
+                <div
+                  style={{
+                    width: '100%',
+                    maxWidth: '380px',
+                    background: 'var(--color-bg, #f8fafc)',
+                    border: '1px solid var(--color-border-light, rgba(0,0,0,0.08))',
+                    borderRadius: '16px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-around',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted, #64748b)', fontWeight: 600 }}>{t('Giờ ra ca')}</span>
+                    <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#059669', letterSpacing: '-0.02em' }}>{currentHM}</span>
+                  </div>
+                  {durationStr && (
+                    <>
+                      <div style={{ width: 1, height: 26, background: 'var(--color-border-light, rgba(0,0,0,0.1))' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted, #64748b)', fontWeight: 600 }}>{t('Thời gian làm việc')}</span>
+                        <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0284c7', letterSpacing: '-0.02em' }}>{durationStr}</span>
+                      </div>
+                    </>
+                  )}
+                  <div style={{ width: 1, height: 26, background: 'var(--color-border-light, rgba(0,0,0,0.1))' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted, #64748b)', fontWeight: 600 }}>{t('Trạng thái')}</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle2 size={14} /> {t('Hợp lệ')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2.2s Animated Countdown Progress Bar */}
+                <div style={{ width: '100%', maxWidth: '240px', height: 4, background: 'var(--color-border-light, rgba(0,0,0,0.08))', borderRadius: 99, overflow: 'hidden', margin: '0.25rem auto 0 auto' }}>
+                  <div 
+                    className="checkin-progress-bar" 
+                    style={{ 
+                      height: '100%', 
+                      background: 'linear-gradient(90deg, #10b981, #059669)', 
+                      borderRadius: 99, 
+                      animation: 'checkin-progress-fill 2.2s linear forwards' 
+                    }} 
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Modal Body */}
+                <div style={{ padding: isMobile ? '1.5rem 1.25rem' : '2rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               
               {/* Header: Icon badge & Title */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '0.75rem' }}>
@@ -541,6 +689,8 @@ export const CheckOutConfirmModal: React.FC<CheckOutConfirmModalProps> = ({
                 )}
               </button>
             </div>
+            </>
+          )}
           </motion.div>
         </div>
       )}
