@@ -33,7 +33,7 @@ interface WorkspaceTaskDrawerProps {
   task: any;
   onUpdate: () => void;
   users: any[];
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: (contactId: number, initialData?: any) => void;
   embedMode?: boolean;
   isFocusSessionActive?: boolean;
   focusTaskIndex?: number;
@@ -5187,11 +5187,21 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     onClick={() => {
                       const contactIdVal = Number(formData.related_type === 'contact' ? formData.related_id : formData.contact_id);
                       if (contactIdVal) {
+                        const initData = {
+                          id: contactIdVal,
+                          full_name: formData.contact_name,
+                          avatar_url: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || 
+                                      allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar ||
+                                      formData.contact_avatar,
+                          phone: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.phone,
+                          email: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.email,
+                          _isLoading: true
+                        };
                         if (onOpenContact) {
-                          onOpenContact(contactIdVal);
+                          onOpenContact(contactIdVal, initData);
                         } else {
                           window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-                            detail: { id: contactIdVal, contactId: contactIdVal }
+                            detail: { id: contactIdVal, contactId: contactIdVal, initialData: initData }
                           }));
                         }
                       }
@@ -5312,11 +5322,19 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                 onClick={() => {
                                   const targetAddId = Number(c.id);
                                   if (targetAddId) {
+                                    const initData = {
+                                      id: targetAddId,
+                                      full_name: getContactFullName(c),
+                                      avatar_url: c.avatar_url || c.avatar,
+                                      phone: c.phone,
+                                      email: c.email,
+                                      _isLoading: true
+                                    };
                                     if (onOpenContact) {
-                                      onOpenContact(targetAddId);
+                                      onOpenContact(targetAddId, initData);
                                     } else {
                                       window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-                                        detail: { id: targetAddId, contactId: targetAddId }
+                                        detail: { id: targetAddId, contactId: targetAddId, initialData: initData }
                                       }));
                                     }
                                   }

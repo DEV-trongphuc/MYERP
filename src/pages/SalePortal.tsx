@@ -3785,9 +3785,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     };
   }, []);
 
-  const handleOpenContactProfile = async (contactId: number, tab: string = 'info') => {
+  const handleOpenContactProfile = async (contactId: number, tab: string = 'info', initialData?: any) => {
     if (!contactId) return;
     setProfileDrawerTab(tab);
+    // Ngay lập tức mở Drawer với Skeleton / initial data thay vì chờ API xong
+    setProfileContact(initialData || { id: contactId, _isLoading: true });
     try {
       const res = await api.get(`/contacts/${contactId}`);
       if (res.data.success && res.data.data) {
@@ -3800,6 +3802,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       toast.error(t('Lỗi khi tải thông tin khách hàng'));
     }
   };
+
+  useEffect(() => {
+    const handleOpenContactDrawerEv = (e: any) => {
+      const cId = Number(e.detail?.id || e.detail?.contactId);
+      if (cId) {
+        handleOpenContactProfile(cId, e.detail?.tab || 'info', e.detail?.initialData);
+      }
+    };
+    window.addEventListener('open-contact-drawer', handleOpenContactDrawerEv);
+    return () => window.removeEventListener('open-contact-drawer', handleOpenContactDrawerEv);
+  }, []);
+
+
 
   const handleAcceptLead = async (leadId: number) => {
     try {
@@ -6780,7 +6795,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           onClick={(e) => {
                             if (customerId) {
                               e.stopPropagation();
-                              handleOpenContactProfile(Number(customerId));
+                              handleOpenContactProfile(Number(customerId), 'info', {
+                                id: Number(customerId),
+                                full_name: customerDisplayName,
+                                avatar_url: task.contact_avatar,
+                                _isLoading: true
+                              });
                             }
                           }}
                           title={customerDisplayName}
@@ -7179,7 +7199,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                       cursor: kContactId ? 'pointer' : 'default'
                                     }}
                                     onClick={() => {
-                                      if (kContactId) handleOpenContactProfile(Number(kContactId));
+                                      if (kContactId) {
+                                        handleOpenContactProfile(Number(kContactId), 'info', {
+                                          id: Number(kContactId),
+                                          full_name: kContactName,
+                                          avatar_url: task.contact_avatar,
+                                          _isLoading: true
+                                        });
+                                      }
                                     }}
                                     title={kContactName}
                                   >
@@ -7675,8 +7702,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       }}
                       users={users}
                       embedMode={true}
-                      onOpenContact={(contactId) => {
-                        handleOpenContactProfile(contactId);
+                      onOpenContact={(contactId, initialData) => {
+                        handleOpenContactProfile(contactId, 'info', initialData);
                       }}
                     />
                   </Suspense>
@@ -18785,9 +18812,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               window.dispatchEvent(new CustomEvent('task-updated'));
             }}
             users={users}
-            onOpenContact={(contactId) => {
+            onOpenContact={(contactId, initialData) => {
               setSelectedTaskForDetails(null);
-              handleOpenContactProfile(contactId);
+              handleOpenContactProfile(contactId, 'info', initialData);
             }}
             isFocusSessionActive={isFocusSessionActive}
             focusTaskIndex={focusTaskIndex}

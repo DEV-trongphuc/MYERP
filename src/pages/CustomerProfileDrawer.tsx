@@ -973,46 +973,20 @@ const DrawerSkeleton = () => {
   
   if (isMobile) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        minHeight: '350px',
-        gap: '16px',
-        background: 'transparent',
-        padding: '2rem 1rem',
-        boxSizing: 'border-box',
-        width: '100%'
-      }}>
-        <div style={{
-          width: '56px',
-          height: '56px',
-          borderRadius: '16px',
-          background: 'var(--color-surface)',
-          boxShadow: '0 8px 20px rgba(0,0,0,0.06)',
-          display: 'grid',
-          placeItems: 'center',
-          border: '1px solid var(--color-border-light)'
-        }}>
-          <Loader2 
-            size={28} 
-            style={{ 
-              animation: 'spin 1s linear infinite', 
-              color: 'var(--color-primary)', 
-              display: 'block' 
-            }} 
-          />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'hidden' }}>
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} width={80} height={32} borderRadius={16} />
+          ))}
         </div>
-        <span style={{ 
-          fontSize: '0.825rem', 
-          fontWeight: 700, 
-          color: 'var(--color-text-muted)', 
-          letterSpacing: '0.02em' 
-        }}>
-          Đang tải dữ liệu hồ sơ...
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <Skeleton width="35%" height={12} borderRadius={4} />
+              <Skeleton width="100%" height={38} borderRadius={8} />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -6627,7 +6601,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setIsInitialNotesExpanded(isFirstStage);
   }, [effectiveContactId, formData.pipeline_status, formData.lead_status, isCurrentlyNurture, isCurrentlyLost, pipelineStages, isOpen]);
 
-  const pipelineStepperBar = (
+  const isProfileLoading = Boolean(
+    formData?._isLoading || 
+    contact?._isLoading || 
+    ((!formData?.created_at && !formData?.phone && !formData?.email && !formData?.pipeline_status) && (loadingContactDetails || !formData?.id))
+  );
+
+  const pipelineStepperBar = isProfileLoading ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 1.5rem', width: '100%', overflowX: 'hidden', borderBottom: '1px solid var(--color-border-light)' }}>
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <Skeleton key={i} width={130} height={32} borderRadius={16} />
+      ))}
+    </div>
+  ) : (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0, borderBottom: '1px solid var(--color-border-light)' }}>
       {/* Alert Banner when lead is Nurture or Lost */}
       {isCurrentlyNurture && (
@@ -7182,7 +7168,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       size={24} 
                     />
                     <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
-                      {fullName}
+                      {(isProfileLoading && !formData.full_name && !contact?.full_name) ? (
+                        <Skeleton width={120} height={18} borderRadius={4} />
+                      ) : (
+                        fullName
+                      )}
                       {activeTab && (
                         <span style={{ fontWeight: 600, color: 'var(--color-text-muted)', marginLeft: '6px', fontSize: '0.78rem' }}>
                           · {TABS.find(t => t.id === activeTab)?.label || ''}
@@ -7345,7 +7335,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     <div className={styles.profileInfoSection}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '2px', flexWrap: 'wrap' }}>
                         <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '-0.02em', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {fullName}
+                          {(isProfileLoading && !formData.full_name && !contact?.full_name) ? (
+                            <Skeleton width={180} height={26} borderRadius={6} />
+                          ) : (
+                            fullName
+                          )}
                           {((formData.dl_status || contact?.dl_status) === 'databank_claim' || (formData.source || contact?.source) === 'databank') ? (
                             <span title="Khách hàng từ Databank" style={{ display: 'inline-flex', marginLeft: '6px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
                               <Layers size={15} />
@@ -7371,7 +7365,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => formData.phone && showCall(formData.phone)}>
                             <Phone size={12} style={{ color: 'var(--color-primary)' }} />
                           </div>
-                          <PhoneLink phone={formData.phone} style={{ fontSize: '0.8125rem' }} />
+                          {(isProfileLoading && !formData.phone && !contact?.phone) ? (
+                            <Skeleton width={100} height={16} borderRadius={4} />
+                          ) : (
+                            <PhoneLink phone={formData.phone} style={{ fontSize: '0.8125rem' }} />
+                          )}
                           {formData.phone && (
                             <button
                               className="btn-icon xs"
@@ -7404,7 +7402,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Mail size={12} className="text-muted" />
                           </div>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{formData.email || 'contact@email.com'}</span>
+                          {(isProfileLoading && !formData.email && !contact?.email) ? (
+                            <Skeleton width={130} height={16} borderRadius={4} />
+                          ) : (
+                            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{formData.email || 'contact@email.com'}</span>
+                          )}
                           {formData.email && (
                             <button
                               className="btn-icon xs"
@@ -7897,7 +7899,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     }} 
                   />
                 )}
-                {(!formData?.id && !contact?.id) ? (
+                {(!formData?.id && !contact?.id) || isProfileLoading ? (
                   <DrawerSkeleton />
                 ) : (
                   <>
