@@ -18,13 +18,22 @@ $action = $input['action'] ?? '';
 $tenantId = 1;
 $createdBy = 100009; // Tunrio - Super admin
 
-function parseDateToSql(?string $dateStr, int $baseYear = 2026): ?string {
+function parseDateToSql(?string $dateStr, ?string $fallbackDate = null): ?string {
     if (!$dateStr) return null;
     $clean = str_replace('.', '/', trim($dateStr));
     $parts = explode('/', $clean);
     if (count($parts) < 2) return null;
     $d = (int)$parts[0];
     $m = (int)$parts[1];
+    
+    $baseYear = 2025;
+    if ($fallbackDate && preg_match('/^(\d{4})/', $fallbackDate, $matches)) {
+        $fy = (int)$matches[1];
+        if ($fy >= 2015 && $fy <= 2025) {
+            $baseYear = $fy;
+        }
+    }
+    
     $y = isset($parts[2]) ? (int)$parts[2] : $baseYear;
     if ($y < 100) $y += 2000;
     if ($d < 1 || $d > 31 || $m < 1 || $m > 12) return null;
@@ -114,7 +123,7 @@ if ($action === 'insert_new') {
                     $body = trim($it['content'] ?? '');
                     if (!$body) continue;
 
-                    $actDate = parseDateToSql($dateStr) ?: ($lead['created_at'] ?: date('Y-m-d H:i:s'));
+                    $actDate = parseDateToSql($dateStr, $lead['created_at'] ?? null) ?: ($lead['created_at'] ?: date('Y-m-d H:i:s'));
                     $typeSub = resolveActivityTypeAndSubject($body, $dateStr ?: date('d/m/y'));
 
                     $stmtInsertAct->execute([
@@ -171,6 +180,17 @@ if ($action === 'batch_update') {
         $cid = (int)$row['contact_id'];
         $snippet = mb_substr(trim($row['body']), 0, 40, 'UTF-8');
         $existingBodiesMap[$cid][$snippet] = true;
+    }
+
+    // Fetch contact created_at for accurate year calculation
+    $stmtContactCreated = $pdo->prepare("
+        SELECT id, created_at FROM contacts 
+        WHERE id IN ($placeholders)
+    ");
+    $stmtContactCreated->execute($contactIds);
+    $contactCreatedAtMap = [];
+    while ($row = $stmtContactCreated->fetch(PDO::FETCH_ASSOC)) {
+        $contactCreatedAtMap[(int)$row['id']] = $row['created_at'];
     }
 
     $pdo->beginTransaction();
@@ -249,7 +269,8 @@ if ($action === 'batch_update') {
                         continue; // already in DB!
                     }
 
-                    $actDate = parseDateToSql($dateStr) ?: date('Y-m-d H:i:s');
+                    $contactCreated = $contactCreatedAtMap[$cid] ?? null;
+                    $actDate = parseDateToSql($dateStr, $contactCreated) ?: ($contactCreated ?: date('Y-m-d H:i:s'));
                     $typeSub = resolveActivityTypeAndSubject($body, $dateStr ?: date('d/m/y'));
 
                     $stmtInsertAct->execute([
