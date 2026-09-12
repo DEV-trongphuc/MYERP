@@ -1790,7 +1790,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="journey-phase-1">Chặng 1: Tiếp Nhận, Chấm Điểm AI &amp; Qualification (Stages 01 - 03)</h2>
               <p>
-                Bao gồm 3 giai đoạn: <code>01 – New Lead</code> $\rightarrow$ <code>02 – Contact Attempted</code> $\rightarrow$ <code>03 – Connected</code>:
+                Bao gồm 3 giai đoạn: <code>01 – New Lead</code> → <code>02 – Contact Attempted</code> → <code>03 – Connected</code>:
               </p>
               <ul>
                 <li><strong>Thẩm định chất lượng sơ bộ qua AI Pre-Screening:</strong> Ngay khi Lead được nạp vào bảng <code>leads</code>, AI Gatekeeper tự động chấm điểm tiềm năng từ <code>0 đến 100</code> dựa trên số điện thoại, định dạng email, nội dung ghi chú và nguồn gốc chiến dịch.</li>
@@ -1802,13 +1802,13 @@ export const DocumentationPage: React.FC = () => {
                     <li><code>nurture</code>: Chưa có nhu cầu tức thì, chuyển vào chuỗi email/tin nhắn chăm sóc tự động.</li>
                   </ul>
                 </li>
-                <li><strong>Cadence liên hệ đa kênh:</strong> Tư vấn viên thực hiện quy trình tiếp cận qua Điện thoại $\rightarrow$ Zalo $\rightarrow$ Email. Mỗi lần tương tác được ghi nhận thời gian thực vào bảng <code>contact_activities</code>.</li>
-                <li><strong>Tiêu chuẩn vượt chặng (Exit Criteria):</strong> Thiết lập được cuộc hội thoại hai chiều, xác nhận được họ tên thật, chương trình quan tâm và kỳ nhập học dự kiến (<code>expected_intake</code>) $\rightarrow$ Chuyển sang Stage <code>04 – Needed</code>.</li>
+                <li><strong>Cadence liên hệ đa kênh:</strong> Tư vấn viên thực hiện quy trình tiếp cận qua Điện thoại → Zalo → Email. Mỗi lần tương tác được ghi nhận thời gian thực vào bảng <code>contact_activities</code>.</li>
+                <li><strong>Tiêu chuẩn vượt chặng (Exit Criteria):</strong> Thiết lập được cuộc hội thoại hai chiều, xác nhận được họ tên thật, chương trình quan tâm và kỳ nhập học dự kiến (<code>expected_intake</code>) → Chuyển sang Stage <code>04 – Needed</code>.</li>
               </ul>
 
               <h2 id="journey-phase-2">Chặng 2: Khám Phá Nhu Cầu, Khớp Chương Trình &amp; Đề Xuất Tuyển Sinh (Stages 04 - 08)</h2>
               <p>
-                Bao gồm 5 giai đoạn: <code>04 – Needed</code> $\rightarrow$ <code>05 – Discovery Completed</code> $\rightarrow$ <code>06 – Program Matched</code> $\rightarrow$ <code>07 – Proposal Sent</code> $\rightarrow$ <code>08 – Evaluation / Objection</code>:
+                Bao gồm 5 giai đoạn: <code>04 – Needed</code> → <code>05 – Discovery Completed</code> → <code>06 – Program Matched</code> → <code>07 – Proposal Sent</code> → <code>08 – Evaluation / Objection</code>:
               </p>
               <ul>
                 <li><strong>Khám phá chuyên sâu (Deep Discovery Framework):</strong> TVV làm rõ 5 yếu tố cốt lõi: <em>Mục tiêu thăng tiến (Goal)</em>, <em>Nỗi đau/hạn chế hiện tại (Pain)</em>, <em>Động lực học tập (Motivation)</em>, <em>Rào cản thời gian/ngân sách (Constraints)</em> và <em>Tiêu chí lựa chọn trường (Decision Criteria)</em>.</li>
@@ -1819,7 +1819,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="journey-phase-3">Chặng 3: Thu Thập Hồ Sơ &amp; Hội Đồng Xét Tuyển Thẩm Định (Stages 09 - 11)</h2>
               <p>
-                Bao gồm 3 giai đoạn: <code>09 – Application Started</code> $\rightarrow$ <code>10 – Application Completed</code> $\rightarrow$ <code>11 – Admission Approved</code>:
+                Bao gồm 3 giai đoạn: <code>09 – Application Started</code> → <code>10 – Application Completed</code> → <code>11 – Admission Approved</code>:
               </p>
               <ul>
                 <li><strong>Checklist Hồ sơ tuyển sinh:</strong> TVV hướng dẫn ứng viên chuẩn bị đầy đủ bộ hồ sơ học thuật gồm: Bằng tốt nghiệp Đại học (công chứng), Bảng điểm Đại học, Sơ yếu lý lịch / CV chuyên nghiệp, Thư giới thiệu (Letter of Recommendation), Chứng chỉ ngoại ngữ (IELTS/TOEIC hoặc bài thi nội bộ) và Đơn đăng ký xét tuyển.</li>
@@ -1829,7 +1829,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="journey-phase-4">Chặng 4: Cam Kết Tài Chính, Đặt Cọc &amp; Cơ Chế Hạ Cấp Hủy Cọc Linh Hoạt (Stages 12 - 13)</h2>
               <p>
-                Bao gồm 2 giai đoạn: <code>12 – Offer / Scholarship Accepted</code> $\rightarrow$ <code>13 – Deposit / Tuition Payment</code>:
+                Bao gồm 2 giai đoạn: <code>12 – Offer / Scholarship Accepted</code> → <code>13 – Deposit / Tuition Payment</code>:
               </p>
               <ul>
                 <li><strong>Chấp thuận thư mời nhập học (Offer Accepted):</strong> Ứng viên xác nhận đồng ý với mức học bổng, cam kết tuân thủ quy chế đào tạo và lựa chọn phương án thanh toán học phí (thanh toán trọn gói hoặc chia đợt).</li>
@@ -1924,6 +1924,9 @@ export const DocumentationPage: React.FC = () => {
           description: 'Quy chuẩn 5 cổng kiểm soát nghiêm ngặt checkConsultantGates, thuật toán chia số có trọng số năng lực, cơ chế hàng đợi pending_work_hours và ân hạn check-in đầu ca.',
           headings: [
             { id: 'five-gates-control', text: '5 Cổng Kiểm Soát Phân Bổ Nghiêm Ngặt (The 5 GATES)' },
+            { id: 'weekend-holidays-shifts', text: 'Quy Tắc Ca Trực Cuối Tuần, Ngày Lễ & Ca Đêm' },
+            { id: 'vacation-leave-toggle', text: 'Cơ Chế Nghỉ Phép & Chủ Động Bật/Tắt Nhận Data (Vacation Mode)' },
+            { id: 'ref-direct-bypass', text: 'Cơ Chế Miễn Trừ 100% Cho Data Giới Thiệu (REF Data) & Tự Khai Thác' },
             { id: 'weighted-round-robin', text: 'Thuật Toán Weighted Round-Robin & Trọng Số Phân Bổ' },
             { id: 'after-hours-pending', text: 'Cơ Chế Xử Lý Ngoài Giờ (Pending Work Hours & Grace Period)' },
             { id: 'sla-lead-recovery', text: 'Quy Tắc Thu Hồi & Tái Phân Bổ Tự Động (Recovery & Re-allocation)' }
@@ -1934,7 +1937,7 @@ export const DocumentationPage: React.FC = () => {
               <p>
                 Để loại bỏ hoàn toàn tình trạng thất thoát lead, phân bổ nhầm nhân sự đang vắng mặt hoặc vượt quá năng lực phục vụ,
                 hàm cốt lõi <code>checkConsultantGates($conn, $consultantId, $lead)</code> trong <code>backend/webhook_logic.php</code>
-                thực thi <strong>5 cổng kiểm soát logic nối tiếp</strong> trước khi bất kỳ tư vấn viên nào được đưa vào danh sách nhận lead:
+                thực thi <strong>5 cổng kiểm soát logic nối tiếp</strong> trước khi bất kỳ tư vấn viên nào được đưa vào danh sách nhận lead tự động từ Marketing:
               </p>
               <table className="doc-table">
                 <thead>
@@ -1948,24 +1951,32 @@ export const DocumentationPage: React.FC = () => {
                   <tr>
                     <td><strong>GATE 1: Project Roster</strong></td>
                     <td><code>project_roster</code> matching <code>campaign_id</code> / <code>project_id</code></td>
-                    <td>Lead thuộc chiến dịch tuyển sinh của dự án/khóa học nào thì <strong>chỉ phân bổ cho TVV đã được ghi danh trong Roster</strong> của dự án đó. Nếu TVV không thuộc danh sách phân công chuyên môn $\rightarrow$ Loại trừ ngay lập tức.</td>
+                    <td>Lead thuộc chiến dịch tuyển sinh của dự án/khóa học nào thì <strong>chỉ phân bổ cho TVV đã được ghi danh trong Roster</strong> của dự án đó. Nếu TVV không thuộc danh sách phân công chuyên môn → Loại trừ ngay lập tức.</td>
                   </tr>
                   <tr>
-                    <td><strong>GATE 2: Valid Check-in</strong></td>
-                    <td><code>check_ins.status = 'approved'</code> hoặc Ca trực hợp lệ</td>
+                    <td><strong>GATE 2: Valid Check-in &amp; Shifts</strong></td>
+                    <td><code>check_ins.status = 'approved'</code> hoặc Đơn trực ca hợp lệ</td>
                     <td>
                       Nhân sự phải có mặt làm việc thực tế:
                       <ul>
-                        <li><strong>Ngày làm việc hành chính:</strong> Bắt buộc có bản ghi chấm công <code>status = 'approved'</code> (hoặc <code>pending_approval</code> nếu bật cờ cấu hình <code>allow_lead_distribution_on_pending_checkin</code>).</li>
-                        <li><strong>Ca trực đêm (Night Shift 22:00 - 06:00):</strong> Được miễn trừ chấm công ban ngày nếu có đơn đăng ký ca đêm đã được duyệt trong <code>night_shift_registrations</code> (kiểm tra qua <code>hasApprovedShiftForDate</code>).</li>
-                        <li><strong>Trực ngày Lễ / Tết / Cuối tuần:</strong> Kiểm tra đăng ký trực ca trong <code>holiday_shift_registrations</code>. Nếu bật bắt buộc chấm công ngày lễ (<code>require_checkin_holiday_lead = 1</code>) thì vẫn phải check-in hợp lệ.</li>
+                        <li><strong>Ngày làm việc hành chính:</strong> Bắt buộc có bản ghi chấm công hợp lệ trong ngày (<code>status = 'approved'</code> hoặc <code>pending_approval</code> nếu bật cờ cấu hình).</li>
+                        <li><strong>Ngày nghỉ Cuối tuần (Thứ 7 &amp; Chủ Nhật):</strong> Mặc định hệ thống <em>vẫn chia số bình thường</em>. Tham số <code>require_checkin_weekend_lead</code> quyết định: nếu = 0 thì miễn trừ chấm công, TVV nghỉ ở nhà vẫn được nhận số từ xa; nếu = 1 thì bắt buộc phải check-in.</li>
+                        <li><strong>Ngày Lễ / Tết (Holidays):</strong> Đối chiếu danh mục <code>holiday_schedules</code>. Bắt buộc TVV phải có đơn đăng ký trực lễ được duyệt trong <code>holiday_shift_registrations</code> (<code>approved = 1</code>) mới được nhận lead.</li>
+                        <li><strong>Ca trực đêm (Night Shift 22:00 - 06:00):</strong> Kiểm tra <code>night_shift_registrations</code> (qua <code>hasApprovedShiftForDate</code>). TVV trực đêm được miễn trừ chấm công ban ngày.</li>
                       </ul>
                     </td>
                   </tr>
                   <tr>
-                    <td><strong>GATE 3: Readiness</strong></td>
-                    <td><code>users.status = 'active'</code> &amp; <code>vacation_mode = 0</code></td>
-                    <td>Kiểm tra tư vấn viên đang trong trạng thái sẵn sàng phục vụ. Nếu nhân viên tạm khóa tài khoản, đang nghỉ thai sản hoặc chủ động bật <strong>Chế độ Tạm Vắng (Vacation Mode = 1)</strong> khi đi gặp khách ngoài $\rightarrow$ Bỏ qua vòng chia.</td>
+                    <td><strong>GATE 3: Readiness &amp; Vacation</strong></td>
+                    <td><code>users.status = 'active'</code> &amp; <code>vacation_mode = 0</code> &amp; Không nghỉ phép</td>
+                    <td>
+                      Kiểm tra tư vấn viên đang trong trạng thái sẵn sàng phục vụ:
+                      <ul>
+                        <li><strong>Chủ động tắt nhận data (Nút Tạm Vắng / Vacation Mode):</strong> TVV tự gạt nút trên giao diện cá nhân khi đi gặp khách, đi họp hoặc bận việc riêng (<code>vacation_mode = 1</code>) → Ngay lập tức bị bỏ qua, không chia lead mới.</li>
+                        <li><strong>Nghỉ phép có đơn (Leave):</strong> Căn cứ <code>leave_start</code> đến <code>leave_end</code> hoặc <code>status = 'leave'</code>. Tự động tích lũy <code>skipped_credit</code> để cấp bù khi quay lại làm việc, đồng thời bảo vệ nguyên vẹn khách cũ.</li>
+                        <li><strong>Cấu hình vòng chia:</strong> Bảng <code>round_consultants</code> có cờ <code>is_active = 1</code> cho phép Quản lý chủ động bật/tắt quyền nhận data của từng TVV trong từng vòng.</li>
+                      </ul>
+                    </td>
                   </tr>
                   <tr>
                     <td><strong>GATE 4: Anti-Hoarding</strong></td>
@@ -1976,6 +1987,137 @@ export const DocumentationPage: React.FC = () => {
                     <td><strong>GATE 5: Golden Hours Cap</strong></td>
                     <td><code>golden_hours_start_time</code> - <code>golden_hours_end_time</code> (06:00 - 08:30)</td>
                     <td>Trong khung giờ vàng nhu cầu khách hàng cao điểm đầu buổi sáng, hệ thống áp trần <code>golden_hours_max_leads_per_consultant</code> để đảm bảo toàn bộ đội ngũ Sales đều nhận được lượng data công bằng, không ai bị nuốt trọn data giờ vàng.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="weekend-holidays-shifts">Quy Tắc Ca Trực Cuối Tuần, Ngày Lễ &amp; Ca Đêm</h2>
+              <p>
+                Để tối ưu hóa cơ hội tiếp cận khách hàng mà vẫn đảm bảo tính công bằng và quy chế lao động, hệ thống thiết kế cơ chế xử lý chuyên biệt cho từng loại ngày:
+              </p>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '180px' }}>Loại ngày / Khung giờ</th>
+                    <th style={{ width: '220px' }}>Quy tắc phân bổ Round-Robin</th>
+                    <th>Cơ chế kiểm soát chấm công &amp; Đăng ký trực ca</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Cuối tuần (Thứ 7 &amp; Chủ Nhật)</strong></td>
+                    <td><strong>Vẫn chia số bình thường theo đúng vòng quay</strong> (biến nội bộ <code>$isRestDay = false</code>) để không bỏ lỡ khách đăng ký cuối tuần.</td>
+                    <td>
+                      Kiểm soát qua khóa cấu hình <code>require_checkin_weekend_lead</code>:
+                      <ul>
+                        <li><strong>Cài đặt = 0 (Mặc định):</strong> Miễn trừ chấm công cuối tuần. Toàn bộ TVV trong vòng chia đều được nhận số tự động từ xa mà không cần phải đến công ty check-in.</li>
+                        <li><strong>Cài đặt = 1:</strong> Bắt buộc TVV phải thực hiện chấm công cuối tuần hợp lệ trên hệ thống mới được đưa vào danh sách nhận lead.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Ngày Nghỉ Lễ / Tết (Holidays)</strong></td>
+                    <td>Chỉ phân bổ cho nhân sự có <strong>đơn đăng ký trực lễ đã được Quản lý duyệt</strong>. Nhân sự không trực lễ hoàn toàn không bị gọi tên trong vòng quay.</td>
+                    <td>
+                      Hệ thống quét lịch lễ trong tham số <code>holiday_schedules</code> (JSON lưu mốc bắt đầu, kết thúc và tên ngày lễ):
+                      <ul>
+                        <li>Kiểm tra bảng <code>holiday_shift_registrations</code> theo điều kiện <code>user_id = ? AND shift_date = ? AND approved = 1</code>.</li>
+                        <li>Nếu không có đơn trực duyệt: Trả về lỗi <code>Failed Gate 2: No approved holiday registration for today</code>.</li>
+                        <li>Tham số <code>require_checkin_holiday_lead</code>: Nếu = 1 thì nhân sự trực lễ vẫn phải check-in; nếu = 0 thì chỉ cần đơn duyệt là đủ điều kiện nhận số.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Ca Trực Đêm (Night Shifts)</strong></td>
+                    <td>Chỉ phân bổ trong khung giờ trực đêm (mặc định <strong>22:00 đến 06:00</strong> sáng hôm sau, cấu hình qua <code>night_shift_start_time</code> và <code>night_shift_end_time</code>).</td>
+                    <td>
+                      Kiểm tra quyền trực ca đêm qua hàm <code>hasApprovedShiftForDate($conn, $userId, $shiftDate)</code> đối soát bảng <code>night_shift_registrations</code> (hoặc <code>holiday_shift_registrations</code>):
+                      <ul>
+                        <li>Nhân sự có ca trực đêm được duyệt sẽ được <strong>tự động miễn trừ yêu cầu chấm công ban ngày</strong> (<code>$bypassCheckIn = true</code>).</li>
+                        <li>Nếu ngoài khung giờ trực đêm, lead đổ về sẽ được gom vào hàng đợi <code>pending_work_hours</code> để giải phóng vào đầu giờ sáng.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="vacation-leave-toggle">Cơ Chế Nghỉ Phép &amp; Chủ Động Bật/Tắt Nhận Data (Vacation Mode)</h2>
+              <p>
+                Hệ thống trao quyền chủ động tối đa cho nhân viên kinh doanh và người quản lý thông qua 3 tầng điều tiết trạng thái:
+              </p>
+              <ul>
+                <li>
+                  <strong>1. Nút chủ động bật/tắt nhận data (Vacation Mode / Nút Sẵn Sàng):</strong>
+                  <p>
+                    Trên góc phải giao diện làm việc cá nhân của mỗi tư vấn viên, hệ thống tích hợp nút gạt trạng thái thời gian thực:
+                    <strong>"Sẵn sàng nhận số" ⟷ "Tạm vắng / Tắt nhận data"</strong> (tác động trực tiếp vào trường <code>vacation_mode</code> trong bảng <code>users</code> và <code>consultants</code>).
+                  </p>
+                  <ul>
+                    <li>Khi TVV ra ngoài gặp khách hàng, tham dự hội thảo, họp nội bộ hoặc bận việc cá nhân: Chỉ cần 1 chạm gạt sang <strong>Tạm vắng (<code>vacation_mode = 1</code>)</strong>.</li>
+                    <li>Ngay lập tức, Gate 3 trả về <code>Failed Gate 3: Vacation Mode enabled (tạm vắng)</code>. Thuật toán Round-Robin sẽ tự động lướt qua TVV này, tuyệt đối không phân bổ lead mới, loại bỏ 100% rủi ro "cháy lead" do không gọi điện kịp thời.</li>
+                    <li>Khi hoàn tất công việc, TVV gạt lại sang <strong>Sẵn sàng (<code>vacation_mode = 0</code>)</strong> để lập tức quay lại vòng quay nhận lead.</li>
+                  </ul>
+                </li>
+                <li>
+                  <strong>2. Quản lý nghỉ phép có đơn hợp lệ (Leave Schedule):</strong>
+                  <p>
+                    Khi TVV có đơn nghỉ phép (phép năm, nghỉ ốm, thai sản) được duyệt trong hệ thống HRM, trường <code>consultants.leave_start</code> và <code>leave_end</code> (hoặc <code>status = 'leave'</code>) được kích hoạt:
+                  </p>
+                  <ul>
+                    <li>Trong suốt kỳ nghỉ phép, TVV được loại khỏi vòng quay chia lead từ Marketing.</li>
+                    <li><strong>Bảo vệ quyền lợi chống đói (Starvation Prevention):</strong> Mỗi lượt quay bị bỏ qua được tự động ghi nhận vào quỹ <code>skipped_credit</code>. Khi kết thúc kỳ nghỉ, TVV được ưu tiên cấp bù số mới (<code>compensation_count</code>), áp trần điều tiết <code>starvation_max_leads_per_hour = 5 lead/giờ</code> để không bị ngợp data.</li>
+                    <li><strong>Đặc quyền bảo vệ khách hàng cũ:</strong> Hàm <code>checkCRMInteraction</code> quy định rằng nếu khách hàng cũ của TVV quay lại hệ thống trong thời gian họ nghỉ phép ngắn ngày, hệ thống <strong>vẫn giữ nguyên quyền sở hữu cho TVV đó</strong> (<code>isDuplicate = true</code>, không phân công cho người khác). Chỉ khi nhân sự nghỉ việc hẳn (<code>status = 'inactive'</code>) thì khách cũ mới được tái phân bổ.</li>
+                  </ul>
+                </li>
+                <li>
+                  <strong>3. Quản lý bật/tắt nhân sự theo từng vòng chia số (<code>round_consultants.is_active</code>):</strong>
+                  <p>
+                    Trong từng vòng chia số cụ thể (Distribution Round), Trưởng phòng kinh doanh có quyền chủ động bật (<code>is_active = 1</code>) hoặc tắt (<code>is_active = 0</code>) từng thành viên để điều động nhân lực linh hoạt theo từng chiến dịch mà không ảnh hưởng đến các vòng chia số khác.
+                  </p>
+                </li>
+              </ul>
+
+              <h2 id="ref-direct-bypass">Cơ Chế Miễn Trừ 100% Cho Data Giới Thiệu (REF Data) &amp; Tự Khai Thác</h2>
+              <div style={{ padding: '16px 20px', background: '#f8fafc', borderLeft: '4px solid #0f172a', borderRadius: '4px', marginBottom: '16px' }}>
+                <strong style={{ color: '#0f172a', fontSize: '1rem' }}>ĐẶC QUYỀN MIỄN TRỪ HOÀN TOÀN 5 GATES VÀ ROUND-ROBIN:</strong>
+                <p style={{ margin: '8px 0 0 0', color: '#334155', lineHeight: 1.6 }}>
+                  Mọi khách hàng có nguồn gốc là <strong>Giới thiệu (<code>source IN ('gioi_thieu', 'ref', 'referral')</code>)</strong> hoặc <strong>Tự khai thác cá nhân (<code>source = 'ca_nhan'</code>)</strong>
+                  được hệ thống công nhận là tài sản độc quyền của tư vấn viên và <strong>HOÀN TOÀN KHÔNG ĐI QUA 5 GATES KIỂM DUYỆT</strong>, không bị đưa vào vòng quay chia số Round-Robin!
+                </p>
+              </div>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '220px' }}>Tiêu chí đối soát</th>
+                    <th style={{ width: '260px' }}>Lead Marketing Tự Động</th>
+                    <th>Lead Giới Thiệu (REF) &amp; Tự Khai Thác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Cơ chế phân bổ</strong></td>
+                    <td>Quay vòng tự động qua Weighted Round-Robin</td>
+                    <td><strong style={{ color: '#059669' }}>Gán trực tiếp (Direct Assignment)</strong> cho chính TVV khai thác hoặc TVV được chỉ định bởi đối tác giới thiệu.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Kiểm tra 5 GATES</strong></td>
+                    <td>Bắt buộc vượt qua 100% cả 5 Gates (Roster, Check-in, Readiness, Anti-Hoarding, Golden Hours).</td>
+                    <td><strong style={{ color: '#059669' }}>Miễn trừ 100% (Bypass All 5 Gates):</strong> Kể cả khi TVV chưa check-in, đang bật Vacation Mode, hoặc hết hạn mức giờ vàng, data giới thiệu vẫn vào thẳng tài khoản của họ.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Hạn mức ngày (Cap Limit)</strong></td>
+                    <td>Tính trừ trực tiếp vào hạn ngạch Lead tối đa trong ngày.</td>
+                    <td><strong style={{ color: '#059669' }}>Miễn trừ hạn ngạch:</strong> Không bị tính trừ vào Cap Limit, TVV được tiếp nhận không giới hạn số lượng khách giới thiệu.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Quy tắc thu hồi SLA 30 phút</strong></td>
+                    <td>Tự động thu hồi nếu không liên hệ sau 30 phút.</td>
+                    <td><strong style={{ color: '#059669' }}>Miễn trừ thu hồi:</strong> Không áp dụng SLA 30 phút, TVV chủ động xây dựng lộ trình tiếp cận đối tác tự nhiên.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Thời hạn bảo hộ độc quyền</strong></td>
+                    <td>Tuân theo chính sách phễu thông thường.</td>
+                    <td><strong style={{ color: '#059669' }}>Khóa bảo hộ độc quyền 180 ngày (6 tháng):</strong> Nếu khách hàng đăng ký lại qua form mới trong 180 ngày, hệ thống tự động khóa bảo hộ và gửi thông báo nhắc TVV cũ chăm sóc.</td>
                   </tr>
                 </tbody>
               </table>
@@ -2238,9 +2380,9 @@ export const DocumentationPage: React.FC = () => {
               <ul>
                 <li><strong>Mô phỏng động học 3 chặng:</strong>
                   <ul>
-                    <li><em>Chặng 1 (Nguồn $\rightarrow$ Lõi kiểm duyệt):</em> Các hạt mang thông tin nguồn Lead chuyển động từ các cổng tiếp nhận về trung tâm AI Gatekeeper.</li>
+                    <li><em>Chặng 1 (Nguồn → Lõi kiểm duyệt):</em> Các hạt mang thông tin nguồn Lead chuyển động từ các cổng tiếp nhận về trung tâm AI Gatekeeper.</li>
                     <li><em>Chặng 2 (Thẩm định tại AI Core):</em> AI Pre-screening đánh giá chất lượng, kiểm tra chống trùng và áp dụng bộ quy tắc nghiệp vụ.</li>
-                    <li><em>Chặng 3 (Lõi kiểm duyệt $\rightarrow$ Tư vấn viên):</em> Hạt phóng thẳng về phía avatar của tư vấn viên được chỉ định trong vòng quay Round-Robin.</li>
+                    <li><em>Chặng 3 (Lõi kiểm duyệt → Tư vấn viên):</em> Hạt phóng thẳng về phía avatar của tư vấn viên được chỉ định trong vòng quay Round-Robin.</li>
                   </ul>
                 </li>
                 <li><strong>Mã màu trạng thái trực quan:</strong>
@@ -2445,7 +2587,7 @@ export const DocumentationPage: React.FC = () => {
               </p>
               <ul>
                 <li>Khoản cọc được tự động cấn trừ trực tiếp vào Đợt thanh toán số 01 của Sales Order.</li>
-                <li>Trường hợp khách hàng không đủ điều kiện nhập học và có nhu cầu xin hoàn cọc: Yêu cầu hoàn cọc phải đi qua quy trình phê duyệt đa cấp (Trưởng phòng Tuyển sinh $\rightarrow$ Kế toán trưởng $\rightarrow$ Giám đốc duyệt chi).</li>
+                <li>Trường hợp khách hàng không đủ điều kiện nhập học và có nhu cầu xin hoàn cọc: Yêu cầu hoàn cọc phải đi qua quy trình phê duyệt đa cấp (Trưởng phòng Tuyển sinh → Kế toán trưởng → Giám đốc duyệt chi).</li>
               </ul>
             </div>
           )
@@ -3157,9 +3299,9 @@ export const DocumentationPage: React.FC = () => {
               <h2 id="academic-sla-audits">Cơ Chế Giám Sát Giờ Giảng &amp; Kiểm Định Chất Lượng</h2>
               <p>
                 Quy trình nghiệm thu giờ giảng 4 bước nghiêm ngặt:
-                <strong>Giảng viên điểm danh</strong> $\rightarrow$
-                <strong>Trợ giảng xác nhận sĩ số &amp; biên bản buổi học</strong> $\rightarrow$
-                <strong>Phòng Học vụ thẩm định giờ dạy thực tế</strong> $\rightarrow$
+                <strong>Giảng viên điểm danh</strong> →
+                <strong>Trợ giảng xác nhận sĩ số &amp; biên bản buổi học</strong> →
+                <strong>Phòng Học vụ thẩm định giờ dạy thực tế</strong> →
                 <strong>Phòng Tài chính - Kế toán lập bảng chi trả thù lao</strong>.
                 Mọi bước đều có lưu vết người duyệt và chữ ký số.
               </p>
@@ -3276,7 +3418,7 @@ export const DocumentationPage: React.FC = () => {
                   <tr>
                     <td><code>status</code></td>
                     <td>ENUM('pending', 'processing', 'sent', 'failed')</td>
-                    <td>Trạng thái xử lý: <code>pending</code> (chờ gửi) $\rightarrow$ <code>processing</code> (đang gửi) $\rightarrow$ <code>sent</code> (thành công) hoặc <code>failed</code>.</td>
+                    <td>Trạng thái xử lý: <code>pending</code> (chờ gửi) → <code>processing</code> (đang gửi) → <code>sent</code> (thành công) hoặc <code>failed</code>.</td>
                   </tr>
                   <tr>
                     <td><code>attempts</code></td>
