@@ -75,7 +75,7 @@ export const FinancialDashboard: React.FC = () => {
       const [sRes, eRes, poRes, soRes] = await Promise.all([
         api.get('/dashboard/stats', { params: { from: dateRange.from, to: dateRange.to } }).catch(() => ({ data: { data: null } })),
         api.get('/reports/sales', { params: { from: dateRange.from, to: dateRange.to } }).catch(() => ({ data: { data: null } })),
-        api.get('/purchase-orders').catch(() => ({ data: [] })),
+        api.get('/expenses', { params: { limit: 15 } }).catch(() => ({ data: { data: { items: [] } } })),
         api.get('/deposits').catch(() => ({ data: [] }))
       ]);
 
@@ -123,7 +123,8 @@ export const FinancialDashboard: React.FC = () => {
         { id: 'deal-015', client: 'Lê Hoàng Nam', amount: 0, type: t('Đổi căn hộ'), status: t('Liên kết deal mới'), date: '2026-07-18', note: 'Đổi từ căn CH-1205 sang CH-1208. Deal cũ đánh dấu Đã đổi.' }
       ]);
 
-      setPoList(poRes?.data?.data || poRes?.data || []);
+      const rawPos = poRes?.data?.data?.items || poRes?.data?.data || poRes?.data || [];
+      setPoList(Array.isArray(rawPos) ? rawPos : []);
       setSoList(soRes?.data?.data || soRes?.data || []);
 
     } catch (e) {
@@ -471,11 +472,11 @@ export const FinancialDashboard: React.FC = () => {
               <thead>
                 <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
                   <th style={{ padding: '12px' }}>{t('Mã PO')}</th>
-                  <th style={{ padding: '12px' }}>{t('Nhà cung cấp')}</th>
+                  <th style={{ padding: '12px' }}>{t('Tiêu đề / Nhà cung cấp')}</th>
                   <th style={{ padding: '12px', textAlign: 'right' }}>{t('Tổng tiền')}</th>
                   <th style={{ padding: '12px' }}>{t('Người tạo')}</th>
                   <th style={{ padding: '12px' }}>{t('Trạng thái')}</th>
-                  <th style={{ padding: '12px' }}>{t('Ngày đặt')}</th>
+                  <th style={{ padding: '12px' }}>{t('Ngày tạo')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -487,24 +488,24 @@ export const FinancialDashboard: React.FC = () => {
                   ))
                 ) : poList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn nhập hàng nào gần đây')}</td>
+                    <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn PO nào gần đây')}</td>
                   </tr>
                 ) : poList.slice(0, 5).map((po, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
-                    <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{po.po_number}</td>
-                    <td style={{ padding: '12px', fontWeight: 600 }}>{po.supplier_name || `Nha cung cap ID: ${po.supplier_id}`}</td>
-                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{FMT_VND(po.total)}</td>
+                  <tr key={po.id || idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
+                    <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{po.po_number || `#EXP-${po.id}`}</td>
+                    <td style={{ padding: '12px', fontWeight: 600 }}>{po.title || po.supplier_name || po.category || '—'}</td>
+                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{FMT_VND(po.amount ?? po.total ?? 0)}</td>
                     <td style={{ padding: '12px' }}>{po.creator_name || '—'}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ 
                         padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
-                        background: po.status === 'received' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                        color: po.status === 'received' ? '#10b981' : '#d97706'
+                        background: po.status === 'approved' || po.status === 'received' ? 'rgba(16, 185, 129, 0.08)' : (po.status === 'rejected' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)'),
+                        color: po.status === 'approved' || po.status === 'received' ? '#10b981' : (po.status === 'rejected' ? '#dc2626' : '#d97706')
                       }}>
-                        {po.status === 'received' ? t('Đã nhập kho') : (po.status === 'draft' ? t('Bản nháp') : t('Đang vận chuyển'))}
+                        {po.status === 'approved' ? t('Đã duyệt') : (po.status === 'received' ? t('Đã nhập kho') : (po.status === 'pending' ? t('Chờ duyệt') : (po.status === 'rejected' ? t('Từ chối') : t('Bản nháp'))))}
                       </span>
                     </td>
-                    <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{po.order_date ? new Date(po.order_date).toLocaleDateString('vi-VN') : '—'}</td>
+                    <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{po.created_at || po.order_date ? new Date(po.created_at || po.order_date).toLocaleDateString('vi-VN') : '—'}</td>
                   </tr>
                 ))}
               </tbody>

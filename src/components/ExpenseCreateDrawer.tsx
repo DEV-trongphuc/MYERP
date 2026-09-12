@@ -1102,7 +1102,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     }}
                     title="Lưu bản nháp để tiếp tục hoàn thiện sau"
                   >
-                    <Bookmark size={14} />
+                    <FileText size={14} style={{ flexShrink: 0 }} />
                     <span>Lưu nháp</span>
                   </button>
                 )}

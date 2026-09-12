@@ -5,7 +5,7 @@ import {
   ShoppingCart, Plus, Search, Filter, Calendar, 
   ChevronRight, ArrowUpRight, CheckCircle2, Clock, XCircle, Loader2,
   Truck, Package, Trash2, PlusCircle, MinusCircle, AlertCircle,
-  DollarSign, Building2, Users, User, Bookmark
+  DollarSign, Building2, Users, User, FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
@@ -636,7 +636,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                     }}
                     title="Lưu bản nháp đơn hàng"
                   >
-                    <Bookmark size={15} />
+                    <FileText size={15} style={{ flexShrink: 0 }} />
                     <span>Lưu nháp</span>
                   </button>
                   <button className="btn-icon" onClick={handleRequestClose} style={{ width: '40px', height: '40px', borderRadius: '12px' }}>
@@ -666,7 +666,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                         flexWrap: 'wrap'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: 'var(--color-text)' }}>
-                          <Bookmark size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
+                          <FileText size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
                           <span>
                             Có 1 bản nháp đơn nhập hàng đã lưu lúc <strong>{existingDraft.savedAt ? new Date(existingDraft.savedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}</strong>
                             {existingDraft.formData?.items?.length ? ` (${existingDraft.formData.items.length} sản phẩm)` : ''}.
@@ -1195,7 +1195,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                       title="Lưu bản nháp đơn nhập hàng"
                     >
-                      <Bookmark size={15} />
+                      <FileText size={15} style={{ flexShrink: 0 }} />
                       <span>Lưu nháp</span>
                     </button>
                     <button className="btn primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 2rem' }} onClick={handleSubmit} disabled={isSubmitting}>

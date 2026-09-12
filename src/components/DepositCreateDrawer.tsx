@@ -750,7 +750,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                   }}
                   title="Lưu bản nháp để tiếp tục sửa sau"
                 >
-                  <Bookmark size={15} />
+                  <FileText size={15} style={{ flexShrink: 0 }} />
                   <span>Lưu nháp</span>
                 </button>
                 <button

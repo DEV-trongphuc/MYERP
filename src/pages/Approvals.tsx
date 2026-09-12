@@ -6323,7 +6323,14 @@ export default function Approvals() {
                                 setWorkflowTitleSuffix(e.target.value);
                                 setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
                               }}
-                              placeholder={t('Nhập nội dung đề xuất (VD: In ấn, thi công Lễ tốt nghiệp...)')}
+                              placeholder={
+                                formType === 'leave' ? t('Nhập nội dung xin nghỉ (VD: Nghỉ việc gia đình, Nghỉ khám bệnh...)') :
+                                formType === 'late_early' ? t('Nhập lý do đi trễ / về sớm...') :
+                                formType === 'overtime' ? t('Nhập nội dung tăng ca...') :
+                                formType === 'remote_work' ? t('Nhập lý do làm việc từ xa...') :
+                                formType === 'advance' ? t('Nhập mục đích tạm ứng...') :
+                                t('Nhập nội dung đề xuất (VD: In ấn, thi công Lễ tốt nghiệp...)')
+                              }
                               style={{
                                 width: '100%',
                                 height: '34px',
@@ -6362,21 +6369,25 @@ export default function Approvals() {
                           onClick={() => handleSaveCurrentDraft(false)}
                           className="hover-lift"
                           style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
                             background: 'var(--color-bg)',
                             border: '1px solid var(--color-border)',
                             padding: '8px 14px',
                             borderRadius: '8px',
                             cursor: 'pointer',
-                            alignItems: 'center',
-                            gap: '6px',
                             height: '36px',
                             fontSize: '0.85rem',
                             fontWeight: 700,
-                            boxShadow: 'var(--shadow-sm)'
+                            boxShadow: 'var(--shadow-sm)',
+                            color: 'var(--color-text)',
+                            flexShrink: 0
                           }}
                           title={t('Lưu lại bản nháp hiện tại để làm việc tiếp sau')}
                         >
-                          <Bookmark size={15} />
+                          <FileText size={15} style={{ flexShrink: 0 }} />
                           <span>{t('Lưu nháp')}</span>
                         </button>
 
@@ -6748,6 +6759,63 @@ export default function Approvals() {
                         ) : formType === 'leave' ? (
                           /* LEAVE FORM FIELDS */
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Ô nhập tiêu đề ở dưới - Tự động 2 chiều đồng bộ với tiêu đề ở trên */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                {t('Tiêu đề / Nội dung đề xuất')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                border: '1.5px solid var(--color-border)',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                transition: 'all 0.15s ease'
+                              }}>
+                                <div style={{
+                                  padding: '0 12px',
+                                  background: 'rgba(0, 0, 0, 0.03)',
+                                  borderRight: '1.5px solid var(--color-border)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text)',
+                                  whiteSpace: 'nowrap',
+                                  userSelect: 'none',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{ color: selectedWorkflowDef?.color || 'var(--color-primary)' }}>●</span>
+                                  <span>{selectedWorkflowDef?.name || t('Đơn xin nghỉ')}</span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                </div>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={workflowTitleSuffix}
+                                  onChange={e => {
+                                    setWorkflowTitleSuffix(e.target.value);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                  }}
+                                  placeholder={t('Nhập nội dung đề xuất (VD: Nghỉ phép năm việc gia đình, Nghỉ khám bệnh...)')}
+                                  style={{
+                                    flex: 1,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    height: '38px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600,
+                                    background: 'transparent',
+                                    padding: '0 12px',
+                                    outline: 'none'
+                                  }}
+                                  required
+                                />
+                              </div>
+                            </div>
+
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại nghỉ phép')}</label>
@@ -6889,7 +6957,14 @@ export default function Approvals() {
                                 type="text"
                                 className="form-input"
                                 value={leaveReason}
-                                onChange={e => setLeaveReason(e.target.value)}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setLeaveReason(val);
+                                  if (!workflowTitleSuffix || workflowTitleSuffix === leaveReason) {
+                                    setWorkflowTitleSuffix(val);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, val));
+                                  }
+                                }}
                                 placeholder={t('Lý do chi tiết...')}
                                 style={{ height: '36px', fontSize: '0.8rem' }}
                                 required
@@ -7024,6 +7099,63 @@ export default function Approvals() {
 
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                {/* Ô nhập tiêu đề ở dưới - Tự động 2 chiều đồng bộ với tiêu đề ở trên */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                    {t('Tiêu đề / Nội dung đề xuất')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                  </label>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    background: 'var(--color-bg-secondary, #f8fafc)',
+                                    border: '1.5px solid var(--color-border)',
+                                    borderRadius: '8px',
+                                    overflow: 'hidden',
+                                    transition: 'all 0.15s ease'
+                                  }}>
+                                    <div style={{
+                                      padding: '0 12px',
+                                      background: 'rgba(0, 0, 0, 0.03)',
+                                      borderRight: '1.5px solid var(--color-border)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      fontSize: '0.82rem',
+                                      fontWeight: 700,
+                                      color: 'var(--color-text)',
+                                      whiteSpace: 'nowrap',
+                                      userSelect: 'none',
+                                      flexShrink: 0
+                                    }}>
+                                      <span style={{ color: selectedWorkflowDef?.color || 'var(--color-primary)' }}>●</span>
+                                      <span>{selectedWorkflowDef?.name || t('Đi trễ / Về sớm')}</span>
+                                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      value={workflowTitleSuffix}
+                                      onChange={e => {
+                                        setWorkflowTitleSuffix(e.target.value);
+                                        setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                      }}
+                                      placeholder={t('Nhập lý do đi trễ / về sớm...')}
+                                      style={{
+                                        flex: 1,
+                                        border: 'none',
+                                        borderRadius: 0,
+                                        height: '38px',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 600,
+                                        background: 'transparent',
+                                        padding: '0 12px',
+                                        outline: 'none'
+                                      }}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+
                                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Loại đăng ký')}</label>
@@ -7168,6 +7300,63 @@ export default function Approvals() {
                         ) : formType === 'overtime' ? (
                           /* OVERTIME REGISTRATION FORM */
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Ô nhập tiêu đề ở dưới - Tự động 2 chiều đồng bộ với tiêu đề ở trên */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                {t('Tiêu đề / Nội dung đề xuất')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                border: '1.5px solid var(--color-border)',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                transition: 'all 0.15s ease'
+                              }}>
+                                <div style={{
+                                  padding: '0 12px',
+                                  background: 'rgba(0, 0, 0, 0.03)',
+                                  borderRight: '1.5px solid var(--color-border)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text)',
+                                  whiteSpace: 'nowrap',
+                                  userSelect: 'none',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{ color: selectedWorkflowDef?.color || 'var(--color-primary)' }}>●</span>
+                                  <span>{selectedWorkflowDef?.name || t('Đăng ký tăng ca')}</span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                </div>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={workflowTitleSuffix}
+                                  onChange={e => {
+                                    setWorkflowTitleSuffix(e.target.value);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                  }}
+                                  placeholder={t('Nhập nội dung tăng ca (VD: Hoàn thành báo cáo quý, Trực tuyển sinh...)')}
+                                  style={{
+                                    flex: 1,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    height: '38px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600,
+                                    background: 'transparent',
+                                    padding: '0 12px',
+                                    outline: 'none'
+                                  }}
+                                  required
+                                />
+                              </div>
+                            </div>
+
                             {/* Hình thức nhận OT & Hệ số tính OT (Loại 1 hoặc x1.5) */}
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 0.8fr', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -7298,6 +7487,63 @@ export default function Approvals() {
                         ) : formType === 'remote_work' ? (
                           /* REMOTE WORK / WFH FORM */
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Ô nhập tiêu đề ở dưới - Tự động 2 chiều đồng bộ với tiêu đề ở trên */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                {t('Tiêu đề / Nội dung đề xuất')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                              </label>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                background: 'var(--color-bg-secondary, #f8fafc)',
+                                border: '1.5px solid var(--color-border)',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                transition: 'all 0.15s ease'
+                              }}>
+                                <div style={{
+                                  padding: '0 12px',
+                                  background: 'rgba(0, 0, 0, 0.03)',
+                                  borderRight: '1.5px solid var(--color-border)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text)',
+                                  whiteSpace: 'nowrap',
+                                  userSelect: 'none',
+                                  flexShrink: 0
+                                }}>
+                                  <span style={{ color: selectedWorkflowDef?.color || 'var(--color-primary)' }}>●</span>
+                                  <span>{selectedWorkflowDef?.name || t('Làm việc từ xa')}</span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>—</span>
+                                </div>
+                                <input
+                                  type="text"
+                                  className="form-input"
+                                  value={workflowTitleSuffix}
+                                  onChange={e => {
+                                    setWorkflowTitleSuffix(e.target.value);
+                                    setExpenseTitle(getFullWorkflowTitle(selectedWorkflowDef, e.target.value));
+                                  }}
+                                  placeholder={t('Nhập lý do làm việc từ xa...')}
+                                  style={{
+                                    flex: 1,
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    height: '38px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600,
+                                    background: 'transparent',
+                                    padding: '0 12px',
+                                    outline: 'none'
+                                  }}
+                                  required
+                                />
+                              </div>
+                            </div>
+
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Buổi đăng ký')}</label>
@@ -11282,7 +11528,7 @@ export default function Approvals() {
                           flexShrink: 0
                         }}
                       >
-                        <Bookmark size={16} />
+                        <FileText size={16} style={{ flexShrink: 0 }} />
                         <span>{t('Lưu nháp')}</span>
                       </button>
 

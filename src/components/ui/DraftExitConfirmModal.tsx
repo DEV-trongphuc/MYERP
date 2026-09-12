@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bookmark, LogOut, Edit3, AlertCircle, RefreshCw } from 'lucide-react';
+import { FileText, LogOut, Edit3, AlertCircle, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 export interface DraftExitConfirmModalProps {
@@ -238,7 +238,7 @@ export const DraftExitConfirmModal: React.FC<DraftExitConfirmModalProps> = ({
                       order: isMobile ? 2 : 1
                     }}
                   >
-                    {isSaving ? <RefreshCw size={15} className="spin" style={{ flexShrink: 0 }} /> : <Bookmark size={15} style={{ flexShrink: 0 }} />}
+                    {isSaving ? <RefreshCw size={15} className="spin" style={{ flexShrink: 0 }} /> : <FileText size={15} style={{ flexShrink: 0 }} />}
                     <span style={{ whiteSpace: 'nowrap' }}>{isSaving ? `${t('Đang lưu nháp')}...` : t(saveDraftText)}</span>
                   </button>
 
