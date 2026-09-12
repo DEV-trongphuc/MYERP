@@ -3141,6 +3141,125 @@ class ContactController {
             respond(500, null, 'Lỗi lấy hồ sơ liên kết: ' . $e->getMessage(), false);
         }
     }
+
+    /**
+     * Lấy danh sách SĐT học viên từ pipeline 9 trở lên để phục vụ quét avatar
+     */
+    public function getPipelinePhones(array $auth): void {
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'manager'], true)) {
+            respond(403, null, 'Chỉ quản trị viên mới có quyền thực hiện tính năng này', false);
+        }
+        $tid = (int)$auth['tenant_id'];
+        $all = !empty($_GET['all']);
+
+        $stageSlugs = [
+            'application_started', 'application_completed', 'admission_approved', 
+            'offer_accepted', 'deposit_tuition_payment', 'enrolled'
+        ];
+        $placeholders = implode(',', array_fill(0, count($stageSlugs), '?'));
+
+        $sql = "SELECT id, full_name, phone, mobile, avatar_url, pipeline_status, stage_id
+                FROM contacts
+                WHERE tenant_id = ? 
+                  AND (stage_id >= 9 OR pipeline_status IN ($placeholders))
+                  AND ((phone IS NOT NULL AND phone != '') OR (mobile IS NOT NULL AND mobile != ''))";
+        
+        if (!$all) {
+            $sql .= " AND (avatar_url IS NULL OR avatar_url = '')";
+        }
+        $sql .= " ORDER BY id DESC";
+
+        $params = array_merge([$tid], $stageSlugs);
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $result = [];
+        foreach ($rows as $r) {
+            $rawPhone = trim($r['phone'] ?: $r['mobile']);
+            $cleanPhone = preg_replace('/[^\d]/', '', $rawPhone);
+            if (strpos($cleanPhone, '84') === 0 && strlen($cleanPhone) >= 11) {
+                $cleanPhone = '0' . substr($cleanPhone, 2);
+            }
+            if (strlen($cleanPhone) >= 9 && strlen($cleanPhone) <= 11) {
+                $result[] = [
+                    'id' => (int)$r['id'],
+                    'full_name' => $r['full_name'],
+                    'phone' => $cleanPhone,
+                    'pipeline_status' => $r['pipeline_status'],
+                    'avatar_url' => $r['avatar_url']
+                ];
+            }
+        }
+
+        respond(200, [
+            'total' => count($result),
+            'contacts' => $result
+        ], 'Lấy danh sách SĐT pipeline 9+ thành công', true);
+    }
+
+    /**
+     * Cập nhật avatar âm thầm:
+     * - Giữ nguyên updated_at (không kích hoạt ON UPDATE CURRENT_TIMESTAMP)
+     * - Giữ nguyên last_contact
+     * - Không tạo log activities
+     * - Tải ảnh về lưu trữ nội bộ máy chủ để tránh link Zalo bị chặn hotlink
+     */
+    public function silentAvatarSync(array $auth): void {
+        if (!in_array($auth['role'], ['admin', 'superadmin', 'manager'], true)) {
+            respond(403, null, 'Không có quyền thực hiện', false);
+        }
+        $tid = (int)$auth['tenant_id'];
+        $b = getBody();
+        $id = (int)($b['id'] ?? $b['contact_id'] ?? 0);
+        $avatarUrl = trim($b['avatar_url'] ?? '');
+        $zaloName = trim($b['zalo_name'] ?? '');
+
+        if (!$id || empty($avatarUrl)) {
+            respond(400, null, 'Thiếu contact_id hoặc avatar_url', false);
+        }
+
+        $savedUrl = $avatarUrl;
+        // Tự động tải ảnh về lưu trong uploads/avatars/
+        if (strpos($avatarUrl, 'http') === 0 && (strpos($avatarUrl, 'zadn.vn') !== false || strpos($avatarUrl, 'zalo') !== false)) {
+            try {
+                $uploadDir = __DIR__ . '/../uploads/avatars/';
+                if (!is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0775, true);
+                }
+                $filename = 'zalo_ava_' . $id . '_' . bin2hex(random_bytes(4)) . '.jpg';
+                $filepath = $uploadDir . $filename;
+                
+                $ctx = stream_context_create([
+                    'http' => [
+                        'timeout' => 10,
+                        'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\nReferer: https://zalo.me/\r\n"
+                    ],
+                    'ssl' => [
+                        'verify_peer' => false,
+                        'verify_peer_name' => false
+                    ]
+                ]);
+                $imgData = @file_get_contents($avatarUrl, false, $ctx);
+                if ($imgData && strlen($imgData) > 500) {
+                    file_put_contents($filepath, $imgData);
+                    $savedUrl = 'uploads/avatars/' . $filename;
+                }
+            } catch (\Throwable $e) {
+                $savedUrl = $avatarUrl;
+            }
+        }
+
+        // Cập nhật âm thầm: updated_at = updated_at
+        $stmt = $this->db->prepare("UPDATE contacts SET avatar_url = ?, updated_at = updated_at WHERE id = ? AND tenant_id = ?");
+        $stmt->execute([$savedUrl, $id, $tid]);
+
+        respond(200, [
+            'id' => $id,
+            'avatar_url' => $savedUrl,
+            'original_url' => $avatarUrl
+        ], 'Cập nhật avatar âm thầm thành công', true);
+    }
 }
 
 
