@@ -710,39 +710,39 @@ export const DocumentationPage: React.FC = () => {
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', margin: '14px 0' }}>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>1. Tổ chức &amp; Bảo mật (11 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>1. Tổ chức &amp; Bảo mật (11 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Quản lý đa doanh nghiệp, tài khoản, token xác thực, phân quyền và nhật ký kiểm toán.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>2. CRM &amp; Khách Hàng (12 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>2. CRM &amp; Khách Hàng (12 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Nhân khẩu học (persons), liên hệ, lịch sử phễu 14 bước tuyển sinh, form thu thập.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>3. Phân Phối Lead &amp; Fair-Share (8 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>3. Phân Phối Lead &amp; Fair-Share (8 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Vòng xoay Round-Robin, trọng số, đền bù lượt thiếu (Starvation) và quy tắc định tuyến.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>4. Bán Hàng &amp; Doanh Thu (9 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>4. Bán Hàng &amp; Doanh Thu (9 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Báo giá (Quotes), hóa đơn (Invoices), tiền cọc giữ chỗ (Deposits), phiếu hợp tác.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>5. Chấm Công &amp; Tiền Lương (8 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>5. Chấm Công &amp; Tiền Lương (8 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Check-in GPS/Selfie, ca trực đêm/lễ/cuối tuần, nghỉ phép và phiếu lương ký số.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>6. Tài Chính &amp; Mua Sắm (5 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>6. Tài Chính &amp; Mua Sắm (5 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Đề xuất thanh toán chi phí, tạm ứng, đơn mua sắm vật tư (PO) và nhà cung cấp.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>7. Đào Tạo &amp; Học Vụ (5 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>7. Đào Tạo &amp; Học Vụ (5 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Chương trình đào tạo, khóa tuyển sinh, biểu phí học phần và bảng xếp ca giảng viên.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>8. Dự Án &amp; Công Việc (6 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>8. Dự Án &amp; Công Việc (6 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Dự án, quy trình mẫu (Workflows), checklist đầu việc và tài liệu kho đám mây.</p>
                 </div>
                 <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--color-bg-secondary)' }}>
-                  <strong style={{ color: 'var(--color-primary)' }}>9. Tự Động Hóa &amp; Tích Hợp (17 bảng)</strong>
+                  <strong style={{ color: '#0f172a' }}>9. Tự Động Hóa &amp; Tích Hợp (17 bảng)</strong>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>Hàng đợi mail/Zalo/Sync, kết nối Google Sheets, Meta CAPI, AI Vector RAG và Cấu hình.</p>
                 </div>
               </div>
