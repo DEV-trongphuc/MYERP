@@ -9655,6 +9655,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                               value={formData.address || ''}
                               onChange={addr => setFormData((prev: any) => ({ ...prev, address: addr }))}
                               placeholder="Chọn địa chỉ liên hệ..."
+                              zIndex={effectiveZIndex + 50}
                             />
                           </div>
 

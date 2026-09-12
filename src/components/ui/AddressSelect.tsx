@@ -16,6 +16,7 @@ interface AddressSelectProps {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  zIndex?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -32,6 +33,7 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
   placeholder = 'Chọn địa chỉ...',
   required,
   disabled = false,
+  zIndex = 2147483645,
 }) => {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -141,7 +143,7 @@ export const AddressSelect: React.FC<AddressSelectProps> = ({
       {/* ── Modal Portal ── */}
       {open && ReactDOM.createPortal(
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 20000000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          style={{ position: 'fixed', inset: 0, zIndex: zIndex || 2147483645, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}
         >
           {/* Backdrop */}
