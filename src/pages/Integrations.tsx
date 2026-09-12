@@ -37,11 +37,11 @@ const SYSTEM_FIELDS = [
   { value: 'form_name', label: 'Tên Mẫu Lead Form / Landing Page' },
 
   // --- Nhu cầu & Tài chính ---
-  { value: 'budget', label: 'Ngân sách tài chính / Doanh thu dự kiến' },
-  { value: 'demand_type', label: 'Mục đích nhu cầu (Ở / Đầu tư / Cho thuê)' },
-  { value: 'property_type', label: 'Loại BĐS quan tâm (Căn hộ / Nhà phố / Biệt thự)' },
-  { value: 'bedroom_count', label: 'Số phòng ngủ mong muốn' },
-  { value: 'preferred_location', label: 'Khu vực / Dự án quan tâm' },
+  { value: 'budget', label: 'Ngân sách tài chính / Học phí / Doanh thu dự kiến' },
+  { value: 'demand_type', label: 'Mục đích nhu cầu (Học tập / Bằng cấp / Hợp tác)' },
+  { value: 'property_type', label: 'Chương trình / Khóa học / Dịch vụ quan tâm' },
+  { value: 'bedroom_count', label: 'Cấp độ / Bậc học mong muốn' },
+  { value: 'preferred_location', label: 'Khu vực / Cơ sở / Đối tác quan tâm' },
 
   // --- Mạng Xã Hội & Khác ---
   { value: 'zalo_phone', label: 'Số Zalo / Link Zalo' },
@@ -2528,7 +2528,7 @@ fetch("${webhookUrl(selected.webhook_token)}", {
                 <input
                   className="form-input"
                   style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', fontWeight: 600, color: 'var(--color-text)' }}
-                  placeholder={t("VD: Landing Page Bất Động Sản")}
+                  placeholder={t("VD: Landing Page Tuyển sinh / Doanh nghiệp")}
                   value={newApiName}
                   onChange={e => setNewApiName(e.target.value)}
                 />

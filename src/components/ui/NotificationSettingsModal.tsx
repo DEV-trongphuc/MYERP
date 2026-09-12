@@ -142,9 +142,9 @@ const EVENT_CATEGORIES = [
       },
       {
         key: 'DEPOSIT_NEW',
-        name: 'Giao dịch Đặt cọc Mới từ Sales',
-        desc: 'Khi có yêu cầu duyệt cọc giao dịch bất động sản mới từ đội ngũ bán hàng',
-        icon: '🏠'
+        name: 'Giao dịch Đặt cọc / Ghi danh Mới từ Sales',
+        desc: 'Khi có yêu cầu duyệt cọc hoặc đăng ký giao dịch mới từ đội ngũ bán hàng',
+        icon: '📝'
       },
       {
         key: 'TICKET_NEW',

@@ -3553,7 +3553,7 @@ export const AccountDetailDrawer: React.FC<Props> = ({ isOpen, onClose, account,
                                       updated[index] = { ...updated[index], name: e.target.value };
                                       setCertificates(updated);
                                     }}
-                                    placeholder={t('Ví dụ: Chứng chỉ hành nghề Môi giới BĐS')}
+                                    placeholder={t('Ví dụ: Chứng chỉ Giảng dạy, Nghiệp vụ Sư phạm, Ngoại ngữ...')}
                                   />
                                 </div>
                                 <div className="form-group" style={{ margin: 0 }}>

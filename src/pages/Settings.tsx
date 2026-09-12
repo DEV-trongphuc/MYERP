@@ -7540,7 +7540,7 @@ function doPost(e) {
                       {[
                         { key: 'source_website', label: 'Nguồn khách từ Website', desc: 'Lead đổ từ Website Inbound' },
                         { key: 'source_referral', label: 'Nguồn được Giới thiệu', desc: 'Khách hàng có người giới thiệu' },
-                        { key: 'project_id', label: 'Liên kết dự án quan tâm', desc: 'Chọn dự án BĐS cụ thể' },
+                        { key: 'project_id', label: 'Liên kết chương trình quan tâm', desc: 'Chọn chương trình hoặc đối tác cụ thể' },
                         { key: 'company_id', label: 'Liên kết công ty đối tác', desc: 'Có liên kết với một Công ty' },
                         { key: 'budget_range', label: 'Xác định phân khúc ngân sách', desc: 'Có khai báo tầm tài chính' },
                         { key: 'revenue_high', label: 'Kỳ vọng doanh thu lớn (>500M)', desc: 'Giá trị deal dự kiến trên 500Tr' },

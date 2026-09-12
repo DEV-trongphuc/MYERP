@@ -12495,7 +12495,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                       { rule: 'Xác định ngành nghề kinh doanh', type: 'Demographic', pts: Number(rulesConfig.industry ?? 5), desc: 'Có trường Ngành nghề kinh doanh' },
                                       { rule: 'Nguồn khách từ Website', type: 'Behavioral', pts: Number(rulesConfig.source_website ?? 15), desc: 'Nguồn Inbound đăng ký qua web' },
                                       { rule: 'Khách được giới thiệu (Referral)', type: 'Behavioral', pts: Number(rulesConfig.source_referral ?? 20), desc: 'Được ghi nhận nguồn giới thiệu' },
-                                      { rule: 'Liên kết chương trình quan tâm', type: 'Behavioral', pts: Number(rulesConfig.project_id ?? 15), desc: 'Chọn chương trình bất động sản cụ thể' },
+                                      { rule: 'Liên kết chương trình quan tâm', type: 'Behavioral', pts: Number(rulesConfig.project_id ?? 15), desc: 'Chọn chương trình hoặc đối tác cụ thể' },
                                       { rule: 'Liên kết công ty đối tác', type: 'Behavioral', pts: Number(rulesConfig.company_id ?? 5), desc: 'Gắn liên kết đối tác công ty' },
                                       { rule: 'Xác định phân khúc ngân sách', type: 'Behavioral', pts: Number(rulesConfig.budget_range ?? 10), desc: 'Có lựa chọn phân khúc ngân sách' },
                                       { rule: 'Kỳ vọng doanh thu > 100 Triệu', type: 'Behavioral', pts: Number(rulesConfig.revenue_medium ?? 20), desc: 'Kỳ vọng giao dịch từ 100Tr đến 500Tr VNĐ' },

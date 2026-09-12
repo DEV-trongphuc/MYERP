@@ -1383,7 +1383,7 @@ export const AITrainingPanel: React.FC = () => {
               <div style={{ background: 'rgba(59, 130, 246, 0.04)', border: '1px solid rgba(59, 130, 246, 0.12)', padding: '0.75rem', borderRadius: '8px', display: 'flex', gap: 8 }}>
                 <Info size={14} color="#3b82f6" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <p style={{ fontSize: '0.725rem', color: '#1d4ed8', margin: 0, lineHeight: 1.4 }}>
-                  Mẹo: Hãy chỉ dẫn AI xưng hô "Ideas xin chào..." hoặc "Dạ, em là trợ lý Ideas..." để tạo thiện cảm tốt nhất cho khách hàng bất động sản.
+                  Mẹo: Hãy chỉ dẫn AI xưng hô "Ideas xin chào..." hoặc "Dạ, em là trợ lý Ideas..." để tạo thiện cảm tốt nhất cho học viên, phụ huynh và đối tác doanh nghiệp.
                 </p>
               </div>
             </div>

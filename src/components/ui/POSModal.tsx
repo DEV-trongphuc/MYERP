@@ -216,7 +216,7 @@ export const POSModal: React.FC<{ onClose: () => void; defaultContact?: Contact 
               <div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, lineHeight: 1.2 }}>Lập Hóa Đơn / Phiếu Thu</h2>
                 <p style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)', margin: '3px 0 0 0', fontWeight: 500 }}>
-                  Quản lý hóa đơn & dòng tiền giao dịch bất động sản
+                  Quản lý hóa đơn & dòng tiền giao dịch đối tác, học viên và khách hàng
                 </p>
               </div>
             </div>

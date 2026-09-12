@@ -6020,7 +6020,7 @@ export default function ProjectsPage() {
             <EmptyCard
               icon={<Building2 size={48} />}
               title="Chưa có chương trình nào"
-              description="Bắt đầu đăng ký các chương trình bất động sản để phân phối và quản lý tài liệu."
+              description="Bắt đầu đăng ký các chương trình đào tạo, dự án hợp tác để phân phối và quản lý tài liệu."
               actionText={isAdmin ? "Thêm ngay" : undefined}
               onAction={isAdmin ? () => {
                 setEditingProject({ status: 'active', campaign_sharing_mode: 'independent' });

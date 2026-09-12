@@ -12650,7 +12650,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                       updated[index] = { ...updated[index], name: e.target.value };
                                       setProfileCertificates(updated);
                                     }}
-                                    placeholder={t('Ví dụ: Chứng chỉ hành nghề Môi giới BĐS')}
+                                    placeholder={t('Ví dụ: Chứng chỉ Giảng dạy, Nghiệp vụ Sư phạm, Ngoại ngữ...')}
                                   />
                                 </div>
                                 <div className="form-group" style={{ margin: 0 }}>

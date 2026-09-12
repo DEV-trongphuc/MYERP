@@ -32,7 +32,7 @@ const COOP_OPTIONS = [
 
 const SUPPLIER_TABS = [
   { id: 'info', label: 'Thông tin chung', icon: <Building2 size={16} /> },
-  { id: 'projects', label: 'Dự án tiêu biểu', icon: <Layers size={16} /> }
+  { id: 'projects', label: 'Chương trình / Dự án hợp tác', icon: <Layers size={16} /> }
 ];
 
 export const SuppliersPage: React.FC = () => {
@@ -114,7 +114,7 @@ export const SuppliersPage: React.FC = () => {
       setSuppliers(data.items || []);
       setTotal(data.total || 0);
     } catch (err: any) {
-      addToast('Lỗi khi tải danh sách nhà cung cấp', 'error');
+      addToast('Lỗi khi tải danh sách đối tác', 'error');
     } finally {
       setLoading(false);
     }
@@ -173,10 +173,10 @@ export const SuppliersPage: React.FC = () => {
       setIsSaving(true);
       if (selectedSupplier) {
         await api.put(`/suppliers/${selectedSupplier.id}`, formData);
-        addToast('Đã cập nhật nhà cung cấp', 'success');
+        addToast('Đã cập nhật đối tác', 'success');
       } else {
         await api.post('/suppliers', formData);
-        addToast('Đã thêm nhà cung cấp mới', 'success');
+        addToast('Đã thêm đối tác mới', 'success');
       }
       setShowModal(false);
       fetchSuppliers();
@@ -189,16 +189,16 @@ export const SuppliersPage: React.FC = () => {
 
   const handleDelete = (id: number) => {
     showConfirm({
-      title: 'Xóa nhà cung cấp',
-      message: 'Bạn có chắc chắn muốn xóa nhà cung cấp này?',
+      title: 'Xóa đối tác',
+      message: 'Bạn có chắc chắn muốn xóa đối tác này?',
       isDanger: true,
       onConfirm: async () => {
         try {
           await api.delete(`/suppliers/${id}`);
           setSuppliers(prev => prev.filter(s => s.id !== id));
-          addToast('Đã xóa nhà cung cấp', 'success');
+          addToast('Đã xóa đối tác', 'success');
         } catch (e: any) {
-          addToast('Lỗi khi xóa nhà cung cấp', 'error');
+          addToast('Lỗi khi xóa đối tác', 'error');
         } finally {
           closeConfirm();
         }
@@ -213,8 +213,8 @@ export const SuppliersPage: React.FC = () => {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Quản lý Nhà cung cấp</h1>
-          <p className="page-subtitle">Quản lý danh sách đối tác và các nhà cung cấp sản phẩm/dịch vụ</p>
+          <h1 className="page-title">Quản lý Đối tác</h1>
+          <p className="page-subtitle">Quản lý danh sách các trường học, viện đào tạo và doanh nghiệp đối tác liên kết</p>
         </div>
         <div className="flex gap-3">
           <button className="btn outline" onClick={() => addToast('Tính năng đang phát triển', 'info')}>
@@ -222,7 +222,7 @@ export const SuppliersPage: React.FC = () => {
           </button>
           {canEdit && (
             <button className="btn primary" onClick={() => handleOpenModal()}>
-              <Plus size={18} /> Thêm nhà cung cấp
+              <Plus size={18} /> Thêm đối tác
             </button>
           )}
         </div>
@@ -261,7 +261,7 @@ export const SuppliersPage: React.FC = () => {
           <Search size={14} style={{ color: 'var(--color-text-muted)', opacity: 0.7 }} />
           <input 
             type="text"
-            placeholder="Tìm kiếm theo tên nhà cung cấp hoặc người liên hệ..." 
+            placeholder="Tìm kiếm theo tên trường, doanh nghiệp, đối tác hoặc người liên hệ..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{
@@ -332,11 +332,11 @@ export const SuppliersPage: React.FC = () => {
 
           {/* Count Badge */}
           <div style={{
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            background: 'var(--color-bg-light)',
+            fontSize: '0.8rem',
             color: 'var(--color-text-muted)',
-            padding: '6px 12px',
+            fontWeight: 500,
+            background: 'var(--color-bg)',
+            padding: '4px 10px',
             borderRadius: '8px',
             border: '1px solid var(--color-border-light)',
             height: '30px',
@@ -344,7 +344,7 @@ export const SuppliersPage: React.FC = () => {
             alignItems: 'center',
             boxSizing: 'border-box'
           }}>
-            Hiển thị <strong style={{ color: 'var(--color-primary)', marginLeft: '4px', marginRight: '4px' }}>{total}</strong> nhà cung cấp
+            Hiển thị <strong style={{ color: 'var(--color-primary)', marginLeft: '4px', marginRight: '4px' }}>{total}</strong> đối tác
           </div>
         </div>
       </div>
@@ -357,8 +357,8 @@ export const SuppliersPage: React.FC = () => {
         <div className="card mobile-flat-container" style={{ padding: '2rem 1rem', overflow: 'hidden' }}>
           <EmptyCard 
             icon={<Truck size={48} />}
-            title="Chưa có nhà cung cấp nào"
-            description="Bắt đầu thêm các đối tác, nhà cung cấp để quản lý."
+            title="Chưa có đối tác nào"
+            description="Bắt đầu thêm các trường học, viện đào tạo hoặc doanh nghiệp đối tác để quản lý."
             actionText={canEdit ? "Thêm ngay" : undefined}
             onAction={canEdit ? () => handleOpenModal() : undefined}
           />
@@ -586,13 +586,13 @@ export const SuppliersPage: React.FC = () => {
                     {/* Left Column: Enterprise Info */}
                     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '10px', padding: '20px' }}>
                       <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '10px', marginBottom: '16px', textAlign: 'left' }}>
-                        Thông tin doanh nghiệp
+                        Thông tin Trường / Doanh nghiệp
                       </h3>
 
                       {isReadOnly ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left' }}>
                           <div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Tên nhà cung cấp / đối tác</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Tên trường / Doanh nghiệp / Đối tác</span>
                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-text)' }}>{formData.name || '—'}</span>
                           </div>
 
@@ -619,7 +619,7 @@ export const SuppliersPage: React.FC = () => {
                           </div>
 
                           <div>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Phân khúc BĐS tập trung</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>Lĩnh vực hoạt động / Ngành nghề</span>
                             <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{formData.focused_type || '—'}</span>
                           </div>
 
@@ -643,10 +643,10 @@ export const SuppliersPage: React.FC = () => {
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
                           <div className="form-group">
-                            <label className="form-label">Tên nhà cung cấp / Doanh nghiệp <span className="text-danger">*</span></label>
+                            <label className="form-label">Tên Trường / Doanh nghiệp / Đối tác <span className="text-danger">*</span></label>
                             <input 
                               className="form-input" 
-                              placeholder="Ví dụ: Công ty Cổ phần A, Công ty TNHH B..."
+                              placeholder="Ví dụ: Swiss UMEF, Đại học Quốc tế, Công ty TNHH ABC..."
                               required 
                               value={formData.name}
                               onChange={e => setFormData({...formData, name: e.target.value})}
@@ -658,7 +658,7 @@ export const SuppliersPage: React.FC = () => {
                               <label className="form-label">Mã số thuế</label>
                               <input 
                                 className="form-input" 
-                                placeholder="MST doanh nghiệp"
+                                placeholder="MST doanh nghiệp / cơ sở"
                                 value={formData.tax_code || ''}
                                 onChange={e => setFormData({...formData, tax_code: e.target.value})}
                               />
@@ -675,7 +675,7 @@ export const SuppliersPage: React.FC = () => {
                           </div>
 
                           <div className="form-group">
-                            <label className="form-label">Website doanh nghiệp</label>
+                            <label className="form-label">Website đơn vị</label>
                             <input 
                               className="form-input" 
                               placeholder="https://..."
@@ -685,10 +685,10 @@ export const SuppliersPage: React.FC = () => {
                           </div>
 
                           <div className="form-group">
-                            <label className="form-label">Phân khúc BĐS tập trung</label>
+                            <label className="form-label">Lĩnh vực hoạt động / Ngành nghề</label>
                             <input 
                               className="form-input" 
-                              placeholder="Ví dụ: Căn hộ cao cấp, Đất nền, Nghỉ dưỡng..."
+                              placeholder="Ví dụ: Giáo dục, Đào tạo đại học/sau ĐH, Du học, Công nghệ, Dịch vụ..."
                               value={formData.focused_type || ''}
                               onChange={e => setFormData({...formData, focused_type: e.target.value})}
                             />
@@ -839,12 +839,12 @@ export const SuppliersPage: React.FC = () => {
                     {/* Bottom Section: Typical Projects & Notes */}
                     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '10px', padding: '20px', textAlign: 'left' }}>
                       <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', textTransform: 'uppercase', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '10px', marginBottom: '16px' }}>
-                        Dự án tiêu biểu & Ghi chú
+                        Chương trình / Dự án hợp tác & Ghi chú
                       </h3>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div>
-                          <label className="form-label" style={{ fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px', fontSize: '0.78rem' }}>Dự án tiêu biểu</label>
+                          <label className="form-label" style={{ fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px', fontSize: '0.78rem' }}>Chương trình / Dự án hợp tác tiêu biểu</label>
                           
                           {isReadOnly ? (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -882,7 +882,7 @@ export const SuppliersPage: React.FC = () => {
                                   );
                                 })
                               ) : (
-                                <span style={{ fontSize: '0.875rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Không có dự án tiêu biểu.</span>
+                                <span style={{ fontSize: '0.875rem', color: 'var(--color-text-light)', fontStyle: 'italic' }}>Không có chương trình hợp tác tiêu biểu.</span>
                               )}
                             </div>
                           ) : (
@@ -944,7 +944,7 @@ export const SuppliersPage: React.FC = () => {
                                       }
                                     }
                                   }}
-                                  placeholder={selectedProjects.length === 0 ? "Chọn dự án hoặc tự nhập tay..." : ""}
+                                  placeholder={selectedProjects.length === 0 ? "Chọn chương trình/dự án hoặc tự nhập tay..." : ""}
                                   style={{
                                     border: 'none',
                                     outline: 'none',
@@ -1055,7 +1055,7 @@ export const SuppliersPage: React.FC = () => {
                                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(163, 20, 34, 0.04)'}
                                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                     >
-                                      + Tạo dự án mới: "{projSearch}"
+                                      + Thêm chương trình/dự án: "{projSearch}"
                                     </div>
                                   </div>
                                 </>
@@ -1073,7 +1073,7 @@ export const SuppliersPage: React.FC = () => {
                           ) : (
                             <textarea 
                               className="form-textarea" 
-                              placeholder="Thông tin thêm về nhà cung cấp..."
+                              placeholder="Thông tin thêm về đối tác..."
                               value={formData.notes || ''}
                               onChange={e => setFormData({...formData, notes: e.target.value})}
                               rows={4}
