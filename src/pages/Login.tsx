@@ -359,10 +359,10 @@ export const Login = () => {
               <img src="/LOGO.webp" className="logo-img" style={{ objectFit: 'contain' }} alt="IDEAS Logo" />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.5px', margin: 0 }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'white', letterSpacing: '-0.5px', margin: 0 }}>
                 {t('Đăng Nhập Hệ Thống')}
               </h2>
-              <p style={{ color: '#64748b', fontWeight: 500, fontSize: '0.875rem', marginTop: '6px', marginBottom: 0 }}>
+              <p style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.875rem', marginTop: '6px', marginBottom: 0 }}>
                 {t('Nhập thông tin tài khoản để truy cập hệ thống')}
               </p>
             </div>
@@ -378,44 +378,44 @@ export const Login = () => {
             <form onSubmit={handleLogin} className="login-form">
               {/* Email */}
               <div>
-                <label className="form-label-custom">{t('Email doanh nghiệp')}</label>
-                <div className="input-wrapper" style={{ marginBottom: 0 }}>
+                <label className="form-label-custom">
+                  {t('Email Doanh Nghiệp')}
+                </label>
+                <div className="input-wrapper">
                   <input
                     type="email"
-                    className="input-field"
+                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@ideas.edu.vn"
-                    required
-                    autoFocus
+                    className="input-field"
+                    placeholder="linhdk@ideas.edu.vn"
                     autoComplete="username"
                   />
-                  <Mail className="input-icon" size={19} />
+                  <div className="input-icon">
+                    <Mail size={18} />
+                  </div>
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label className="form-label-custom" style={{ margin: 0 }}>{t('Mật khẩu')}</label>
-                </div>
-                <div className="input-wrapper" style={{ marginBottom: 0 }}>
+                <label className="form-label-custom">
+                  {t('Mật Khẩu')}
+                </label>
+                <div className="input-wrapper">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    className="input-field"
+                    required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    className="input-field"
                     placeholder="••••••••"
-                    required
                     autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    className="input-icon-btn no-active-scale"
-                    tabIndex={-1}
-                    aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    className="input-icon-btn"
                   >
                     {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
                   </button>
@@ -424,7 +424,7 @@ export const Login = () => {
 
               {/* Options row: Remember Me & Forgot Password */}
               <div className="options-row">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', cursor: 'pointer', userSelect: 'none' }}>
                   <input
                     type="checkbox"
                     checked={rememberMe}
@@ -469,7 +469,7 @@ export const Login = () => {
 
             <div ref={googleBtnRef} style={{ display: 'flex', justifyContent: 'center', minHeight: '44px', width: '100%' }} />
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '1.25rem', color: '#64748b', fontSize: '11px', fontWeight: 500 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '1.25rem', color: '#94a3b8', fontSize: '11px', fontWeight: 500 }}>
               <ShieldCheck size={14} style={{ color: '#10b981' }} />
               <span>{t('Bảo mật dữ liệu chuẩn doanh nghiệp SSL/TLS')}</span>
             </div>
@@ -676,15 +676,15 @@ export const Login = () => {
         .right-side {
           position: relative;
           width: 560px;
-          background: #ffffff;
-          border-left: 1px solid #e2e8f0;
+          background: rgba(12, 18, 32, 0.6);
+          backdrop-filter: blur(30px);
+          border-left: 1px solid rgba(255, 255, 255, 0.08);
           padding: 4rem;
           display: flex;
           flex-direction: column;
           justify-content: center;
           align-items: center;
           overflow-y: auto;
-          box-shadow: -10px 0 40px rgba(0, 0, 0, 0.04);
         }
         .badge-container {
           display: inline-flex;
@@ -722,32 +722,33 @@ export const Login = () => {
         .logo-box {
           width: 80px;
           height: 80px;
-          background: linear-gradient(135deg, #BD1D2D 0%, #a31422 100%);
+          background: #ffffff;
           border-radius: 24px;
           display: flex;
           align-items: center;
           justify-content: center;
           margin: 0 auto 1rem;
-          box-shadow: 0 16px 32px rgba(189, 29, 45, 0.3);
+          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), 0 0 25px rgba(255, 255, 255, 0.15);
           transform: rotate(3deg);
           overflow: hidden;
-          padding: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          padding: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.9);
         }
         .logo-img {
           width: 100%;
           height: 100%;
           object-fit: contain;
-          border-radius: 16px;
+          border-radius: 14px;
         }
         .login-card {
           width: 100%;
           max-width: 400px;
           padding: 2.25rem 2rem;
-          background: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-radius: 28px;
-          box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 1px 1px rgba(0, 0, 0, 0.02);
+          background: rgba(15, 23, 42, 0.55);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 32px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(20px);
         }
         .login-form {
           display: flex;
@@ -757,7 +758,7 @@ export const Login = () => {
         .form-label-custom {
           font-size: 11.5px;
           font-weight: 700;
-          color: #475569;
+          color: #94a3b8;
           text-transform: uppercase;
           letter-spacing: 0.8px;
           display: block;
@@ -791,7 +792,7 @@ export const Login = () => {
           height: 38px;
           background: none;
           border: none;
-          color: #64748b;
+          color: #94a3b8;
           cursor: pointer;
           padding: 0;
           display: flex;
@@ -804,8 +805,8 @@ export const Login = () => {
           user-select: none;
         }
         .input-icon-btn:hover {
-          color: #BD1D2D;
-          background: #f1f5f9;
+          color: #ef4444;
+          background: rgba(255, 255, 255, 0.05);
           transform: translateY(-50%) !important;
         }
         .input-icon-btn:active,
@@ -823,7 +824,7 @@ export const Login = () => {
         .forgot-btn {
           background: none;
           border: none;
-          color: #dc2626;
+          color: #f87171;
           font-size: 0.8125rem;
           font-weight: 600;
           cursor: pointer;
@@ -831,7 +832,7 @@ export const Login = () => {
           transition: color 0.2s;
         }
         .forgot-btn:hover {
-          color: #991b1b;
+          color: #fca5a5;
           text-decoration: underline;
         }
         .divider-modern {
@@ -839,7 +840,7 @@ export const Login = () => {
           align-items: center;
           text-align: center;
           margin: 1.25rem 0;
-          color: #94a3b8;
+          color: #64748b;
           font-size: 11px;
           font-weight: 600;
           text-transform: uppercase;
@@ -849,7 +850,7 @@ export const Login = () => {
         .divider-modern::after {
           content: '';
           flex: 1;
-          border-bottom: 1px solid #e2e8f0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
         .divider-modern span {
           padding: 0 10px;
@@ -860,21 +861,20 @@ export const Login = () => {
           padding-left: 16px;
           padding-right: 46px;
           border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          color: #0f172a;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(15, 23, 42, 0.8);
+          color: white;
           font-size: 15px;
           transition: all 0.2s ease;
           box-sizing: border-box;
         }
         .input-field:focus {
           outline: none;
-          border-color: #BD1D2D;
-          background: #ffffff;
-          box-shadow: 0 0 0 3px rgba(189, 29, 45, 0.12);
+          border-color: #ef4444;
+          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
         }
         .input-field::placeholder {
-          color: #94a3b8;
+          color: #64748b;
         }
         .submit-btn-custom {
           width: 100%;
@@ -1017,7 +1017,6 @@ export const Login = () => {
             overflow-y: auto;
             align-items: center;
             justify-content: center;
-            background: #ffffff;
           }
           .left-side {
             display: none;
@@ -1028,7 +1027,7 @@ export const Login = () => {
             padding: 2rem 1.25rem;
             border-left: none;
             border-top: none;
-            background: #ffffff;
+            background: transparent;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -1038,7 +1037,6 @@ export const Login = () => {
             max-width: 440px;
             padding: 2rem 1.35rem;
             border-radius: 26px;
-            border: 1px solid #e2e8f0;
           }
           .login-form {
             gap: 1.35rem;
