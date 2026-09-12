@@ -368,17 +368,28 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           .catch(e => console.error(e));
 
         if (currentViewRole === 'accountant') {
-          fetchAPI('purchase-orders')
-            .then(res => {
-              setPoList(res?.data || res || []);
-            })
-            .catch(e => console.error(e));
+          Promise.all([
+            fetchAPI('purchase-orders').catch(() => ({ data: [] })),
+            fetchAPI('deposits').catch(() => ({ data: [] }))
+          ]).then(([poRes, soRes]) => {
+            const rawPos = poRes?.data || poRes || [];
+            const rawSos = soRes?.data || soRes || [];
+            const pos = Array.isArray(rawPos) ? rawPos : (Array.isArray(rawPos?.orders) ? rawPos.orders : []);
+            const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
+            setPoList(pos);
+            setSoList(sos);
 
-          fetchAPI('deposits')
-            .then(res => {
-              setSoList(res?.data || res || []);
-            })
-            .catch(e => console.error(e));
+            // Tab nó có thì active tab đó, nếu cả 2 có thì active PO
+            if (pos.length > 0 && sos.length > 0) {
+              setActiveOrderType('po');
+            } else if (pos.length > 0) {
+              setActiveOrderType('po');
+            } else if (sos.length > 0) {
+              setActiveOrderType('so');
+            } else {
+              setActiveOrderType('po');
+            }
+          }).catch(e => console.error(e));
         }
 
         if (currentViewRole === 'marketing') {
@@ -1923,43 +1934,72 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }
 
   if (currentViewRole === 'accountant') {
-    const actStats = {
-      revenueThisMonth: stats?.revenue || 185200000,
-      pendingDeposits: 52000000,
-      expensesThisMonth: stats?.expenses || 18450000,
-      pendingApprovalInvoices: pendingExpensesCount || 0,
-      cashFlowTrend: [
-        { month: t('T3'), revenue: 120, expenses: 15 },
-        { month: t('T4'), revenue: 150, expenses: 18 },
-        { month: t('T5'), revenue: 140, expenses: 12 },
-        { month: t('T6'), revenue: 195, expenses: 22 },
-        { month: t('T7'), revenue: 185, expenses: 18 }
-      ],
-      expenseCategories: [
-        { name: t('Marketing & Ads'), value: 12000000 },
-        { name: t('Lương & Thưởng'), value: 45000000 },
-        { name: t('Vận hành văn phòng'), value: 8500000 },
-        { name: t('Khác'), value: 2000000 }
-      ]
-    };
+    const acct = stats?.accountantStats || {};
+    const revenue = Number(acct.revenue ?? 0);
+    const approvedExpenses = Number(acct.approved_expenses ?? 0);
+    const profit = acct.profit !== undefined ? Number(acct.profit) : (revenue - approvedExpenses);
+    const pendingRevenue = Number(acct.pending_revenue ?? 0);
+    const pendingOrdersCount = Number(acct.pending_orders_count ?? 0);
+    const pendingExpenses = acct.pending_expenses_count !== undefined ? Number(acct.pending_expenses_count) : pendingExpensesCount;
+    const approvedExpensesCount = Number(acct.approved_expenses_count ?? 0);
+
+    const revenueChange = acct.revenue_change || '0%';
+    const pendingRevenueChange = acct.pending_revenue_change || '0%';
+    const approvedExpensesChange = acct.approved_expenses_change || '0%';
+    const pendingExpensesChange = acct.pending_expenses_change || '0%';
+
+    const topExpenseCategories: Array<{ name: string; amount: number }> = acct.top_expense_categories || [];
+
+    const cashFlowTrend = (acct.cash_flow_trend && acct.cash_flow_trend.length > 0)
+      ? acct.cash_flow_trend
+      : [
+        { month: t('T5'), revenue: 0, expenses: 0 },
+        { month: t('T6'), revenue: 0, expenses: 0 },
+        { month: t('T7'), revenue: 0, expenses: 0 },
+        { month: t('T8'), revenue: 0, expenses: 0 },
+        { month: t('T9'), revenue: 0, expenses: 0 }
+      ];
+
+    const expenseCategories: Array<{ name: string; value: number }> = (acct.expense_categories && acct.expense_categories.length > 0)
+      ? acct.expense_categories
+      : [];
 
     const actIssues = [];
-    if (pendingExpensesCount > 0) {
+    if (pendingExpenses > 0) {
       actIssues.push({
         icon: <CreditCard size={14} style={{ color: '#ef4444' }} />,
-        text: `${pendingExpensesCount} ${t('yêu cầu thanh toán chi phí cần duyệt.')}`,
+        text: `${pendingExpenses} ${t('yêu cầu thanh toán chi phí cần duyệt.')}`,
         action: () => navigate('/expenses?status=pending')
       });
     }
-    actIssues.push({
-      icon: <Receipt size={14} style={{ color: '#fbbf24' }} />,
-      text: `2 ${t('thanh toán SO cần đối soát.')}`,
-      action: () => navigate('/deposits')
-    });
+    if (pendingOrdersCount > 0) {
+      actIssues.push({
+        icon: <Receipt size={14} style={{ color: '#fbbf24' }} />,
+        text: `${pendingOrdersCount} ${t('đơn hàng / SO cần đối soát.')}`,
+        action: () => navigate('/deposits')
+      });
+    }
 
     const formatVND = (n: any) => {
       const num = Math.round(Number(n || 0));
       return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
+    };
+
+    const getPoStatusBadge = (status: string) => {
+      switch (status) {
+        case 'received':
+          return { label: t('Đã nhập kho'), bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' };
+        case 'ordered':
+          return { label: t('Đã đặt hàng'), bg: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6' };
+        case 'approved':
+          return { label: t('Đã duyệt'), bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' };
+        case 'draft':
+          return { label: t('Bản nháp'), bg: 'rgba(148, 163, 184, 0.12)', color: '#64748b' };
+        case 'cancelled':
+          return { label: t('Đã hủy'), bg: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' };
+        default:
+          return { label: t('Đang xử lý'), bg: 'rgba(245, 158, 11, 0.08)', color: '#d97706' };
+      }
     };
 
     return renderDashboardWrapper(
@@ -1985,18 +2025,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <DollarSign size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{actStats.revenueThisMonth.toLocaleString()}đ</div>
+            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{formatVND(revenue)}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                <span>{t('Lợi nhuận')}: {formatVND(actStats.revenueThisMonth - actStats.expensesThisMonth)}</span>
+                <span>{t('Lợi nhuận')}: {formatVND(profit)}</span>
               </span>
             </div>
-            <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div className={`stat-change ${revenueChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M12 5l9 14H3z" />
+                {revenueChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
               </svg>
-              +12.5%
+              {revenueChange}
               <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
             </div>
           </div>
@@ -2012,18 +2052,18 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <FileText size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{actStats.pendingDeposits.toLocaleString()}đ</div>
+            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{formatVND(pendingRevenue)}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block', flexShrink: 0 }} />
-                <span>{t('Đơn chờ đối soát')}: 2</span>
+                <span>{t('Đơn chờ đối soát')}: {pendingOrdersCount}</span>
               </span>
             </div>
-            <div className="stat-change up" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div className={`stat-change ${pendingRevenueChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M12 5l9 14H3z" />
+                {pendingRevenueChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
               </svg>
-              +4.8%
+              {pendingRevenueChange}
               <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
             </div>
           </div>
@@ -2039,22 +2079,27 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <CreditCard size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{actStats.expensesThisMonth.toLocaleString()}đ</div>
+            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{formatVND(approvedExpenses)}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', flexShrink: 0 }} />
-                <span>Marketing: 12M</span>
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                <span>Lương: 45M</span>
-              </span>
+              {topExpenseCategories.length > 0 ? (
+                topExpenseCategories.map((cat, idx) => (
+                  <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: idx === 0 ? '#ef4444' : '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
+                    <span>{cat.name}: {formatNumberCompact(cat.amount)}</span>
+                  </span>
+                ))
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
+                  <span>{t('Đã duyệt')}: {approvedExpensesCount} {t('phiếu')}</span>
+                </span>
+              )}
             </div>
-            <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div className={`stat-change ${approvedExpensesChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M12 19L3 5h18z" />
+                {approvedExpensesChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
               </svg>
-              -8.2%
+              {approvedExpensesChange}
               <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
             </div>
           </div>
@@ -2070,22 +2115,22 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <AlertTriangle size={16} />
               </div>
             </div>
-            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{actStats.pendingApprovalInvoices}</div>
+            <div className="stat-value" style={{ color: 'var(--color-text)', margin: '4px 0', fontSize: '1.4rem' }}>{pendingExpenses}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', marginBottom: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', flexShrink: 0 }} />
-                <span>Chờ duyệt: {actStats.pendingApprovalInvoices}</span>
+                <span>{t('Chờ duyệt')}: {pendingExpenses}</span>
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
-                <span>Đã duyệt: 18</span>
+                <span>{t('Đã duyệt')}: {approvedExpensesCount}</span>
               </span>
             </div>
-            <div className="stat-change down" style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div className={`stat-change ${pendingExpensesChange.startsWith('-') ? 'down' : 'up'}`} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <svg viewBox="0 0 24 24" width="8" height="8" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M12 19L3 5h18z" />
+                {pendingExpensesChange.startsWith('-') ? <path d="M12 19L3 5h18z" /> : <path d="M12 5l9 14H3z" />}
               </svg>
-              -15.0%
+              {pendingExpensesChange}
               <span className="stat-desc" style={{ color: 'var(--color-text-light)', marginLeft: '4px', fontWeight: 500 }}>{getComparisonLabel(dateFilter)}</span>
             </div>
           </div>
@@ -2097,11 +2142,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>{t('Xu hướng Thu - Chi (Triệu VND)')}</h3>
             <div style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={actStats.cashFlowTrend} margin={{ left: -10, right: 5, top: 10, bottom: 0 }}>
+                <BarChart data={cashFlowTrend} margin={{ left: -10, right: 5, top: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
-                  <Tooltip />
+                  <Tooltip formatter={(val: any) => `${Number(val || 0).toLocaleString()} tr`} />
                   <Bar dataKey="revenue" name={t('Thu nhập')} fill="#60a5fa" radius={[4, 4, 0, 0]} barSize={16} />
                   <Bar dataKey="expenses" name={t('Chi phí')} fill="#ef4444" radius={[4, 4, 0, 0]} barSize={16} />
                 </BarChart>
@@ -2110,48 +2155,56 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           </div>
 
           <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>{t('Cơ cấu Chi phí Văn phòng')}</h3>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>{t('Cơ cấu Chi phí')}</h3>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie
-                    data={actStats.expenseCategories}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={4}
-                  >
-                    {actStats.expenseCategories.map((entry, idx) => (
-                      <Cell key={`cell-${idx}`} fill={['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6'][idx % 4]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => value.toLocaleString() + 'đ'} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '6px 12px',
-                width: '100%',
-                marginTop: '12px',
-                padding: '0 12px',
-                fontSize: '0.75rem',
-                color: 'var(--color-text-light)'
-              }}>
-                {actStats.expenseCategories.map((entry, index) => {
-                  const colors = ['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6'];
-                  return (
-                    <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors[index % colors.length], flexShrink: 0 }} />
-                      <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{entry.name}</span>
-                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', fontWeight: 500, flexShrink: 0 }}>({Math.round(entry.value / 1000000)}M)</span>
-                    </div>
-                  );
-                })}
-              </div>
+              {expenseCategories.length === 0 ? (
+                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  {t('Chưa có dữ liệu chi phí')}
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie
+                        data={expenseCategories}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={4}
+                      >
+                        {expenseCategories.map((_, idx) => (
+                          <Cell key={`cell-${idx}`} fill={['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899', '#6366f1'][idx % 7]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: any) => formatVND(value)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '6px 12px',
+                    width: '100%',
+                    marginTop: '12px',
+                    padding: '0 12px',
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-light)'
+                  }}>
+                    {expenseCategories.map((entry, index) => {
+                      const colors = ['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899', '#6366f1'];
+                      return (
+                        <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors[index % colors.length], flexShrink: 0 }} />
+                          <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{entry.name}</span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem', fontWeight: 500, flexShrink: 0 }}>({formatNumberCompact(entry.value)})</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -2163,23 +2216,6 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <FileText size={18} color="var(--color-primary)" /> {t('Đơn Hàng Gần Đây (PO & SO)')}
             </h3>
             <div style={{ display: 'flex', gap: '4px', background: 'var(--color-bg)', padding: '3px', borderRadius: '8px' }}>
-              <button
-                onClick={() => setActiveOrderType('so')}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: activeOrderType === 'so' ? 'var(--color-surface)' : 'transparent',
-                  color: activeOrderType === 'so' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
-                {t('SO gần đây')}
-              </button>
               <button
                 onClick={() => setActiveOrderType('po')}
                 style={{
@@ -2195,7 +2231,24 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                   boxShadow: activeOrderType === 'po' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                {t('PO gần đây')}
+                {t('PO gần đây')} ({poList.length})
+              </button>
+              <button
+                onClick={() => setActiveOrderType('so')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: activeOrderType === 'so' ? 'var(--color-surface)' : 'transparent',
+                  color: activeOrderType === 'so' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: activeOrderType === 'so' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                {t('SO gần đây')} ({soList.length})
               </button>
             </div>
           </div>
@@ -2205,7 +2258,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                    <th style={{ padding: '12px' }}>{t('Mã căn')}</th>
+                    <th style={{ padding: '12px' }}>{t('Mã sản phẩm / Mã căn')}</th>
                     <th style={{ padding: '12px' }}>{t('Khách hàng')}</th>
                     <th style={{ padding: '12px' }}>{t('Chương trình')}</th>
                     <th style={{ padding: '12px', textAlign: 'right' }}>{t('Giá bán')}</th>
@@ -2227,15 +2280,15 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     </tr>
                   ) : soList.slice(0, 5).map((so, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
-                      <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{so.unit_code}</td>
+                      <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{so.unit_code || so.so_number || '—'}</td>
                       <td style={{ padding: '12px', fontWeight: 600 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={so.avatar} name={so.full_name || ''} size={24} />
-                          <span>{so.full_name || ''}</span>
+                          <Avatar src={so.avatar || so.avatar_url} name={so.full_name || so.contact_name || ''} size={24} />
+                          <span>{so.full_name || so.contact_name || '—'}</span>
                         </div>
                       </td>
-                      <td style={{ padding: '12px' }}>{so.project_name}</td>
-                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(so.price)}</td>
+                      <td style={{ padding: '12px' }}>{so.project_name || '—'}</td>
+                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(so.price || so.total || 0)}</td>
                       <td style={{ padding: '12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <Avatar src={so.creator_avatar || so.assigned_to_avatar} name={so.creator_name || '—'} size={24} />
@@ -2248,10 +2301,10 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                           background: so.status === 'approved' ? 'rgba(16, 185, 129, 0.08)' : (so.status === 'cancelled' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)'),
                           color: so.status === 'approved' ? '#10b981' : (so.status === 'cancelled' ? '#dc2626' : '#d97706')
                         }}>
-                          {so.status === 'approved' ? t('Hoàn tất cọc') : (so.status === 'cancelled' ? t('Bể cọc') : t('Đang giao dịch'))}
+                          {so.status === 'approved' ? t('Hoàn tất cọc') : (so.status === 'cancelled' ? t('Bể cọc') : (so.status === 'pending_admin' ? t('Chờ duyệt') : t('Đang giao dịch')))}
                         </span>
                       </td>
-                      <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{so.created_at ? new Date(so.created_at).toLocaleDateString('vi-VN') : '—'}</td>
+                      <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{so.created_at || so.order_date ? new Date(so.created_at || so.order_date).toLocaleDateString('vi-VN') : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2279,34 +2332,37 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <tr>
                       <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn nhập hàng nào gần đây')}</td>
                     </tr>
-                  ) : poList.slice(0, 5).map((po, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
-                      <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{po.po_number}</td>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={po.supplier_avatar} name={po.supplier_name || 'NCC'} size={24} />
-                          <span>{po.supplier_name || `Nha cung cap ID: ${po.supplier_id}`}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(po.total)}</td>
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Avatar src={po.creator_avatar || po.avatar} name={po.creator_name || '—'} size={24} />
-                          <span>{po.creator_name || '—'}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        <span style={{ 
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
-                          background: po.status === 'received' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                          color: po.status === 'received' ? '#10b981' : '#d97706'
-                        }}>
-                          {po.status === 'received' ? t('Đã nhập kho') : (po.status === 'draft' ? t('Bản nháp') : t('Đang vận chuyển'))}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{po.order_date ? new Date(po.order_date).toLocaleDateString('vi-VN') : '—'}</td>
-                    </tr>
-                  ))}
+                  ) : poList.slice(0, 5).map((po, idx) => {
+                    const badge = getPoStatusBadge(po.status);
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--color-border-light)', height: '48px' }}>
+                        <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>{po.po_number}</td>
+                        <td style={{ padding: '12px', fontWeight: 600 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Avatar src={po.supplier_avatar} name={po.supplier_name || 'NCC'} size={24} />
+                            <span>{po.supplier_name || `Nhà cung cấp ID: ${po.supplier_id}`}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{formatVND(po.total)}</td>
+                        <td style={{ padding: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Avatar src={po.creator_avatar || po.avatar} name={po.creator_name || '—'} size={24} />
+                            <span>{po.creator_name || '—'}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          <span style={{ 
+                            padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700,
+                            background: badge.bg,
+                            color: badge.color
+                          }}>
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px', color: 'var(--color-text-muted)' }}>{po.order_date || po.created_at ? new Date(po.order_date || po.created_at).toLocaleDateString('vi-VN') : '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
