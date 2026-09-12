@@ -47,7 +47,8 @@ import {
   MessageSquare,
   Send,
   Bell,
-  X
+  X,
+  Menu
 } from 'lucide-react';
 
 interface DocItem {
@@ -106,6 +107,7 @@ export const DocumentationPage: React.FC = () => {
   const [expandedSectionIds, setExpandedSectionIds] = useState<string[]>(['arch']);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [activeHeadingId, setActiveHeadingId] = useState<string>('');
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const toggleSection = (sectionId: string) => {
@@ -4130,6 +4132,7 @@ export const DocumentationPage: React.FC = () => {
     setActiveSectionId(sectionId);
     setActiveItemId(itemId);
     setActiveHeadingId('');
+    setIsMobileNavOpen(false);
     if (contentRef.current) {
       contentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -4140,9 +4143,17 @@ export const DocumentationPage: React.FC = () => {
       {/* Top Header */}
       <header className="doc-full-header">
         <div className="doc-header-left">
+          <button
+            className="doc-mobile-toggle-btn"
+            onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+            aria-label="Mở menu danh mục phân hệ"
+            title="Mở menu danh mục"
+          >
+            {isMobileNavOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
           <div className="doc-brand" onClick={() => navigate('/')}>
             <span className="doc-brand-title">IDEAS MYERP</span>
-            <span className="doc-brand-badge">ENTERPRISE DOCS</span>
+            <span className="doc-brand-badge">DOCS</span>
           </div>
           <span className="doc-header-sep">/</span>
           <span className="doc-header-subtitle">Tài Liệu Toàn Diện 14 Phân Hệ Hệ Thống</span>
@@ -4168,24 +4179,46 @@ export const DocumentationPage: React.FC = () => {
             className="doc-nav-btn doc-nav-btn-secondary"
             title="Xem Tài Liệu API & SDK Reference"
           >
-            <Code size={15} />
-            <span>API Docs & SDKs</span>
+            <Code size={14} />
+            <span className="doc-btn-label">API Docs</span>
           </button>
           <button
             onClick={() => navigate('/')}
             className="doc-nav-btn doc-nav-btn-primary"
             title="Trở về Trang Chủ MYERP"
           >
-            <Home size={15} />
-            <span>Vào Hệ Thống</span>
+            <Home size={14} />
+            <span className="doc-btn-label">Vào Hệ Thống</span>
           </button>
         </div>
       </header>
 
       {/* Main Full-Width Layout (3 Columns) */}
       <div className="doc-full-container">
+        {/* Mobile Backdrop */}
+        {isMobileNavOpen && (
+          <div 
+            className="doc-mobile-backdrop"
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Column 1: Left Navigation Sidebar */}
-        <aside className="doc-col-sidebar">
+        <aside className={`doc-col-sidebar ${isMobileNavOpen ? 'mobile-open' : ''}`}>
+          <div className="doc-col-sidebar-header-mobile">
+            <div className="doc-mobile-header-title">
+              <Layers size={16} />
+              <span>DANH MỤC PHÂN HỆ</span>
+            </div>
+            <button 
+              className="doc-mobile-close-btn"
+              onClick={() => setIsMobileNavOpen(false)}
+              aria-label="Đóng menu"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <div className="doc-col-sidebar-inner">
             <div className="doc-menu-caption">DANH MỤC PHÂN HỆ ({sections.length})</div>
 
@@ -5073,6 +5106,51 @@ export const DocumentationPage: React.FC = () => {
           text-decoration: underline;
         }
 
+        .doc-mobile-toggle-btn {
+          display: none;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 6px;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #0f172a;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: all 0.15s;
+        }
+
+        .doc-mobile-toggle-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .doc-mobile-backdrop {
+          display: none;
+        }
+
+        .doc-col-sidebar-header-mobile {
+          display: none;
+        }
+
+        /* Ensure all tables are horizontally scrollable without squishing columns */
+        .table-responsive,
+        .doc-table-wrapper {
+          width: 100%;
+          overflow-x: auto !important;
+          -webkit-overflow-scrolling: touch;
+          margin: 16px 0 24px 0;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          background: #ffffff;
+        }
+
+        .doc-table {
+          width: 100%;
+          min-width: 620px !important;
+          margin: 0 !important;
+        }
+
         @media (max-width: 1200px) {
           .doc-col-toc {
             display: none;
@@ -5080,14 +5158,195 @@ export const DocumentationPage: React.FC = () => {
         }
 
         @media (max-width: 900px) {
-          .doc-col-sidebar {
-            display: none;
+          .doc-full-header {
+            padding: 0 12px;
+            height: 54px;
           }
+
+          .doc-mobile-toggle-btn {
+            display: inline-flex;
+          }
+
+          .doc-header-subtitle,
+          .doc-header-sep,
           .doc-header-search-bar {
-            display: none;
+            display: none !important;
           }
+
+          .doc-brand-title {
+            font-size: 14.5px;
+          }
+
+          .doc-brand-badge {
+            font-size: 9px;
+            padding: 1px 4px;
+          }
+
+          .doc-header-right {
+            gap: 6px;
+          }
+
+          .doc-nav-btn {
+            height: 32px;
+            padding: 0 8px;
+            font-size: 12px;
+            gap: 4px;
+          }
+
+          /* Mobile Slide-in Drawer Sidebar */
+          .doc-col-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 290px;
+            max-width: 85vw;
+            z-index: 1001;
+            background: #ffffff;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+            transform: translateX(-100%);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex !important;
+            flex-direction: column;
+            border-right: 1px solid #e2e8f0;
+          }
+
+          .doc-col-sidebar.mobile-open {
+            transform: translateX(0);
+          }
+
+          .doc-mobile-backdrop {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(2px);
+            z-index: 1000;
+          }
+
+          .doc-col-sidebar-header-mobile {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+          }
+
+          .doc-mobile-header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: 0.5px;
+          }
+
+          .doc-mobile-close-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #64748b;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            border-radius: 4px;
+          }
+
+          .doc-mobile-close-btn:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+          }
+
           .doc-col-content {
-            padding: 24px 20px;
+            padding: 16px 14px 60px 14px !important;
+          }
+
+          .doc-article-title {
+            font-size: 21px !important;
+            line-height: 1.35;
+          }
+
+          .doc-article-lead {
+            font-size: 13px;
+          }
+
+          .doc-prose h2 {
+            font-size: 17px !important;
+            margin: 22px 0 10px 0 !important;
+          }
+
+          .doc-prose h3 {
+            font-size: 14px !important;
+          }
+
+          .doc-prose p, .doc-prose li {
+            font-size: 13.5px !important;
+            line-height: 1.6;
+          }
+
+          .doc-nav-breadcrumb {
+            font-size: 11px;
+            flex-wrap: wrap;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            gap: 4px;
+          }
+
+          /* Prevent vertical letter squishing on tables */
+          .doc-table {
+            display: block;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            min-width: 580px !important;
+          }
+
+          .doc-table th, .doc-table td {
+            padding: 8px 10px !important;
+            font-size: 12px !important;
+          }
+
+          /* Code boxes */
+          .doc-code-box, pre {
+            max-width: 100%;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            font-size: 11.5px !important;
+            padding: 10px 12px !important;
+          }
+
+          /* Sơ đồ luồng hiển thị dạng dọc thân thiện di động */
+          .doc-flow {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 6px;
+            padding: 12px;
+          }
+
+          .doc-flow-step {
+            font-size: 11.5px;
+            padding: 6px 10px;
+            text-align: center;
+          }
+
+          .doc-flow-arrow {
+            transform: rotate(90deg);
+            align-self: center;
+            font-size: 11px;
+          }
+
+          .doc-stages {
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+
+          .doc-grid-3 {
+            grid-template-columns: 1fr;
+            gap: 12px;
           }
         }
       `}</style>

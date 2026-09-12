@@ -14,7 +14,10 @@ import {
   ArrowUpRight,
   Send,
   CheckCircle2,
-  FileText
+  FileText,
+  Menu,
+  X,
+  Layers
 } from 'lucide-react';
 import { apiCategories } from './apiDocsData';
 import type { ApiCategory, ApiEndpoint } from './apiDocsData';
@@ -27,11 +30,13 @@ export const ApiDocumentationPage: React.FC = () => {
   const [selectedEndpointIndex, setSelectedEndpointIndex] = useState(0);
   const [expandedCatIds, setExpandedCatIds] = useState<string[]>(['auth']);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const handleSelectEndpoint = (catId: string, idx: number) => {
     setSelectedCatId(catId);
     setSelectedEndpointIndex(idx);
+    setIsMobileNavOpen(false);
     if (contentRef.current) {
       contentRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -150,9 +155,17 @@ echo $response;
       {/* Header */}
       <header className="api-full-header">
         <div className="api-header-left">
+          <button
+            className="api-mobile-toggle-btn"
+            onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+            aria-label="Mở menu API"
+            title="Mở menu API"
+          >
+            {isMobileNavOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
           <div className="api-brand" onClick={() => navigate('/')}>
-            <span className="api-brand-title">MYERP DEVELOPER</span>
-            <span className="api-brand-badge">REST API REFERENCE</span>
+            <span className="api-brand-title">MYERP DEV</span>
+            <span className="api-brand-badge">API</span>
           </div>
           <span className="api-header-sep">/</span>
           <span className="api-header-subtitle">{apiCategories.length} Chuyên Mục & 39 Controllers</span>
@@ -179,23 +192,46 @@ echo $response;
             className="api-nav-btn api-nav-btn-secondary"
             title="Xem Tài Liệu Toàn Thể Sản Phẩm"
           >
-            <BookOpen size={15} />
-            <span>Product Docs (/docs)</span>
+            <BookOpen size={14} />
+            <span className="api-btn-label">Docs</span>
           </button>
           <button 
             onClick={() => navigate('/')}
             className="api-nav-btn api-nav-btn-primary"
+            title="Vào Hệ Thống MYERP"
           >
-            <Home size={15} />
-            <span>Vào Hệ Thống</span>
+            <Home size={14} />
+            <span className="api-btn-label">Vào Hệ Thống</span>
           </button>
         </div>
       </header>
 
       {/* Main Full-Width Layout (3 Columns) */}
       <div className="api-full-container">
+        {/* Mobile Backdrop */}
+        {isMobileNavOpen && (
+          <div 
+            className="api-mobile-backdrop"
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Column 1: Endpoints Directory Sidebar */}
-        <aside className="api-col-sidebar">
+        <aside className={`api-col-sidebar ${isMobileNavOpen ? 'mobile-open' : ''}`}>
+          <div className="api-col-sidebar-header-mobile">
+            <div className="api-mobile-header-title">
+              <Layers size={16} />
+              <span>DANH MỤC API &amp; SDKs</span>
+            </div>
+            <button 
+              className="api-mobile-close-btn"
+              onClick={() => setIsMobileNavOpen(false)}
+              aria-label="Đóng menu"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <div className="api-col-sidebar-inner">
             <div className="api-menu-caption">
               DANH MỤC PHÂN HỆ ({categories.length} PHÂN HỆ • {categories.reduce((acc, c) => acc + c.endpoints.length, 0)} APIs)
@@ -1049,6 +1085,44 @@ echo $response;
           line-height: 1.4;
         }
 
+        .api-mobile-toggle-btn {
+          display: none;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 6px;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #0f172a;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: all 0.15s;
+        }
+
+        .api-mobile-toggle-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .api-mobile-backdrop {
+          display: none;
+        }
+
+        .api-col-sidebar-header-mobile {
+          display: none;
+        }
+
+        /* Ensure tables are horizontally scrollable */
+        .api-spec-section {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        .api-table {
+          min-width: 540px !important;
+          width: 100%;
+        }
+
         @media (max-width: 1200px) {
           .api-col-quick {
             display: none;
@@ -1056,11 +1130,158 @@ echo $response;
         }
 
         @media (max-width: 900px) {
-          .api-col-sidebar {
-            display: none;
+          .api-full-header {
+            padding: 0 12px;
+            height: 54px;
           }
+
+          .api-mobile-toggle-btn {
+            display: inline-flex;
+          }
+
+          .api-header-subtitle,
+          .api-header-sep,
+          .api-header-search-bar {
+            display: none !important;
+          }
+
+          .api-brand-title {
+            font-size: 14px;
+          }
+
+          .api-brand-badge {
+            font-size: 9px;
+            padding: 1px 4px;
+          }
+
+          .api-header-right {
+            gap: 6px;
+          }
+
+          .api-nav-btn {
+            height: 32px;
+            padding: 0 8px;
+            font-size: 12px;
+            gap: 4px;
+          }
+
+          /* Mobile Slide-in Drawer Sidebar */
+          .api-col-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 310px;
+            max-width: 85vw;
+            z-index: 1001;
+            background: #ffffff;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+            transform: translateX(-100%);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex !important;
+            flex-direction: column;
+            border-right: 1px solid #e2e8f0;
+          }
+
+          .api-col-sidebar.mobile-open {
+            transform: translateX(0);
+          }
+
+          .api-mobile-backdrop {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(2px);
+            z-index: 1000;
+          }
+
+          .api-col-sidebar-header-mobile {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+          }
+
+          .api-mobile-header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: 0.5px;
+          }
+
+          .api-mobile-close-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #64748b;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            border-radius: 4px;
+          }
+
+          .api-mobile-close-btn:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+          }
+
           .api-col-content {
-            padding: 24px 20px;
+            padding: 16px 14px 60px 14px !important;
+          }
+
+          .api-headline {
+            font-size: 20px !important;
+            line-height: 1.35;
+          }
+
+          .api-lead {
+            font-size: 13px;
+          }
+
+          .api-path-box {
+            font-size: 12px !important;
+            word-break: break-all;
+          }
+
+          .api-hero-meta {
+            flex-wrap: wrap;
+            gap: 6px;
+          }
+
+          /* Prevent vertical letter squishing on tables */
+          .api-table {
+            display: block;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            min-width: 520px !important;
+          }
+
+          .api-table th, .api-table td {
+            padding: 8px 10px !important;
+            font-size: 12px !important;
+          }
+
+          .api-code-editor, pre {
+            font-size: 11.5px !important;
+            padding: 12px !important;
+            max-width: 100%;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .api-lang-tabs {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            max-width: 100%;
           }
         }
       `}</style>
