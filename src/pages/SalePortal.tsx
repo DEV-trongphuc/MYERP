@@ -10327,7 +10327,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             setSchedulerModalTab(hasLeads ? 'leads' : 'diary');
             setDiaryPage(1);
             setTasksPage(1);
-            handleDateClick(dateStr);
             setSchedulerModalOpen(true);
           }}
           style={{
@@ -10371,7 +10370,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 setShowTaskForm(true);
                 setDiaryPage(1);
                 setTasksPage(1);
-                handleDateClick(dateStr);
                 setSchedulerModalOpen(true);
               }}
               className="quick-add-btn btn primary sm icon-only"
@@ -10396,56 +10394,34 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             </button>
           </div>
 
-          {/* Render Scheduler Activities */}
+          {/* Render High Priority / Important Tasks Only */}
           {(() => {
-            const dayActivities = calendarActivities.filter(a => {
+            const dayImportantTasks = calendarActivities.filter(a => {
               const dStr = (a.due_date || a.date || a.created_at || '').substring(0, 10);
-              return dStr === dateStr && (a.type === 'task' || a.type === 'meeting' || a.type === 'call' || a.type === 'note');
+              const isHigh = a.priority === 'high' || a.priority === 'urgent' || a.priority === 'cao';
+              return dStr === dateStr && a.type === 'task' && isHigh;
             });
-            if (dayActivities.length === 0) return null;
+            if (dayImportantTasks.length === 0) return null;
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', width: '100%', marginBottom: '4px' }}>
-                {dayActivities.slice(0, 3).map((a: any) => {
+                {dayImportantTasks.slice(0, 3).map((a: any) => {
                   const isDone = a.status === 'done' || a.status === 'completed';
-                  const isTask = a.type === 'task';
-                  const isMeeting = a.type === 'meeting';
-                  const isNote = a.type === 'note';
-                  const isCall = a.type === 'call';
-                  
-                  let bg = 'rgba(142, 142, 147, 0.08)';
-                  let border = 'rgba(142, 142, 147, 0.2)';
-                  let color = 'var(--color-text)';
-                  let icon = '📝';
-                  
-                  if (isTask) {
-                    bg = theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff';
-                    border = theme === 'dark' ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe';
-                    color = theme === 'dark' ? '#60a5fa' : '#1d4ed8';
-                    icon = '📌';
-                  } else if (isMeeting) {
-                    bg = theme === 'dark' ? 'rgba(168, 85, 247, 0.15)' : '#faf5ff';
-                    border = theme === 'dark' ? 'rgba(168, 85, 247, 0.3)' : '#e9d5ff';
-                    color = theme === 'dark' ? '#c084fc' : '#7e22ce';
-                    icon = '🤝';
-                  } else if (isCall) {
-                    bg = theme === 'dark' ? 'rgba(245, 158, 11, 0.15)' : '#fffbeb';
-                    border = theme === 'dark' ? 'rgba(245, 158, 11, 0.3)' : '#fde68a';
-                    color = theme === 'dark' ? '#fbbf24' : '#b45309';
-                    icon = '📞';
-                  } else if (isNote) {
-                    bg = theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5';
-                    border = theme === 'dark' ? 'rgba(16, 185, 129, 0.3)' : '#a7f3d0';
-                    color = theme === 'dark' ? '#34d399' : '#047857';
-                    icon = '📓';
-                  }
+                  const bg = theme === 'dark' ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2';
+                  const border = theme === 'dark' ? 'rgba(239, 68, 68, 0.3)' : '#fecaca';
+                  const color = theme === 'dark' ? '#f87171' : '#b91c1c';
+                  const icon = '🔥';
                   
                   return (
                     <div
                       key={a.id}
                       onClick={(e) => {
+                        e.stopPropagation();
                         if (a.contact_id) {
-                          e.stopPropagation();
                           setProfileContact({ id: a.contact_id });
+                        } else {
+                          setSelectedSchedulerDate(dateStr);
+                          setSchedulerModalTab('tasks');
+                          setSchedulerModalOpen(true);
                         }
                       }}
                       style={{
@@ -10458,19 +10434,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         border: `1px solid ${border}`,
                         backgroundColor: bg,
                         color: color,
-                        fontWeight: 650,
+                        fontWeight: 700,
                         textDecoration: isDone ? 'line-through' : 'none',
                         opacity: isDone ? 0.65 : 1,
-                        cursor: a.contact_id ? 'pointer' : 'default',
+                        cursor: 'pointer',
                         width: '100%',
                         overflow: 'hidden'
                       }}
                       className="calendar-activity-item hover-lift"
-                      title={`${a.subject || a.title || ''}: ${a.body || a.description || ''}`}
+                      title={`[${t('Ưu tiên cao')}] ${a.subject || a.title || ''}: ${a.body || a.description || ''}`}
                     >
                       <span style={{ fontSize: '0.7rem', flexShrink: 0 }}>{icon}</span>
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.subject || a.title || t('Hoạt động')}
+                        {a.subject || a.title || t('Công việc quan trọng')}
                       </span>
                       {a.contact_id && (
                         <div 
@@ -10495,9 +10471,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     </div>
                   );
                 })}
-                {dayActivities.length > 3 && (
-                  <div style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', fontWeight: 700, textAlign: 'center' }}>
-                    +{dayActivities.length - 3} {t('hoạt động khác')}
+                {dayImportantTasks.length > 3 && (
+                  <div style={{ fontSize: '0.6rem', color: 'var(--color-danger)', fontWeight: 700, textAlign: 'center' }}>
+                    +{dayImportantTasks.length - 3} {t('việc quan trọng khác')}
                   </div>
                 )}
               </div>
