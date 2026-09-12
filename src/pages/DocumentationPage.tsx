@@ -937,8 +937,8 @@ export const DocumentationPage: React.FC = () => {
                   <tbody>
                     <tr>
                       <td><code>global_work_start_time</code><br /><code>global_work_end_time</code></td>
-                      <td><code>08:00</code><br /><code>17:00</code></td>
-                      <td>Khung giờ làm việc hành chính chuẩn toàn công ty (Sáng 08:00 - 12:00, Chiều 13:00 - 17:00; chuẩn 8 tiếng làm việc = 480 phút). Áp dụng cho mọi nhân viên không cài đặt khung giờ đặc thù (<code>use_custom_work_hours = 0</code>).</td>
+                      <td><code>08:00 - 12:00</code><br /><code>13:00 - 17:00</code></td>
+                      <td>Khung giờ làm việc hành chính chuẩn 8 tiếng / ngày (Sáng 8h00 - 12h00, Chiều 1h00 - 5h00 chiều tức 13h00 - 17h00; nghỉ trưa 1 tiếng: 12h00 - 13h00). Tổng chuẩn 480 phút / ngày công. Áp dụng cho mọi nhân viên không cài đặt khung giờ đặc thù (<code>use_custom_work_hours = 0</code>). Khối Sales giờ nhận lead có thể mở rộng đến 22:00 nhưng giờ tan ca tính công vẫn là 17:00.</td>
                     </tr>
                     <tr>
                       <td><code>global_work_schedule</code></td>
