@@ -876,6 +876,56 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
   };
 
+  const openAttendanceUpdateModal = (defaultDate?: string) => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const targetDate = defaultDate || todayStr;
+    const monthStr = targetDate.substring(0, 7);
+    setBulkMonth(monthStr);
+    setSuggestedDays([{
+      date: targetDate,
+      check_in: '08:00',
+      check_out: '17:30',
+      reason: '',
+      has_check_in: false,
+      has_check_out: false,
+      is_on_leave: false,
+      disabled: false
+    }]);
+    setShowBulkCreateModal(true);
+  };
+
+  const handleAddManualDay = () => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    let newDate = todayStr;
+    if (suggestedDays.length > 0) {
+      const lastDate = suggestedDays[suggestedDays.length - 1].date;
+      if (lastDate) {
+        try {
+          const d = new Date(lastDate);
+          d.setDate(d.getDate() + 1);
+          newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        } catch {
+          newDate = todayStr;
+        }
+      }
+    }
+    setSuggestedDays(prev => [
+      ...prev,
+      {
+        date: newDate,
+        check_in: '08:00',
+        check_out: '17:30',
+        reason: '',
+        has_check_in: false,
+        has_check_out: false,
+        is_on_leave: false,
+        disabled: false
+      }
+    ]);
+  };
+
   const handleScanMissingDays = async (monthPeriod: string) => {
     setSuggestedLoading(true);
     try {
@@ -2023,12 +2073,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             {/* Button Bổ sung công gộp */}
             <button
               type="button"
-              onClick={() => {
-                setIsOpeningBulkModal(true);
-                navigate('/approvals?create=attendance_bulk&scan=1');
-                setTimeout(() => setIsOpeningBulkModal(false), 1200);
-              }}
-              disabled={isOpeningBulkModal}
+              onClick={() => openAttendanceUpdateModal()}
               className="btn outline hover-lift"
               style={{
                 borderRadius: 'var(--radius-md)',
@@ -2043,17 +2088,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 whiteSpace: 'nowrap',
                 backgroundColor: 'var(--color-primary-light)',
                 borderColor: 'var(--color-primary)',
-                color: 'var(--color-primary)',
-                cursor: isOpeningBulkModal ? 'wait' : 'pointer',
-                opacity: isOpeningBulkModal ? 0.75 : 1
+                color: 'var(--color-primary)'
               }}
             >
-              {isOpeningBulkModal ? (
-                <Loader2 size={13} className="spin" />
-              ) : (
-                <CheckSquare size={13} />
-              )}
-              {isOpeningBulkModal ? t('Đang mở...') : (isMobile ? t('C.nhật công') : t('Cập nhật bổ sung công'))}
+              <CheckSquare size={13} />
+              {isMobile ? t('C.nhật công') : t('Cập nhật bổ sung công')}
             </button>
 
             {/* View Mode Icon Switcher */}
@@ -2864,10 +2903,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             </button>
             
             <button
-              onClick={() => {
-                setShowBulkCreateModal(true);
-                setSuggestedDays([]);
-              }}
+              onClick={() => openAttendanceUpdateModal()}
               className="btn primary"
               style={{
                 height: isMobile ? '32px' : '36px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px',
@@ -4889,6 +4925,14 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         icon: <MapPin size={18} />,
         bg: 'linear-gradient(135deg, #10b981, #047857)',
         color: '#10b981'
+      },
+      {
+        id: 'attendance_bulk',
+        title: t('Cập nhật công'),
+        desc: t('Đề xuất cập nhật / bổ sung ngày công làm việc thiếu hoặc điều chỉnh giờ công.'),
+        icon: <CheckSquare size={18} />,
+        bg: 'linear-gradient(135deg, #6366f1, #4338ca)',
+        color: '#6366f1'
       }
     ];
 
@@ -4925,8 +4969,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 key={opt.id}
                 onClick={() => {
                   setShowMenuModal(false);
-                  setCreateLeaveType(opt.id as any);
-                  setShowCreateLeaveModal(true);
+                  if (opt.id === 'attendance_bulk') {
+                    openAttendanceUpdateModal();
+                  } else {
+                    setCreateLeaveType(opt.id as any);
+                    setShowCreateLeaveModal(true);
+                  }
                 }}
                 style={{
                   display: 'flex',
@@ -5760,12 +5808,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             {/* Button Bổ sung công gộp */}
             <button
               type="button"
-              onClick={() => {
-                setIsOpeningBulkModal(true);
-                navigate('/approvals?create=attendance_bulk&scan=1');
-                setTimeout(() => setIsOpeningBulkModal(false), 1200);
-              }}
-              disabled={isOpeningBulkModal}
+              onClick={() => openAttendanceUpdateModal()}
               className="btn outline hover-lift"
               style={{
                 borderRadius: 'var(--radius-md)',
@@ -5780,17 +5823,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 whiteSpace: 'nowrap',
                 backgroundColor: 'var(--color-primary-light)',
                 borderColor: 'var(--color-primary)',
-                color: 'var(--color-primary)',
-                cursor: isOpeningBulkModal ? 'wait' : 'pointer',
-                opacity: isOpeningBulkModal ? 0.75 : 1
+                color: 'var(--color-primary)'
               }}
             >
-              {isOpeningBulkModal ? (
-                <Loader2 size={12} className="spin" />
-              ) : (
-                <CheckSquare size={12} />
-              )}
-              {isOpeningBulkModal ? t('Đang mở...') : (isMobile ? t('C.nhật công') : t('Cập nhật bổ sung công'))}
+              <CheckSquare size={12} />
+              {isMobile ? t('C.nhật công') : t('Cập nhật bổ sung công')}
             </button>
 
             {/* View Mode Icon Switcher */}
@@ -7689,7 +7726,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   }} 
                 />
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)' }}>
-                  IDEAS - {t('Quy trình')} ({t('Tạo mới')})
+                  IDEAS - {t('Quy trình Cập nhật công')} ({t('Tạo mới')})
                 </h3>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -7825,13 +7862,35 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   flexDirection: 'column',
                   gap: '1rem'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                      {t('NGÀY ĐỀ XUẤT PHÁT HIỆN')} ({suggestedDays.length} {t('ngày')})
+                      {t('DANH SÁCH NGÀY CẬP NHẬT CÔNG')} ({suggestedDays.length} {t('ngày')})
                     </h3>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>
-                      {t('Vui lòng giải trình đầy đủ lý do bổ sung')}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleAddManualDay}
+                        className="btn outline hover-lift"
+                        style={{
+                          height: '28px',
+                          padding: '0 10px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          borderRadius: '6px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          borderColor: 'var(--color-primary)',
+                          color: 'var(--color-primary)'
+                        }}
+                      >
+                        <Plus size={13} />
+                        {t('Thêm ngày')}
+                      </button>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>
+                        {t('Vui lòng giải trình đầy đủ lý do bổ sung')}
+                      </span>
+                    </div>
                   </div>
 
                   {suggestedDays.length > 0 ? (
@@ -7839,7 +7898,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                         <thead>
                           <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                            <th style={{ padding: '10px 12px', width: '100px' }}>{t('Ngày')}</th>
+                            <th style={{ padding: '10px 12px', width: '130px' }}>{t('Ngày')}</th>
                             <th style={{ padding: '10px 12px', width: '100px' }}>{t('Thứ')}</th>
                             <th style={{ padding: '10px 12px', width: '90px' }}>{t('Vào')}</th>
                             <th style={{ padding: '10px 12px', width: '90px' }}>{t('Ra')}</th>
@@ -7852,15 +7911,33 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             const isInactive = Boolean(day.is_on_leave || day.disabled);
                             return (
                               <tr 
-                                key={day.date} 
+                                key={day.date + '-' + idx} 
                                 style={{ 
                                   borderBottom: '1px solid var(--color-border)',
                                   background: isInactive ? 'var(--color-bg-light, rgba(0,0,0,0.02))' : 'transparent',
                                   opacity: isInactive ? 0.7 : 1
                                 }}
                               >
-                                <td style={{ padding: '10px 12px', fontWeight: 650 }}>
-                                  <div>{day.date}</div>
+                                <td style={{ padding: '8px 12px', fontWeight: 650 }}>
+                                  <input
+                                    type="date"
+                                    value={day.date}
+                                    onChange={(e) => {
+                                      const newDate = e.target.value;
+                                      const newDays = [...suggestedDays];
+                                      newDays[idx].date = newDate;
+                                      setSuggestedDays(newDays);
+                                    }}
+                                    style={{
+                                      padding: '4px 6px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--color-border)',
+                                      fontSize: '0.78rem',
+                                      background: 'var(--color-surface)',
+                                      color: 'var(--color-text)',
+                                      fontWeight: 650
+                                    }}
+                                  />
                                   {day.is_on_leave && (
                                     <span style={{ 
                                       display: 'inline-flex', 
@@ -7953,7 +8030,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                                 <td style={{ padding: '6px 12px', textAlign: 'center' }}>
                                   <button
                                     type="button"
-                                    onClick={() => setSuggestedDays(suggestedDays.filter(d => d.date !== day.date))}
+                                    onClick={() => setSuggestedDays(suggestedDays.filter((_, i) => i !== idx))}
                                     style={{
                                       border: 'none',
                                       background: 'none',
@@ -7973,6 +8050,28 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           })}
                         </tbody>
                       </table>
+                      <div style={{ padding: '10px 12px', background: 'var(--color-bg-light)', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-start' }}>
+                        <button
+                          type="button"
+                          onClick={handleAddManualDay}
+                          className="btn outline hover-lift"
+                          style={{
+                            height: '30px',
+                            padding: '0 12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            borderColor: 'var(--color-primary)',
+                            color: 'var(--color-primary)'
+                          }}
+                        >
+                          <Plus size={13} />
+                          {t('Thêm ngày khác')}
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div style={{
@@ -7981,12 +8080,25 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                       color: 'var(--color-text-muted)',
                       border: '1px dashed var(--color-border)',
                       borderRadius: '12px',
-                      background: 'var(--color-bg-light)'
+                      background: 'var(--color-bg-light)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px'
                     }}>
-                      <Info size={28} style={{ marginBottom: '8px', color: 'var(--color-primary)', opacity: 0.7 }} />
+                      <Info size={28} style={{ color: 'var(--color-primary)', opacity: 0.7 }} />
                       <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                        {t('Không có ngày nào thiếu công cần bổ sung cho tháng này. Hãy bấm Quét các ngày thiếu công để bắt đầu!')}
+                        {t('Chưa có ngày nào trong danh sách. Bạn có thể thêm ngày thủ công hoặc bấm Quét các ngày thiếu công!')}
                       </p>
+                      <button
+                        type="button"
+                        onClick={handleAddManualDay}
+                        className="btn primary"
+                        style={{ height: '32px', fontSize: '0.75rem', marginTop: '4px' }}
+                      >
+                        <Plus size={14} />
+                        {t('Thêm ngày thủ công')}
+                      </button>
                     </div>
                   )}
                 </div>
