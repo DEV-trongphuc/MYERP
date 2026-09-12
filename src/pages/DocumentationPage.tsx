@@ -3363,6 +3363,33 @@ export const DocumentationPage: React.FC = () => {
                 Mở API Docs
               </button>
             </div>
+
+            {/* Exclusive Intellectual Property & Development Notice */}
+            <div className="doc-toc-copyright-box">
+              <div className="doc-copyright-badge">
+                <Shield size={12} color="#dc2626" />
+                <span>BẢN QUYỀN ĐỘC QUYỀN</span>
+              </div>
+              <div className="doc-copyright-title">TurnioDEV Fullstack Developer</div>
+              <div className="doc-copyright-subtitle">CEO / Founder DOM MARKETING</div>
+              <p className="doc-copyright-statement">
+                Hệ thống xây dựng và phát triển độc quyền. Nghiêm cấm tuyệt đối mọi hành vi sao chép, trích xuất cấu trúc, phân phối lại hoặc đảo ngược mã nguồn (Reverse Engineering) dưới mọi hình thức khi chưa có sự chấp thuận bằng văn bản chính thức từ tác giả. Mọi hành vi xâm phạm sẽ bị truy cứu trách nhiệm pháp lý theo Luật Sở hữu trí tuệ.
+              </p>
+              <div className="doc-copyright-links">
+                <a href="https://domation.net/" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="Website DOM MARKETING">
+                  <Globe size={12} /> <span>domation.net</span>
+                </a>
+                <a href="https://www.tiktok.com/@turnio.dev" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="TikTok TurnioDEV">
+                  <Zap size={12} /> <span>@turnio.dev</span>
+                </a>
+                <a href="https://fb.com/turni0" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="Facebook TurnioDEV">
+                  <Share2 size={12} /> <span>fb.com/turni0</span>
+                </a>
+                <a href="https://www.linkedin.com/in/turnio-dev/" target="_blank" rel="noopener noreferrer" className="doc-copyright-link" title="LinkedIn TurnioDEV">
+                  <Briefcase size={12} /> <span>in/turnio-dev</span>
+                </a>
+              </div>
+            </div>
           </div>
         </aside>
       </div>
@@ -4014,6 +4041,73 @@ export const DocumentationPage: React.FC = () => {
 
         .doc-quick-btn:hover {
           background: #1e293b;
+        }
+
+        .doc-toc-copyright-box {
+          margin-top: 14px;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-left: 3px solid #dc2626;
+          border-radius: 6px;
+          padding: 12px;
+        }
+
+        .doc-copyright-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 10px;
+          font-weight: 800;
+          color: #dc2626;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 6px;
+        }
+
+        .doc-copyright-title {
+          font-size: 12px;
+          font-weight: 700;
+          color: #0f172a;
+          line-height: 1.3;
+        }
+
+        .doc-copyright-subtitle {
+          font-size: 11px;
+          font-weight: 600;
+          color: #475569;
+          margin-bottom: 8px;
+        }
+
+        .doc-copyright-statement {
+          font-size: 10.8px;
+          color: #64748b;
+          line-height: 1.55;
+          margin: 0 0 10px 0;
+          text-align: justify;
+        }
+
+        .doc-copyright-links {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          border-top: 1px dashed #e2e8f0;
+          padding-top: 8px;
+        }
+
+        .doc-copyright-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          color: #0284c7;
+          text-decoration: none;
+          font-weight: 500;
+          transition: color 0.15s;
+        }
+
+        .doc-copyright-link:hover {
+          color: #0369a1;
+          text-decoration: underline;
         }
 
         @media (max-width: 1200px) {
