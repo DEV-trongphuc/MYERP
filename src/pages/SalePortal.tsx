@@ -582,6 +582,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [pinnedTaskIds, setPinnedTaskIds] = useState<number[]>([]);
 
   useEffect(() => {
+    if (wsViewMode === 'kanban') {
+      setShowDoneTasks(true);
+    }
+  }, [wsViewMode]);
+
+  useEffect(() => {
     if (currentUser?.id) {
       try {
         const stored = localStorage.getItem(`pinned_tasks_${currentUser.id}`);
@@ -6049,7 +6055,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     <LayoutGrid size={16} />
                   </button>
                   <button
-                    onClick={() => setWsViewMode('kanban')}
+                    onClick={() => {
+                      setWsViewMode('kanban');
+                      setShowDoneTasks(true);
+                    }}
                     title={t('Dạng Kanban')}
                     style={{
                       width: '32px',
