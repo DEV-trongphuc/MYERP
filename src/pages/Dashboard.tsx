@@ -31,6 +31,7 @@ import toast from 'react-hot-toast';
 import { KpiCardSkeleton, Skeleton, ChartSkeleton } from '../components/ui/Skeleton';
 
 import { Avatar } from '../components/ui/Avatar';
+import { Pagination } from '../components/ui/Pagination';
 import { WarRoomFlightDeck } from '../components/Dashboard/WarRoomFlightDeck';
 import { ExpenseQuickViewDrawer } from '../components/ExpenseQuickViewDrawer';
 import { DepositDetailDrawer } from '../components/DepositDetailDrawer';
@@ -115,6 +116,9 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const [selectedExpenseId, setSelectedExpenseId] = useState<number | null>(null);
   const [selectedDeposit, setSelectedDeposit] = useState<any | null>(null);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [poPage, setPoPage] = useState(1);
+  const [soPage, setSoPage] = useState(1);
+  const ORDER_PAGE_SIZE = 5;
 
   // Subtab and Marketing states
   const [activeSubTab, setActiveSubTab] = useState<'default' | 'hr' | 'accountant' | 'marketing'>('default');
@@ -395,7 +399,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
         if (currentViewRole === 'accountant' || activeSubTab === 'accountant' || user?.role === 'admin' || user?.role === 'director' || user?.role === 'superadmin') {
           Promise.all([
-            api.get('/expenses', { params: { limit: 15 } }).catch(() => ({ data: { data: { items: [] } } })),
+            api.get('/expenses', { params: { limit: 50 } }).catch(() => ({ data: { data: { items: [] } } })),
             fetchAPI('deposits').catch(() => ({ data: [] })),
             api.get('/users').catch(() => ({ data: { data: [] } }))
           ]).then(([expRes, soRes, usersRes]) => {
@@ -2688,11 +2692,11 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
+          <div style={{ overflowX: 'auto', maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
             {activeOrderType === 'so' ? (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
                 <thead>
-                  <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                  <tr style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--color-surface)', color: 'var(--color-text-muted)', fontWeight: 700, borderBottom: '1px solid var(--color-border-light)', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                     <th style={{ padding: '12px' }}>{t('Mã SO / Mã cọc')}</th>
                     <th style={{ padding: '12px' }}>{t('Khách hàng')}</th>
                     <th style={{ padding: '12px' }}>{t('Chương trình')}</th>
@@ -2713,7 +2717,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                     <tr>
                       <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('Không có đơn hàng bán nào gần đây')}</td>
                     </tr>
-                  ) : soList.slice(0, 10).map((so, idx) => (
+                  ) : soList.slice((soPage - 1) * ORDER_PAGE_SIZE, soPage * ORDER_PAGE_SIZE).map((so, idx) => (
                     <tr 
                       key={so.id || idx} 
                       onClick={() => setSelectedDeposit(so)}
@@ -2755,7 +2759,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
                 <thead>
-                  <tr style={{ background: 'var(--color-border-light)', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                  <tr style={{ position: 'sticky', top: 0, zIndex: 3, background: 'var(--color-surface)', color: 'var(--color-text-muted)', fontWeight: 700, borderBottom: '1px solid var(--color-border-light)', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                     <th style={{ padding: '12px', minWidth: 260, width: '30%' }}>{t('Tên hóa đơn / Đề xuất PO')}</th>
                     <th style={{ padding: '12px' }}>{t('Người tạo')}</th>
                     <th style={{ padding: '12px', textAlign: 'right' }}>{t('Số tiền')}</th>
@@ -2777,7 +2781,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         {t('Không có Purchase Order nào gần đây')}
                       </td>
                     </tr>
-                  ) : poList.slice(0, 10).map((po, idx) => {
+                  ) : poList.slice((poPage - 1) * ORDER_PAGE_SIZE, poPage * ORDER_PAGE_SIZE).map((po, idx) => {
                     const catInfo = getPoCatInfo(po.category);
                     const CatIcon = catInfo.icon;
                     return (
@@ -2851,6 +2855,34 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               </table>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {activeOrderType === 'po' && poList.length > ORDER_PAGE_SIZE && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0 4px', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                {t('Hiển thị')} {(poPage - 1) * ORDER_PAGE_SIZE + 1} - {Math.min(poPage * ORDER_PAGE_SIZE, poList.length)} / {poList.length} {t('đơn PO')}
+              </span>
+              <Pagination
+                total={poList.length}
+                page={poPage}
+                pageSize={ORDER_PAGE_SIZE}
+                onChange={(p) => setPoPage(p)}
+              />
+            </div>
+          )}
+          {activeOrderType === 'so' && soList.length > ORDER_PAGE_SIZE && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0 4px', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                {t('Hiển thị')} {(soPage - 1) * ORDER_PAGE_SIZE + 1} - {Math.min(soPage * ORDER_PAGE_SIZE, soList.length)} / {soList.length} {t('đơn SO')}
+              </span>
+              <Pagination
+                total={soList.length}
+                page={soPage}
+                pageSize={ORDER_PAGE_SIZE}
+                onChange={(p) => setSoPage(p)}
+              />
+            </div>
+          )}
         </div>
 
         {/* 2. Charts & Details - Placed BELOW Recent Orders as requested */}
@@ -5824,6 +5856,41 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           onClose={() => setShowWarRoom(false)}
           stats={stats}
           recentLogs={recentLogs}
+        />
+      )}
+
+      {/* Quick View Drawer for Purchase Orders / Expenses */}
+      {selectedExpenseId !== null && (
+        <ExpenseQuickViewDrawer
+          expenseId={selectedExpenseId}
+          onClose={() => setSelectedExpenseId(null)}
+          user={user}
+          onStatusChange={() => {
+            api.get('/expenses', { params: { limit: 50 } })
+              .then(expRes => {
+                const rawPos = expRes?.data?.data?.items || expRes?.data?.data || [];
+                if (Array.isArray(rawPos)) setPoList(rawPos);
+              })
+              .catch(console.error);
+          }}
+        />
+      )}
+
+      {/* Quick View Drawer for Sales Orders / Deposits */}
+      {selectedDeposit && (
+        <DepositDetailDrawer
+          isOpen={!!selectedDeposit}
+          onClose={() => setSelectedDeposit(null)}
+          deposit={selectedDeposit}
+          onSaveSuccess={() => {
+            fetchAPI('deposits')
+              .then(soRes => {
+                const rawSos = soRes?.data || soRes || [];
+                const sos = Array.isArray(rawSos) ? rawSos : (Array.isArray(rawSos?.orders) ? rawSos.orders : []);
+                setSoList(sos);
+              })
+              .catch(console.error);
+          }}
         />
       )}
     </div>
