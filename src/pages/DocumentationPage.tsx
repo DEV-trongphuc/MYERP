@@ -1755,56 +1755,536 @@ export const DocumentationPage: React.FC = () => {
               </ul>
             </div>
           )
+        },
+        {
+          id: 'pipe-journey-evaluation',
+          title: 'Hành Trình Tuyển Sinh: 5 Chặng Đánh Giá Từ Lead Đến Học Viên & Bàn Giao Học Vụ',
+          description: 'Đặc tả 5 chặng chuyển hóa từ lúc tiếp nhận Lead, thẩm định AI, khám phá nhu cầu, xét duyệt hồ sơ, thu cọc giữ chỗ (xử lý hủy cọc linh hoạt) đến bàn giao học vụ và tiến trình nhắc lịch tự động.',
+          headings: [
+            { id: 'journey-overview', text: 'Tổng Quan Lộ Trình 5 Chặng Tuyển Sinh' },
+            { id: 'journey-phase-1', text: 'Chặng 1: Tiếp Nhận, Chấm Điểm AI & Qualification' },
+            { id: 'journey-phase-2', text: 'Chặng 2: Khám Phá Nhu Cầu, Khớp Chương Trình & Đề Xuất Tuyển Sinh' },
+            { id: 'journey-phase-3', text: 'Chặng 3: Thu Thập Hồ Sơ & Hội Đồng Xét Tuyển Thẩm Định' },
+            { id: 'journey-phase-4', text: 'Chặng 4: Cam Kết Tài Chính, Đặt Cọc & Cơ Chế Hạ Cấp Hủy Cọc Linh Hoạt' },
+            { id: 'journey-phase-5', text: 'Chặng 5: Bàn Giao Học Vụ & Tiến Trình Nhắc Lịch Thạc Sĩ Tự Động' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="journey-overview">Tổng Quan Lộ Trình 5 Chặng Tuyển Sinh</h2>
+              <p>
+                Hệ thống IDEAS MYERP quy chuẩn hóa toàn bộ tiến trình tuyển sinh đào tạo từ lúc một thông tin khách hàng tiềm năng vừa phát sinh
+                cho tới khi hoàn tất nghĩa vụ tài chính, cấp mã học viên và bàn giao sang phòng Quản lý Đào tạo.
+                Hành trình này được cấu trúc thành <strong>5 chặng chuyển hóa chiến lược</strong>, ánh xạ trực tiếp với 14 Pipeline Stages:
+              </p>
+              <div className="doc-flow">
+                <div className="doc-flow-step">Chặng 1: Ingestion &amp; Qualification (01 - 03)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">Chặng 2: Discovery &amp; Proposal (04 - 08)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">Chặng 3: Application &amp; Admission (09 - 11)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">Chặng 4: Commitment &amp; Deposit (12 - 13)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">Chặng 5: Handover &amp; Academic (14)</div>
+              </div>
+
+              <h2 id="journey-phase-1">Chặng 1: Tiếp Nhận, Chấm Điểm AI &amp; Qualification (Stages 01 - 03)</h2>
+              <p>
+                Bao gồm 3 giai đoạn: <code>01 – New Lead</code> $\rightarrow$ <code>02 – Contact Attempted</code> $\rightarrow$ <code>03 – Connected</code>:
+              </p>
+              <ul>
+                <li><strong>Thẩm định chất lượng sơ bộ qua AI Pre-Screening:</strong> Ngay khi Lead được nạp vào bảng <code>leads</code>, AI Gatekeeper tự động chấm điểm tiềm năng từ <code>0 đến 100</code> dựa trên số điện thoại, định dạng email, nội dung ghi chú và nguồn gốc chiến dịch.</li>
+                <li><strong>Phân tầng nhiệt độ (Temperature Classification):</strong> Dữ liệu được gán nhãn:
+                  <ul>
+                    <li><code>hot</code> (Điểm &gt; 80 hoặc yêu cầu nhập học gấp): Ưu tiên tư vấn trong vòng 5 phút.</li>
+                    <li><code>warm</code> (Điểm 50 - 80): Đang trong quá trình tìm hiểu thông tin, nhu cầu rõ ràng.</li>
+                    <li><code>low_intent</code> (Điểm &lt; 50): Cần sàng lọc thêm trước khi phân bổ nguồn lực chuyên sâu.</li>
+                    <li><code>nurture</code>: Chưa có nhu cầu tức thì, chuyển vào chuỗi email/tin nhắn chăm sóc tự động.</li>
+                  </ul>
+                </li>
+                <li><strong>Cadence liên hệ đa kênh:</strong> Tư vấn viên thực hiện quy trình tiếp cận qua Điện thoại $\rightarrow$ Zalo $\rightarrow$ Email. Mỗi lần tương tác được ghi nhận thời gian thực vào bảng <code>contact_activities</code>.</li>
+                <li><strong>Tiêu chuẩn vượt chặng (Exit Criteria):</strong> Thiết lập được cuộc hội thoại hai chiều, xác nhận được họ tên thật, chương trình quan tâm và kỳ nhập học dự kiến (<code>expected_intake</code>) $\rightarrow$ Chuyển sang Stage <code>04 – Needed</code>.</li>
+              </ul>
+
+              <h2 id="journey-phase-2">Chặng 2: Khám Phá Nhu Cầu, Khớp Chương Trình &amp; Đề Xuất Tuyển Sinh (Stages 04 - 08)</h2>
+              <p>
+                Bao gồm 5 giai đoạn: <code>04 – Needed</code> $\rightarrow$ <code>05 – Discovery Completed</code> $\rightarrow$ <code>06 – Program Matched</code> $\rightarrow$ <code>07 – Proposal Sent</code> $\rightarrow$ <code>08 – Evaluation / Objection</code>:
+              </p>
+              <ul>
+                <li><strong>Khám phá chuyên sâu (Deep Discovery Framework):</strong> TVV làm rõ 5 yếu tố cốt lõi: <em>Mục tiêu thăng tiến (Goal)</em>, <em>Nỗi đau/hạn chế hiện tại (Pain)</em>, <em>Động lực học tập (Motivation)</em>, <em>Rào cản thời gian/ngân sách (Constraints)</em> và <em>Tiêu chí lựa chọn trường (Decision Criteria)</em>.</li>
+                <li><strong>Khớp giải pháp đào tạo (Program Matching):</strong> Dựa trên thông tin thu thập, TVV lựa chọn chương trình phù hợp nhất từ danh mục sản phẩm (bảng <code>products</code>) – ví dụ: Thạc sĩ Quản trị Kinh doanh (MBA), Thạc sĩ Tài chính, hay Khóa đào tạo Lãnh đạo cao cấp.</li>
+                <li><strong>Gửi Đề xuất tuyển sinh chính thức (Proposal Sent):</strong> Xuất báo giá chuyên nghiệp từ phân hệ Báo giá (<code>QuotesPage.tsx</code>) gửi tới học viên bao gồm: Khung chương trình chi tiết (Curriculum), lộ trình học tập, biểu phí học phí, hạn ngạch học bổng và lịch khai giảng.</li>
+                <li><strong>Xử lý phản đối và rào cản (Evaluation / Objection):</strong> Giải đáp toàn diện các băn khoăn về công nhận văn bằng (Accreditation), thời khóa biểu học buổi tối/cuối tuần, chính sách trả góp học phí và đối soát thực tế từ cựu học viên thành đạt.</li>
+              </ul>
+
+              <h2 id="journey-phase-3">Chặng 3: Thu Thập Hồ Sơ &amp; Hội Đồng Xét Tuyển Thẩm Định (Stages 09 - 11)</h2>
+              <p>
+                Bao gồm 3 giai đoạn: <code>09 – Application Started</code> $\rightarrow$ <code>10 – Application Completed</code> $\rightarrow$ <code>11 – Admission Approved</code>:
+              </p>
+              <ul>
+                <li><strong>Checklist Hồ sơ tuyển sinh:</strong> TVV hướng dẫn ứng viên chuẩn bị đầy đủ bộ hồ sơ học thuật gồm: Bằng tốt nghiệp Đại học (công chứng), Bảng điểm Đại học, Sơ yếu lý lịch / CV chuyên nghiệp, Thư giới thiệu (Letter of Recommendation), Chứng chỉ ngoại ngữ (IELTS/TOEIC hoặc bài thi nội bộ) và Đơn đăng ký xét tuyển.</li>
+                <li><strong>Theo dõi tiến độ hoàn thiện hồ sơ:</strong> Hệ thống hiển thị tỷ lệ % hoàn thiện hồ sơ trên Drawer <code>CustomerProfileDrawer.tsx</code>, tự động nhắc nhở tài liệu còn thiếu trước ngày đóng đợt xét tuyển.</li>
+                <li><strong>Hội đồng Xét tuyển thẩm định (Admissions Committee Review):</strong> Hồ sơ hợp lệ được chuyển sang trạng thái <code>10 – Application Completed</code> để Ban Xét tuyển phê duyệt. Khi đạt chuẩn đầu vào, hệ thống chuyển sang <code>11 – Admission Approved</code> và tự động phát hành <strong>Giấy Báo Trúng Tuyển (Official Acceptance Letter)</strong> hoặc Giấy Báo Có Điều Kiện (Conditional Acceptance).</li>
+              </ul>
+
+              <h2 id="journey-phase-4">Chặng 4: Cam Kết Tài Chính, Đặt Cọc &amp; Cơ Chế Hạ Cấp Hủy Cọc Linh Hoạt (Stages 12 - 13)</h2>
+              <p>
+                Bao gồm 2 giai đoạn: <code>12 – Offer / Scholarship Accepted</code> $\rightarrow$ <code>13 – Deposit / Tuition Payment</code>:
+              </p>
+              <ul>
+                <li><strong>Chấp thuận thư mời nhập học (Offer Accepted):</strong> Ứng viên xác nhận đồng ý với mức học bổng, cam kết tuân thủ quy chế đào tạo và lựa chọn phương án thanh toán học phí (thanh toán trọn gói hoặc chia đợt).</li>
+                <li><strong>Thu cọc giữ chỗ (Admissions Deposit):</strong> Kế toán hoặc TVV ghi nhận khoản đặt cọc tuyển sinh trên phân hệ Tiền cọc (bảng <code>deposits</code>). Hệ thống tự động tạo mã biên lai cọc, gửi email xác nhận thu cọc cho học viên và trừ công nợ tương ứng trên Đơn bán hàng (Sales Order).</li>
+                <li><strong>Quy tắc xử lý bỏ cọc / hủy cọc linh hoạt (deposit_demote_status):</strong>
+                  <p>
+                    Trong trường hợp khách hàng đã đặt cọc nhưng sau đó phát sinh thay đổi nguyện vọng, hoãn học hoặc yêu cầu hoàn/hủy cọc:
+                  </p>
+                  <table className="doc-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '220px' }}>Khóa cấu hình hệ thống</th>
+                        <th style={{ width: '180px' }}>Giá trị chuẩn</th>
+                        <th>Cơ chế vận hành &amp; Tác động đa chiều</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>deposit_demote_status</code></td>
+                        <td><code>chua_chot</code> (hoặc cấu hình tùy chỉnh)</td>
+                        <td>
+                          Khi trạng thái đơn cọc chuyển sang <code>cancelled</code> hoặc <code>refunded</code>:
+                          <ul>
+                            <li>Phễu tuyển sinh của khách hàng tự động hạ cấp về Stage được chỉ định trong tham số <code>deposit_demote_status</code> (thay vì cố định một trạng thái cứng, doanh nghiệp có thể cấu hình lùi về bất kỳ bước nào như <em>evaluation_objection</em>, <em>proposal_sent</em> hoặc <em>chua_chot</em>).</li>
+                            <li>Doanh số dự kiến (Expected Revenue) trên báo cáo tài chính tự động bị khấu trừ tương ứng.</li>
+                            <li>Hệ thống bắt buộc nhập lý do hủy cọc và ghi vết lịch sử kiểm toán trong bảng <code>audit_logs</code>.</li>
+                          </ul>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </li>
+              </ul>
+
+              <h2 id="journey-phase-5">Chặng 5: Bàn Giao Học Vụ &amp; Tiến Trình Nhắc Lịch Thạc Sĩ Tự Động (Stage 14)</h2>
+              <p>
+                Khi học viên hoàn tất 100% nghĩa vụ tài chính đợt đầu và nộp đủ hồ sơ gốc, khách hàng chính thức đạt mốc: <code>14 – Enrolled (Won)</code>.
+                Đây là thời điểm kết thúc quy trình tư vấn bán hàng và kích hoạt bàn giao sang phòng Quản trị Đào tạo (Academic Department):
+              </p>
+              <div className="doc-flow">
+                <div className="doc-flow-step">1. Đạt mốc 14 – Enrolled (deal_won_status)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">2. Cấp Mã Học Viên &amp; Kích hoạt Hồ sơ sinh viên</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">3. Bàn giao sang Cổng Học Vụ (Academic Portals)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">4. Kích hoạt Cron Nhắc Lịch Học &amp; Luận Văn Thạc Sĩ</div>
+              </div>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '240px' }}>Hạng mục tự động hóa</th>
+                    <th style={{ width: '220px' }}>Thành phần kỹ thuật</th>
+                    <th>Đặc tả chi tiết bàn giao &amp; Vận hành thực tế</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Cấp Mã Học Viên &amp; Đồng Bộ Lớp</strong></td>
+                    <td><code>contacts.pipeline_status = deal_won_status</code></td>
+                    <td>Học viên được tự động định danh mã số học viên, gán vào lớp học theo đúng kỳ khai giảng (<code>campaign_id</code>) và cấp quyền truy cập cổng tra cứu thời khóa biểu cá nhân.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Tiến Trình Nhắc Lịch Học Thuật Tự Động</strong></td>
+                    <td><code>backend/cron_academic_reminders.php</code></td>
+                    <td>
+                      Tiến trình ngầm độc quyền quét cơ sở dữ liệu định kỳ mỗi 15 phút, tự động gửi thông báo cá nhân hóa qua Email và Telegram/Zalo cho học viên và giảng viên:
+                      <ul>
+                        <li><strong>Nhắc mốc Luận văn Thạc sĩ (<code>thesis_milestones_json</code>):</strong> Tự động đếm ngược và thông báo thời hạn nộp đề cương luận văn, hạn nộp bản thảo đợt 1, lịch bảo vệ trước hội đồng khoa học.</li>
+                        <li><strong>Nhắc lịch Seminar Giảng viên (<code>lecturer_seminar</code>):</strong> Tự động gửi email thông báo trước 12 giờ cho giảng viên phụ trách kèm danh sách học viên lớp học.</li>
+                        <li><strong>Thông báo buổi học khẩn cấp &amp; Hạn bài tập:</strong> Cảnh báo trước 2 giờ học trực tuyến qua Zoom/Meet và nhắc nhở hạn chót nộp bài tập môn học (Assignment Deadlines).</li>
+                      </ul>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )
         }
       ]
     },
 
-    // 4. PHÂN BỔ LEAD & ĐỀN BÙ FAIR-SHARE
+    // 4. PHÂN BỔ LEAD, ĐA KÊNH, ĐỀN BÙ FAIR-SHARE & DASHBOARDS
     {
       id: 'crm-distribution',
-      title: '4. Thuật Toán Phân Bổ Lead & Đền Bù Công Bằng (Fair-Share)',
+      title: '4. Thuật Toán Phân Bổ Lead, Đa Kênh, Đền Bù Công Bằng (Fair-Share) & Dashboards',
       icon: RefreshCw,
       items: [
         {
           id: 'dist-round-robin',
-          title: 'Thuật Toán Chia Round-Robin, Trọng Số Năng Lực & Phân Ca Trực',
-          description: 'Quy tắc lọc danh sách tư vấn viên khả dụng, chia quay vòng theo trọng số và phân ca.',
+          title: 'Thuật Toán Chia Round-Robin, 5 Cổng Kiểm Soát (5 GATES) & Xử Lý Ngoài Giờ',
+          description: 'Quy chuẩn 5 cổng kiểm soát nghiêm ngặt checkConsultantGates, thuật toán chia số có trọng số năng lực, cơ chế hàng đợi pending_work_hours và ân hạn check-in đầu ca.',
           headings: [
-            { id: 'round-robin-engine', text: 'Thuật Toán Round-Robin & Trọng Số Năng Lực' },
-            { id: 'fair-share-audit', text: 'Quy Trình Đền Bù Lead Rác (Fair Share Audit)' },
-            { id: 'sla-lead-recovery', text: 'Quy Tắc Thu Hồi & Tái Phân Bổ (Recovery)' }
+            { id: 'five-gates-control', text: '5 Cổng Kiểm Soát Phân Bổ Nghiêm Ngặt (The 5 GATES)' },
+            { id: 'weighted-round-robin', text: 'Thuật Toán Weighted Round-Robin & Trọng Số Phân Bổ' },
+            { id: 'after-hours-pending', text: 'Cơ Chế Xử Lý Ngoài Giờ (Pending Work Hours & Grace Period)' },
+            { id: 'sla-lead-recovery', text: 'Quy Tắc Thu Hồi & Tái Phân Bổ Tự Động (Recovery & Re-allocation)' }
           ],
           content: (
             <div className="doc-prose">
-              <h2 id="round-robin-engine">Thuật Toán Round-Robin &amp; Trọng Số Năng Lực</h2>
+              <h2 id="five-gates-control">5 Cổng Kiểm Soát Phân Bổ Nghiêm Ngặt (The 5 GATES)</h2>
               <p>
-                Quy trình chia lead vận hành theo thuật toán quay vòng công bằng (Round-Robin) có áp dụng trọng số năng lực:
+                Để loại bỏ hoàn toàn tình trạng thất thoát lead, phân bổ nhầm nhân sự đang vắng mặt hoặc vượt quá năng lực phục vụ,
+                hàm cốt lõi <code>checkConsultantGates($conn, $consultantId, $lead)</code> trong <code>backend/webhook_logic.php</code>
+                thực thi <strong>5 cổng kiểm soát logic nối tiếp</strong> trước khi bất kỳ tư vấn viên nào được đưa vào danh sách nhận lead:
+              </p>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '130px' }}>Cổng kiểm soát</th>
+                    <th style={{ width: '220px' }}>Điều kiện kỹ thuật kiểm tra</th>
+                    <th>Nghiệp vụ chi tiết &amp; Cơ chế kích hoạt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>GATE 1: Project Roster</strong></td>
+                    <td><code>project_roster</code> matching <code>campaign_id</code> / <code>project_id</code></td>
+                    <td>Lead thuộc chiến dịch tuyển sinh của dự án/khóa học nào thì <strong>chỉ phân bổ cho TVV đã được ghi danh trong Roster</strong> của dự án đó. Nếu TVV không thuộc danh sách phân công chuyên môn $\rightarrow$ Loại trừ ngay lập tức.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>GATE 2: Valid Check-in</strong></td>
+                    <td><code>check_ins.status = 'approved'</code> hoặc Ca trực hợp lệ</td>
+                    <td>
+                      Nhân sự phải có mặt làm việc thực tế:
+                      <ul>
+                        <li><strong>Ngày làm việc hành chính:</strong> Bắt buộc có bản ghi chấm công <code>status = 'approved'</code> (hoặc <code>pending_approval</code> nếu bật cờ cấu hình <code>allow_lead_distribution_on_pending_checkin</code>).</li>
+                        <li><strong>Ca trực đêm (Night Shift 22:00 - 06:00):</strong> Được miễn trừ chấm công ban ngày nếu có đơn đăng ký ca đêm đã được duyệt trong <code>night_shift_registrations</code> (kiểm tra qua <code>hasApprovedShiftForDate</code>).</li>
+                        <li><strong>Trực ngày Lễ / Tết / Cuối tuần:</strong> Kiểm tra đăng ký trực ca trong <code>holiday_shift_registrations</code>. Nếu bật bắt buộc chấm công ngày lễ (<code>require_checkin_holiday_lead = 1</code>) thì vẫn phải check-in hợp lệ.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>GATE 3: Readiness</strong></td>
+                    <td><code>users.status = 'active'</code> &amp; <code>vacation_mode = 0</code></td>
+                    <td>Kiểm tra tư vấn viên đang trong trạng thái sẵn sàng phục vụ. Nếu nhân viên tạm khóa tài khoản, đang nghỉ thai sản hoặc chủ động bật <strong>Chế độ Tạm Vắng (Vacation Mode = 1)</strong> khi đi gặp khách ngoài $\rightarrow$ Bỏ qua vòng chia.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>GATE 4: Anti-Hoarding</strong></td>
+                    <td><code>backpressure_limit</code> (Van chống ôm data)</td>
+                    <td>Nếu số lượng lead chưa liên hệ đầu tiên (chưa gọi/chưa nhắn) của TVV vượt quá hạn mức trần cấu hình, hệ thống tạm ngắt cấp data mới để TVV tập trung xử lý dứt điểm lượng data tồn đọng, ngăn ngừa tình trạng quá tải.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>GATE 5: Golden Hours Cap</strong></td>
+                    <td><code>golden_hours_start_time</code> - <code>golden_hours_end_time</code> (06:00 - 08:30)</td>
+                    <td>Trong khung giờ vàng nhu cầu khách hàng cao điểm đầu buổi sáng, hệ thống áp trần <code>golden_hours_max_leads_per_consultant</code> để đảm bảo toàn bộ đội ngũ Sales đều nhận được lượng data công bằng, không ai bị nuốt trọn data giờ vàng.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="weighted-round-robin">Thuật Toán Weighted Round-Robin &amp; Trọng Số Phân Bổ</h2>
+              <p>
+                Tại hàm <code>getNextConsultantInRound($conn, $roundId, $lead, $excludeIds)</code>, sau khi lọc qua 5 Cổng kiểm duyệt,
+                các tư vấn viên hợp lệ được xếp vào vòng quay phân bổ tự động có áp dụng trọng số năng lực:
               </p>
               <ul>
-                <li><strong>Lọc danh sách khả dụng (Active Pool):</strong> Chỉ tư vấn viên thỏa mãn cả 3 điều kiện: (1) Tài khoản đang kích hoạt, (2) Đang trong ca trực hợp lệ theo chấm công hoặc bảng xếp ca, (3) Chưa chạm ngưỡng giới hạn lead tối đa trong ngày (Cap Limit).</li>
-                <li><strong>Trọng số phân bổ (Weight):</strong> TVV kỳ cựu hoặc đạt thành tích xuất sắc có thể được cấu hình trọng số <code>1.5x</code> hoặc <code>2.0x</code>, nghĩa là cứ mỗi vòng quay họ nhận được 2 lead thay vì 1 lead.</li>
+                <li><strong>Tỷ lệ phân phối (<code>receive_ratio</code>):</strong> Thiết lập tỷ trọng cấp data giữa các tư vấn viên (ví dụ: TVV Senior nhận hệ số <code>2.0</code>, TVV Junior nhận hệ số <code>1.0</code>).</li>
+                <li><strong>Hạn mức lượt cấp (<code>data_per_turn</code> &amp; <code>current_turn_remaining</code>):</strong> Mỗi vòng quay, nhân sự nhận đủ số lượng quy định theo lượt trước khi chuyển tiếp cho nhân sự kế tiếp trong danh sách vòng tròn.</li>
+                <li><strong>Khóa ứng dụng MySQL Advisory Lock:</strong> Mỗi lượt phân bổ được bảo vệ bởi <code>GET_LOCK('round_robin_assign_' . $roundId, 5)</code> đảm bảo an toàn tuyệt đối, triệt tiêu 100% rủi ro tranh chấp dữ liệu khi nhiều nguồn Lead đổ về cùng mili-giây.</li>
               </ul>
 
-              <h2 id="fair-share-audit">Quy Trình Đền Bù Lead Rác (Fair Share Audit)</h2>
+              <h2 id="after-hours-pending">Cơ Chế Xử Lý Ngoài Giờ (Pending Work Hours &amp; Grace Period)</h2>
               <p>
-                Để đảm bảo công bằng khi nhân viên nhận phải lead rác (số thuê bao không liên lạc được, số ảo, nhầm máy):
+                Khi có khách hàng điền form vào ban đêm hoặc ngoài khung giờ làm việc quy định (trừ nhân sự trực ca đêm chuyên biệt):
               </p>
               <div className="doc-flow">
-                <div className="doc-flow-step">1. TVV mở Ticket báo lỗi lead (bảng <code>data_reports</code>)</div>
+                <div className="doc-flow-step">1. Lead về ngoài giờ: Ghi nhận status = 'pending_work_hours'</div>
                 <div className="doc-flow-arrow">→</div>
-                <div className="doc-flow-step">2. Quản lý đối soát nhật ký tương tác &amp; CRM Activities</div>
+                <div className="doc-flow-step">2. Đầu giờ làm việc: Tiến trình releasePendingWorkHoursLeads quét hàng đợi</div>
                 <div className="doc-flow-arrow">→</div>
-                <div className="doc-flow-step">3. Quản lý phê duyệt (Approved / Compensated)</div>
+                <div className="doc-flow-step">3. Kiểm tra Check-in &amp; Đệm ân hạn (Grace Period: lead_response_timeout_minutes)</div>
                 <div className="doc-flow-arrow">→</div>
-                <div className="doc-flow-step">4. Hệ thống tự động cộng 1 Credit bù data</div>
+                <div className="doc-flow-step">4. Nếu Check-in đúng giờ: Giải phóng Lead và bắn Noti 1-1 cho Sales</div>
                 <div className="doc-flow-arrow">→</div>
-                <div className="doc-flow-step">5. Tự động ưu tiên cấp lead mới ở vòng chia Fair-Share kế tiếp</div>
+                <div className="doc-flow-step">5. Nếu Quá hạn Ân hạn: Thu hồi và Tái phân bổ ngay cho TVV Online</div>
               </div>
+              <p>
+                <strong>Đặc tả kỹ thuật cơ chế Ân Hạn Check-in (Grace Period):</strong>
+                Thời gian ân hạn được cấu hình qua tham số <code>lead_response_timeout_minutes</code> (mặc định là <strong>2 phút</strong>).
+                Khi bắt đầu giờ làm việc (ví dụ <code>08:00</code>), thời hạn ân hạn sẽ kết thúc lúc <code>08:02</code>.
+                Nếu sau thời điểm này mà TVV dự kiến nhận số vẫn chưa có lượt chấm công hợp lệ (chưa tới công ty hoặc check-in trễ),
+                tiến trình sẽ kích hoạt cờ <code>isLateCheckinRealloc = true</code>, lập tức thu hồi data và chuyển giao cho TVV khác đã check-in sẵn sàng làm việc.
+              </p>
 
-              <h2 id="sla-lead-recovery">Quy Tắc Thu Hồi &amp; Tái Phân Bổ (Recovery)</h2>
+              <h2 id="sla-lead-recovery">Quy Tắc Thu Hồi &amp; Tái Phân Bổ Tự Động (Recovery &amp; Re-allocation)</h2>
               <ul>
-                <li><strong>Thu hồi theo SLA ngắn (SLA Timeout):</strong> Nếu tư vấn viên không thực hiện cuộc gọi hoặc cập nhật tương tác đầu tiên trong vòng <strong>30 phút</strong>, hệ thống tự động thu hồi lead và đẩy sang tư vấn viên tiếp theo.</li>
-                <li><strong>Tái chăm sóc định kỳ (Re-nurturing 3 - 6 tháng):</strong> Các khách hàng đã liên hệ nhưng chưa chốt đơn sau 90 ngày (Dead Deals) có thể được kích hoạt lại quy trình nuôi dưỡng dài hạn, hoặc Trưởng nhóm chủ động phân công lại cho nhân sự khác khai thác theo từng chiến dịch tuyển sinh.</li>
+                <li><strong>SLA Phản hồi nhanh (Time-to-First-Contact SLA):</strong> Hệ thống theo dõi mốc thời gian từ lúc gán Lead đến khi phát sinh tương tác đầu tiên. Nếu quá thời gian SLA cấu hình (ví dụ 30 phút trong giờ làm việc) mà TVV chưa gọi điện hoặc cập nhật nhật ký, Lead tự động bị thu hồi về kho chung hoặc chuyển sang tư vấn viên khác.</li>
+                <li><strong>Tái phân bổ khách hàng tiềm năng cũ (Dead Deals Re-allocation):</strong> Các hồ sơ khách hàng dừng tương tác trên 90 ngày được gom vào chiến dịch tái nuôi dưỡng (Re-nurturing) và cho phép Trưởng nhóm phân công lại cho nhân sự mới khai thác góc nhìn mới.</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'dist-fairshare-handover',
+          title: 'Đền Bù Phân Phối (Fair-Share), Chống Đói (Starvation) & Chuyển Giao Data Chủ Động',
+          description: 'Thuật toán bảo vệ chống đói starvation cho nhân sự nghỉ phép, quy trình kiểm toán cấp bù data rác qua data_reports và cơ chế chuyển giao data chủ động.',
+          headings: [
+            { id: 'starvation-prevention', text: 'Thuật Toán Chống Đói (Starvation Prevention) Khi Nghỉ Phép' },
+            { id: 'data-report-compensation', text: 'Quy Trình Báo Lỗi Data Rác (data_reports) & Cấp Bù Tự Động' },
+            { id: 'manual-handover-reassign', text: 'Chuyển Giao Data Chủ Động (Manual Handover & Reassignment)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="starvation-prevention">Thuật Toán Chống Đói (Starvation Prevention) Khi Nghỉ Phép</h2>
+              <p>
+                Một trong những bất cập lớn nhất của mô hình chia số truyền thống là khi tư vấn viên nghỉ ốm, nghỉ phép năm hoặc đi công tác,
+                họ bị mất toàn bộ cơ hội nhận khách hàng và bị tụt hậu doanh số khi quay trở lại. MYERP giải quyết triệt để vấn đề này qua
+                <strong>Thuật toán Chống đói dữ liệu (Starvation Prevention Engine)</strong>:
+              </p>
+              <ul>
+                <li><strong>Tích lũy Credit bỏ lỡ (<code>skipped_credit</code>):</strong> Trong thời gian nhân viên bật <code>vacation_mode</code> hoặc nghỉ phép có đơn hợp lệ (<code>leave_start</code> đến <code>leave_end</code>), mỗi khi vòng quay Round-Robin đi qua vị trí của họ, hệ thống tự động ghi nhận 1 đơn vị <code>skipped_credit</code> vào nhật ký điều phối.</li>
+                <li><strong>Cơ chế tự động cấp bù khi trở lại (<code>compensation_count</code>):</strong> Ngay khi nhân sự check-in trở lại văn phòng, hệ thống kích hoạt quỹ cấp bù. Ở các vòng chia tiếp theo, nhân sự này được ưu tiên nhận bù data so với các nhân sự khác cho đến khi bù đủ số lượt bị thiếu hụt.</li>
+                <li><strong>Van điều tiết chống ngợp data (<code>starvation_max_leads_per_hour</code>):</strong> Để tránh việc nhân sự vừa quay lại làm việc bị "dội" hàng chục số cùng một lúc không kịp gọi, hệ thống áp đặt trần tối đa (mặc định <strong>5 lead/giờ</strong>). Phần data bù còn lại sẽ được rải đều sang các giờ tiếp theo một cách khoa học.</li>
+              </ul>
+
+              <h2 id="data-report-compensation">Quy Trình Báo Lỗi Data Rác (data_reports) &amp; Cấp Bù Tự Động</h2>
+              <p>
+                Khi tư vấn viên nhận phải lead rác (số thuê bao không tồn tại, nhầm máy, số ảo spam từ quảng cáo):
+              </p>
+              <div className="doc-flow">
+                <div className="doc-flow-step">1. TVV mở Ticket báo lỗi Lead (bảng data_reports, chọn lý do: Sai số, Không liên lạc được, Trùng lặp)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">2. Quản lý kiểm duyệt đối soát bản ghi cuộc gọi &amp; lịch sử tương tác</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">3. Quản lý bấm Phê duyệt (Approved / Compensated)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">4. Hệ thống tự động sinh bản ghi distribution_logs với status = 'compensation'</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">5. Tự động ưu tiên phân bổ Lead mới đạt chuẩn cho TVV ở lượt quay Fair-Share tiếp theo</div>
+              </div>
+              <p>
+                Nhờ quy trình này, tỷ lệ thất thoát data và bất bình đẳng giữa các thành viên trong đội ngũ kinh doanh được triệt tiêu 100%.
+              </p>
+
+              <h2 id="manual-handover-reassign">Chuyển Giao Data Chủ Động (Manual Handover &amp; Reassignment)</h2>
+              <p>
+                Ngoài thuật toán tự động, hệ thống hỗ trợ quản lý và tư vấn viên thực hiện điều chuyển dữ liệu chủ động:
+              </p>
+              <ul>
+                <li><strong>Bàn giao đơn lẻ (Single Handover):</strong> Thao tác trực tiếp trên Drawer <code>CustomerProfileDrawer.tsx</code>, chọn tư vấn viên tiếp nhận mới kèm ghi chú lý do bàn giao (ví dụ: chuyển giao do khác vùng địa lý hoặc cần kỹ năng tư vấn chuyên sâu).</li>
+                <li><strong>Chuyển giao hàng loạt (Bulk Reassignment):</strong> Hỗ trợ Trưởng phòng kinh doanh lọc danh sách hàng chục/hàng trăm hồ sơ theo chiến dịch, trạng thái phễu hoặc người phụ trách cũ (nhân sự nghỉ việc) để chuyển giao sang đội ngũ mới chỉ với 1 thao tác.</li>
+                <li><strong>Lưu vết kiểm toán bất biến:</strong> Mọi thao tác bàn giao chủ động đều được ghi nhận hành vi <code>action = 'MANUAL_REASSIGN'</code> trong cả 2 bảng <code>distribution_logs</code> và <code>contact_activities</code>, lưu rõ người chuyển, người nhận, thời điểm và lý do.</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'dist-security-privacy',
+          title: 'Phân Luồng Tin Nhắn Riêng Từng Sales (1-1) & Bảo Mật Cô Lập Dữ Liệu',
+          description: 'Hạ tầng bắn tin tức thì 1-1 riêng biệt qua Telegram, Zalo Bot, Email, In-App Deep Link và ma trận phân quyền cô lập data chống tranh chấp.',
+          headings: [
+            { id: 'direct-1-on-1-notifications', text: 'Phân Luồng Tin Nhắn Trực Tiếp 1-1 Cho Từng Tư Vấn Viên' },
+            { id: 'data-isolation-matrix', text: 'Ma Trận Phân Quyền Cô Lập Dữ Liệu Khách Hàng (Data Isolation)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="direct-1-on-1-notifications">Phân Luồng Tin Nhắn Trực Tiếp 1-1 Cho Từng Tư Vấn Viên</h2>
+              <p>
+                Tại hàm <code>sendDirectSaleLeadNotification($conn, $leadId, $assignedToId, $roundId)</code> trong <code>backend/webhook_logic.php</code>,
+                ngay khi một Lead được chỉ định cho tư vấn viên, hệ thống kích hoạt đồng thời <strong>4 kênh thông báo riêng tư độc lập</strong>:
+              </p>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '180px' }}>Kênh thông báo 1-1</th>
+                    <th style={{ width: '220px' }}>Cơ chế định tuyến &amp; Điểm nhận</th>
+                    <th>Nội dung tin nhắn &amp; Trải nghiệm người dùng</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Telegram Bot 1-1</strong></td>
+                    <td><code>users.telegram_chat_id</code> cá nhân của TVV</td>
+                    <td>Bắn tin nhắn riêng trực tiếp cho TVV qua Telegram với định dạng HTML nổi bật: Họ tên khách hàng, Số điện thoại (bấm gọi được ngay), Email, Nguồn chiến dịch, Phân loại và Ghi chú nhu cầu.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Zalo Bot Cá Nhân</strong></td>
+                    <td><code>users.zalo_chat_id</code> thông qua <code>backend/zalo_bot.php</code></td>
+                    <td>Gửi thông báo Zalo cá nhân hóa kèm tên vòng chia số và thông tin tóm tắt để TVV có thể mở Zalo chat trực tiếp với khách hàng ngay trên điện thoại.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Email Giao Việc Tức Thời</strong></td>
+                    <td>Hộp thư công vụ TVV qua <code>backend/mailer.php</code></td>
+                    <td>Gửi email chứa đầy đủ thông số hồ sơ khách hàng, CC tự động cho Quản lý phụ trách vòng chia số (<code>cc_emails</code>) để giám sát tiến độ.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>In-App Web Notification &amp; Deep Link</strong></td>
+                    <td>Bảng <code>notifications</code> với link: <code>{'/contacts?open_contact_id={id}'}</code></td>
+                    <td>Đẩy chuông thông báo đỏ trên giao diện MYERP thời gian thực. TVV chỉ cần click vào thông báo là <strong>hệ thống tự động mở thẳng CustomerProfileDrawer 360</strong> của khách hàng đó, không cần gõ tìm kiếm thủ công.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="data-isolation-matrix">Ma Trận Phân Quyền Cô Lập Dữ Liệu Khách Hàng (Data Isolation)</h2>
+              <p>
+                Để bảo vệ quyền lợi cá nhân của từng tư vấn viên và ngăn ngừa triệt để tình trạng tranh chấp, xem trộm data hoặc làm phiền khách hàng của nhau:
+              </p>
+              <ul>
+                <li><strong>Cấp Tư vấn viên (Consultant Scope):</strong> Chỉ nhìn thấy và thao tác trên các bản ghi mà trường <code>assigned_to = consultantId</code> hoặc <code>owner_id = userId</code>. Danh sách khách hàng của đồng nghiệp cùng phòng hoàn toàn bị ẩn khỏi giao diện và API.</li>
+                <li><strong>Cấp Trưởng nhóm / Quản lý (Team Manager Scope):</strong> Xem toàn bộ dữ liệu của các thành viên thuộc phòng ban/nhóm mình phụ trách (theo <code>department_id</code> hoặc phân công nhóm), thực hiện điều phối và hỗ trợ đóng deal.</li>
+                <li><strong>Cấp Ban Giám Đốc / Admin (Global Scope):</strong> Quyền truy cập toàn diện trên mọi chiến dịch và đơn vị thành viên, theo dõi dòng chảy dữ liệu trên War Room Flight Deck và báo cáo kiểm toán Fair-Share Audit.</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'dist-sources-analytics',
+          title: 'Nguồn Dữ Liệu Đa Kênh (Meta Ads, Google Sheets, CAPI) & Phân Tích Hiệu Quả Nguồn',
+          description: 'Cổng thu thập dữ liệu đa kênh tự động, đồng bộ realtime qua Webhook, Google Sheets API, Meta CAPI Server-side và báo cáo phân tích ROI/Attribution.',
+          headings: [
+            { id: 'omnichannel-ingestion', text: 'Cổng Thu Thập Dữ Liệu Đa Kênh Tự Động (Omnichannel Ingestion)' },
+            { id: 'meta-capi-tracking', text: 'Meta Conversions API (CAPI) Server-Side Tracking & Dữ Liệu Băm' },
+            { id: 'attribution-analytics', text: 'Phân Tích Nguồn Dữ Liệu & Đo Lường Hiệu Quả (Attribution & ROI)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="omnichannel-ingestion">Cổng Thu Thập Dữ Liệu Đa Kênh Tự Động (Omnichannel Ingestion)</h2>
+              <p>
+                IDEAS MYERP tích hợp sẵn các đường ống dữ liệu (Data Pipelines) mạnh mẽ từ mọi điểm chạm quảng cáo và truyền thông:
+              </p>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '190px' }}>Nguồn dữ liệu</th>
+                    <th style={{ width: '230px' }}>Cơ chế kỹ thuật kết nối</th>
+                    <th>Đặc tả xử lý, Chống trùng &amp; Đồng bộ dữ liệu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Meta Lead Ads Webhook</strong></td>
+                    <td><code>POST /backend/webhook.php</code> qua Facebook Graph API</td>
+                    <td>
+                      Tiếp nhận tức thời sự kiện khách điền Instant Form trên Facebook/Instagram:
+                      <ul>
+                        <li>Xác thực chữ ký bảo mật <code>hub_verify_token</code> và phản hồi <code>hub_challenge</code>.</li>
+                        <li>Trích xuất động các trường tùy biến (custom fields), chuẩn hóa số điện thoại về định dạng quốc gia chuẩn (bỏ khoảng trắng, chuyển <code>+84</code> thành <code>0x</code>).</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>Google Sheets API Sync</strong></td>
+                    <td><code>backend/cron_sync.php</code> (hàm <code>syncInventoryConnection</code>)</td>
+                    <td>
+                      Đồng bộ định kỳ tự động từ các bảng tính Google Sheets của đội ngũ Marketing / CTV:
+                      <ul>
+                        <li>Hỗ trợ ánh xạ linh hoạt tên cột (Column Mapping: Họ tên, SĐT, Email, Nguồn, Khóa học quan tâm, Ghi chú).</li>
+                        <li>Chống nạp trùng lặp dựa trên khóa phức hợp <code>phone + email + source</code>.</li>
+                        <li>Tự động đánh dấu dòng đã đồng bộ trên Google Sheets để tránh đọc lại dữ liệu cũ.</li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>RESTful Lead Ingestion API</strong></td>
+                    <td><code>POST /backend/api.php?action=create_lead</code> kèm API Token</td>
+                    <td>Cổng API mở cho phép Landing Pages, Website tuyển sinh bên ngoài, Chatbot AI hoặc các ứng dụng vệ tinh đẩy dữ liệu về hệ thống tập trung với độ trễ dưới 50ms.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="meta-capi-tracking">Meta Conversions API (CAPI) Server-Side Tracking &amp; Dữ Liệu Băm</h2>
+              <p>
+                Khắc phục tình trạng mất dấu chuyển đổi do chính sách bảo mật trình duyệt (iOS 14+, Safari ITP, AdBlockers),
+                bộ điều khiển <code>backend/controllers/CapiController.php</code> thực thi cơ chế <strong>Server-to-Server Tracking</strong>:
+              </p>
+              <ul>
+                <li><strong>Sự kiện chuyển đổi tự động:</strong> Khi khách hàng tiến triển trên phễu, hệ thống tự động bắn các sự kiện chuẩn về Meta Pixel:
+                  <ul>
+                    <li><code>Lead</code>: Khi dữ liệu vừa được nạp vào hệ thống thành công.</li>
+                    <li><code>CompleteRegistration</code>: Khi học viên nộp đủ hồ sơ tuyển sinh (Stage 10).</li>
+                    <li><code>Purchase</code>: Khi phát sinh biên lai đặt cọc hoặc đóng học phí (Stage 13).</li>
+                  </ul>
+                </li>
+                <li><strong>Bảo mật &amp; Băm dữ liệu người dùng (SHA-256):</strong> Mọi thông tin định danh (User Data Parameters: Email, Số điện thoại, Họ tên, Tỉnh thành) đều được chuẩn hóa chữ thường, loại bỏ ký tự thừa và <strong>băm một chiều bằng thuật toán SHA-256</strong> (<code>hash('sha256', $value)</code>) trước khi gửi qua Meta Graph API, tuân thủ tuyệt đối quy định bảo vệ dữ liệu cá nhân.</li>
+              </ul>
+
+              <h2 id="attribution-analytics">Phân Tích Nguồn Dữ Liệu &amp; Đo Lường Hiệu Quả (Attribution &amp; ROI)</h2>
+              <p>
+                Toàn bộ dữ liệu khách hàng được lưu vết trọn vẹn bộ tham số tiếp thị đa chiều:
+                <code>utm_source</code>, <code>utm_medium</code>, <code>utm_campaign</code>, <code>utm_content</code>, <code>utm_term</code>.
+                Hệ thống báo cáo phân tích nguồn giúp Giám đốc Marketing và Ban Lãnh Đạo nắm bắt chính xác:
+              </p>
+              <ul>
+                <li><strong>Tỷ lệ chuyển đổi theo kênh:</strong> So sánh tỷ lệ chuyển đổi từ Lead thành Học viên giữa Facebook Ads, Google Search, TikTok, Sự kiện Workshop và Mạng lưới cựu học viên (Referral).</li>
+                <li><strong>Chi phí trên một Học viên chính thức (Cost per Enrolled Student):</strong> Kết hợp dữ liệu chi phí quảng cáo với dữ liệu doanh thu thực thu để tính toán chỉ số hoàn vốn đầu tư tiếp thị (ROAS).</li>
+              </ul>
+            </div>
+          )
+        },
+        {
+          id: 'dist-dashboards-reporting',
+          title: 'Hệ Thống Dashboard Thống Kê Điều Hành (War Room, Fair-Share) & Báo Cáo Nhanh',
+          description: 'Bảng điều hành tác chiến War Room Flight Deck dạng hạt mô phỏng realtime, Dashboard kiểm toán Fair-Share Audit và báo cáo nhanh tự động 22:00.',
+          headings: [
+            { id: 'war-room-flight-deck', text: 'Bảng Điều Hành Tác Chiến Tuyển Sinh Real-time (War Room Flight Deck)' },
+            { id: 'fair-share-audit-dashboard', text: 'Dashboard Kiểm Toán Phân Bổ Công Bằng (Fair-Share Audit Dashboard)' },
+            { id: 'daily-automated-reports', text: 'Hệ Thống Báo Cáo Nhanh Tự Động Cuối Ngày (Daily 22:00 Report)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="war-room-flight-deck">Bảng Điều Hành Tác Chiến Tuyển Sinh Real-time (War Room Flight Deck)</h2>
+              <p>
+                Phân hệ <strong>War Room Flight Deck</strong> (<code>src/components/Dashboard/WarRoomFlightDeck.tsx</code>) là trung tâm chỉ huy số
+                mô phỏng dòng chảy khách hàng theo thời gian thực dưới dạng hệ thống hạt động học (Particle / Stardust System):
+              </p>
+              <ul>
+                <li><strong>Mô phỏng động học 3 chặng:</strong>
+                  <ul>
+                    <li><em>Chặng 1 (Nguồn $\rightarrow$ Lõi kiểm duyệt):</em> Các hạt mang thông tin nguồn Lead chuyển động từ các cổng tiếp nhận về trung tâm AI Gatekeeper.</li>
+                    <li><em>Chặng 2 (Thẩm định tại AI Core):</em> AI Pre-screening đánh giá chất lượng, kiểm tra chống trùng và áp dụng bộ quy tắc nghiệp vụ.</li>
+                    <li><em>Chặng 3 (Lõi kiểm duyệt $\rightarrow$ Tư vấn viên):</em> Hạt phóng thẳng về phía avatar của tư vấn viên được chỉ định trong vòng quay Round-Robin.</li>
+                  </ul>
+                </li>
+                <li><strong>Mã màu trạng thái trực quan:</strong>
+                  <ul>
+                    <li><code>assigned</code>: Phân bổ thành công tới tư vấn viên trực ca.</li>
+                    <li><code>rejected</code> / <code>duplicate</code>: Bị chặn do trùng lặp dữ liệu hoặc số nằm trong danh sách đen viễn thông.</li>
+                    <li><code>compensation</code>: Lead được cấp bù công bằng cho tư vấn viên theo chính sách Fair-Share.</li>
+                    <li><code>pending_work_hours</code>: Tạm treo chờ mở ca làm việc buổi sáng.</li>
+                  </ul>
+                </li>
+                <li><strong>Giám sát tốc độ phản hồi (Speed-to-Lead):</strong> Đo lường số giây từ lúc Lead phát sinh đến khi Sales nhấc máy gọi cuộc đầu tiên, giúp tối ưu hóa tỷ lệ chốt đơn ngay khi nhu cầu khách hàng đang nóng nhất.</li>
+              </ul>
+
+              <h2 id="fair-share-audit-dashboard">Dashboard Kiểm Toán Phân Bổ Công Bằng (Fair-Share Audit Dashboard)</h2>
+              <p>
+                Trang Kiểm toán Phân bổ (<code>src/pages/FairShareAudit.tsx</code>) cung cấp công cụ đối soát minh bạch tuyệt đối giữa các nhân viên kinh doanh:
+              </p>
+              <ul>
+                <li><strong>Biểu đồ so khớp Kỳ vọng vs Thực tế (Expected vs Actual BarChart):</strong> Hiển thị song song số lượng Lead nhân sự đáng lẽ phải nhận theo tỷ trọng cấu hình (<code>receive_ratio</code>) so với số lượng Lead thực tế đã được gán.</li>
+                <li><strong>Đo lường độ lệch (Variance &amp; Delta):</strong> Tự động chỉ rõ số lượng chênh lệch (âm hoặc dương) của từng người.</li>
+                <li><strong>Bóc tách nguyên nhân bù trừ chi tiết (Compensation Breakdown Modal):</strong>
+                  <ul>
+                    <li><code>ticket</code>: Bù do các Ticket báo lỗi data rác (<code>data_reports</code>) được quản lý phê duyệt.</li>
+                    <li><code>blacklist</code>: Bù do hệ thống phát hiện số điện thoại lọt danh sách chặn viễn thông.</li>
+                    <li><code>reassign</code>: Bù trừ do các lượt điều chuyển công tác hoặc chuyển giao data chủ động.</li>
+                  </ul>
+                </li>
+              </ul>
+
+              <h2 id="daily-automated-reports">Hệ Thống Báo Cáo Nhanh Tự Động Cuối Ngày (Daily 22:00 Report)</h2>
+              <p>
+                Được điều phối bởi tiến trình ngầm <code>backend/cron_daily_report.php</code>, hệ thống tự động tổng hợp và phát hành bản tin
+                điều hành lúc cuối ngày (mặc định cấu hình lúc <strong>17:00 hoặc 22:00</strong> tùy đơn vị):
+              </p>
+              <ul>
+                <li><strong>Nội dung báo cáo tổng hợp:</strong>
+                  <ul>
+                    <li>Tổng số lượng Lead mới phát sinh trong ngày bóc tách theo từng nguồn chiến dịch.</li>
+                    <li>Tỷ lệ liên hệ thành công của toàn đội ngũ và số cuộc gọi thực hiện.</li>
+                    <li>Số đơn cọc mới thu trong ngày (bảng <code>deposits</code>) và tổng doanh số tiền mặt thực tế.</li>
+                    <li>Bảng vinh danh Top Tư vấn viên có tốc độ xử lý nhanh nhất và doanh thu cao nhất ngày.</li>
+                  </ul>
+                </li>
+                <li><strong>Kênh phát hành đa nền tảng:</strong> Tự động gửi tin nhắn tổng hợp điều hành vào <strong>Nhóm Zalo Ban Lãnh Đạo</strong> (<code>zalo_admin_group_chat_id</code>) và <strong>Nhóm Telegram Quản Trị</strong> (<code>telegram_admin_group_chat_id</code>) mà không cần nhân viên hành chính phải lập báo cáo Excel thủ công.</li>
               </ul>
             </div>
           )
