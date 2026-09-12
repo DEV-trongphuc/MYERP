@@ -69,11 +69,10 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     title: 'NHÂN SỰ',
     items: [
       { name: 'Tài khoản cá nhân', href: '/account', icon: User },
-      { name: 'Chấm công', href: '/attendance', icon: Clock, hideForRoles: ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'] },
       { name: 'Phiếu lương', href: '/my-payslips', icon: FileText },
       { name: 'Phòng ban', href: '/consultants?tab=teams', icon: Users },
       { name: 'Nhân sự công ty', href: '/consultants', icon: Users },
-      { name: 'Quản lý chấm công', href: '/attendance', icon: Clock, hideForRoles: ['assistant', 'sale', 'viewer', 'sales', 'marketing', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] },
+      { name: 'Quản lý công', href: '/attendance', icon: Clock },
       { name: 'Nhân sự & Lương', href: '/hrm', icon: ShieldCheck, hideForRoles: ['manager', 'assistant', 'sale', 'viewer', 'sales', 'accountant', 'marketing', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien'] }
     ]
   },
@@ -606,10 +605,6 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       const isAdmin = role === 'admin' || role === 'superadmin' || role === 'super_admin';
       const isManagerOrAdmin = isAdmin || role === 'manager' || role === 'director';
 
-      // For Admin, Director, Manager and HR, hide personal 'Chấm công' item (they only need 'Quản lý chấm công')
-      if (item.name === 'Chấm công' && ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(role)) {
-        return false;
-      }
 
       // Dynamic Unlocking for Approvers / Team Leaders
       const moduleKey = getModuleKeyForHref(item.href);

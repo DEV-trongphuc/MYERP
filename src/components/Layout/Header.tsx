@@ -2311,7 +2311,7 @@ export const Header = ({
             // 1. Exact string matches
             if (lowercase === 'dashboard') return { bg: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: '#ffffff' };
             if (lowercase === 'bàn làm việc') return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
-            if (lowercase === 'chấm công' || lowercase === 'quản lý chấm công') return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
+            if (lowercase === 'chấm công' || lowercase === 'quản lý chấm công' || lowercase === 'quản lý công') return { bg: 'linear-gradient(135deg, #ff7a00, #d05300)', color: '#ffffff' };
             if (lowercase === 'báo cáo') return { bg: 'linear-gradient(135deg, #8b5cf6, #5b21b6)', color: '#ffffff' };
             if (lowercase === 'tiềm năng' || lowercase === 'khách hàng') return { bg: 'linear-gradient(135deg, #f43f5e, #be123c)', color: '#ffffff' };
             if (lowercase === 'pipeline') return { bg: 'linear-gradient(135deg, #10b981, #047857)', color: '#ffffff' };
@@ -2393,8 +2393,9 @@ export const Header = ({
             'Quy trình': 'Quản lý phê duyệt nghỉ phép, tạm ứng, chi phí và chấm công',
             'Tài khoản cá nhân': 'Thông tin hồ sơ và đổi mật khẩu',
             'Phòng ban': 'Danh sách các phòng ban và phân cấp thành viên',
-            'Nhân viên kinh doanh': 'Hồ sơ và lịch làm việc của tư vấn viên',
-            'Quản lý chấm công': 'Báo cáo check-in và xin nghỉ phép',
+            'Nhân sự công ty': 'Danh sách hồ sơ nhân sự toàn công ty',
+            'Quản lý công': 'Báo cáo check-in, bảng chấm công và xin nghỉ phép',
+            'Quản lý chấm công': 'Báo cáo check-in, bảng chấm công và xin nghỉ phép',
             'Chấm công': 'Ghi nhận check-in và xin nghỉ phép của tôi',
             'Nhân sự & Lương': 'Hồ sơ nhân sự, bảng lương và hợp đồng lao động',
             'Phiếu lương': 'Xem phiếu lương chi tiết từng tháng và xác nhận nhận lương',
@@ -2492,7 +2493,7 @@ export const Header = ({
           const RECENT_TARGETS_BY_ROLE: Record<string, string[]> = {
             admin: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Báo cáo',
@@ -2504,7 +2505,7 @@ export const Header = ({
             ],
             superadmin: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Báo cáo',
@@ -2516,7 +2517,7 @@ export const Header = ({
             ],
             super_admin: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Báo cáo',
@@ -2528,7 +2529,7 @@ export const Header = ({
             ],
             director: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Báo cáo',
@@ -2540,7 +2541,7 @@ export const Header = ({
             ],
             manager: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Tiềm năng',
@@ -2552,7 +2553,7 @@ export const Header = ({
             ],
             assistant: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Tiềm năng',
@@ -2563,7 +2564,7 @@ export const Header = ({
             ],
             sale: [
               'Quy trình',
-              'Chấm công',
+              'Quản lý công',
               'Bàn làm việc',
               'Tiềm năng',
               'Pipeline',
@@ -2575,7 +2576,7 @@ export const Header = ({
             ],
             sales: [
               'Quy trình',
-              'Chấm công',
+              'Quản lý công',
               'Bàn làm việc',
               'Tiềm năng',
               'Pipeline',
@@ -2587,7 +2588,7 @@ export const Header = ({
             ],
             accountant: [
               'Quy trình',
-              'Chấm công',
+              'Quản lý công',
               'Dashboard',
               'Sales Order',
               'Purchase Order',
@@ -2599,7 +2600,7 @@ export const Header = ({
             ],
             hr: [
               'Quy trình',
-              'Quản lý chấm công',
+              'Quản lý công',
               'Nhân sự & Lương',
               'Phiếu lương',
               'Phòng ban',
@@ -2610,7 +2611,7 @@ export const Header = ({
             ],
             marketing: [
               'Quy trình',
-              'Chấm công',
+              'Quản lý công',
               'Chiến dịch',
               'Tiềm năng',
               'Nhật ký Data',
@@ -2621,7 +2622,7 @@ export const Header = ({
             ],
             sale_admin: [
               'Quy trình',
-              'Chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Tiềm năng',
@@ -2632,7 +2633,7 @@ export const Header = ({
             ],
             saleadmin: [
               'Quy trình',
-              'Chấm công',
+              'Quản lý công',
               'Dashboard',
               'Bàn làm việc',
               'Tiềm năng',
@@ -2645,8 +2646,7 @@ export const Header = ({
 
           const defaultRecentTargets = [
             'Quy trình',
-            'Chấm công',
-            'Quản lý chấm công',
+            'Quản lý công',
             'Dashboard',
             'Bàn làm việc',
             'Tiềm năng',
@@ -2662,8 +2662,8 @@ export const Header = ({
 
           const findItem = (name: string) => {
             let found = allVisibleItems.find(item => item.name === name);
-            if (!found && (name === 'Chấm công' || name === 'Quản lý chấm công')) {
-              found = allVisibleItems.find(item => item.name === 'Chấm công' || item.name === 'Quản lý chấm công');
+            if (!found && (name === 'Chấm công' || name === 'Quản lý chấm công' || name === 'Quản lý công')) {
+              found = allVisibleItems.find(item => item.name === 'Quản lý công' || item.name === 'Chấm công' || item.name === 'Quản lý chấm công');
             }
             if (!found && (name === 'Khách hàng' || name === 'Tiềm năng')) {
               found = allVisibleItems.find(item => item.name === 'Tiềm năng' || item.name === 'Khách hàng');
