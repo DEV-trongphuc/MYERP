@@ -1987,7 +1987,7 @@ export const DocumentationPage: React.FC = () => {
             { id: 'geofence-wifi', text: 'Xác Thực Tọa Độ GPS & BSSID Mạng Wi-Fi' },
             { id: 'selfie-verification', text: 'Chụp Ảnh Selfie & Nhận Diện Khuôn Mặt' },
             { id: 'late-early-rules', text: 'Thuật Toán Tính Đi Trễ, Về Sớm & Cập Nhật Công' },
-            { id: 'penalty-rules', text: 'Khung Giờ Chuẩn & Chế Tài Khấu Trừ Công' }
+            { id: 'penalty-rules', text: 'Khung Giờ Làm Việc & Thuật Toán Cấn Trừ Phút Trễ (Cascade Deductions)' }
           ],
           content: (
             <div className="doc-prose">
@@ -2033,45 +2033,84 @@ export const DocumentationPage: React.FC = () => {
                 <li><strong>Trường hợp đặc biệt:</strong> Nếu Trưởng phòng / Quản lý / Leader tự tạo đơn bổ sung công cho chính mình, hệ thống tự động duyệt (<code>approved</code>) và gán <code>late_minutes = 0</code> nhằm tránh tình trạng nghẽn đơn tự phê duyệt.</li>
               </ul>
 
-              <h2 id="penalty-rules">Khung Giờ Chuẩn &amp; Chế Tài Khấu Trừ Công</h2>
+              <h2 id="penalty-rules">Khung Giờ Làm Việc &amp; Thuật Toán Cấn Trừ Phút Trễ (Cascade Deductions)</h2>
+              <p>
+                Khác với các hệ thống áp dụng mức phạt bậc thang hành chính tùy tiện, IDEAS MYERP thực thi <strong>thuật toán tính toán chính xác theo từng phút thực tế</strong> và <strong>cơ chế cấn trừ luân chuyển tự động 3 bước (Cascade Deductions)</strong> trực tiếp trong bộ máy tính lương <code>HRMController.php</code>:
+              </p>
+
               <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
                 <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
                   <thead>
                     <tr style={{ background: 'var(--color-bg-secondary)' }}>
-                      <th>Khung giờ làm việc</th>
-                      <th>Số phút đi muộn / về sớm</th>
-                      <th>Mức chế tài xử lý</th>
-                      <th>Quy tắc công lương tương ứng</th>
+                      <th style={{ width: '22%' }}>Ca làm việc</th>
+                      <th style={{ width: '22%' }}>Khung giờ chuẩn</th>
+                      <th style={{ width: '56%' }}>Đặc tả quy chuẩn nghiệp vụ</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td><strong>Ca sáng:</strong> 08:00 - 12:00<br /><strong>Ca chiều:</strong> 13:30 - 17:30</td>
-                      <td>1 - 15 phút</td>
-                      <td>Nhắc nhở / Cảnh cáo hệ thống</td>
-                      <td>Ghi nhận số phút trễ vào bảng công; bảo lưu nguyên vẹn 1.0 ngày công chuẩn.</td>
+                      <td><strong>Ca sáng</strong></td>
+                      <td><code>08:00 - 12:00</code></td>
+                      <td>Bắt đầu tính trễ từ <code>08:01</code>. Đi trễ phút nào cộng dồn chính xác từng phút đó vào <code>late_minutes</code>. Nghỉ trưa: <code>12:00 - 13:30</code>.</td>
                     </tr>
                     <tr>
-                      <td>Theo lịch làm việc chi nhánh</td>
-                      <td>16 - 60 phút</td>
-                      <td>Khấu trừ 0.25 ngày công</td>
-                      <td>Tính 0.75 ngày công thực tế; trừ tiền phạt trễ trong bảng lương tháng.</td>
+                      <td><strong>Ca chiều</strong></td>
+                      <td><code>13:30 - 17:00</code></td>
+                      <td>Bắt đầu tính trễ từ <code>13:31</code> nếu check-in ca chiều; tính về sớm (<code>early_minutes</code>) nếu check-out trước <code>17:00</code> (hoặc trước giờ ca riêng). Chuẩn 8 giờ làm việc / ngày = 480 phút.</td>
                     </tr>
                     <tr>
-                      <td>Theo lịch làm việc chi nhánh</td>
-                      <td>Trên 60 phút</td>
-                      <td>Tính nửa ngày công (0.5 công)</td>
-                      <td>Yêu cầu nộp đơn xin đi muộn bù giờ hoặc chuyển sang nghỉ nửa ngày phép năm.</td>
-                    </tr>
-                    <tr>
-                      <td>Toàn bộ các ca</td>
-                      <td>Quên check-in / check-out</td>
-                      <td>Ghi nhận vắng mặt tạm thời</td>
-                      <td>Khóa tính công ngày đó cho đến khi đơn "Cập nhật công" được Quản lý phê duyệt.</td>
+                      <td><strong>Khung giờ cá nhân hóa</strong></td>
+                      <td><code>work_start_time</code><br /><code>work_end_time</code></td>
+                      <td>Áp dụng khi <code>use_custom_work_hours = 1</code> trên hồ sơ nhân sự (dành cho bộ phận trực ca đêm, trực ngày lễ hoặc giảng viên). Với khối Sales, giờ nhận lead mở rộng đến <code>22:00</code> nhưng giờ hành chính tính công vẫn kết thúc lúc <code>17:00</code>.</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+
+              <h3>Quy Trình Cấn Trừ Luân Chuyển Tự Động 3 Bước Vào Bảng Lương (HRM Engine)</h3>
+              <p>
+                Tại thời điểm tính bảng lương tháng (<code>calculatePayroll</code>), hệ thống cộng tổng toàn bộ số phút trễ hợp lệ trong tháng (<code>totalLateMinutes</code>) và quy đổi chính xác sang số ngày công theo công thức:
+              </p>
+              <div className="doc-code-box">
+                <code>
+                  $lateDays = $totalLateMinutes / 480.0; // 1 ngày công chuẩn = 8 tiếng = 480 phút
+                </code>
+              </div>
+              <p>
+                Sau đó, hệ thống tự động thực thi chu trình cấn trừ 3 cấp nhằm bảo vệ tối đa quyền lợi thu nhập cho nhân sự:
+              </p>
+              <ol>
+                <li>
+                  <strong>Bước 1 - Cấn trừ vào Quỹ Nghỉ Bù (<code>compensatory_leave</code>):</strong><br />
+                  Hệ thống ưu tiên trừ số ngày trễ vào quỹ ngày nghỉ bù tích lũy còn lại của nhân viên (<code>compensatory_leave_total - compensatory_leave_used</code>). Nhân viên <strong>không bị trừ ngày phép năm và bảo lưu nguyên vẹn 100% lương</strong>.
+                </li>
+                <li>
+                  <strong>Bước 2 - Cấn trừ vào Quỹ Phép Năm (<code>annual_leave</code>):</strong><br />
+                  Nếu quỹ nghỉ bù không đủ, phần ngày trễ còn lại được trừ tiếp vào số ngày phép năm còn lại của nhân viên (<code>annual_leave_total - annual_leave_used</code>). Nhân viên <strong>vẫn nhận đủ 100% lương ngày công đó</strong>.
+                </li>
+                <li>
+                  <strong>Bước 3 - Trừ trực tiếp vào Ngày công tính lương (<code>work_days_actual</code>):</strong><br />
+                  Chỉ khi cả quỹ nghỉ bù và quỹ phép năm đều đã hết (bằng 0), số ngày công quy đổi từ phút trễ còn lại mới bị trừ thẳng vào ngày công thực tế (<code>$totalWorkDays = max(0.0, $totalWorkDays - $deductWorkDays)</code>). Khi đó, lương cơ bản thực nhận sẽ được giảm trừ theo tỷ lệ ngày công thực tế:
+                  <div className="doc-code-box" style={{ marginTop: '6px' }}>
+                    <code>
+                      $basicSalaryCalculated = ($baseSalary / $workDaysRequired) * $totalWorkDays;
+                    </code>
+                  </div>
+                </li>
+              </ol>
+
+              <h3>Cơ Chế Miễn Trừ Hợp Lệ &amp; Đặc Quyền Phê Duyệt</h3>
+              <ul>
+                <li>
+                  <strong>Đơn xin đi muộn / về sớm (<code>leave_type = 'late_early'</code>):</strong> Nhân viên nộp đơn giải trình và được Quản lý trực tiếp phê duyệt thì ngày làm việc đó được đưa vào danh sách miễn trừ (<code>$waivedDates</code>). Toàn bộ số phút trễ của ngày đó <strong>được xóa trắng 100%, không cộng dồn vào <code>totalLateMinutes</code></strong>.
+                </li>
+                <li>
+                  <strong>Ban Giám Đốc (<code>isDirector</code>):</strong> Tự động hưởng 100% ngày công chuẩn (<code>$actualWorkedDays = $workDaysRequired</code>), miễn chấm công và số phút trễ tự động bằng 0.
+                </li>
+                <li>
+                  <strong>Trưởng phòng / Quản lý (<code>isLeaderOrManager</code>):</strong> Khi tự tạo đơn bổ sung công bù (<code>isSupplementary</code>) cho chính mình, hệ thống tự động phê duyệt ngay lập tức (<code>approved</code>) và gán <code>late_minutes = 0</code> nhằm tránh tình trạng nghẽn đơn tự duyệt.
+                </li>
+              </ul>
             </div>
           )
         },
