@@ -1632,7 +1632,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [autoRemind, setAutoRemind] = useState(false);
   const [remindDaysBefore, setRemindDaysBefore] = useState(3);
   const [remindAtHour, setRemindAtHour] = useState(8);
-  const [remindTarget, setRemindTarget] = useState(1);
+  const [remindTarget, setRemindTarget] = useState(2);
 
 
   const [pendingPipelineTransition, setPendingPipelineTransition] = useState<{ targetId: string; targetLabel: string; note: string } | null>(null);

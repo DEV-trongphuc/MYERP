@@ -121,6 +121,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   const [hrAdvances, setHrAdvances] = useState<any[]>([]);
   const [hrTeams, setHrTeams] = useState<any[]>([]);
   const [hrTodayCheckIns, setHrTodayCheckIns] = useState<any[]>([]);
+  const [hrWeeklyCheckIns, setHrWeeklyCheckIns] = useState<any[]>([]);
   const [hrDashboardMonth, setHrDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
   const [hrDashboardPayslips, setHrDashboardPayslips] = useState<any[]>([]);
   const [hrLoading, setHrLoading] = useState(false);
@@ -472,10 +473,16 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   useEffect(() => {
     if (currentViewRole === 'hr' && isActive) {
       setHrLoading(true);
-      const todayStr = new Date().toISOString().substring(0, 10);
-      const parts = parsedMonthStr.split('-');
-      const y = parts[0];
-      const m = parts[1];
+      const now = new Date();
+      const todayStr = now.toISOString().substring(0, 10);
+      const currentDay = now.getDay();
+      const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diffToMonday);
+      const saturday = new Date(monday);
+      saturday.setDate(monday.getDate() + 5);
+      const mondayStr = monday.toISOString().substring(0, 10);
+      const saturdayStr = saturday.toISOString().substring(0, 10);
 
       Promise.all([
         fetchAPI('hrm/profiles').catch(() => ({ data: [] })),
@@ -483,13 +490,16 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         fetchAPI('hrm/advances').catch(() => ({ data: [] })),
         fetchAPI('hrm/teams').catch(() => ({ data: [] })),
         fetchAPI(`check-ins?date=${todayStr}`).catch(() => ({ data: [] })),
+        fetchAPI(`check-ins?from=${mondayStr}&to=${saturdayStr}`).catch(() => ({ data: [] })),
         fetchAPI(`hrm/payroll?month_year=${parsedMonthStr}`).catch(() => ({ data: [] }))
-      ]).then(([profRes, leaveRes, advRes, teamRes, todayCheckRes, payRes]) => {
+      ]).then(([profRes, leaveRes, advRes, teamRes, todayCheckRes, weekCheckRes, payRes]) => {
         setHrProfiles(profRes?.data || profRes || []);
         setHrLeaves(leaveRes?.data || leaveRes || []);
         setHrAdvances(advRes?.data || advRes || []);
         setHrTeams(teamRes?.data || teamRes || []);
         setHrTodayCheckIns(Array.isArray(todayCheckRes) ? todayCheckRes : todayCheckRes?.data || []);
+        const weeklyRows = weekCheckRes?.data?.check_ins || weekCheckRes?.check_ins || (Array.isArray(weekCheckRes?.data) ? weekCheckRes.data : (Array.isArray(weekCheckRes) ? weekCheckRes : []));
+        setHrWeeklyCheckIns(weeklyRows);
         setHrDashboardPayslips(payRes?.data || payRes || []);
       }).catch(() => {})
       .finally(() => {
@@ -523,43 +533,90 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }, [t]);
 
   const hrTopLatenessList = useMemo(() => {
-    const list = [...hrDashboardPayslips]
+    const payslipList = [...hrDashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
       .map(p => ({
-        id: p.id,
+        id: p.id || p.user_id,
         name: p.employee_name,
         value: Number(p.lateness_minutes || 0)
-      }))
-      .sort((a, b) => b.value - a.value);
+      }));
     
-    const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
-    return list.map(item => ({
+    if (payslipList.length > 0) {
+      payslipList.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...payslipList.map(x => x.value));
+      return payslipList.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // Real fallback from weekly check-ins if payslips not yet generated
+    const userMap: Record<string, { id: any; name: string; value: number }> = {};
+    hrWeeklyCheckIns.forEach((c: any) => {
+      const late = Number(c.lateness_minutes || 0);
+      if (late > 0) {
+        const uid = c.user_id || c.user_name;
+        if (!userMap[uid]) {
+          userMap[uid] = { id: uid, name: c.user_name || `ID #${uid}`, value: 0 };
+        }
+        userMap[uid].value += late;
+      }
+    });
+
+    const checkinList = Object.values(userMap).sort((a, b) => b.value - a.value);
+    if (checkinList.length === 0) return [];
+    const maxVal = Math.max(...checkinList.map(x => x.value));
+    return checkinList.map(item => ({
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [hrDashboardPayslips]);
+  }, [hrDashboardPayslips, hrWeeklyCheckIns]);
 
   const hrTopOTList = useMemo(() => {
-    const list = [...hrDashboardPayslips]
+    const payslipList = [...hrDashboardPayslips]
       .filter(p => Number(p.overtime_days || 0) > 0 || Number(p.overtime_hours || 0) > 0)
       .map(p => {
         const hours = Number(p.overtime_hours || 0) > 0 
           ? Number(p.overtime_hours) 
           : Math.round(Number(p.overtime_days || 0) * 8 * 10) / 10;
         return {
-          id: p.id,
+          id: p.id || p.user_id,
           name: p.employee_name,
           value: hours
         };
-      })
-      .sort((a, b) => b.value - a.value);
-    
-    const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
+      });
+
+    if (payslipList.length > 0) {
+      payslipList.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...payslipList.map(x => x.value));
+      return payslipList.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // Real fallback from approved overtime requests
+    const otLeaves = hrLeaves.filter((l: any) => l.leave_type === 'overtime' && l.status === 'approved');
+    const userMap: Record<string, { id: any; name: string; value: number }> = {};
+    otLeaves.forEach((l: any) => {
+      const hours = Number(l.total_hours || (Number(l.total_days || 0) * 8) || 0);
+      if (hours > 0) {
+        const uid = l.user_id || l.user_name;
+        if (!userMap[uid]) {
+          userMap[uid] = { id: uid, name: l.user_name || `ID #${uid}`, value: 0 };
+        }
+        userMap[uid].value += hours;
+      }
+    });
+
+    const list = Object.values(userMap).sort((a, b) => b.value - a.value);
+    if (list.length === 0) return [];
+    const maxVal = Math.max(...list.map(x => x.value));
     return list.map(item => ({
       ...item,
       percent: Math.min(100, (item.value / maxVal) * 100)
     })).slice(0, 10);
-  }, [hrDashboardPayslips]);
+  }, [hrDashboardPayslips, hrLeaves]);
 
   const syncDateFilterToModal = (filter: string) => {
     let mode = 'this_month';
@@ -1670,16 +1727,21 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   };
 
   if (currentViewRole === 'hr') {
+    const isHrLoading = hrLoading || (hrProfiles.length === 0 && hrLeaves.length === 0);
     const totalHeadcount = hrProfiles.length;
     const pendingLeaves = hrLeaves.filter(l => l.status === 'pending').length;
     const pendingAdvances = hrAdvances.filter(a => a.status === 'pending').length;
     const totalPendingRequests = pendingLeaves + pendingAdvances;
 
-    // Attendance stats today
-    const presentToday = hrTodayCheckIns.length > 0 ? hrTodayCheckIns.length : Math.round(totalHeadcount * 0.85) || 28;
-    const lateToday = hrTodayCheckIns.length > 0 
-      ? hrTodayCheckIns.filter(c => c.status === 'late' || Number(c.lateness_minutes || 0) > 0).length 
-      : Math.round(totalHeadcount * 0.12) || 4;
+    // Attendance stats today (100% real, NO fallback to Math.round(0.85) or 0.12)
+    const now = new Date();
+    const todayStr = now.toISOString().substring(0, 10);
+    const todayCheckIns = (hrTodayCheckIns && hrTodayCheckIns.length > 0)
+      ? hrTodayCheckIns
+      : hrWeeklyCheckIns.filter((c: any) => c.check_in_date === todayStr);
+
+    const presentToday = new Set(todayCheckIns.map((c: any) => c.user_id)).size;
+    const lateToday = todayCheckIns.filter((c: any) => c.status === 'late' || Number(c.lateness_minutes || 0) > 0 || c.status === 'early_leave' || Number(c.early_leave_minutes || 0) > 0).length;
 
     const deptMap: Record<string, number> = {};
     hrProfiles.forEach(p => {
@@ -1692,14 +1754,39 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       value
     }));
 
+    // Weekly Attendance 100% Real from check-ins (Thứ 2 đến Thứ 7)
+    const currentDay = now.getDay();
+    const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday);
+
     const weeklyAttendanceData = [
-      { name: t('Thứ 2'), rate: 95 },
-      { name: t('Thứ 3'), rate: 88 },
-      { name: t('Thứ 4'), rate: 90 },
-      { name: t('Thứ 5'), rate: 85 },
-      { name: t('Thứ 6'), rate: 95 },
-      { name: t('Thứ 7'), rate: 82 }
-    ];
+      { name: t('Thứ 2'), dayOffset: 0 },
+      { name: t('Thứ 3'), dayOffset: 1 },
+      { name: t('Thứ 4'), dayOffset: 2 },
+      { name: t('Thứ 5'), dayOffset: 3 },
+      { name: t('Thứ 6'), dayOffset: 4 },
+      { name: t('Thứ 7'), dayOffset: 5 }
+    ].map(d => {
+      const dayDate = new Date(monday);
+      dayDate.setDate(monday.getDate() + d.dayOffset);
+      const dateStr = dayDate.toISOString().substring(0, 10);
+
+      if (dateStr > todayStr) {
+        return { name: d.name, rate: 0, count: 0, total: totalHeadcount, isFuture: true };
+      }
+
+      const dayCheckIns = hrWeeklyCheckIns.filter((c: any) => c.check_in_date === dateStr);
+      const uniqueUsers = new Set(dayCheckIns.map((c: any) => c.user_id)).size;
+      const rate = totalHeadcount > 0 ? Math.min(100, Math.round((uniqueUsers / totalHeadcount) * 100)) : 0;
+      return {
+        name: d.name,
+        rate,
+        count: uniqueUsers,
+        total: totalHeadcount,
+        isFuture: false
+      };
+    });
 
     const hrIssues = [];
     if (totalPendingRequests > 0) {
@@ -1734,9 +1821,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <Users size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-text)' }}>{totalHeadcount}</div>
+            {isHrLoading ? (
+              <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
+            ) : (
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-text)' }}>{totalHeadcount}</div>
+            )}
             <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
-              <span>{t('Nhân sự chính thức của hệ thống')}</span>
+              {isHrLoading ? <Skeleton width={140} height={12} /> : <span>{t('Nhân sự chính thức của hệ thống')}</span>}
             </div>
           </div>
 
@@ -1751,9 +1842,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <CheckCircle size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#10b981' }}>{presentToday}</div>
+            {isHrLoading ? (
+              <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
+            ) : (
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#10b981' }}>{presentToday}</div>
+            )}
             <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
-              <span>{t('Nhân viên đã chấm công ngày hôm nay')}</span>
+              {isHrLoading ? <Skeleton width={160} height={12} /> : <span>{t('Nhân viên đã chấm công ngày hôm nay')}</span>}
             </div>
           </div>
 
@@ -1768,9 +1863,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <Clock size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ec4899' }}>{lateToday}</div>
+            {isHrLoading ? (
+              <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
+            ) : (
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ec4899' }}>{lateToday}</div>
+            )}
             <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
-              <span>{t('Ghi nhận đi trễ hoặc về sớm hôm nay')}</span>
+              {isHrLoading ? <Skeleton width={160} height={12} /> : <span>{t('Ghi nhận đi trễ hoặc về sớm hôm nay')}</span>}
             </div>
           </div>
 
@@ -1785,9 +1884,13 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                 <ShieldAlert size={16} />
               </div>
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#f59e0b' }}>{totalPendingRequests}</div>
+            {isHrLoading ? (
+              <Skeleton width={80} height={36} style={{ margin: '4px 0' }} />
+            ) : (
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: '#f59e0b' }}>{totalPendingRequests}</div>
+            )}
             <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '6px' }}>
-              <span>{t('Tổng số đơn xin nghỉ & tạm ứng chờ duyệt')}</span>
+              {isHrLoading ? <Skeleton width={170} height={12} /> : <span>{t('Tổng số đơn xin nghỉ & tạm ứng chờ duyệt')}</span>}
             </div>
           </div>
 
@@ -1804,7 +1907,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               </h3>
             </div>
             <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
-              {hrTopLatenessList.length > 0 ? hrTopLatenessList.map((item, i) => (
+              {isHrLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Skeleton width={`${50 + (i % 2) * 20}%`} height={14} />
+                      <Skeleton width={45} height={12} />
+                    </div>
+                    <Skeleton width="100%" height={6} borderRadius={4} />
+                  </div>
+                ))
+              ) : hrTopLatenessList.length > 0 ? hrTopLatenessList.map((item, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1831,7 +1944,17 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               </h3>
             </div>
             <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, justifyContent: 'flex-start', overflowY: 'auto', maxHeight: 280, paddingRight: 4 }}>
-              {hrTopOTList.length > 0 ? hrTopOTList.map((item, i) => (
+              {isHrLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Skeleton width={`${50 + (i % 2) * 20}%`} height={14} />
+                      <Skeleton width={45} height={12} />
+                    </div>
+                    <Skeleton width="100%" height={6} borderRadius={4} />
+                  </div>
+                ))
+              ) : hrTopOTList.length > 0 ? hrTopOTList.map((item, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1861,25 +1984,53 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               {t('TỶ LỆ ĐI LÀM TUẦN NÀY (%)')}
             </h3>
             <div style={{ height: 260 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weeklyAttendanceData} margin={{ left: -10, right: 5, top: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[50, 100]} ticks={[50, 65, 80, 95, 100]} tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
-                  <Tooltip contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }} />
-                  <Bar dataKey="rate" fill="var(--color-primary)" radius={[4, 4, 0, 0]} barSize={30} />
-                </BarChart>
-              </ResponsiveContainer>
+              {isHrLoading ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: '100%', padding: '16px 8px' }}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, height: '100%', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      <Skeleton width="100%" height={`${30 + (i % 3) * 25}%`} borderRadius="4px 4px 0 0" />
+                      <Skeleton width="65%" height={12} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weeklyAttendanceData} margin={{ left: -10, right: 5, top: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 10, fill: 'var(--color-text-light)' }} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip 
+                      contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }} 
+                      formatter={(value: any, _name: any, item: any) => {
+                        const payload = item?.payload;
+                        if (payload?.isFuture) return [t('Chưa diễn ra'), t('Tỷ lệ')];
+                        return [`${value}% (${payload?.count || 0}/${payload?.total || 0} ${t('nhân sự')})`, t('Đi làm')];
+                      }}
+                    />
+                    <Bar dataKey="rate" fill="var(--color-primary)" radius={[4, 4, 0, 0]} barSize={30} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
-          {/* Department Pie Chart - Style exactly like Nguồn Data */}
+          {/* Department Pie Chart */}
           <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem' }}>
               {t('CƠ CẤU NHÂN SỰ THEO PHÒNG BAN')}
             </h3>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              {totalHeadcount === 0 ? (
+              {isHrLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '16px 0' }}>
+                  <Skeleton width={140} height={140} borderRadius="50%" style={{ marginBottom: 16 }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', width: '100%' }}>
+                    <Skeleton width="85%" height={14} />
+                    <Skeleton width="75%" height={14} />
+                    <Skeleton width="80%" height={14} />
+                    <Skeleton width="70%" height={14} />
+                  </div>
+                </div>
+              ) : totalHeadcount === 0 ? (
                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{t('Chưa có dữ liệu')}</span>
               ) : (
                 <>

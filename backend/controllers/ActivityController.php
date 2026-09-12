@@ -1897,6 +1897,8 @@ class ActivityController {
             $contact = $stmtC->fetch(PDO::FETCH_ASSOC);
 
             if ($contact) {
+                // BẢO VỆ TUYỆT ĐỐI: KHÔNG GỬI EMAIL CHO KHÁCH HÀNG
+                /*
                 if (!empty($contact['email'])) {
                     try {
                         require_once __DIR__ . '/../mailer.php';
@@ -1909,6 +1911,7 @@ class ActivityController {
                         error_log("Automation Email Error: " . $e->getMessage());
                     }
                 }
+                */
 
                 $newScore = (int)$contact['lead_score'] + 15;
                 $this->db->prepare("UPDATE contacts SET lead_score = ? WHERE id = ?")

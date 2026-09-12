@@ -103,6 +103,15 @@ function runMailerCron($conn) {
         }
     }
 
+    // BẢO VỆ TUYỆT ĐỐI: Lấy danh sách email nội bộ
+    $internalEmailsMap = [];
+    $uRes = $conn->query("SELECT LOWER(TRIM(email)) as em FROM users WHERE email IS NOT NULL AND email != ''");
+    if ($uRes) {
+        while ($uRow = $uRes->fetch_assoc()) {
+            if (!empty($uRow['em'])) $internalEmailsMap[$uRow['em']] = true;
+        }
+    }
+
     foreach ($mails as $row) {
         $mailId = $row['id'];
         $to = $row['to_email'];
@@ -110,6 +119,32 @@ function runMailerCron($conn) {
         $subject = $row['subject'];
         $htmlBody = $row['body_html'];
         
+        $cleanTo = strtolower(trim($to));
+        $isInternal = isset($internalEmailsMap[$cleanTo]) || (substr($cleanTo, -13) === '@ideas.edu.vn');
+        if (!$isInternal) {
+            echo "[" . date('Y-m-d H:i:s') . "] [SECURITY SHIELD] BLOCKED email to customer: $cleanTo (Mail ID: $mailId)\n";
+            $errMsgBlocked = 'BLOCKED: Customer email disabled by system policy';
+            $updFailStmt->bind_param("si", $errMsgBlocked, $mailId);
+            $updFailStmt->execute();
+            continue;
+        }
+
+        // BẢO VỆ TUYỆT ĐỐI CC: Chỉ cho phép email nội bộ vào danh sách CC
+        $safeCcList = [];
+        if (!empty($ccEmailString)) {
+            $ccParts = explode(',', $ccEmailString);
+            foreach ($ccParts as $cc) {
+                $cc = trim($cc);
+                $cleanCc = strtolower($cc);
+                if (!empty($cleanCc) && (isset($internalEmailsMap[$cleanCc]) || substr($cleanCc, -13) === '@ideas.edu.vn')) {
+                    $safeCcList[] = $cleanCc;
+                } else if (!empty($cleanCc)) {
+                    echo "[" . date('Y-m-d H:i:s') . "] [SECURITY SHIELD] Removed customer email from CC: $cleanCc\n";
+                }
+            }
+        }
+        $ccEmailString = implode(', ', $safeCcList);
+
         $isSent = false;
         $lastErrorMsg = null;
 

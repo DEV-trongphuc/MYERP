@@ -56,58 +56,25 @@ try {
         $custName = trim($row['full_name'] ?? '');
         $payDateStr = date('d/m/Y', strtotime($row['expected_pay_date']));
         $amountStr = number_format($row['expected_amount']) . ' VND';
-        $remindTarget = (int)($row['remind_target'] ?? 1);
+        $remindTarget = (int)($row['remind_target'] ?? 2);
 
         $saleEmail = !empty($row['owner_email']) ? $row['owner_email'] : $row['creator_email'];
         $saleName = !empty($row['owner_name']) ? $row['owner_name'] : $row['creator_name'];
 
-        if ($remindTarget === 2) {
-            // Option 2: Remind caretaker sale directly
-            if (!empty($saleEmail)) {
-                $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
-                $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
-                $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
-                                "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/>" .
-                                "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                                "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
-                                "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
-                                "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
+        // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO KHÁCH HÀNG / HỌC VIÊN.
+        // TẤT CẢ THÔNG BÁO NHẮC ĐỀU CHỈ GỬI CHO SALE CHĂM SÓC.
+        if (!empty($saleEmail)) {
+            $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+            $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
+            $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
+                            "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/>" .
+                            "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
+                            "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
+                            "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
+                            "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
 
-                sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
-                echo "  [Sale-Only] Reminded caretaker sale: $saleName for student $custName\n";
-            }
-        } else {
-            // Option 1: Remind student (fallback to sale if no email)
-            $hasEmail = !empty(trim($row['contact_email'] ?? ''));
-            if ($hasEmail) {
-                // Remind the customer directly
-                $emailSubject = "[IDEAS] Nhắc nhở thanh toán đợt cọc: " . $row['milestone_name'];
-                $emailTitle = "NHẮC NHỞ THANH TOÁN";
-                $emailContent = "Chào <strong>" . htmlspecialchars($custName) . "</strong>,<br/><br/>" .
-                                "Đây là thông báo nhắc lịch thanh toán tự động cho đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                                "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").<br/>" .
-                                "Số tiền cần đóng: <strong>" . $amountStr . "</strong>.<br/>" .
-                                "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/><br/>" .
-                                "Vui lòng hoàn tất thanh toán và tải hình ảnh Ủy nhiệm chi (UNC) lên hệ thống. Xin cảm ơn!";
-                
-                sendEmailNotification($row['contact_email'], $emailSubject, $emailTitle, $emailContent, '', false);
-                echo "  [Auto] Reminded student: $custName ($emailSubject)\n";
-            } else {
-                // Fallback: Remind caretaker sale instead
-                if (!empty($saleEmail)) {
-                    $emailSubject = "[IDEAS] [Fallback] Nhắc nhở chăm sóc khách hàng thanh toán: " . $custName;
-                    $emailTitle = "FALLBACK: NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
-                    $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
-                                    "Hệ thống ghi nhận học viên/khách hàng <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ") <strong>không có địa chỉ email</strong>.<br/>" .
-                                    "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                                    "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
-                                    "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
-                                    "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
-
-                    sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
-                    echo "  [Fallback] Reminded caretaker sale: $saleName for student $custName\n";
-                }
-            }
+            sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
+            echo "  [Sale-Only] Reminded caretaker sale: $saleName for student $custName\n";
         }
 
         // Update last_reminded_at timestamp

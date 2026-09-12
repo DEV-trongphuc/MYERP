@@ -193,7 +193,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const [autoRemind, setAutoRemind] = useState(true);
   const [remindDaysBefore, setRemindDaysBefore] = useState(3);
   const [remindAtHour, setRemindAtHour] = useState(8);
-  const [remindTarget, setRemindTarget] = useState(1);
+  const [remindTarget, setRemindTarget] = useState(2);
 
   const [isCooperation, setIsCooperation] = useState(false);
   const [allowedCollaborators, setAllowedCollaborators] = useState<{ id: string; name: string; isOwner: boolean }[]>([]);
@@ -1452,8 +1452,8 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Đối tượng nhận nhắc nhở</label>
                             <CustomSelect
                               options={[
-                                { value: '1', label: 'Gửi học viên (Fallback về Sale)' },
-                                { value: '2', label: 'Chỉ gửi nhắc cho Sale chăm sóc' }
+                                { value: '2', label: 'Chỉ gửi nhắc cho Sale chăm sóc (Mặc định)' },
+                                { value: '1', label: 'Gửi học viên (Fallback về Sale)' }
                               ]}
                               value={String(remindTarget)}
                               onChange={val => setRemindTarget(Number(val))}

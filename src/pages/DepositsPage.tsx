@@ -213,12 +213,12 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   const [autoRemind, setAutoRemind] = useState(true);
   const [remindDaysBefore, setRemindDaysBefore] = useState(3);
   const [remindAtHour, setRemindAtHour] = useState(8);
-  const [remindTarget, setRemindTarget] = useState(1);
+  const [remindTarget, setRemindTarget] = useState(2);
 
   const [autoRemindManage, setAutoRemindManage] = useState(true);
   const [remindDaysBeforeManage, setRemindDaysBeforeManage] = useState(3);
   const [remindAtHourManage, setRemindAtHourManage] = useState(8);
-  const [remindTargetManage, setRemindTargetManage] = useState(1);
+  const [remindTargetManage, setRemindTargetManage] = useState(2);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [unitCode, setUnitCode] = useState('');
   const [price, setPrice] = useState('');
@@ -325,7 +325,7 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
       setAutoRemindManage(selectedDepForManage.auto_remind !== 0);
       setRemindDaysBeforeManage(Number(selectedDepForManage.remind_days_before) || 3);
       setRemindAtHourManage(Number(selectedDepForManage.remind_at_hour) || 8);
-      setRemindTargetManage(Number(selectedDepForManage.remind_target) || 1);
+      setRemindTargetManage(Number(selectedDepForManage.remind_target) || 2);
       fetchAPI(`cooperation-slips?contact_id=${selectedDepForManage.contact_id}`)
         .then(res => {
           const slips = res.data || res || [];

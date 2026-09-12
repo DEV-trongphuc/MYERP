@@ -58,6 +58,57 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
         return true;
     }
 
+    // BẢO VỆ TUYỆT ĐỐI: CHẶN HOÀN TOÀN MỌI EMAIL GỬI CHO KHÁCH HÀNG / HỌC VIÊN
+    $cleanTo = strtolower(trim($to));
+    if (empty($cleanTo)) {
+        return false;
+    }
+
+    static $internalEmailsMap = null;
+    if ($internalEmailsMap === null) {
+        $internalEmailsMap = [];
+        try {
+            if ($db instanceof \PDO) {
+                $stmt = $db->query("SELECT LOWER(TRIM(email)) as em FROM users WHERE email IS NOT NULL AND email != ''");
+                if ($stmt) {
+                    while ($r = $stmt->fetch(\PDO::FETCH_ASSOC)) {
+                        if (!empty($r['em'])) $internalEmailsMap[$r['em']] = true;
+                    }
+                }
+            } elseif ($db instanceof \mysqli) {
+                $res = $db->query("SELECT LOWER(TRIM(email)) as em FROM users WHERE email IS NOT NULL AND email != ''");
+                if ($res) {
+                    while ($r = $res->fetch_assoc()) {
+                        if (!empty($r['em'])) $internalEmailsMap[$r['em']] = true;
+                    }
+                }
+            }
+        } catch (\Throwable $ex) {
+            error_log("Error loading internal users in mailer: " . $ex->getMessage());
+        }
+    }
+
+    $isInternalRecipient = isset($internalEmailsMap[$cleanTo]) || (substr($cleanTo, -13) === '@ideas.edu.vn');
+    if (!$isInternalRecipient) {
+        error_log("[SECURITY SHIELD] KHÔNG GỬI EMAIL CHO KHÁCH HÀNG. Chặn gửi tới: " . $cleanTo . " | Tiêu đề: " . $subject);
+        return false;
+    }
+
+    // BẢO VỆ TUYỆT ĐỐI CC: Lọc sạch mọi email không phải nội bộ ra khỏi CC
+    if (!empty($ccEmailString)) {
+        $rawCcs = explode(',', $ccEmailString);
+        $cleanCcs = [];
+        foreach ($rawCcs as $c) {
+            $cClean = strtolower(trim($c));
+            if (!empty($cClean) && (isset($internalEmailsMap[$cClean]) || substr($cClean, -13) === '@ideas.edu.vn')) {
+                $cleanCcs[] = $cClean;
+            } else if (!empty($cClean)) {
+                error_log("[SECURITY SHIELD] Loại bỏ email khách hàng khỏi CC: " . $cClean);
+            }
+        }
+        $ccEmailString = implode(', ', $cleanCcs);
+    }
+
     // Tự động thêm thời gian [H:i d/m/Y] vào tiêu đề email để tránh bị gộp luồng
     $timeStr = date('H:i d/m/Y');
     $subject = trim($subject);

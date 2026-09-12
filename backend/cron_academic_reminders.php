@@ -191,6 +191,8 @@ try {
                             $msgTitle = "⏰ NHẮC NHỞ CỘT MỐC LUẬN VĂN";
                             $msgBody = "Chào Anh/Chị $studName, đây là thông báo nhắc nhở tự động về hạn hoàn thành cột mốc luận văn/đề cương: \"{$ms['milestone']}\" trước ngày " . date('d/m/Y', strtotime($ms['due_date'])) . ". Vui lòng hoàn thành đúng tiến độ.";
 
+                            // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO HỌC VIÊN/KHÁCH HÀNG
+                            /*
                             if (!empty($studEmail)) {
                                 try {
                                     sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở hạn nộp luận văn: {$ms['milestone']}", $msgTitle, nl2br($msgBody));
@@ -199,6 +201,7 @@ try {
                                     echo "  [Thesis] Email send error: " . $emEx->getMessage() . "\n";
                                 }
                             }
+                            */
 
                             $ins = $conn->prepare("INSERT INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, ?, ?)");
                             $ins->bind_param("iss", $studentId, $notifyType, $todayStr);
@@ -246,10 +249,13 @@ try {
                                 $msgTitle = "⏰ NHẮC NHỞ LỊCH HỌC CHÍNH THỨC";
                                 $msgBody = "Chào Anh/Chị $studName, đây là thông báo nhắc nhở tự động về buổi học chính thức tại trường của môn: \"{$sub['name']}\" ({$sub['code']}) diễn ra vào ngày " . date('d/m/Y', strtotime($session['date'])) . " lúc $timeStart. Vui lòng tham gia lớp học đầy đủ và đúng giờ.";
 
+                                // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO HỌC VIÊN/KHÁCH HÀNG
+                                /*
                                 try {
                                     sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở lịch học chính thức - Môn {$sub['name']}", $msgTitle, nl2br($msgBody));
                                     echo "  [School] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {}
+                                */
 
                                 $ins = $conn->prepare("INSERT INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, ?, ?)");
                                 $ins->bind_param("iss", $studentId, $notifyType, $todayStr);
@@ -307,10 +313,13 @@ try {
                                 $msgTitle = "⏰ NHẮC NHỞ LỊCH HỌC LỚP CHUYÊN ĐỀ";
                                 $msgBody = "Chào Anh/Chị $studName, đây là thông báo nhắc nhở tự động về lớp học chuyên đề IDEAS: \"{$sem['topic']}\" của môn: \"{$sub['name']}\" diễn ra vào ngày " . date('d/m/Y', strtotime($sem['date'])) . " lúc $startTime. Địa điểm: " . ($sem['location'] ?? 'Online') . ". Vui lòng tham gia đầy đủ và đúng giờ.";
 
+                                // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO HỌC VIÊN/KHÁCH HÀNG
+                                /*
                                 try {
                                     sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở lịch học chuyên đề - Môn {$sub['name']}", $msgTitle, nl2br($msgBody));
                                     echo "  [Ideas] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {}
+                                */
 
                                 $ins = $conn->prepare("INSERT INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, ?, ?)");
                                 $ins->bind_param("iss", $studentId, $notifyType, $todayStr);
@@ -363,10 +372,13 @@ try {
                                 $msgTitle = "⏰ NHẮC NHỞ HẠN NỘP BÀI TẬP / QUIZ";
                                 $msgBody = "Chào Anh/Chị $studName, đây là nhắc nhở tự động về hạn chót (Deadline) nộp bài tập: \"{$asn['name']}\" của môn: \"{$sub['name']}\" vào lúc " . date('H:i d/m/Y', $dueTimestamp) . ". Anh/Chị vui lòng hoàn thành và nộp bài đúng hạn.";
 
+                                // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO HỌC VIÊN/KHÁCH HÀNG
+                                /*
                                 try {
                                     sendEmailNotification($studEmail, "[IDEAS] Nhắc nhở hạn nộp bài tập: {$asn['name']}", $msgTitle, nl2br($msgBody));
                                     echo "  [Assign] Email sent to student $studName ($studEmail)\n";
                                 } catch (\Throwable $emEx) {}
+                                */
 
                                 $ins = $conn->prepare("INSERT INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, ?, ?)");
                                 $ins->bind_param("iss", $studentId, $notifyType, $todayStr);
@@ -493,10 +505,13 @@ try {
                                      . $zoomInfoText
                                      . "\n\nAnh/Chị vui lòng chuẩn bị thiết bị và truy cập lớp học đúng giờ.";
 
+                            // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO HỌC VIÊN/KHÁCH HÀNG
+                            /*
                             try {
                                 sendEmailNotification($studEmail, "[IDEAS] Lớp học sắp bắt đầu - {$sess['title']}", $msgTitle, nl2br($msgBody));
                                 echo "  [Upcoming] Email sent to student $studName ($studEmail)\n";
                             } catch (\Throwable $emEx) {}
+                            */
 
                             $ins = $conn->prepare("INSERT INTO sent_notifications (user_id, notify_type, notify_date) VALUES (?, ?, ?)");
                             $ins->bind_param("iss", $studentId, $notifyType, $todayStr);

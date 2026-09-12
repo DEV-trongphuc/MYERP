@@ -97,7 +97,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
   const [autoRemindManage, setAutoRemindManage] = useState(deposit ? deposit.auto_remind !== 0 : true);
   const [remindDaysBeforeManage, setRemindDaysBeforeManage] = useState(deposit ? Number(deposit.remind_days_before) || 3 : 3);
   const [remindAtHourManage, setRemindAtHourManage] = useState(deposit ? Number(deposit.remind_at_hour) || 8 : 8);
-  const [remindTargetManage, setRemindTargetManage] = useState(deposit ? Number(deposit.remind_target) || 1 : 1);
+  const [remindTargetManage, setRemindTargetManage] = useState(deposit ? Number(deposit.remind_target) || 2 : 2);
 
   // Cancel transaction states
   const [isCancelOpen, setIsCancelOpen] = useState(false);
@@ -123,7 +123,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
       setAutoRemindManage(deposit.auto_remind !== 0);
       setRemindDaysBeforeManage(Number(deposit.remind_days_before) || 3);
       setRemindAtHourManage(Number(deposit.remind_at_hour) || 8);
-      setRemindTargetManage(Number(deposit.remind_target) || 1);
+      setRemindTargetManage(Number(deposit.remind_target) || 2);
 
       // Fetch customer details if email is missing
       if (!deposit.email && deposit.contact_id) {
@@ -1209,8 +1209,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                             <CustomSelect
                               disabled={!canEditMilestones}
                               options={[
-                                { value: '1', label: 'Gửi học viên (Fallback về Sale)' },
-                                { value: '2', label: 'Chỉ gửi nhắc cho Sale chăm sóc' }
+                                { value: '2', label: 'Chỉ gửi nhắc cho Sale chăm sóc (Mặc định)' },
+                                { value: '1', label: 'Gửi học viên (Fallback về Sale)' }
                               ]}
                               value={String(remindTargetManage)}
                               onChange={val => setRemindTargetManage(Number(val))}

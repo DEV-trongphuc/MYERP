@@ -257,12 +257,15 @@ class DepositController {
             $exchangeRate = (float)($b['exchange_rate'] ?? 1.0);
             if ($exchangeRate <= 0) $exchangeRate = 1.0;
 
+            $remindTarget = (int)($b['remind_target'] ?? 2);
+            if ($remindTarget !== 1 && $remindTarget !== 2) $remindTarget = 2;
+
             // Insert deposit record
             $stmt = $this->db->prepare("
-                INSERT INTO deposits (contact_id, company_id, supplier_id, project_id, unit_code, price, expected_commission, status, created_by, auto_remind, remind_days_before, remind_at_hour, notes, accountant_id, participant_ids, currency, exchange_rate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_admin', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO deposits (contact_id, company_id, supplier_id, project_id, unit_code, price, expected_commission, status, created_by, auto_remind, remind_days_before, remind_at_hour, remind_target, notes, accountant_id, participant_ids, currency, exchange_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_admin', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$contactId, $companyId, $supplierId, $projectId, $unitCode, $price, $expectedCommission, $auth['user_id'], $autoRemind, $remindDaysBefore, $remindAtHour, $notes, $accountantId, $participantIdsStr, $currency, $exchangeRate]);
+            $stmt->execute([$contactId, $companyId, $supplierId, $projectId, $unitCode, $price, $expectedCommission, $auth['user_id'], $autoRemind, $remindDaysBefore, $remindAtHour, $remindTarget, $notes, $accountantId, $participantIdsStr, $currency, $exchangeRate]);
             $depositId = $this->db->lastInsertId();
 
             // Grant access to contact for each participant if contact exists
@@ -1103,6 +1106,12 @@ class DepositController {
                 $stmtRemHour = $this->db->prepare("UPDATE deposits SET remind_at_hour = ? WHERE id = ?");
                 $stmtRemHour->execute([$remHour, $id]);
             }
+            if (isset($input['remind_target'])) {
+                $remTarget = (int)$input['remind_target'];
+                if ($remTarget !== 1 && $remTarget !== 2) $remTarget = 2;
+                $stmtRemTarget = $this->db->prepare("UPDATE deposits SET remind_target = ? WHERE id = ?");
+                $stmtRemTarget->execute([$remTarget, $id]);
+            }
 
             $isAdmin = in_array(strtolower($auth['role'] ?? ''), ['admin', 'superadmin', 'super_admin', 'manager', 'director', 'assistant', 'accountant'], true);
             if ($isAdmin) {
@@ -1397,80 +1406,33 @@ class DepositController {
 
         require_once __DIR__ . '/../mailer.php';
 
-        $remindTarget = (int)($row['remind_target'] ?? 1);
+        $remindTarget = (int)($row['remind_target'] ?? 2);
         $saleEmail = !empty($row['owner_email']) ? $row['owner_email'] : $row['creator_email'];
         $saleName = !empty($row['owner_name']) ? $row['owner_name'] : $row['creator_name'];
 
-        if ($remindTarget === 2) {
-            // Option 2: Remind caretaker sale directly
-            if (empty($saleEmail)) {
-                respond(400, null, 'Không tìm thấy email của Sale chăm sóc để gửi nhắc nhở', false);
-            }
-
-            $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
-            $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
-            $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
-                            "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/>" .
-                            "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                            "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
-                            "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
-                            "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
-
-            sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
-
-            logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_SALE_DIRECT', 'deposit', $id, "Gửi email nhắc nhở trực tiếp cho Sale $saleName về hạn của khách $custName");
-
-            $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
-            $stmtUpd->execute([$milestoneId]);
-
-            respond(200, null, 'Đã gửi email nhắc nhở tới Sale chăm sóc thành công');
-        } else {
-            // Option 1: Remind student (fallback to sale if no email)
-            $hasEmail = !empty(trim($row['contact_email'] ?? ''));
-            if ($hasEmail) {
-                // Remind the customer directly
-                $emailSubject = "[IDEAS] Nhắc nhở thanh toán đợt cọc: " . $row['milestone_name'];
-                $emailTitle = "NHẮC NHỞ THANH TOÁN";
-                $emailContent = "Chào <strong>" . htmlspecialchars($custName) . "</strong>,<br/><br/>" .
-                                "Đây là thông báo nhắc lịch thanh toán cho đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                                "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").<br/>" .
-                                "Số tiền cần đóng: <strong>" . $amountStr . "</strong>.<br/>" .
-                                "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/><br/>" .
-                                "Vui lòng hoàn tất thanh toán và tải hình ảnh Ủy nhiệm chi (UNC) lên hệ thống. Xin cảm ơn!";
-                
-                sendEmailNotification($row['contact_email'], $emailSubject, $emailTitle, $emailContent, '', false);
-                
-                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_CUSTOMER_PAYMENT', 'deposit', $id, "Gửi email nhắc nhở thanh toán đợt " . $row['milestone_name'] . " cho khách hàng $custName");
-                
-                $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
-                $stmtUpd->execute([$milestoneId]);
-                
-                respond(200, null, 'Đã gửi email nhắc thanh toán thành công tới học viên');
-            } else {
-                // Fallback: Remind caretaker sale instead
-                if (empty($saleEmail)) {
-                    respond(400, null, 'Khách hàng không có email và không tìm thấy email của Sale chăm sóc để gửi nhắc nhở', false);
-                }
-
-                $emailSubject = "[IDEAS] [Fallback] Nhắc nhở chăm sóc khách hàng thanh toán: " . $custName;
-                $emailTitle = "FALLBACK: NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
-                $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
-                                "Hệ thống ghi nhận học viên/khách hàng <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ") <strong>không có địa chỉ email</strong>.<br/>" .
-                                "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
-                                "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
-                                "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
-                                "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
-
-                sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
-
-                logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_SALE_FALLBACK', 'deposit', $id, "Gửi email nhắc nhở fallback cho Sale $saleName chăm sóc khách hàng $custName do khách không có email");
-                
-                $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
-                $stmtUpd->execute([$milestoneId]);
-                
-                respond(200, null, 'Khách hàng không có email. Đã gửi email nhắc nhở cho Sale chăm sóc thay thế');
-            }
+        // BẢO VỆ TUYỆT ĐỐI: TUYỆT ĐỐI KHÔNG GỬI EMAIL CHO KHÁCH HÀNG / HỌC VIÊN.
+        // TẤT CẢ THÔNG BÁO NHẮC ĐỀU CHỈ GỬI CHO SALE CHĂM SÓC.
+        if (empty($saleEmail)) {
+            respond(400, null, 'Không tìm thấy email của Sale chăm sóc để gửi nhắc nhở', false);
         }
+
+        $emailSubject = "[IDEAS] Nhắc lịch thanh toán của học viên: " . $custName;
+        $emailTitle = "NHẮC NHỞ TƯ VẤN VIÊN CHĂM SÓC";
+        $emailContent = "Chào <strong>" . htmlspecialchars($saleName) . "</strong>,<br/><br/>" .
+                        "Hệ thống gửi thông báo nhắc lịch thanh toán của học viên <strong>" . htmlspecialchars($custName) . "</strong> (SĐT: " . htmlspecialchars($row['contact_phone'] ?? '—') . ").<br/>" .
+                        "Vui lòng chủ động liên hệ nhắc nhở khách hàng thanh toán đợt: <strong>" . htmlspecialchars($row['milestone_name']) . "</strong>.<br/>" .
+                        "Số tiền cần thanh toán: <strong>" . $amountStr . "</strong>.<br/>" .
+                        "Hạn thanh toán: <strong>" . $payDateStr . "</strong>.<br/>" .
+                        "Chương trình: <strong>" . htmlspecialchars($row['project_name']) . "</strong> (Căn " . htmlspecialchars($row['unit_code']) . ").";
+
+        sendEmailNotification($saleEmail, $emailSubject, $emailTitle, $emailContent, '', false);
+
+        logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'REMIND_SALE_DIRECT', 'deposit', $id, "Gửi email nhắc nhở trực tiếp cho Sale $saleName về hạn thanh toán của khách $custName");
+
+        $stmtUpd = $this->db->prepare("UPDATE deposit_milestones SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?");
+        $stmtUpd->execute([$milestoneId]);
+
+        respond(200, null, 'Đã gửi email nhắc nhở tới Sale chăm sóc thành công');
     }
 
     public function getComments(array $auth, int $id): void {
