@@ -237,6 +237,7 @@ try {
 
     // 6. Ensure extended CRM columns exist in contacts and leads tables
     $extendedCols = [
+        'avatar_url' => "TEXT NULL COMMENT 'Ảnh đại diện khách hàng'",
         'phone2' => "VARCHAR(50) NULL COMMENT 'Số điện thoại 2 / phụ'",
         'gender' => "VARCHAR(20) NULL COMMENT 'Giới tính'",
         'dob' => "DATE NULL COMMENT 'Ngày sinh'",

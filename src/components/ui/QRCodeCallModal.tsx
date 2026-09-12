@@ -19,7 +19,7 @@ export const QRCodeCallModal: React.FC = () => {
         <>
           <div
             style={{
-              position: 'fixed', inset: 0, zIndex: 1000030,
+              position: 'fixed', inset: 0, zIndex: 2147483645,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: '2rem'
             }}
@@ -30,8 +30,8 @@ export const QRCodeCallModal: React.FC = () => {
               exit={{ opacity: 0 }}
               onClick={closeCall}
               style={{
-                position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)',
-                backdropFilter: 'blur(4px)', zIndex: -1
+                position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)',
+                backdropFilter: 'blur(6px)', zIndex: -1
               }}
             />
             <motion.div

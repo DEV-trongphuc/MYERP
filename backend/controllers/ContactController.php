@@ -956,16 +956,17 @@ class ContactController {
 
         $assignedOwnerId = (in_array($auth['role'], ['sale', 'sales'], true)) ? (int)$auth['user_id'] : (!empty($b['owner_id']) ? (int)$b['owner_id'] : (int)$auth['user_id']);
         $secPhone = !empty($mobile) ? $mobile : null;
+        $avatarUrl = !empty($b['avatar_url']) ? $b['avatar_url'] : null;
         $stmt = $this->db->prepare("
-            INSERT INTO contacts (tenant_id,company_id,owner_id,created_by,full_name,
+            INSERT INTO contacts (tenant_id,company_id,owner_id,created_by,full_name,avatar_url,
                 email,phone,mobile,phone2,job_title,department,source,status,tags,notes,stage_id,
                 birthday,address,city,ward,expected_revenue,win_probability,last_contact,lead_score,person_id,collaborator_ids,pipeline_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ");
         $stmt->execute([
             $auth['tenant_id'],
             $company_id, $assignedOwnerId,
-            $auth['user_id'], trim($b['full_name'] ?? ''),
+            $auth['user_id'], trim($b['full_name'] ?? ''), $avatarUrl,
             $email, $phone, $secPhone, $secPhone,
             $b['job_title'] ?? null, $b['department'] ?? null,
             $b['source'] ?? 'other', $b['status'] ?? 'lead',
@@ -1327,7 +1328,7 @@ class ContactController {
         }
 
         $fields = [
-            'company_id','project_id','owner_id','full_name','email','phone',
+            'company_id','project_id','owner_id','full_name','avatar_url','email','phone',
             'mobile','job_title','department','source','status','notes',
             'birthday','address','city','ward',
             'expected_revenue','win_probability','last_contact','stage_id',

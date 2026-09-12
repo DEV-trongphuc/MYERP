@@ -642,6 +642,12 @@ try {
             $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
         }
 
+        // Ensure contacts table has avatar_url column
+        $contactCols = $db->query("SHOW COLUMNS FROM contacts")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        if (!in_array('avatar_url', $contactCols, true)) {
+            $db->exec("ALTER TABLE contacts ADD COLUMN avatar_url TEXT NULL DEFAULT NULL AFTER full_name");
+        }
+
         // Ensure salary_rate exists on hrm_leave_requests
         $hlrCols = $db->query("SHOW COLUMNS FROM hrm_leave_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
         if (!in_array('salary_rate', $hlrCols, true)) {

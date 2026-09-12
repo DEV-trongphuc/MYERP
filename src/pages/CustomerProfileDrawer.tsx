@@ -2596,6 +2596,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [docs, setDocs] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [downloadingZip, setDownloadingZip] = useState<boolean>(false);
+  const [settingAvatarId, setSettingAvatarId] = useState<string | number | null>(null);
 
   const handleDownloadAllZip = async () => {
     if (!effectiveContactId) return;
@@ -7293,28 +7294,31 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                     <div style={{ position: 'relative', flexShrink: 0 }}>
                       <div
                         style={{
-                          width: 56,
-                          height: 56,
+                          width: 72,
+                          height: 72,
                           borderRadius: '50%',
                           overflow: 'hidden',
                           cursor: 'pointer',
-                          position: 'relative'
+                          position: 'relative',
+                          boxShadow: '0 4px 14px rgba(0, 0, 0, 0.12)',
+                          border: '2.5px solid var(--color-surface, #ffffff)'
                         }}
                         onClick={() => {
                           setTempAvatar(formData.avatar_url || '');
                           setShowAvatarModal(true);
                         }}
+                        title="Bấm để đổi ảnh đại diện"
                       >
                         <Avatar 
                           src={formData.avatar_url} 
                           name={fullName} 
-                          size={56} 
+                          size={72} 
                         />
                         <div
                           style={{
                             position: 'absolute',
                             inset: 0,
-                            background: 'rgba(0,0,0,0.3)',
+                            background: 'rgba(0,0,0,0.35)',
                             opacity: 0,
                             display: 'flex',
                             alignItems: 'center',
@@ -7325,11 +7329,11 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                           onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                           onMouseLeave={e => e.currentTarget.style.opacity = '0'}
                         >
-                          <Pencil size={16} color="white" />
+                          <Pencil size={18} color="white" />
                         </div>
                       </div>
-                      <div style={{ position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: '50%', background: 'var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-md)', border: '2px solid var(--color-surface)' }}>
-                        <UserCheck size={11} className="text-success" />
+                      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: 'var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-md)', border: '2px solid var(--color-surface)' }}>
+                        <UserCheck size={13} className="text-success" />
                       </div>
                     </div>
 
@@ -14091,40 +14095,52 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                             formData.avatar_url.split('?')[0].endsWith(fileUrl.split('/').pop()?.split('?')[0] || '---xyz---')
                                           )
                                         );
+                                        const isSettingThis = settingAvatarId === doc.id;
                                         return (
                                           <button
                                             type="button"
                                             className="hover-lift"
+                                            disabled={isCurrentAvatar || isSettingThis || settingAvatarId !== null}
                                             style={{
                                               background: isCurrentAvatar ? 'rgba(16, 185, 129, 0.16)' : 'rgba(100, 116, 139, 0.08)',
                                               color: isCurrentAvatar ? '#059669' : 'var(--color-text-muted)',
                                               border: isCurrentAvatar ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--color-border-light)',
                                               padding: '6px',
                                               borderRadius: '8px',
-                                              cursor: isCurrentAvatar ? 'default' : 'pointer',
+                                              cursor: (isCurrentAvatar || isSettingThis || settingAvatarId !== null) ? 'default' : 'pointer',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               justifyContent: 'center',
                                               height: '30px',
                                               width: '32px',
                                               transition: 'all 0.2s',
+                                              opacity: (settingAvatarId !== null && !isSettingThis) ? 0.5 : 1,
                                               boxShadow: isCurrentAvatar ? '0 0 0 2px rgba(16, 185, 129, 0.15)' : 'none'
                                             }}
-                                            title={isCurrentAvatar ? "Đang là ảnh đại diện của khách hàng" : "Đặt làm ảnh đại diện"}
+                                            title={isSettingThis ? "Đang đặt làm ảnh đại diện..." : isCurrentAvatar ? "Đang là ảnh đại diện của khách hàng" : "Đặt làm ảnh đại diện"}
                                             onClick={async (e) => {
                                               e.stopPropagation();
-                                              if (isCurrentAvatar) return;
+                                              if (isCurrentAvatar || isSettingThis || settingAvatarId !== null) return;
+                                              setSettingAvatarId(doc.id);
                                               try {
                                                 await api.put(`/contacts/${effectiveContactId}`, { avatar_url: fileUrl });
-                                                setFormData((prev: any) => ({ ...prev, avatar_url: fileUrl }));
+                                                setFormData((prev: any) => ({ ...prev, avatar_url: fileUrl, avatar: fileUrl }));
                                                 addToast('Đã đặt làm ảnh đại diện thành công!', 'success');
-                                                onUpdate?.({ ...formData, avatar_url: fileUrl });
+                                                onUpdate?.({ ...formData, avatar_url: fileUrl, avatar: fileUrl });
                                               } catch (err: any) {
                                                 addToast(err.response?.data?.message || 'Lỗi khi cập nhật ảnh đại diện', 'error');
+                                              } finally {
+                                                setSettingAvatarId(null);
                                               }
                                             }}
                                           >
-                                            {isCurrentAvatar ? <UserCheck size={14} style={{ color: '#059669' }} /> : <User size={14} />}
+                                            {isSettingThis ? (
+                                              <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
+                                            ) : isCurrentAvatar ? (
+                                              <UserCheck size={14} style={{ color: '#059669' }} />
+                                            ) : (
+                                              <User size={14} />
+                                            )}
                                           </button>
                                         );
                                       })()
