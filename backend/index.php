@@ -635,6 +635,9 @@ try {
         if (!in_array('related_user_ids', $cols, true)) {
             $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN related_user_ids LONGTEXT NULL DEFAULT NULL AFTER manager_id");
         }
+        if (!in_array('approver2_id', $cols, true)) {
+            $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN approver2_id INT NULL DEFAULT NULL AFTER manager_id");
+        }
         if (!in_array('updated_at', $cols, true)) {
             $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
         }

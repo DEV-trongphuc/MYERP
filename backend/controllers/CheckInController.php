@@ -1177,6 +1177,7 @@ class CheckInController {
 
             // Look up manager/leader or HR as default if approver_id not provided
             $approverId = !empty($b['approver_id']) ? (int)$b['approver_id'] : null;
+            $approverId2 = !empty($b['approver_id_2']) ? (int)$b['approver_id_2'] : (!empty($b['approver2_id']) ? (int)$b['approver2_id'] : null);
             if (empty($approverId)) {
                 $stmtUser = $this->db->prepare("SELECT email, department, team_id FROM users WHERE id = ?");
                 $stmtUser->execute([$userId]);
@@ -1274,10 +1275,10 @@ class CheckInController {
                 $requestId = (int)$existingReq['id'];
                 $stmtUpdate = $this->db->prepare("
                     UPDATE attendance_bulk_requests 
-                    SET manager_id = ?, related_user_ids = ?, status = ?, approved_by = ?, approved_at = ?, admin_note = ?, updated_at = CURRENT_TIMESTAMP
+                    SET manager_id = ?, approver2_id = ?, related_user_ids = ?, status = ?, approved_by = ?, approved_at = ?, admin_note = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 ");
-                $stmtUpdate->execute([$approverId, $relatedUserIds, $initialStatus, $approvedBy, $approvedAt, $adminNote, $requestId]);
+                $stmtUpdate->execute([$approverId, $approverId2, $relatedUserIds, $initialStatus, $approvedBy, $approvedAt, $adminNote, $requestId]);
 
                 // Xóa chi tiết cũ để cập nhật danh sách ngày mới
                 $this->db->prepare("DELETE FROM attendance_bulk_request_details WHERE request_id = ?")->execute([$requestId]);
@@ -1285,10 +1286,10 @@ class CheckInController {
             } else {
                 // Create bulk request
                 $stmt = $this->db->prepare("
-                    INSERT INTO attendance_bulk_requests (user_id, month_period, status, manager_id, related_user_ids, approved_by, approved_at, admin_note)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO attendance_bulk_requests (user_id, month_period, status, manager_id, approver2_id, related_user_ids, approved_by, approved_at, admin_note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$userId, $month, $initialStatus, $approverId, $relatedUserIds, $approvedBy, $approvedAt, $adminNote]);
+                $stmt->execute([$userId, $month, $initialStatus, $approverId, $approverId2, $relatedUserIds, $approvedBy, $approvedAt, $adminNote]);
                 $requestId = (int)$this->db->lastInsertId();
             }
 
@@ -1401,6 +1402,21 @@ class CheckInController {
                     'days_count' => $daysCount,
                     'month_period' => $month
                 ]);
+
+                // Notify approver 2 if present
+                if (!empty($approverId2) && (int)$approverId2 !== (int)$userId && (int)$approverId2 !== (int)$targetUid) {
+                    NotificationService::send($this->db, $tenantId, 'ATTENDANCE_UPDATE', [
+                        'user_id' => $approverId2,
+                        'user_name' => $userName,
+                        'reason' => $notifReason . " (Người duyệt cấp 2)",
+                        'ref_id' => $requestId,
+                        'is_bulk' => true,
+                        'is_single_day' => $isSingleDay,
+                        'single_date' => $singleDateStr,
+                        'days_count' => $daysCount,
+                        'month_period' => $month
+                    ]);
+                }
 
                 // Notify related persons
                 if (!empty($relArr)) {

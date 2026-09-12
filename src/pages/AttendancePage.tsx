@@ -171,6 +171,15 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
   const [submittingLeave, setSubmittingLeave] = useState(false);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const approversOptions = useMemo(() => {
+    return usersList
+      .filter(u => ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'assistant'].includes(String(u.role).toLowerCase()))
+      .map(u => ({ 
+        value: String(u.id), 
+        label: u.full_name || u.name,
+        avatar: resolveAttachmentUrl(u.avatar_url || u.avatar)
+      }));
+  }, [usersList]);
   const [leaveBalance, setLeaveBalance] = useState<any>(null);
 
   const calculateWorkingDays = (from: string, to: string, session: string) => {
@@ -892,6 +901,21 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       is_on_leave: false,
       disabled: false
     }]);
+
+    // Tự động load danh sách user và áp dụng người duyệt mặc định
+    Promise.all([
+      usersList.length === 0 ? fetchAPI('users?all=1') : Promise.resolve({ data: usersList }),
+      teamsList.length === 0 ? fetchAPI('teams') : Promise.resolve({ data: teamsList })
+    ]).then(([usersRes, teamsRes]) => {
+      const uList = usersRes?.data || usersList;
+      const tList = teamsRes?.data || teamsList;
+      if (usersList.length === 0 && Array.isArray(uList)) setUsersList(uList);
+      if (teamsList.length === 0 && Array.isArray(tList)) setTeamsList(tList);
+      if (Array.isArray(uList) && uList.length > 0) {
+        applyDefaultApprover(uList, tList, 'leave');
+      }
+    }).catch(err => console.error('Error fetching users/teams for bulk attendance modal:', err));
+
     setShowBulkCreateModal(true);
   };
 
@@ -964,7 +988,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       toast.error(t('Không có ngày thiếu công hợp lệ nào cần bổ sung (các ngày quét được đều đã có đơn nghỉ phép hoặc đã đủ công).'));
       return;
     }
-    const emptyReason = validDays.some(d => !d.reason.trim());
+    const emptyReason = validDays.some(d => !d.reason || !d.reason.trim());
     if (emptyReason) {
       toast.error(t('Vui lòng điền lý do bổ sung cho tất cả các ngày'));
       return;
@@ -975,11 +999,14 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         method: 'POST',
         body: JSON.stringify({
           month_period: bulkMonth,
+          approver_id: approverIdField ? Number(approverIdField) : null,
+          approver_id_2: approverId2Field ? Number(approverId2Field) : null,
+          related_user_ids: relatedUserIds,
           details: validDays.map(d => ({
             date: d.date,
             check_in: d.check_in,
             check_out: d.check_out,
-            reason: d.reason
+            reason: d.reason.trim()
           }))
         }) as any
       });
@@ -988,6 +1015,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         setShowBulkCreateModal(false);
         setSuggestedDays([]);
         fetchBulkRequests();
+        fetchCalendarCheckIns();
       } else {
         toast.error(res?.message || t('Lỗi gửi phiếu đề xuất'));
       }
@@ -3783,14 +3811,6 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
       }
       previewMessage = `${t('Tổng số ngày làm việc từ xa:')} ${days} ${t('ngày')}`;
     }
-
-    const approversOptions = usersList
-      .filter(u => ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr', 'assistant'].includes(String(u.role).toLowerCase()))
-      .map(u => ({ 
-        value: String(u.id), 
-        label: u.full_name || u.name,
-        avatar: resolveAttachmentUrl(u.avatar_url || u.avatar)
-      }));
 
     const getThemeColor = () => {
       if (createLeaveType === 'leave') return '#f43f5e';
@@ -7675,496 +7695,696 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         document.body
       )}
 
-      {/* Create Bulk Request Drawer */}
-      {showBulkCreateModal && createPortal(
-        <>
-          <div 
-            className="drawer-backdrop" 
-            onClick={() => setShowBulkCreateModal(false)}
-            style={{ zIndex: 10500 }}
-          />
+      {/* Create Bulk Request Modal (CustomModal y hệt phong cách Đơn xin phép) */}
+      <CustomModal
+        isOpen={showBulkCreateModal}
+        onClose={() => setShowBulkCreateModal(false)}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowBulkCreateModal(false);
+                setShowMenuModal(true);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--color-text-muted)',
+                padding: '6px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s',
+                marginRight: '-4px'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-border-light)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              title={t('Quay lại chọn loại đơn')}
+            >
+              <ArrowLeft size={16} />
+            </button>
 
-          <div className="drawer-sheet" style={{
-            position: 'fixed',
-            top: 0,
-            left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
-            right: 0,
-            bottom: 0,
-            background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
-            boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-            boxSizing: 'border-box',
-            zIndex: 10600,
-            overflow: 'hidden'
-          }} onClick={e => e.stopPropagation()}>
-            
-            {/* Drawer Header */}
             <div style={{
-              padding: '1.25rem 1.5rem',
-              borderBottom: '1px solid var(--color-border-light)',
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1, #4338ca)',
+              color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'var(--color-surface)',
-              zIndex: 100,
-              position: 'sticky',
-              top: 0,
+              justifyContent: 'center',
               flexShrink: 0
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img 
-                  src="/LOGO.jpg" 
-                  alt="IDEAS LOGO" 
-                  style={{ 
-                    height: '32px', 
-                    width: '32px', 
-                    borderRadius: '8px', 
-                    border: '1px solid var(--color-border-light)',
-                    objectFit: 'cover'
-                  }} 
-                />
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text)' }}>
-                  IDEAS - {t('Quy trình Cập nhật công')} ({t('Tạo mới')})
-                </h3>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  onClick={() => setShowBulkCreateModal(false)}
-                  className="btn outline"
-                  style={{
-                    height: '36px',
-                    padding: '0 12px',
-                    fontSize: '0.8rem',
-                    borderRadius: '8px'
-                  }}
-                >
-                  {t('Hủy bỏ')}
-                </button>
-                {suggestedDays.length > 0 && (
-                  <button
-                    onClick={handleSubmitBulkRequest}
-                    disabled={bulkSubmitting}
-                    className="btn primary success"
-                    style={{
-                      height: '36px',
-                      padding: '0 12px',
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      borderRadius: '8px',
-                      color: '#ffffff'
-                    }}
-                  >
-                    <Check size={14} />
-                    {bulkSubmitting ? t('Đang gửi...') : t('Gửi quy trình')}
-                  </button>
-                )}
-                <button 
-                  onClick={() => setShowBulkCreateModal(false)} 
-                  className="hover-lift"
-                  style={{
-                    background: 'var(--color-bg)',
-                    border: '1px solid var(--color-border)',
-                    padding: '8px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    color: 'var(--color-text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '36px',
-                    width: '36px'
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
+              <CheckSquare size={14} />
             </div>
 
-            {/* Drawer Body (Split layout) */}
-            <div className="custom-scrollbar" style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '1.5rem',
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr',
-              gap: '1.5rem',
-              background: 'var(--color-bg-light, #f8fafc)'
-            }}>
-              {/* Left Column: Form & Scan Details */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                {/* Configuration Card */}
-                <div style={{
-                  background: 'var(--color-surface)',
-                  padding: '1.25rem',
-                  borderRadius: '16px',
-                  border: '1px solid var(--color-border-light)',
-                  boxShadow: 'var(--shadow-sm)',
-                  display: 'flex',
-                  gap: '16px',
-                  alignItems: 'flex-end',
-                  flexWrap: 'wrap'
-                }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', flex: '1' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      {t('Tháng cần bổ sung')}
-                    </label>
-                    <input
-                      type="month"
-                      value={bulkMonth}
-                      onChange={(e) => setBulkMonth(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-bg-light)',
-                        color: 'var(--color-text)',
-                        fontSize: '0.8125rem',
-                        fontWeight: 600
-                      }}
-                    />
-                  </div>
+            <span style={{ fontSize: '0.95rem', fontWeight: 800 }}>
+              {t('Đăng ký Cập nhật công')}
+            </span>
+          </div>
+        }
+        width="780px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '4px 0' }}>
+          <p style={{ margin: '-4px 0 0 0', fontSize: '0.78rem', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '12px' }}>
+            {t('Khai báo bổ sung, điều chỉnh giờ công chấm thiếu hoặc quên chấm công')}
+          </p>
 
+          {/* Configuration / Action bar */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+            padding: '10px 14px',
+            background: 'var(--color-bg-light)',
+            borderRadius: '12px',
+            border: '1px solid var(--color-border-light)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('Tháng:')}
+                </span>
+                <input
+                  type="month"
+                  value={bulkMonth}
+                  onChange={(e) => setBulkMonth(e.target.value)}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.78rem',
+                    fontWeight: 650
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleScanMissingDays(bulkMonth)}
+                disabled={suggestedLoading}
+                className="btn outline hover-lift"
+                style={{
+                  height: '32px',
+                  borderRadius: '8px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  borderColor: 'var(--color-primary)',
+                  color: 'var(--color-primary)',
+                  padding: '0 12px'
+                }}
+              >
+                <RefreshCw size={13} className={suggestedLoading ? 'spin' : ''} />
+                {suggestedLoading ? t('Đang quét...') : t('Quét các ngày thiếu công')}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddManualDay}
+              className="btn outline hover-lift"
+              style={{
+                height: '32px',
+                borderRadius: '8px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                borderColor: 'var(--color-primary)',
+                color: 'var(--color-primary)',
+                padding: '0 12px'
+              }}
+            >
+              <Plus size={13} />
+              {t('Thêm ngày')}
+            </button>
+          </div>
+
+          {/* List of days */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', margin: 0 }}>
+                {t('Danh sách ngày cập nhật công')} ({suggestedDays.length} {t('ngày')})
+              </label>
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>
+                {t('Vui lòng giải trình đầy đủ lý do bổ sung')}
+              </span>
+            </div>
+
+            {suggestedDays.length > 0 ? (
+              <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px', maxHeight: '240px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                    <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 12px', width: '130px' }}>{t('Ngày')}</th>
+                      <th style={{ padding: '8px 12px', width: '90px' }}>{t('Thứ')}</th>
+                      <th style={{ padding: '8px 12px', width: '90px' }}>{t('Vào')}</th>
+                      <th style={{ padding: '8px 12px', width: '90px' }}>{t('Ra')}</th>
+                      <th style={{ padding: '8px 12px' }}>{t('Lý do giải trình')}</th>
+                      <th style={{ padding: '8px 12px', width: '40px', textAlign: 'center' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suggestedDays.map((day, idx) => {
+                      const isInactive = Boolean(day.is_on_leave || day.disabled);
+                      return (
+                        <tr 
+                          key={day.date + '-' + idx} 
+                          style={{ 
+                            borderBottom: '1px solid var(--color-border)',
+                            background: isInactive ? 'var(--color-bg-light, rgba(0,0,0,0.02))' : 'transparent',
+                            opacity: isInactive ? 0.7 : 1
+                          }}
+                        >
+                          <td style={{ padding: '6px 12px', fontWeight: 650 }}>
+                            <input
+                              type="date"
+                              value={day.date}
+                              onChange={(e) => {
+                                const newDate = e.target.value;
+                                const newDays = [...suggestedDays];
+                                newDays[idx].date = newDate;
+                                setSuggestedDays(newDays);
+                              }}
+                              style={{
+                                padding: '4px 6px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--color-border)',
+                                fontSize: '0.78rem',
+                                background: 'var(--color-surface)',
+                                color: 'var(--color-text)',
+                                fontWeight: 650
+                              }}
+                            />
+                            {day.is_on_leave && (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '3px',
+                                fontSize: '0.65rem', 
+                                color: 'var(--color-primary)', 
+                                fontWeight: 700,
+                                marginTop: '2px',
+                                background: 'rgba(163, 20, 34, 0.08)',
+                                padding: '2px 6px',
+                                borderRadius: '4px'
+                              }}>
+                                🏖️ {day.leave_type || t('Đã có đơn nghỉ')}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--color-text-muted)' }}>{getDayOfWeek(day.date)}</td>
+                          <td style={{ padding: '6px 12px' }}>
+                            <input
+                              type="time"
+                              value={day.check_in}
+                              onChange={(e) => {
+                                const newDays = [...suggestedDays];
+                                newDays[idx].check_in = e.target.value;
+                                setSuggestedDays(newDays);
+                              }}
+                              disabled={day.has_check_in || isInactive}
+                              style={{
+                                width: '100%',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--color-border)',
+                                fontSize: '0.75rem',
+                                background: (day.has_check_in || isInactive) ? 'var(--color-bg-light, #f1f5f9)' : 'var(--color-surface)',
+                                color: (day.has_check_in || isInactive) ? 'var(--color-text-muted, #94a3b8)' : 'var(--color-text)',
+                                cursor: (day.has_check_in || isInactive) ? 'not-allowed' : 'auto'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 12px' }}>
+                            <input
+                              type="time"
+                              value={day.check_out}
+                              onChange={(e) => {
+                                const newDays = [...suggestedDays];
+                                newDays[idx].check_out = e.target.value;
+                                setSuggestedDays(newDays);
+                              }}
+                              disabled={day.has_check_out || isInactive}
+                              style={{
+                                width: '100%',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--color-border)',
+                                fontSize: '0.75rem',
+                                background: (day.has_check_out || isInactive) ? 'var(--color-bg-light, #f1f5f9)' : 'var(--color-surface)',
+                                color: (day.has_check_out || isInactive) ? 'var(--color-text-muted, #94a3b8)' : 'var(--color-text)',
+                                cursor: (day.has_check_out || isInactive) ? 'not-allowed' : 'auto'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 12px' }}>
+                            {day.is_on_leave ? (
+                              <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                                {day.leave_reason || t('Nghỉ theo đơn xin phép (Không áp dụng bù công)')}
+                              </span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={day.reason}
+                                placeholder={t('Lý do giải trình công...')}
+                                onChange={(e) => {
+                                  const newDays = [...suggestedDays];
+                                  newDays[idx].reason = e.target.value;
+                                  setSuggestedDays(newDays);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--color-border)',
+                                  fontSize: '0.75rem',
+                                  background: 'var(--color-surface)',
+                                  color: 'var(--color-text)'
+                                }}
+                              />
+                            )}
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setSuggestedDays(suggestedDays.filter((_, i) => i !== idx))}
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                              title={t('Bỏ ngày này')}
+                            >
+                              <X size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div style={{ padding: '8px 12px', background: 'var(--color-bg-light)', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-start' }}>
                   <button
                     type="button"
-                    onClick={() => handleScanMissingDays(bulkMonth)}
-                    disabled={suggestedLoading}
+                    onClick={handleAddManualDay}
                     className="btn outline hover-lift"
                     style={{
-                      height: '38px',
-                      borderRadius: '8px',
-                      fontSize: '0.8125rem',
+                      height: '26px',
+                      padding: '0 10px',
+                      fontSize: '0.72rem',
                       fontWeight: 700,
-                      display: 'flex',
+                      borderRadius: '6px',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      gap: '4px',
                       borderColor: 'var(--color-primary)',
                       color: 'var(--color-primary)'
                     }}
                   >
-                    <RefreshCw size={14} className={suggestedLoading ? 'spin' : ''} />
-                    {suggestedLoading ? t('Đang quét...') : t('Quét các ngày thiếu công')}
+                    <Plus size={12} />
+                    {t('Thêm ngày khác')}
                   </button>
                 </div>
+              </div>
+            ) : (
+              <div style={{
+                padding: '1.5rem',
+                textAlign: 'center',
+                color: 'var(--color-text-muted)',
+                border: '1px dashed var(--color-border)',
+                borderRadius: '12px',
+                background: 'var(--color-bg-light)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Info size={24} style={{ color: 'var(--color-primary)', opacity: 0.7 }} />
+                <p style={{ margin: 0, fontSize: '0.8125rem' }}>
+                  {t('Chưa có ngày nào trong danh sách. Hãy thêm ngày thủ công hoặc bấm Quét các ngày thiếu công!')}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAddManualDay}
+                  className="btn primary"
+                  style={{ height: '30px', fontSize: '0.75rem', marginTop: '4px' }}
+                >
+                  <Plus size={13} />
+                  {t('Thêm ngày thủ công')}
+                </button>
+              </div>
+            )}
+          </div>
 
-                {/* List of scanned days */}
-                <div style={{
-                  background: 'var(--color-surface)',
-                  padding: '1.25rem',
-                  borderRadius: '16px',
-                  border: '1px solid var(--color-border-light)',
-                  boxShadow: 'var(--shadow-sm)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1rem'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <h3 style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: 'var(--color-text)' }}>
-                      {t('DANH SÁCH NGÀY CẬP NHẬT CÔNG')} ({suggestedDays.length} {t('ngày')})
-                    </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        type="button"
-                        onClick={handleAddManualDay}
-                        className="btn outline hover-lift"
+          {/* Approver selection (y hệt đơn xin phép) */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                {t('Người duyệt 1 (Trưởng nhóm / Quản lý)')}
+              </label>
+              <CustomSelect
+                value={approverIdField}
+                onChange={setApproverIdField}
+                options={approversOptions}
+                width="100%"
+                searchable={true}
+                showAvatars={true}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                {t('Người duyệt 2 (Không bắt buộc)')}
+              </label>
+              <CustomSelect
+                value={approverId2Field}
+                onChange={setApproverId2Field}
+                options={[
+                  { value: '', label: t('-- Không chọn --') },
+                  ...approversOptions.filter(opt => opt.value !== approverIdField)
+                ]}
+                width="100%"
+                searchable={true}
+                showAvatars={true}
+              />
+            </div>
+          </div>
+
+          {/* Người liên quan (Theo dõi) (y hệt đơn xin phép) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', background: 'var(--color-bg-light)', borderRadius: '12px', border: '1px solid var(--color-border-light)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', margin: 0 }}>
+                {t('Người liên quan (Theo dõi)')} ({relatedUserIds.length})
+              </label>
+            </div>
+
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {/* Avatars */}
+              {relatedUserIds.length > 0 && (
+                <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {relatedUserIds.map((uid, idx) => {
+                    const u = usersList.find(x => Number(x.id) === Number(uid));
+                    if (!u) return null;
+                    return (
+                      <div
+                        key={u.id}
                         style={{
-                          height: '28px',
-                          padding: '0 10px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          borderRadius: '6px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          borderColor: 'var(--color-primary)',
-                          color: 'var(--color-primary)'
+                          marginLeft: idx === 0 ? 0 : -8,
+                          border: '1.5px solid var(--color-surface)',
+                          borderRadius: '50%',
+                          overflow: 'hidden',
+                          zIndex: 10 - idx,
+                          boxShadow: 'var(--shadow-sm)',
+                          display: 'flex'
                         }}
+                        title={u.full_name || u.name}
                       >
-                        <Plus size={13} />
-                        {t('Thêm ngày')}
-                      </button>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>
-                        {t('Vui lòng giải trình đầy đủ lý do bổ sung')}
-                      </span>
+                        <Avatar src={u.avatar || u.avatar_url} name={u.full_name || u.name} size={28} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Plus button */}
+              <button
+                type="button"
+                onClick={() => setShowRelatedDropdown(!showRelatedDropdown)}
+                style={{
+                  border: '1px dashed var(--color-primary)',
+                  background: 'rgba(163, 20, 34, 0.04)',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'all 0.15s ease'
+                }}
+                className="hover-scale"
+                title={t('Thêm người liên quan')}
+              >
+                <UserPlus size={14} color="var(--color-primary)" />
+              </button>
+
+              {/* Dropdown with SEARCH */}
+              {showRelatedDropdown && (
+                <div 
+                  ref={relatedDropdownRef}
+                  style={{
+                    position: 'absolute',
+                    top: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 'auto' : '100%',
+                    bottom: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 'calc(100% + 6px)' : 'auto',
+                    left: 0,
+                    marginTop: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 0 : '6px',
+                    marginBottom: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? '6px' : 0,
+                    zIndex: 9999,
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border-light)',
+                    borderRadius: '12px',
+                    boxShadow: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? '0 -10px 25px rgba(0, 0, 0, 0.18)' : '0 10px 25px rgba(0, 0, 0, 0.18)',
+                    minWidth: '240px',
+                    maxWidth: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? 'calc(100vw - 32px)' : '320px',
+                    maxHeight: (isMobile || (typeof window !== 'undefined' && window.innerWidth <= 768)) ? '250px' : '280px',
+                    overflowY: 'auto',
+                    padding: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ position: 'sticky', top: 0, background: 'var(--color-surface)', zIndex: 10, paddingBottom: '4px' }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+                      <input
+                        type="text"
+                        placeholder={t('Tìm người liên quan...')}
+                        value={relatedSearch}
+                        onChange={(e) => setRelatedSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px 6px 26px',
+                          fontSize: '0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid var(--color-border)',
+                          background: 'var(--color-bg)',
+                          color: 'var(--color-text)',
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                        autoFocus
+                      />
                     </div>
                   </div>
-
-                  {suggestedDays.length > 0 ? (
-                    <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                            <th style={{ padding: '10px 12px', width: '130px' }}>{t('Ngày')}</th>
-                            <th style={{ padding: '10px 12px', width: '100px' }}>{t('Thứ')}</th>
-                            <th style={{ padding: '10px 12px', width: '90px' }}>{t('Vào')}</th>
-                            <th style={{ padding: '10px 12px', width: '90px' }}>{t('Ra')}</th>
-                            <th style={{ padding: '10px 12px' }}>{t('Lý do giải trình')}</th>
-                            <th style={{ padding: '10px 12px', width: '50px', textAlign: 'center' }}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {suggestedDays.map((day, idx) => {
-                            const isInactive = Boolean(day.is_on_leave || day.disabled);
-                            return (
-                              <tr 
-                                key={day.date + '-' + idx} 
-                                style={{ 
-                                  borderBottom: '1px solid var(--color-border)',
-                                  background: isInactive ? 'var(--color-bg-light, rgba(0,0,0,0.02))' : 'transparent',
-                                  opacity: isInactive ? 0.7 : 1
-                                }}
-                              >
-                                <td style={{ padding: '8px 12px', fontWeight: 650 }}>
-                                  <input
-                                    type="date"
-                                    value={day.date}
-                                    onChange={(e) => {
-                                      const newDate = e.target.value;
-                                      const newDays = [...suggestedDays];
-                                      newDays[idx].date = newDate;
-                                      setSuggestedDays(newDays);
-                                    }}
-                                    style={{
-                                      padding: '4px 6px',
-                                      borderRadius: '6px',
-                                      border: '1px solid var(--color-border)',
-                                      fontSize: '0.78rem',
-                                      background: 'var(--color-surface)',
-                                      color: 'var(--color-text)',
-                                      fontWeight: 650
-                                    }}
-                                  />
-                                  {day.is_on_leave && (
-                                    <span style={{ 
-                                      display: 'inline-flex', 
-                                      alignItems: 'center', 
-                                      gap: '3px',
-                                      fontSize: '0.65rem', 
-                                      color: 'var(--color-primary)', 
-                                      fontWeight: 700,
-                                      marginTop: '2px',
-                                      background: 'rgba(163, 20, 34, 0.08)',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px'
-                                    }}>
-                                      🏖️ {day.leave_type || t('Đã có đơn nghỉ')}
-                                    </span>
-                                  )}
-                                </td>
-                                <td style={{ padding: '10px 12px', color: 'var(--color-text-muted)' }}>{getDayOfWeek(day.date)}</td>
-                                <td style={{ padding: '6px 12px' }}>
-                                  <input
-                                    type="time"
-                                    value={day.check_in}
-                                    onChange={(e) => {
-                                      const newDays = [...suggestedDays];
-                                      newDays[idx].check_in = e.target.value;
-                                      setSuggestedDays(newDays);
-                                    }}
-                                    disabled={day.has_check_in || isInactive}
-                                    style={{
-                                      width: '100%',
-                                      padding: '4px 8px',
-                                      borderRadius: '6px',
-                                      border: '1px solid var(--color-border)',
-                                      fontSize: '0.75rem',
-                                      background: (day.has_check_in || isInactive) ? 'var(--color-bg-light, #f1f5f9)' : 'var(--color-surface)',
-                                      color: (day.has_check_in || isInactive) ? 'var(--color-text-muted, #94a3b8)' : 'var(--color-text)',
-                                      cursor: (day.has_check_in || isInactive) ? 'not-allowed' : 'auto'
-                                    }}
-                                  />
-                                </td>
-                                <td style={{ padding: '6px 12px' }}>
-                                  <input
-                                    type="time"
-                                    value={day.check_out}
-                                    onChange={(e) => {
-                                      const newDays = [...suggestedDays];
-                                      newDays[idx].check_out = e.target.value;
-                                      setSuggestedDays(newDays);
-                                    }}
-                                    disabled={day.has_check_out || isInactive}
-                                    style={{
-                                      width: '100%',
-                                      padding: '4px 8px',
-                                      borderRadius: '6px',
-                                      border: '1px solid var(--color-border)',
-                                      fontSize: '0.75rem',
-                                      background: (day.has_check_out || isInactive) ? 'var(--color-bg-light, #f1f5f9)' : 'var(--color-surface)',
-                                      color: (day.has_check_out || isInactive) ? 'var(--color-text-muted, #94a3b8)' : 'var(--color-text)',
-                                      cursor: (day.has_check_out || isInactive) ? 'not-allowed' : 'auto'
-                                    }}
-                                  />
-                                </td>
-                                <td style={{ padding: '6px 12px' }}>
-                                  {day.is_on_leave ? (
-                                    <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
-                                      {day.leave_reason || t('Nghỉ theo đơn xin phép (Không áp dụng bù công)')}
-                                    </span>
-                                  ) : (
-                                    <input
-                                      type="text"
-                                      value={day.reason}
-                                      placeholder={t('Lý do giải trình công...')}
-                                      onChange={(e) => {
-                                        const newDays = [...suggestedDays];
-                                        newDays[idx].reason = e.target.value;
-                                        setSuggestedDays(newDays);
-                                      }}
-                                      style={{
-                                        width: '100%',
-                                        padding: '6px 10px',
-                                        borderRadius: '6px',
-                                        border: '1px solid var(--color-border)',
-                                        fontSize: '0.75rem',
-                                        background: 'var(--color-surface)',
-                                        color: 'var(--color-text)'
-                                      }}
-                                    />
-                                  )}
-                                </td>
-                                <td style={{ padding: '6px 12px', textAlign: 'center' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSuggestedDays(suggestedDays.filter((_, i) => i !== idx))}
-                                    style={{
-                                      border: 'none',
-                                      background: 'none',
-                                      color: '#ef4444',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center'
-                                    }}
-                                    title={t('Bỏ ngày này')}
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                      <div style={{ padding: '10px 12px', background: 'var(--color-bg-light)', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-start' }}>
-                        <button
-                          type="button"
-                          onClick={handleAddManualDay}
-                          className="btn outline hover-lift"
-                          style={{
-                            height: '30px',
-                            padding: '0 12px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            borderRadius: '6px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            borderColor: 'var(--color-primary)',
-                            color: 'var(--color-primary)'
+                  {usersList
+                    .filter((u: any) => {
+                      if (!relatedSearch.trim()) return true;
+                      const query = relatedSearch.toLowerCase();
+                      return (
+                        (u.full_name || u.name || '').toLowerCase().includes(query) ||
+                        (u.email || '').toLowerCase().includes(query) ||
+                        (u.role || '').toLowerCase().includes(query)
+                      );
+                    })
+                    .map((u: any) => {
+                      const isSelected = relatedUserIds.includes(Number(u.id));
+                      return (
+                        <div
+                          key={u.id}
+                          onClick={() => {
+                            const uid = Number(u.id);
+                            if (isSelected) {
+                              setRelatedUserIds(relatedUserIds.filter(id => id !== uid));
+                            } else {
+                              setRelatedUserIds([...relatedUserIds, uid]);
+                            }
                           }}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: isSelected ? 'var(--color-primary-light)' : 'transparent',
+                            color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                            fontWeight: isSelected ? 600 : 400
+                          }}
+                          className="hover-bg-alt"
                         >
-                          <Plus size={13} />
-                          {t('Thêm ngày khác')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{
-                      padding: '2rem 1.5rem',
-                      textAlign: 'center',
-                      color: 'var(--color-text-muted)',
-                      border: '1px dashed var(--color-border)',
-                      borderRadius: '12px',
-                      background: 'var(--color-bg-light)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      <Info size={28} style={{ color: 'var(--color-primary)', opacity: 0.7 }} />
-                      <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                        {t('Chưa có ngày nào trong danh sách. Bạn có thể thêm ngày thủ công hoặc bấm Quét các ngày thiếu công!')}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleAddManualDay}
-                        className="btn primary"
-                        style={{ height: '32px', fontSize: '0.75rem', marginTop: '4px' }}
-                      >
-                        <Plus size={14} />
-                        {t('Thêm ngày thủ công')}
-                      </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                            <Avatar src={u.avatar || u.avatar_url} name={u.full_name || u.name} size={20} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name || u.name}</span>
+                          </div>
+                          {isSelected && <Check size={12} color="var(--color-primary)" strokeWidth={3} style={{ flexShrink: 0, marginLeft: '4px' }} />}
+                        </div>
+                      );
+                    })}
+                  {usersList.filter((u: any) => {
+                    if (!relatedSearch.trim()) return true;
+                    const query = relatedSearch.toLowerCase();
+                    return (
+                      (u.full_name || u.name || '').toLowerCase().includes(query) ||
+                      (u.email || '').toLowerCase().includes(query) ||
+                      (u.role || '').toLowerCase().includes(query)
+                    );
+                  }).length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '10px 4px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      {t('Không tìm thấy kết quả')}
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Right Column: Steps Preview */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1.5rem',
-                background: 'var(--color-surface)',
-                padding: '1.25rem',
-                borderRadius: '16px',
-                border: '1px solid var(--color-border-light)',
-                boxShadow: 'var(--shadow-sm)'
-              }}>
-                <div>
-                  <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.8125rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.05em' }}>
-                    {t('CÁC BƯỚC THỰC HIỆN DỰ KIẾN')}
-                  </h3>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '10px' }}>
-                    {[
-                      { title: t('Trưởng bộ phận phê duyệt'), desc: t('Tự động định tuyến khi quy trình được gửi') },
-                      { title: t('Nhân sự (HR) phê duyệt'), desc: t('Được chuyển giao sau khi Manager thông qua') },
-                      { title: t('Hoàn tất cấp công'), desc: t('Bảng công được cập nhật tự động lên hệ thống') }
-                    ].map((step, idx, arr) => (
-                      <div key={idx} style={{ display: 'flex', gap: '12px', position: 'relative' }}>
-                        {idx < arr.length - 1 && (
-                          <div style={{
-                            position: 'absolute', left: '15px', top: '32px', bottom: '-20px', width: '2px',
-                            background: 'var(--color-border-light)'
-                          }} />
-                        )}
-                        <div style={{
-                          width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          backgroundColor: 'var(--color-border-light)', color: 'var(--color-text-muted)', flexShrink: 0
-                        }}>
-                          {idx === 0 ? <RefreshCw size={12} /> : <Clock size={12} />}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-text)' }}>{step.title}</span>
-                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-light)' }}>{step.desc}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '12px', marginTop: '10px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {t('Thông tin người khởi tạo')}
-                  </label>
-                  <div style={{
-                    padding: '10px 12px', borderRadius: '8px', background: 'var(--color-bg-light)',
-                    border: '1px solid var(--color-border-light)', fontSize: '0.8125rem', color: 'var(--color-text-light)'
-                  }}>
-                    {user?.name || user?.username} ({user?.role})
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
+
+            {/* Selected chips */}
+            {relatedUserIds.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                {relatedUserIds.map(uid => {
+                  const u = usersList.find(x => Number(x.id) === Number(uid));
+                  if (!u) return null;
+                  return (
+                    <span
+                      key={u.id}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 8px',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text)',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        borderRadius: '12px',
+                        border: '1px solid var(--color-border-light)'
+                      }}
+                    >
+                      <Avatar src={u.avatar || u.avatar_url} name={u.full_name || u.name} size={16} />
+                      <span>{u.full_name || u.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setRelatedUserIds(relatedUserIds.filter(id => id !== Number(u.id)))}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-danger)',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: '0.8rem',
+                          lineHeight: 1
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </>,
-        document.body
-      )}
+
+          {/* Preview Banner */}
+          <div style={{ 
+            padding: '12px 16px', 
+            borderRadius: '12px', 
+            background: 'rgba(99, 102, 241, 0.06)', 
+            border: '1px solid rgba(99, 102, 241, 0.15)',
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            color: '#4338ca',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <Info size={16} />
+            <span>
+              {t('Tổng số ngày đề xuất cập nhật công:')} {suggestedDays.filter(d => !d.is_on_leave && !d.disabled).length} {t('ngày')}
+            </span>
+          </div>
+
+          {/* Footer Buttons */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '12px',
+            borderTop: '1px solid var(--color-border-light)',
+            paddingTop: '1.25rem',
+            marginTop: '0.5rem',
+            paddingBottom: isMobile ? 'calc(env(safe-area-inset-bottom, 16px) + 24px)' : '0'
+          }}>
+            <button
+              type="button"
+              onClick={() => setShowBulkCreateModal(false)}
+              style={{
+                height: '38px',
+                padding: '0 20px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: 'transparent',
+                color: 'var(--color-text)'
+              }}
+            >
+              {t('Hủy')}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmitBulkRequest}
+              disabled={bulkSubmitting || suggestedDays.filter(d => !d.is_on_leave && !d.disabled).length === 0}
+              className="btn"
+              style={{
+                height: '38px',
+                padding: '0 24px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #6366f1, #4338ca)',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: (bulkSubmitting || suggestedDays.filter(d => !d.is_on_leave && !d.disabled).length === 0) ? 'not-allowed' : 'pointer',
+                opacity: (bulkSubmitting || suggestedDays.filter(d => !d.is_on_leave && !d.disabled).length === 0) ? 0.6 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)'
+              }}
+            >
+              {bulkSubmitting ? (
+                <>
+                  <Loader2 size={14} className="spin" />
+                  <span>{t('Đang gửi đề xuất...')}</span>
+                </>
+              ) : (
+                <>
+                  <Check size={16} />
+                  <span>{t('Gửi đề xuất')}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </CustomModal>
 
       {/* View & Approve Bulk Request Detail Drawer */}
       {selectedBulkRequest && createPortal(
