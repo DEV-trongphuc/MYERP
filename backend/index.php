@@ -904,12 +904,21 @@ switch ($resource) {
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId && !$subResource && $method === 'GET') $ctrl->show($auth, (int)$resourceId);
-        elseif ($resourceId  && $method === 'DELETE') $ctrl->destroyPost($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'comments' && isset($segments[3]) && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$segments[3]);
+        elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$subResource);
+        elseif ($resourceId && !$subResource && $method === 'DELETE') $ctrl->destroyPost($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'react' && $method === 'POST') $ctrl->react($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'reactions' && $method === 'GET') $ctrl->getReactions($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'comments' && $method === 'GET') $ctrl->getComments($auth, (int)$resourceId);
         elseif ($resourceId  && $subResource === 'comments' && $method === 'POST') $ctrl->addComment($auth, (int)$resourceId);
-        elseif ($resourceId === 'comments' && $subResource && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$subResource);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // DIRECT COMMENTS ENDPOINT
+    case 'comments':
+        $auth = requireAuth();
+        $ctrl = new PostController($db);
+        if ($resourceId && $method === 'DELETE') $ctrl->deleteComment($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
         break;
 

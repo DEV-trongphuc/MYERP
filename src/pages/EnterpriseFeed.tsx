@@ -637,6 +637,7 @@ export const EnterpriseFeed: React.FC = () => {
     try {
       const res = await api.delete(`/posts/comments/${commentId}`);
       if (res.data && res.data.success) {
+        toast.success(t('Đã xóa bình luận'));
         loadComments(postId);
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
@@ -645,8 +646,9 @@ export const EnterpriseFeed: React.FC = () => {
           return p;
         }));
       }
-    } catch (e) {
-      toast.error(t('Lỗi khi xóa bình luận'));
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.message || t('Lỗi khi xóa bình luận');
+      toast.error(errMsg);
     }
   };
 
@@ -748,6 +750,15 @@ export const EnterpriseFeed: React.FC = () => {
     );
   };
 
+  const isOnlyStickerComment = (rawContent: string) => {
+    if (!rawContent) return false;
+    const trimmed = rawContent.trim();
+    if (/^\/stickers\/[a-zA-Z0-9_\-\/]+\.(png|gif|webp|jpg)$/i.test(trimmed)) return true;
+    if (/^<img\s+[^>]*src=["'][^"']*\/stickers\/[^"']*["'][^>]*\/?>(?:&nbsp;|\s)*$/i.test(trimmed)) return true;
+    if (/^!\[.*?\]\([^\)]*\/stickers\/[^\)]*\)$/i.test(trimmed)) return true;
+    return false;
+  };
+
   const renderCommentContent = (content: string) => {
     if (!content) return null;
     const trimmed = content.trim();
@@ -755,7 +766,7 @@ export const EnterpriseFeed: React.FC = () => {
     // Check if content is a direct sticker URL
     if (/^\/stickers\/[a-zA-Z0-9_\-\/]+\.(png|gif|webp|jpg)$/i.test(trimmed)) {
       return (
-        <div style={{ marginTop: '6px', marginBottom: '2px' }}>
+        <div style={{ marginTop: '4px', marginBottom: '2px' }}>
           <img 
             src={trimmed} 
             alt="sticker" 
@@ -763,8 +774,31 @@ export const EnterpriseFeed: React.FC = () => {
             style={{ 
               maxWidth: '120px', 
               maxHeight: '120px', 
-              width: 'auto',
-              height: 'auto',
+              width: 'auto', 
+              height: 'auto', 
+              objectFit: 'contain', 
+              display: 'block', 
+              borderRadius: '8px' 
+            }} 
+          />
+        </div>
+      );
+    }
+
+    // Check if content is markdown sticker ![...](/stickers/...)
+    const mdStickerMatch = trimmed.match(/^!\[.*?\]\(([^\)]*\/stickers\/[^\)]*)\)$/i);
+    if (mdStickerMatch) {
+      return (
+        <div style={{ marginTop: '4px', marginBottom: '2px' }}>
+          <img 
+            src={mdStickerMatch[1]} 
+            alt="sticker" 
+            className="feed-comment-sticker" 
+            style={{ 
+              maxWidth: '120px', 
+              maxHeight: '120px', 
+              width: 'auto', 
+              height: 'auto', 
               objectFit: 'contain', 
               display: 'block', 
               borderRadius: '8px' 
@@ -1618,94 +1652,111 @@ export const EnterpriseFeed: React.FC = () => {
                                 name={comment.author_name} 
                                 size={28} 
                               />
-                              <div style={{ flex: 1 }}>
-                                <div style={{
-                                  background: 'var(--color-bg)',
-                                  padding: '8px 12px',
-                                  borderRadius: '12px',
-                                  border: '1px solid var(--color-border-light)'
-                                }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{comment.author_name}</span>
-                                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
-                                      {new Date(comment.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                  </div>
-                                  {renderCommentContent(comment.content)}
-                                </div>
-                                
-                                {/* Comment Actions */}
-                                <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: 'var(--color-text-muted)', padding: '4px 8px 0 8px' }}>
-                                  <button 
-                                    onClick={() => setReplyToCommentId(prev => ({ ...prev, [post.id]: comment.id }))}
-                                    style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}
-                                  >
-                                    {t('Phản hồi')}
-                                  </button>
-                                  {(user?.id === comment.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
-                                    <button 
-                                      onClick={() => setCommentToDelete({ postId: post.id, commentId: comment.id })}
-                                      style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center' }}
-                                      title={t('Xóa')}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  )}
-                                </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                {(() => {
+                                  const isSticker = isOnlyStickerComment(comment.content);
+                                  return (
+                                    <>
+                                      <div style={{
+                                        background: isSticker ? 'transparent' : 'var(--color-bg)',
+                                        padding: isSticker ? '2px 0' : '8px 12px',
+                                        borderRadius: '12px',
+                                        border: isSticker ? 'none' : '1px solid var(--color-border-light)'
+                                      }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isSticker ? '2px' : '0' }}>
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{comment.author_name}</span>
+                                          <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                                            {new Date(comment.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                        </div>
+                                        {renderCommentContent(comment.content)}
+                                      </div>
+                                      
+                                      {/* Comment Actions - Aligned Right */}
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', fontSize: '0.7rem', color: 'var(--color-text-muted)', padding: '3px 4px 0 4px' }}>
+                                        <button 
+                                          onClick={() => setReplyToCommentId(prev => ({ ...prev, [post.id]: comment.id }))}
+                                          style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                                        >
+                                          {t('Phản hồi')}
+                                        </button>
+                                        {(user?.id === comment.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
+                                          <button 
+                                            onClick={() => setCommentToDelete({ postId: post.id, commentId: comment.id })}
+                                            style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center' }}
+                                            title={t('Xóa')}
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
 
                             {/* Nested Replies */}
-                            {comment.replies && comment.replies.map(reply => (
-                              <div 
-                                key={reply.id} 
-                                id={`comment-${reply.id}`}
-                                style={{ 
-                                  display: 'flex', 
-                                  gap: '8px', 
-                                  alignItems: 'flex-start', 
-                                  marginLeft: '36px',
-                                  borderRadius: '12px',
-                                  padding: highlightedCommentId === reply.id ? '6px' : '0px',
-                                  backgroundColor: highlightedCommentId === reply.id ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
-                                  boxShadow: highlightedCommentId === reply.id ? '0 0 0 2px var(--color-primary)' : 'none',
-                                  transition: 'all 0.3s ease'
-                                }}
-                              >
-                                <Avatar 
-                                  src={reply.author_avatar} 
-                                  name={reply.author_name} 
-                                  size={24} 
-                                />
-                                <div style={{ flex: 1 }}>
-                                  <div style={{
-                                    background: 'var(--color-bg)',
-                                    padding: '6px 10px',
+                            {comment.replies && comment.replies.map(reply => {
+                              const isReplySticker = isOnlyStickerComment(reply.content);
+                              return (
+                                <div 
+                                  key={reply.id} 
+                                  id={`comment-${reply.id}`}
+                                  style={{ 
+                                    display: 'flex', 
+                                    gap: '8px', 
+                                    alignItems: 'flex-start', 
+                                    marginLeft: '36px',
                                     borderRadius: '12px',
-                                    border: '1px solid var(--color-border-light)'
-                                  }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{reply.author_name}</span>
-                                      <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
-                                        {new Date(reply.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
+                                    padding: highlightedCommentId === reply.id ? '6px' : '0px',
+                                    backgroundColor: highlightedCommentId === reply.id ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                                    boxShadow: highlightedCommentId === reply.id ? '0 0 0 2px var(--color-primary)' : 'none',
+                                    transition: 'all 0.3s ease'
+                                  }}
+                                >
+                                  <Avatar 
+                                    src={reply.author_avatar} 
+                                    name={reply.author_name} 
+                                    size={24} 
+                                  />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                      background: isReplySticker ? 'transparent' : 'var(--color-bg)',
+                                      padding: isReplySticker ? '2px 0' : '6px 10px',
+                                      borderRadius: '12px',
+                                      border: isReplySticker ? 'none' : '1px solid var(--color-border-light)'
+                                    }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isReplySticker ? '2px' : '0' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{reply.author_name}</span>
+                                        <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                                          {new Date(reply.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      </div>
+                                      {renderCommentContent(reply.content)}
                                     </div>
-                                    {renderCommentContent(reply.content)}
-                                  </div>
-                                  <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: 'var(--color-text-muted)', padding: '2px 8px 0 8px' }}>
-                                    {(user?.id === reply.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
+                                    {/* Reply Actions - Aligned Right */}
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px', fontSize: '0.7rem', color: 'var(--color-text-muted)', padding: '3px 4px 0 4px' }}>
                                       <button 
-                                        onClick={() => setCommentToDelete({ postId: post.id, commentId: reply.id })}
-                                        style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center' }}
-                                        title={t('Xóa')}
+                                        onClick={() => setReplyToCommentId(prev => ({ ...prev, [post.id]: comment.id }))}
+                                        style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 600, cursor: 'pointer', padding: 0 }}
                                       >
-                                        <Trash2 size={12} />
+                                        {t('Phản hồi')}
                                       </button>
-                                    )}
+                                      {(user?.id === reply.user_id || ['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '')) && (
+                                        <button 
+                                          onClick={() => setCommentToDelete({ postId: post.id, commentId: reply.id })}
+                                          style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center' }}
+                                          title={t('Xóa')}
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ))
                       )}

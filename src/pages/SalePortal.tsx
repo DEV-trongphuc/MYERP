@@ -9,7 +9,7 @@ import {
   Sun, Moon, ChevronDown, ChevronUp, AlertTriangle, ChevronLeft, ChevronRight,
   LayoutDashboard, Database, Ticket, Calendar, RefreshCw, Menu, Tag, Server, Scale, Settings, Info, Cpu,
   Camera, Video, Layers, Plus, Receipt, CreditCard, Building2, Users, User, UserCheck, UserPlus, Trash2, CheckSquare, Square, X, Paperclip, LifeBuoy, Fingerprint, LayoutGrid, Monitor, Tv, Phone, Save, Award, Ban, RotateCcw, MoreHorizontal, Check, KeyRound, Loader2, Shield, Mail, ShieldCheck, Lock as LockIcon, Bell,
-  Play, Sparkles, ArrowRight, Eye, EyeOff, MapPin, Pin
+  Play, Sparkles, ArrowRight, Eye, EyeOff, MapPin, Pin, Palette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
@@ -61,6 +61,7 @@ const AttendancePage = lazy(() => import('./AttendancePage'));
 import api from '../api/axios';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
+import { WorkspaceCustomizerModal } from '../components/ui/WorkspaceCustomizerModal';
 import styles from './EntityDrawer.module.css';
 
 
@@ -577,7 +578,34 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [wsStatus, setWsStatus] = useState('planned'); // Default: hide completed
   const [showDoneTasks, setShowDoneTasks] = useState(false);
   const [wsViewMode, setWsViewMode] = useState<'grid' | 'kanban' | 'focus'>('grid');
-  const [hideWorkspaceAlerts, setHideWorkspaceAlerts] = useState(false);
+  const [hideWorkspaceAlerts, setHideWorkspaceAlerts] = useState(true);
+  const [showWorkspaceCustomizer, setShowWorkspaceCustomizer] = useState(false);
+  const [wsBg, setWsBg] = useState<string>(() => {
+    const uid = currentUser?.id || user?.id;
+    return uid ? localStorage.getItem(`ws_custom_bg_${uid}`) || '' : '';
+  });
+  const [wsCols, setWsCols] = useState<number>(() => {
+    const uid = currentUser?.id || user?.id;
+    const val = uid ? localStorage.getItem(`ws_custom_cols_${uid}`) : null;
+    return val ? Number(val) : 3;
+  });
+  const [wsOverlay, setWsOverlay] = useState<number>(() => {
+    const uid = currentUser?.id || user?.id;
+    const val = uid ? localStorage.getItem(`ws_custom_overlay_${uid}`) : null;
+    return val ? Number(val) : 40;
+  });
+
+  useEffect(() => {
+    const uid = currentUser?.id || user?.id;
+    if (uid) {
+      const savedBg = localStorage.getItem(`ws_custom_bg_${uid}`) || '';
+      const savedCols = localStorage.getItem(`ws_custom_cols_${uid}`);
+      const savedOverlay = localStorage.getItem(`ws_custom_overlay_${uid}`);
+      setWsBg(savedBg);
+      if (savedCols) setWsCols(Number(savedCols));
+      if (savedOverlay) setWsOverlay(Number(savedOverlay));
+    }
+  }, [currentUser?.id, user?.id]);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
   const [pinnedTaskIds, setPinnedTaskIds] = useState<number[]>([]);
 
