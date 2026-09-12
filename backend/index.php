@@ -574,8 +574,8 @@ if (!empty($rawAction)) {
     $path = trim(urldecode($rawAction), '/');
 } else {
     $requestUri = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
-    // Auto-detect base path: works for /ideas, /backend, /crm, /CRM/backend, /index.php
-    $requestUri = preg_replace('#^.*/(backend|ideas|crm)(/index\.php)?#i', '', $requestUri);
+    // Auto-detect base path: works for /ideas, /backend, /crm, /api, /index.php
+    $requestUri = preg_replace('#^.*/(backend|ideas|crm|api)(/index\.php)?#i', '', $requestUri);
     $requestUri = preg_replace('#^/index\.php#i', '', $requestUri);
     $path       = trim(urldecode($requestUri), '/');
 }
