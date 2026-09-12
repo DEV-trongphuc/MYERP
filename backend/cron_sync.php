@@ -603,26 +603,8 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                         }
                     }
 
-                    $isRestDay = false;
-                    if ($dayOfWeek == 7) {
-                        $isRestDay = true;
-                    } else if ($dayOfWeek == 6) {
-                        $stmtSched = $conn->prepare("SELECT work_schedule FROM users WHERE id = ?");
-                        if ($stmtSched) {
-                            $stmtSched->bind_param("i", $targetUserId);
-                            $stmtSched->execute();
-                            $sRow = $stmtSched->get_result()->fetch_assoc();
-                            $stmtSched->close();
-                            if ($sRow && !empty($sRow['work_schedule'])) {
-                                $sched = json_decode($sRow['work_schedule'], true);
-                                if (isset($sched[6]) && isset($sched[6]['active']) && !(bool)$sched[6]['active']) {
-                                    $isRestDay = true;
-                                }
-                            }
-                        }
-                    }
-
-                    $hasReg = false;
+                    $isRestDay = false; // Thứ 7 và Chủ Nhật vẫn chia cho các TVV theo đúng vòng
+                    $hasReg = true;
                     $isHoliday = !empty($holidayName);
 
                     if ($isHoliday) {
@@ -631,18 +613,6 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                         $stmtCheckReg->execute();
                         $hasReg = (bool)$stmtCheckReg->get_result()->fetch_assoc();
                         $stmtCheckReg->close();
-                    }
-
-                    if (!$hasReg && $isRestDay) {
-                        $stmtCheckReg = $conn->prepare("SELECT 1 FROM weekend_shift_registrations WHERE user_id = ? AND shift_date = ? AND approved = 1 LIMIT 1");
-                        $stmtCheckReg->bind_param("is", $targetUserId, $currDate);
-                        $stmtCheckReg->execute();
-                        $hasReg = (bool)$stmtCheckReg->get_result()->fetch_assoc();
-                        $stmtCheckReg->close();
-                    }
-
-                    if (!$isHoliday && !$isRestDay) {
-                        $hasReg = true; // Normal weekday workday
                     }
 
                     $isWeekendOrHoliday = (!empty($holidayName) || $isRestDay);
@@ -958,34 +928,10 @@ if (!function_exists('releasePendingWorkHoursLeads')) {
                         }
                     }
 
-                    $isRestDay = false;
-                    if ($dayOfWeek == 7) {
-                        $isRestDay = true;
-                    } else if ($dayOfWeek == 6) {
-                        $stmtSched = $conn->prepare("SELECT work_schedule FROM users WHERE id = ?");
-                        if ($stmtSched) {
-                            $stmtSched->bind_param("i", $targetUserId);
-                            $stmtSched->execute();
-                            $sRow = $stmtSched->get_result()->fetch_assoc();
-                            $stmtSched->close();
-                            if ($sRow && !empty($sRow['work_schedule'])) {
-                                $sched = json_decode($sRow['work_schedule'], true);
-                                if (isset($sched[6]) && isset($sched[6]['active']) && !(bool)$sched[6]['active']) {
-                                    $isRestDay = true;
-                                }
-                            }
-                        }
-                    }
-
+                    $isRestDay = false; // Thứ 7 và Chủ Nhật vẫn chia cho các TVV theo đúng vòng
                     $hasReg = true;
                     if (!empty($holidayName)) {
                         $stmtCheckReg = $conn->prepare("SELECT 1 FROM holiday_shift_registrations WHERE user_id = ? AND shift_date = ? AND approved = 1 LIMIT 1");
-                        $stmtCheckReg->bind_param("is", $targetUserId, $currDate);
-                        $stmtCheckReg->execute();
-                        $hasReg = (bool)$stmtCheckReg->get_result()->fetch_assoc();
-                        $stmtCheckReg->close();
-                    } else if ($isRestDay) {
-                        $stmtCheckReg = $conn->prepare("SELECT 1 FROM weekend_shift_registrations WHERE user_id = ? AND shift_date = ? AND approved = 1 LIMIT 1");
                         $stmtCheckReg->bind_param("is", $targetUserId, $currDate);
                         $stmtCheckReg->execute();
                         $hasReg = (bool)$stmtCheckReg->get_result()->fetch_assoc();

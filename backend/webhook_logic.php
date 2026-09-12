@@ -2442,7 +2442,7 @@ function checkConsultantGates($conn, $consultantId, $lead = null)
     }
 
     // Determine if today is a rest day (weekend/off day) for this user
-    $isRestDay = isRestDayForUser($conn, $targetUserId, $todayStr);
+    $isRestDay = false; // Thứ 7 và Chủ Nhật vẫn chia số bình thường cho các TVV theo đúng vòng
 
     if (!empty($holidayName)) {
         // Holiday constraint
@@ -2453,16 +2453,6 @@ function checkConsultantGates($conn, $consultantId, $lead = null)
         $stmtCheckReg->close();
         if (!$hasReg) {
             return "Failed Gate 2: No approved holiday registration for today ({$holidayName})";
-        }
-    } else if ($isRestDay) {
-        // Rest day constraint
-        $stmtCheckReg = $conn->prepare("SELECT 1 FROM weekend_shift_registrations WHERE user_id = ? AND shift_date = ? AND approved = 1");
-        $stmtCheckReg->bind_param("is", $targetUserId, $todayStr);
-        $stmtCheckReg->execute();
-        $hasReg = $stmtCheckReg->get_result()->fetch_assoc();
-        $stmtCheckReg->close();
-        if (!$hasReg) {
-            return "Failed Gate 2: No approved weekend registration for today";
         }
     }
 
@@ -2686,7 +2676,13 @@ function isConsultantInWorkHours($timeStr, $start, $end, $workScheduleJson = nul
                 $dayConfig = $schedule[$dayOfWeek];
                 $active = isset($dayConfig['active']) ? (bool) $dayConfig['active'] : false;
                 if (!$active) {
-                    return false; // Closed today
+                    if ($dayOfWeek == 6 || $dayOfWeek == 7) {
+                        // Thứ 7 & Chủ Nhật vẫn chia cho các TVV theo đúng vòng, dùng giờ làm việc tiêu chuẩn
+                        $start = $start ?: '08:00';
+                        $end = $end ?: '22:00';
+                    } else {
+                        return false; // Closed today
+                    }
                 }
                 
                 $start = $dayConfig['start'] ?? '00:00';

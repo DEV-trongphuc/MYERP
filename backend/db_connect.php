@@ -99,37 +99,7 @@ if (!function_exists('get_system_setting')) {
 
 if (!function_exists('isRestDayForUser')) {
     function isRestDayForUser($conn, $userId, $date) {
-        $dayOfWeek = (int)date('N', strtotime($date));
-        if ($dayOfWeek == 7) {
-            return true; // Sunday is always rest day
-        }
-        if ($dayOfWeek == 6) { // Saturday
-            // 1. Check user's individual schedule if use_custom_work_hours is enabled
-            $stmtSched = $conn->prepare("SELECT use_custom_work_hours, work_schedule FROM users WHERE id = ?");
-            if ($stmtSched) {
-                $stmtSched->bind_param("i", $userId);
-                $stmtSched->execute();
-                $sRow = $stmtSched->get_result()->fetch_assoc();
-                $stmtSched->close();
-                if ($sRow && (int)($sRow['use_custom_work_hours'] ?? 0) === 1 && !empty($sRow['work_schedule'])) {
-                    $sched = json_decode($sRow['work_schedule'], true);
-                    if (isset($sched[6]) && isset($sched[6]['active'])) {
-                        return !(bool)$sched[6]['active'];
-                    }
-                }
-            }
-            
-            // 2. Fallback to global work schedule
-            $resSched = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'global_work_schedule' LIMIT 1");
-            if ($resSched && $gRow = $resSched->fetch_assoc()) {
-                $schedule = json_decode($gRow['setting_value'], true);
-                if (isset($schedule["6"]) && isset($schedule["6"]["active"])) {
-                    return !(bool)$schedule["6"]["active"];
-                }
-            }
-            
-            return true; // default Saturday is off if not specified
-        }
+        // Thứ 7 và Chủ Nhật vẫn chia cho các TVV theo đúng vòng (không coi là ngày nghỉ chặn nhận lead)
         return false;
     }
 }
