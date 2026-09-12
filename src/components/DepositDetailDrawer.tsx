@@ -1445,7 +1445,11 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
                                 )}
 
                                 {m.unc_file_path && (() => {
-                                  const downloadUrl = m.unc_file_path.startsWith('uploads/') ? `${import.meta.env.VITE_API_URL || '/backend'}/${m.unc_file_path}` : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${m.unc_file_path}`;
+                                  const downloadUrl = m.unc_file_path.startsWith('http')
+  ? m.unc_file_path
+  : m.unc_file_path.startsWith('uploads/') || m.unc_file_path.startsWith('/uploads/')
+    ? `${import.meta.env.VITE_API_URL || '/backend'}${m.unc_file_path.startsWith('/') ? '' : '/'}${m.unc_file_path}`
+    : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${m.unc_file_path}`;
                                   const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(m.unc_file_path);
                                   return (
                                     <a

@@ -803,6 +803,25 @@ export const Header = ({
         }
       }
 
+      // Deposit / Sales Order matching
+      if (targetLink.startsWith('/deposits')) {
+        const depUrlObj = new URL(targetLink, window.location.origin);
+        const openId = depUrlObj.searchParams.get('open_id') || depUrlObj.searchParams.get('id');
+        const numOpenId = Number(openId);
+        if (openId && !isNaN(numOpenId) && numOpenId > 0) {
+          window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
+            detail: { id: numOpenId, depositId: numOpenId }
+          }));
+        }
+      }
+
+      const openDepId = urlObj.searchParams.get('open_deposit_id');
+      if (openDepId && !isNaN(Number(openDepId))) {
+        window.dispatchEvent(new CustomEvent('open-deposit-drawer', {
+          detail: { id: Number(openDepId), depositId: Number(openDepId) }
+        }));
+      }
+
       navigate(targetLink, { state: { timestamp: Date.now() } });
       return;
     }

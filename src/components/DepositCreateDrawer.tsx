@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText, Bookmark } from 'lucide-react';
+import { User, Building2, ChevronLeft, Plus, Trash2, Upload, X, AlertCircle, Loader2, Check, UserPlus, Bell, Search, FileText, Bookmark, FolderOpen } from 'lucide-react';
 import { fetchAPI } from '../utils/api';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
@@ -208,7 +208,32 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
   const [showParticipantDropdown, setShowParticipantDropdown] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
 
+  // Customer documents from "Hồ sơ & Tài liệu" for UNC proof selection
+  const [customerDocs, setCustomerDocs] = useState<any[]>([]);
+  const [loadingCustomerDocs, setLoadingCustomerDocs] = useState(false);
+  const [showDocPickerModal, setShowDocPickerModal] = useState(false);
+  const [docSearchText, setDocSearchText] = useState('');
+
   const isAdmin = user && ['admin', 'superadmin', 'super_admin', 'assistant', 'manager', 'director', 'accountant'].includes(user.role);
+
+  // Load customer documents for UNC proof selection
+  useEffect(() => {
+    const activeContactId = selectedContactId || defaultContact?.id;
+    if (isOpen && activeContactId) {
+      setLoadingCustomerDocs(true);
+      api.get(`/cloud-files?contact_id=${activeContactId}&limit=1000`)
+        .then(res => {
+          const items = res.data?.data?.items || res.data?.data || [];
+          if (Array.isArray(items)) {
+            setCustomerDocs(items);
+          }
+        })
+        .catch(err => console.error('Error loading customer cloud files:', err))
+        .finally(() => setLoadingCustomerDocs(false));
+    } else {
+      setCustomerDocs([]);
+    }
+  }, [isOpen, selectedContactId, defaultContact?.id]);
 
   // Load lists
   useEffect(() => {
@@ -237,20 +262,35 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             setContacts(filteredContacts);
           }
           if (resProj.success) setProjects(resProj.data || []);
-          if (resUsr.success) setUsersList(resUsr.data || []);
           if (resComp.success) setCompanies(resComp.data?.items || resComp.data || []);
           if (resSup.success) setSuppliers(resSup.data?.items || resSup.data || []);
           if (resCoop.success) setCoopSlips(resCoop.data || []);
 
-          if (resDep && resDep.success && Array.isArray(resDep.data) && resDep.data.length > 0) {
-            const lastWithAcct = resDep.data.find((d: any) => d.accountant_id);
-            if (lastWithAcct) {
-              setDepositAccountantId(String(lastWithAcct.accountant_id));
+          if (resUsr.success && Array.isArray(resUsr.data)) {
+            const list = resUsr.data;
+            setUsersList(list);
+
+            // 1. Mặc định Người duyệt là Thu Thảo (Nguyễn Thu Thảo - thaont@ideas.edu.vn)
+            const thuThao = list.find((u: any) => 
+              u.full_name?.toLowerCase().includes('thu thảo') || 
+              u.full_name?.toLowerCase().includes('thảo') ||
+              Number(u.id) === 100064
+            );
+            if (thuThao) {
+              setDepositAccountantId(String(thuThao.id));
+            } else if (resDep && resDep.success && Array.isArray(resDep.data) && resDep.data.length > 0) {
+              const lastWithAcct = resDep.data.find((d: any) => d.accountant_id);
+              if (lastWithAcct) setDepositAccountantId(String(lastWithAcct.accountant_id));
             }
-          } else {
-            const savedAcc = localStorage.getItem('last_selected_accountant_id');
-            if (savedAcc) {
-              setDepositAccountantId(savedAcc);
+
+            // 2. Mặc định Người liên quan là Mai Thị Nữ (numt@ideas.edu.vn)
+            const maiThiNu = list.find((u: any) => 
+              u.full_name?.toLowerCase().includes('mai thị nữ') || 
+              u.full_name?.toLowerCase().includes('nữ') ||
+              Number(u.id) === 100062
+            );
+            if (maiThiNu) {
+              setParticipantIds(prev => prev.length > 0 ? prev : [String(maiThiNu.id)]);
             }
           }
         })
@@ -264,7 +304,25 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
     if (isOpen) {
       setCommissionType('amount');
       setCommissionPercent('');
-      setParticipantIds([]);
+      
+      // Mặc định Người liên quan là Mai Thị Nữ
+      const maiThiNu = usersList.find((u: any) => 
+        u.full_name?.toLowerCase().includes('mai thị nữ') || 
+        u.full_name?.toLowerCase().includes('nữ') ||
+        Number(u.id) === 100062
+      );
+      setParticipantIds(maiThiNu ? [String(maiThiNu.id)] : []);
+
+      // Đảm bảo mặc định Người duyệt là Thu Thảo
+      if (!depositAccountantId && usersList.length > 0) {
+        const thuThao = usersList.find((u: any) => 
+          u.full_name?.toLowerCase().includes('thu thảo') || 
+          u.full_name?.toLowerCase().includes('thảo') ||
+          Number(u.id) === 100064
+        );
+        if (thuThao) setDepositAccountantId(String(thuThao.id));
+      }
+
       setShowParticipantDropdown(false);
       setNotes('');
       setPrice('');
@@ -1323,13 +1381,42 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
 
                     {/* UNC Proof */}
                     <div className="card" style={{ padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--color-surface)' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px' }}>
-                        Minh chứng thanh toán
-                      </h4>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                          Minh chứng thanh toán
+                        </h4>
+                        {Boolean(selectedContactId || defaultContact?.id) && (
+                          <button
+                            type="button"
+                            onClick={() => setShowDocPickerModal(true)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              color: 'var(--color-primary, #b91c1c)',
+                              background: 'rgba(185, 28, 28, 0.08)',
+                              border: '1px solid rgba(185, 28, 28, 0.25)',
+                              borderRadius: '8px',
+                              padding: '4px 10px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Chọn từ danh sách hồ sơ / hợp đồng của khách hàng"
+                          >
+                            <FolderOpen size={13} />
+                            <span>Chọn từ Hồ sơ ({customerDocs.length})</span>
+                          </button>
+                        )}
+                      </div>
+
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>
-                          Minh chứng Đợt 1 (UNC) *
-                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', margin: 0 }}>
+                            Minh chứng Đợt 1 (UNC) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                          </label>
+                        </div>
                         
                         <PasteDropzoneArea
                           compact={true}
@@ -1530,6 +1617,180 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
                 >
                   {isSaving ? 'Đang tạo...' : 'Tạo phiếu'}
                 </button>
+              </div>
+            )}
+
+            {/* Customer Document Picker Modal */}
+            {showDocPickerModal && (
+              <div
+                className="overlay-backdrop"
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0, 0, 0, 0.65)',
+                  backdropFilter: 'blur(6px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: baseZIndex + 100,
+                  padding: '16px'
+                }}
+                onClick={() => setShowDocPickerModal(false)}
+              >
+                <div
+                  style={{
+                    background: 'var(--color-surface)',
+                    borderRadius: '16px',
+                    border: '1px solid var(--color-border)',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+                    width: '100%',
+                    maxWidth: '620px',
+                    maxHeight: '85vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Modal Header */}
+                  <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FolderOpen size={18} color="var(--color-primary)" />
+                      <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                        Chọn từ Hồ sơ & Tài liệu của khách hàng
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDocPickerModal(false)}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Search filter */}
+                  <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--color-border-light)', background: 'var(--color-bg-subtle, rgba(0,0,0,0.02))' }}>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Tìm theo tên file, hợp đồng, phiếu đăng ký, chứng từ..."
+                        value={docSearchText}
+                        onChange={e => setDocSearchText(e.target.value)}
+                        style={{ paddingLeft: '32px', fontSize: '0.8rem', height: '36px', borderRadius: '8px' }}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  {/* Documents List */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {loadingCustomerDocs ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '8px', color: 'var(--color-text-muted)' }}>
+                        <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-primary)' }} />
+                        <span style={{ fontSize: '0.8rem' }}>Đang tải danh sách tài liệu...</span>
+                      </div>
+                    ) : customerDocs.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--color-text-muted)' }}>
+                        <FileText size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                        <p style={{ margin: 0, fontSize: '0.825rem' }}>Khách hàng này chưa có tệp nào trong mục Hồ sơ & Tài liệu.</p>
+                      </div>
+                    ) : (() => {
+                      const filtered = customerDocs.filter(d => {
+                        if (!docSearchText.trim()) return true;
+                        const q = docSearchText.toLowerCase();
+                        return (d.name || '').toLowerCase().includes(q) || (d.category || '').toLowerCase().includes(q);
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                            Không tìm thấy tệp nào khớp với từ khóa "{docSearchText}".
+                          </div>
+                        );
+                      }
+
+                      return filtered.map((doc: any) => {
+                        const isImg = /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(doc.name || doc.file_path || '');
+                        const filePath = doc.file_path || doc.path || doc.url || '';
+                        const isSelected = depositProofImgUrl === filePath;
+
+                        return (
+                          <div
+                            key={doc.id}
+                            onClick={() => {
+                              setDepositProofImgUrl(filePath);
+                              setShowDocPickerModal(false);
+                              addToast(`Đã chọn minh chứng: ${doc.name}`, 'success');
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 12px',
+                              borderRadius: '10px',
+                              border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border-light)',
+                              background: isSelected ? 'rgba(189, 29, 45, 0.05)' : 'var(--color-surface)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              gap: '12px'
+                            }}
+                            onMouseEnter={e => {
+                              if (!isSelected) e.currentTarget.style.background = 'var(--color-surface-hover, #f8fafc)';
+                            }}
+                            onMouseLeave={e => {
+                              if (!isSelected) e.currentTarget.style.background = 'var(--color-surface)';
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                              <div style={{ width: '38px', height: '38px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', flexShrink: 0 }}>
+                                {isImg ? (
+                                  <img
+                                    src={filePath.startsWith('http') ? filePath : `${import.meta.env.VITE_API_URL || '/backend'}/uploads/${filePath.replace(/^\/?uploads\//, '')}`}
+                                    alt={doc.name}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                ) : (
+                                  <FileText size={20} color="var(--color-primary)" />
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                <span style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {doc.name}
+                                </span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                  {doc.category ? `[${doc.category}] · ` : ''}{doc.created_at ? new Date(doc.created_at).toLocaleDateString('vi-VN') : ''}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              className={`btn ${isSelected ? 'primary' : 'outline'} sm`}
+                              style={{ padding: '4px 12px', fontSize: '0.72rem', fontWeight: 700, borderRadius: '6px', flexShrink: 0 }}
+                            >
+                              {isSelected ? '✓ Đang chọn' : 'Chọn tệp'}
+                            </button>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div style={{ padding: '10px 18px', borderTop: '1px solid var(--color-border-light)', display: 'flex', justifyContent: 'flex-end', background: 'var(--color-bg-subtle, rgba(0,0,0,0.02))' }}>
+                    <button
+                      type="button"
+                      className="btn outline sm"
+                      onClick={() => setShowDocPickerModal(false)}
+                      style={{ fontSize: '0.78rem', padding: '5px 14px' }}
+                    >
+                      Đóng
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

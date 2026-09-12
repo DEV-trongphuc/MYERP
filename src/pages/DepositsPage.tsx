@@ -1,6 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchAPI } from '../utils/api';
+import api from '../api/axios';
 import { compressToWebP } from '../utils/imageCompress';
 import { useAuth } from '../contexts/AuthContext';
 import { useUIStore } from '../store/uiStore';
@@ -249,14 +250,43 @@ export default function DepositsPage({ defaultTab = 'list' }: { defaultTab?: 'li
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const openId = params.get('open_id') || params.get('id');
-    if (openId && deposits.length > 0) {
-      const found = deposits.find((d: any) => String(d.id) === String(openId));
-      if (found) {
-        setSelectedDepForManage(found);
-        setShowManageModal(true);
+    if (openId) {
+      if (deposits.length > 0) {
+        const found = deposits.find((d: any) => String(d.id) === String(openId));
+        if (found) {
+          setSelectedDepForManage(found);
+          setShowManageModal(true);
+          return;
+        }
       }
+      api.get(`/deposits/${openId}`)
+        .then(res => {
+          if (res.data?.data) {
+            setSelectedDepForManage(res.data.data);
+            setShowManageModal(true);
+          }
+        })
+        .catch(err => console.error('Error fetching deposit from deep-link:', err));
     }
   }, [deposits]);
+
+  useEffect(() => {
+    const handleOpenDepositDrawer = (e: any) => {
+      const depId = e.detail?.id || e.detail?.depositId;
+      if (depId) {
+        api.get(`/deposits/${depId}`)
+          .then(res => {
+            if (res.data?.data) {
+              setSelectedDepForManage(res.data.data);
+              setShowManageModal(true);
+            }
+          })
+          .catch(err => console.error('Error opening deposit drawer from event:', err));
+      }
+    };
+    window.addEventListener('open-deposit-drawer', handleOpenDepositDrawer);
+    return () => window.removeEventListener('open-deposit-drawer', handleOpenDepositDrawer);
+  }, []);
 
   const [tempMilestones, setTempMilestones] = useState<any[]>([]);
   const [isSavingMilestones, setIsSavingMilestones] = useState(false);

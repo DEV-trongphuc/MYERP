@@ -317,16 +317,17 @@ class DepositController {
                         ");
                         $stmtMention->execute([$noteId, $accountantId]);
 
-                        // Send notification
+                        // Send notification to accountant
                         $stmtNotif = $this->db->prepare("
                             INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
                             VALUES (?, ?, 'Yêu cầu phê duyệt phiếu thanh toán', ?, 'mention', ?)
                         ");
+                        $acctTargetLink = "/approvals?open_id=$depositId&open_type=deposit";
                         $stmtNotif->execute([
                             $accountantId,
                             $auth['tenant_id'],
-                            "Nhân viên $creatorName đã tạo phiếu thanh toán mới và chỉ định bạn phê duyệt.",
-                            $targetLink
+                            "Nhân viên $creatorName đã tạo phiếu thanh toán mới (#SO-$depositId) và chỉ định bạn phê duyệt.",
+                            $acctTargetLink
                         ]);
                     }
                 } catch (Throwable $notifErr) {
@@ -346,13 +347,14 @@ class DepositController {
                         INSERT INTO notifications (user_id, tenant_id, title, body, type, link)
                         VALUES (?, ?, 'Bạn được gắn thẻ liên quan trong phiếu thanh toán', ?, 'mention', ?)
                     ");
+                    $partTargetLink = $contactId ? "/contacts/$contactId?tab=deals&open_deposit_id=$depositId" : "/deposits?open_id=$depositId";
                     foreach ($participantIds as $pId) {
                         if ($pId !== (int)$auth['user_id']) {
                             $stmtNotif->execute([
                                 $pId,
                                 $auth['tenant_id'],
-                                "Nhân viên $creatorName đã thêm bạn làm người liên quan trong phiếu thanh toán mới.",
-                                "/contacts/$contactId"
+                                "Nhân viên $creatorName đã thêm bạn làm người liên quan trong phiếu thanh toán mới (#SO-$depositId).",
+                                $partTargetLink
                             ]);
                         }
                     }
@@ -412,13 +414,18 @@ class DepositController {
             }
 
             $stmtM = $this->db->prepare("
-                INSERT INTO deposit_milestones (deposit_id, milestone_name, expected_amount, expected_pay_date, status, original_amount)
-                VALUES (?, ?, ?, ?, 'pending', ?)
+                INSERT INTO deposit_milestones (deposit_id, milestone_name, expected_amount, expected_pay_date, status, original_amount, unc_file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ");
+            $isFirstMilestone = true;
+            $initialUncPath = !empty($b['unc_file_path']) ? trim($b['unc_file_path']) : null;
             foreach ($milestones as $m) {
                 $payDate = !empty($m['expected_pay_date']) ? $m['expected_pay_date'] : null;
                 $originalAmount = isset($m['original_amount']) ? (float)$m['original_amount'] : null;
-                $stmtM->execute([$depositId, trim($m['name'] ?? $m['milestone_name']), (float)$m['amount'], $payDate, $originalAmount]);
+                $mStatus = ($isFirstMilestone && $initialUncPath) ? 'paid' : 'pending';
+                $mUnc = ($isFirstMilestone && $initialUncPath) ? $initialUncPath : null;
+                $stmtM->execute([$depositId, trim($m['name'] ?? $m['milestone_name']), (float)$m['amount'], $payDate, $mStatus, $originalAmount, $mUnc]);
+                $isFirstMilestone = false;
             }
 
             // Update contact pipeline stage to deal won status and set temperature to 'hot' (Sôi = xuống tiền)

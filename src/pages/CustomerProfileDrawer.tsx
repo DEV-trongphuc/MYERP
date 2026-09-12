@@ -14279,7 +14279,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'center', 
-                            zIndex: 1000500, 
+                            zIndex: effectiveZIndex + 50, 
                             background: 'rgba(15, 23, 42, 0.88)',
                             backdropFilter: 'blur(8px)',
                             padding: '24px'
@@ -16118,6 +16118,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             isOpen={showExpenseModal}
             onClose={() => setShowExpenseModal(false)}
             user={currentUser}
+            zIndex={effectiveZIndex + 20}
             editItem={{
               entity_type: 'contact',
               entity_id: effectiveContactId,
@@ -17783,7 +17784,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             onClose={() => setShowManageModal(false)}
             deposit={selectedDepForManage}
             onSaveSuccess={() => fetchData('deals')}
-            zIndex={zIndex ? zIndex + 20 : 1000100}
+            zIndex={effectiveZIndex + 20}
           />
         </Suspense>
       )}
