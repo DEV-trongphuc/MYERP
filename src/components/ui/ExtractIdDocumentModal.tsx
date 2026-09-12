@@ -146,7 +146,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
   // Dynamic status text during scanning
   const scanStages = [
     'Đang kết nối và tải tệp tài liệu...',
-    'AI Gemini Vision đang quét nhận diện tài liệu...',
+    'AI DOM Vision đang quét nhận diện tài liệu...',
     'Đang bóc tách Họ tên, Số CCCD, Số Hộ chiếu...',
     'Trích xuất Ngày sinh, Giới tính, Quê quán & Địa chỉ...',
     'Đang chuẩn hóa và hoàn thiện dữ liệu...'
@@ -799,15 +799,19 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
               <div 
                 className="ai-scanner-frame"
                 style={{
-                  width: '320px',
-                  height: '220px',
+                  width: '100%',
+                  maxWidth: '540px',
+                  height: '380px',
                   background: '#0f172a',
-                  border: '2px solid rgba(99, 102, 241, 0.8)',
+                  border: '2px solid rgba(99, 102, 241, 0.85)',
+                  borderRadius: '16px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginBottom: '24px',
-                  position: 'relative'
+                  marginBottom: '20px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.22)'
                 }}
               >
                 {/* Tia quét Laser */}
@@ -828,12 +832,13 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       (e.target as HTMLElement).style.opacity = '0';
                     }}
                     style={{
-                      maxWidth: '90%',
-                      maxHeight: '90%',
+                      maxWidth: '92%',
+                      maxHeight: '92%',
                       objectFit: 'contain',
-                      borderRadius: '8px',
-                      opacity: 0.85,
-                      transition: 'opacity 0.2s'
+                      borderRadius: '10px',
+                      opacity: 0.9,
+                      transition: 'opacity 0.2s',
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)'
                     }} 
                   />
                 ) : (
@@ -869,7 +874,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
           {step === 'review' && (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isSelectedImage && selectedFileUrl ? '280px 1fr' : '1fr',
+              gridTemplateColumns: isSelectedImage && selectedFileUrl ? '340px 1fr' : '1fr',
               gap: '24px'
             }}>
               {/* Cột trái: Ảnh tài liệu đối chiếu */}
@@ -896,7 +901,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    maxHeight: '380px'
+                    maxHeight: '440px'
                   }}>
                     <img 
                       src={selectedFileUrl} 
@@ -907,7 +912,7 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                       style={{
                         width: '100%',
                         height: 'auto',
-                        maxHeight: '380px',
+                        maxHeight: '440px',
                         objectFit: 'contain'
                       }} 
                     />

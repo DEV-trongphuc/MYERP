@@ -1443,6 +1443,168 @@ export const DocumentationPage: React.FC = () => {
           )
         },
         {
+          id: 'gate-id-extract-ai',
+          title: 'Công Nghệ AI DOM Vision Trích Xuất & Thẩm Định Hộ Chiếu (Passport) / CCCD Tự Động',
+          description: 'Hệ thống Vision AI bóc tách thông tin cá nhân từ Hộ chiếu hoặc Căn cước công dân, tự động chuẩn hóa ngày sinh DD/MM/YYYY, gán nơi sinh thành địa chỉ và cập nhật hồ sơ khách hàng chỉ với 1-click.',
+          headings: [
+            { id: 'ai-dom-vision-overview', text: 'Tổng Quan & Giá Trị Nghiệp Vụ' },
+            { id: 'ai-dom-vision-workflow', text: 'Quy Trình 4 Bước Trích Xuất Thông Minh' },
+            { id: 'ai-dom-vision-rules', text: 'Quy Tắc Chuẩn Hóa Ngày Sinh & Địa Chỉ Thường Trú' },
+            { id: 'ai-dom-vision-mapping', text: 'Ma Trận Ánh Xạ Dữ Liệu Lên Hồ Sơ Khách Hàng' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', padding: '14px 18px', borderRadius: '8px', marginBottom: '22px' }}>
+                <strong style={{ color: '#4338ca', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={16} />
+                  <span>Tính Năng AI Độc Quyền Của MYERP (Đã Đưa Vào Vận Hành Thực Tế)</span>
+                </strong>
+                <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#3730a3' }}>
+                  Hỗ trợ chuyên viên Tuyển sinh và Quản trị Đào tạo loại bỏ 95% thao tác gõ phím thủ công khi tiếp nhận hồ sơ xét tuyển, đảm bảo tính chuẩn xác tuyệt đối của dữ liệu định danh pháp lý phục vụ cấp văn bằng và làm thủ tục tốt nghiệp.
+                </p>
+              </div>
+
+              <h2 id="ai-dom-vision-overview">Tổng Quan &amp; Giá Trị Nghiệp Vụ</h2>
+              <p>
+                Trong quy trình tuyển sinh các chương trình đào tạo quốc tế và sau đại học (Thạc sĩ Quản trị Kinh doanh, Tiến sĩ, Cử nhân quốc tế),
+                học viên bắt buộc phải nộp bản sao chụp <strong>Hộ chiếu (Passport)</strong> hoặc <strong>Căn cước công dân (CCCD / CMND)</strong>.
+                Trước đây, việc nhập liệu thủ công các trường Họ tên có dấu, Số định danh 12 số, Số Passport, Ngày sinh, Ngày cấp, Nơi sinh... thường xuyên gặp tình trạng gõ sai chính tả hoặc nhầm lẫn cấu trúc ngày tháng (MM/DD so với DD/MM).
+              </p>
+              <p>
+                Công nghệ <strong>AI DOM Vision</strong> được tích hợp trực tiếp vào Drawer Hồ sơ khách hàng (<code>CustomerProfileDrawer.tsx</code>),
+                cho phép hệ thống tự động đọc, phân tích quang học đa tầng (Multimodal Vision Analysis) và trích xuất toàn bộ thông tin với tốc độ xử lý dưới <strong>2 giây</strong>.
+              </p>
+
+              <h2 id="ai-dom-vision-workflow">Quy Trình 4 Bước Trích Xuất Thông Minh</h2>
+              <div className="doc-flow">
+                <div className="doc-flow-step">1. Chọn/Tải tệp CCCD hoặc Passport (Có Preview ảnh thật)</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">2. Khung Quét Laser HUD AI DOM Vision đa chiều</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">3. Chuẩn hóa Ngày sinh DD/MM/YYYY &amp; Fallback Nơi sinh</div>
+                <div className="doc-flow-arrow">→</div>
+                <div className="doc-flow-step">4. Đối chiếu trực quan &amp; 1-Click cập nhật vào Database</div>
+              </div>
+
+              <div className="doc-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '18px 0' }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#4f46e5', fontSize: '14px', fontWeight: 700 }}>
+                    Bước 1 &amp; Bước 2: Nhận Diện &amp; Quét Laser Đa Tầng
+                  </h4>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    <li><strong>Thuật toán lọc tệp thông minh:</strong> Hệ thống tự động quét toàn bộ tệp trong tab <em>"Hồ sơ &amp; Tài liệu"</em> của khách hàng, ưu tiên gom nhóm vào mục <em>"Đề xuất CCCD / Passport"</em> nếu tên tệp chứa từ khóa liên quan (như <code>passport</code>, <code>cccd</code>, <code>cmnd</code>, <code>dinh danh</code>).</li>
+                    <li><strong>Preview ảnh thu nhỏ (Thumbnail Preview):</strong> Các tệp hình ảnh (.webp, .jpg, .png) hiển thị trực tiếp ảnh thu nhỏ ngay trên thẻ chọn tệp thay vì icon xám, giúp tư vấn viên nhận diện tệp cần quét ngay trong 1 giây.</li>
+                    <li><strong>Khung quét Laser HUD mở rộng:</strong> Giao diện máy quét công nghệ cao hiển thị kích thước lớn (540px × 380px), bao bọc toàn bộ hình ảnh tài liệu với tia quét laser chuyển động liên tục, mô phỏng buồng quét tài liệu an ninh thực tế.</li>
+                  </ul>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#059669', fontSize: '14px', fontWeight: 700 }}>
+                    Bước 3 &amp; Bước 4: Chuẩn Hóa &amp; Đối Chiếu Trực Quan
+                  </h4>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6, color: '#334155' }}>
+                    <li><strong>Phát hiện tài liệu không hợp lệ:</strong> Nếu người dùng vô tình chọn nhầm hợp đồng, bằng cấp, ảnh phong cảnh... AI DOM sẽ tự động từ chối và giải thích lý do cụ thể, ngăn ngừa rác dữ liệu.</li>
+                    <li><strong>Đối chiếu song song (Side-by-Side Visual Review):</strong> Màn hình Review hiển thị tài liệu gốc bên cột trái với chiều cao mở rộng (440px) song song cùng form dữ liệu bên phải, cho phép tư vấn viên so sánh từng ký tự trước khi xác nhận.</li>
+                    <li><strong>1-Click đồng bộ Database:</strong> Khi bấm <em>"Xác nhận &amp; Tự động điền vào hồ sơ"</em>, hệ thống đồng thời cập nhật form hiển thị và gửi lệnh ghi trực tiếp vào bảng <code>contacts</code> qua API <code>PUT /contacts/:id</code>.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <h2 id="ai-dom-vision-rules">Quy Tắc Chuẩn Hóa Ngày Sinh &amp; Địa Chỉ Thường Trú</h2>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '220px' }}>Quy chuẩn nghiệp vụ</th>
+                    <th style={{ width: '220px' }}>Hành vi hệ thống</th>
+                    <th>Mục đích &amp; Lợi ích thực tế</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Chuẩn hóa Ngày sinh DD/MM/YYYY</strong></td>
+                    <td>Chuyển đổi mọi định dạng (<code>YYYY-MM-DD</code> hoặc <code>YYYY/MM/DD</code>) thành chuẩn <code>DD/MM/YYYY</code> (ví dụ: <code>03/08/1980</code>).</td>
+                    <td>Thống nhất quy cách lưu trữ và hiển thị học bạ theo đúng tiêu chuẩn hành chính của Bộ Giáo dục &amp; Đào tạo Việt Nam.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Tự động kế thừa Nơi sinh vào Địa chỉ</strong></td>
+                    <td>
+                      Nếu tài liệu là Hộ chiếu (Passport) không có dòng địa chỉ thường trú, hệ thống tự động lấy <strong>Nơi sinh (Place of birth)</strong> hoặc Quê quán điền vào ô Địa chỉ.
+                    </td>
+                    <td>
+                      Tránh tình trạng để trống trường địa chỉ bắt buộc trên hồ sơ xét tuyển khi ứng viên chỉ nộp Hộ chiếu mà chưa kịp nộp CCCD.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>In hoa Họ và Tên</strong></td>
+                    <td>Tự động viết IN HOA có dấu đầy đủ (ví dụ: <code>LÊ THỊ BÍCH VÂN</code>).</td>
+                    <td>Đảm bảo tính trang trọng, chuẩn xác phục vụ in ấn Giấy báo trúng tuyển (Acceptance Letter) và Chứng chỉ đào tạo.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Hiệu ứng Shimmer Wave chống đơ</strong></td>
+                    <td>Áp dụng dải sáng gradient chuyển động ngang chu kỳ 1.4s khi đang tải tệp.</td>
+                    <td>Tạo phản hồi thị giác mượt mà, thông báo trạng thái hoạt động theo thời gian thực, triệt tiêu cảm giác đứng hình.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h2 id="ai-dom-vision-mapping">Ma Trận Ánh Xạ Dữ Liệu Lên Hồ Sơ Khách Hàng</h2>
+              <table className="doc-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '200px' }}>Trường trích xuất AI DOM</th>
+                    <th style={{ width: '220px' }}>Cột cơ sở dữ liệu (Database)</th>
+                    <th style={{ width: '220px' }}>Vị trí hiển thị trên UI CRM</th>
+                    <th>Ghi chú nghiệp vụ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Họ và tên</td>
+                    <td><code>contacts.full_name</code></td>
+                    <td>Tiêu đề hồ sơ &amp; Cột Họ tên CRM</td>
+                    <td>Tự động viết hoa, đồng bộ avatar và định danh khách hàng.</td>
+                  </tr>
+                  <tr>
+                    <td>Số CCCD / CMND</td>
+                    <td><code>contacts.citizen_id</code></td>
+                    <td>Tab Thông tin chung (Drawer)</td>
+                    <td>Chuẩn hóa chỉ lưu dãy số, loại bỏ ký tự khoảng trắng thừa.</td>
+                  </tr>
+                  <tr>
+                    <td>Số Passport (Hộ chiếu)</td>
+                    <td><code>contacts.passport</code></td>
+                    <td>Tab Thông tin chung (Drawer)</td>
+                    <td>Bao gồm chữ cái đầu và dãy số (ví dụ: <code>E03843574</code>).</td>
+                  </tr>
+                  <tr>
+                    <td>Ngày sinh</td>
+                    <td><code>contacts.birthday</code></td>
+                    <td>Tab Thông tin chung &amp; Bảng CRM</td>
+                    <td>Định dạng <code>DD/MM/YYYY</code> chuẩn mực.</td>
+                  </tr>
+                  <tr>
+                    <td>Giới tính</td>
+                    <td><code>contacts.gender</code></td>
+                    <td>Tab Thông tin chung (Drawer)</td>
+                    <td>Ánh xạ chuẩn sang <code>male</code> (Nam) hoặc <code>female</code> (Nữ).</td>
+                  </tr>
+                  <tr>
+                    <td>Quốc tịch</td>
+                    <td><code>contacts.nationality</code></td>
+                    <td>Tab Thông tin chung (Drawer)</td>
+                    <td>Mặc định <code>Việt Nam</code> hoặc theo quốc tịch ghi trên Passport.</td>
+                  </tr>
+                  <tr>
+                    <td>Nơi thường trú / Địa chỉ</td>
+                    <td><code>contacts.address</code></td>
+                    <td>Tab Thông tin chung (Drawer)</td>
+                    <td>Tự động điền Nơi sinh nếu tài liệu là Hộ chiếu.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )
+        },
+        {
           id: 'gate-contract-ocr',
           title: '[R&D Đang Phát Triển] Tải Hợp Đồng Tự Động Sinh Sales Order & Lịch Thanh Toán',
           description: 'Tính năng AI OCR thông minh trích xuất dữ liệu từ văn bản hợp đồng đào tạo scan để tạo Đơn bán hàng tự động.',
