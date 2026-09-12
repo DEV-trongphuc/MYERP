@@ -1,23 +1,23 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BookOpen, 
-  Code, 
-  Search, 
-  ChevronRight, 
-  Layers, 
-  ShieldCheck, 
-  Users, 
-  DollarSign, 
-  CheckSquare, 
-  Clock, 
-  Building2, 
-  Calendar, 
-  Sparkles, 
-  ArrowUpRight, 
-  Home, 
-  Copy, 
-  Check, 
+import {
+  BookOpen,
+  Code,
+  Search,
+  ChevronRight,
+  Layers,
+  ShieldCheck,
+  Users,
+  DollarSign,
+  CheckSquare,
+  Clock,
+  Building2,
+  Calendar,
+  Sparkles,
+  ArrowUpRight,
+  Home,
+  Copy,
+  Check,
   FileText,
   AlertTriangle,
   Zap,
@@ -46,7 +46,8 @@ import {
   Mail,
   MessageSquare,
   Send,
-  Bell
+  Bell,
+  X
 } from 'lucide-react';
 
 interface DocItem {
@@ -64,6 +65,39 @@ interface DocSection {
   items: DocItem[];
 }
 
+const PermCell: React.FC<{ r: string; w: string; d: string }> = ({ r, w, d }) => {
+  if (r === 'none' && w === 'none' && d === 'none') {
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', color: '#9ca3af', fontSize: '0.74rem' }}>
+        <X size={13} color="#9ca3af" /> <span>None</span>
+      </div>
+    );
+  }
+  if (r === 'all' && w === 'all' && d === 'all') {
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px', color: '#059669', fontSize: '0.74rem', fontWeight: 700 }}>
+        <Check size={13} color="#059669" strokeWidth={2.5} /> <span>All</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', fontSize: '0.68rem', textAlign: 'left', lineHeight: 1.3 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: r === 'none' ? '#9ca3af' : '#059669' }}>
+        {r === 'none' ? <X size={10} color="#9ca3af" /> : <Check size={10} color="#059669" strokeWidth={2.5} />}
+        <span>R: <strong>{r}</strong></span>
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: w === 'none' ? '#9ca3af' : '#2563eb' }}>
+        {w === 'none' ? <X size={10} color="#9ca3af" /> : <Check size={10} color="#2563eb" strokeWidth={2.5} />}
+        <span>W: <strong>{w}</strong></span>
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', color: d === 'none' ? '#9ca3af' : '#dc2626' }}>
+        {d === 'none' ? <X size={10} color="#9ca3af" /> : <Check size={10} color="#dc2626" strokeWidth={2.5} />}
+        <span>D: <strong>{d}</strong></span>
+      </span>
+    </div>
+  );
+};
+
 export const DocumentationPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,7 +109,7 @@ export const DocumentationPage: React.FC = () => {
   const contentRef = useRef<HTMLDivElement>(null);
 
   const toggleSection = (sectionId: string) => {
-    setExpandedSectionIds(prev => 
+    setExpandedSectionIds(prev =>
       prev.includes(sectionId)
         ? prev.filter(id => id !== sectionId)
         : [...prev, sectionId]
@@ -107,12 +141,12 @@ export const DocumentationPage: React.FC = () => {
           content: (
             <div className="doc-prose">
               <p>
-                <strong>IDEAS MYERP</strong> là nền tảng quản trị tổng thể doanh nghiệp (Enterprise Resource Planning & CRM) 
-                được thiết kế chuyên biệt cho hệ sinh thái giáo dục, đào tạo đại học/sau đại học và dịch vụ tư vấn chuyên sâu. 
-                Hệ thống hội tụ khả năng tự động hóa bán hàng (Sales Automation), quản lý nhân sự - tiền lương đa tầng (HRM & Payroll), 
+                <strong>IDEAS MYERP</strong> là nền tảng quản trị tổng thể doanh nghiệp (Enterprise Resource Planning & CRM)
+                được thiết kế chuyên biệt cho hệ sinh thái giáo dục, đào tạo đại học/sau đại học và dịch vụ tư vấn chuyên sâu.
+                Hệ thống hội tụ khả năng tự động hóa bán hàng (Sales Automation), quản lý nhân sự - tiền lương đa tầng (HRM & Payroll),
                 chấm công sinh trắc học thông minh, kiểm soát ngân sách chi tiêu và Trí tuệ Nhân tạo hỗ trợ thẩm định dữ liệu.
               </p>
-              
+
               <h2 id="tech-stack">Mô Hình Công Nghệ (Tech Stack)</h2>
               <table className="doc-table">
                 <thead>
@@ -153,7 +187,7 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="multi-tenant">Cơ Chế Phân Lập Multi-Tenant</h2>
               <p>
-                Toàn bộ các bảng nghiệp vụ cốt lõi (<code>contacts</code>, <code>deals</code>, <code>pipeline_stages</code>, <code>expenses</code>, <code>hrm_employees</code>) 
+                Toàn bộ các bảng nghiệp vụ cốt lõi (<code>contacts</code>, <code>deals</code>, <code>pipeline_stages</code>, <code>expenses</code>, <code>hrm_employees</code>)
                 đều được gắn cờ định danh <code>tenant_id</code>. Tất cả các truy vấn tại Controller đều bắt buộc truyền điều kiện lọc theo đơn vị thành viên:
               </p>
               <div className="doc-code-box">
@@ -167,8 +201,8 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="database-engine">Cơ Sở Dữ Liệu & Auto Migrations</h2>
               <p>
-                Hệ thống áp dụng cơ chế di trú cơ sở dữ liệu phiên bản lũy tiến (Incremental Migrations). Khi hệ thống khởi động hoặc quản trị viên truy cập trang bảo trì, 
-                file <code>run_migrations.php</code> sẽ tự động quét danh mục <code>backend/migrations/</code>, đối chiếu với bảng nhật ký phiên bản và thực thi các script SQL 
+                Hệ thống áp dụng cơ chế di trú cơ sở dữ liệu phiên bản lũy tiến (Incremental Migrations). Khi hệ thống khởi động hoặc quản trị viên truy cập trang bảo trì,
+                file <code>run_migrations.php</code> sẽ tự động quét danh mục <code>backend/migrations/</code>, đối chiếu với bảng nhật ký phiên bản và thực thi các script SQL
                 còn thiếu một cách tuần tự, đảm bảo database luôn đồng nhất giữa môi trường phát triển và môi trường vận hành thực tế.
               </p>
             </div>
@@ -186,7 +220,7 @@ export const DocumentationPage: React.FC = () => {
             <div className="doc-prose">
               <h2 id="advisory-lock">Cơ Chế Khóa Tranh Chấp (Advisory Locking)</h2>
               <p>
-                Để giải quyết triệt để lỗi xung đột dữ liệu đồng thời (<em>Race Condition / Double Assignment</em>) khi nhiều tư vấn viên 
+                Để giải quyết triệt để lỗi xung đột dữ liệu đồng thời (<em>Race Condition / Double Assignment</em>) khi nhiều tư vấn viên
                 cùng lúc nhận lead hoặc nhiều cấp quản lý cùng bấm duyệt một đơn chi tiêu:
               </p>
               <div className="doc-code-box">
@@ -226,11 +260,11 @@ export const DocumentationPage: React.FC = () => {
             <div className="doc-prose">
               <h2 id="queue-engine">Hàng Đợi Tác Vụ Ngầm (Queue Engine)</h2>
               <p>
-                Để giữ thời gian phản hồi API dưới 50ms, các tác vụ nặng như gửi email xác nhận, gửi tin nhắn Zalo ZNS hoặc đồng bộ Meta CAPI 
+                Để giữ thời gian phản hồi API dưới 50ms, các tác vụ nặng như gửi email xác nhận, gửi tin nhắn Zalo ZNS hoặc đồng bộ Meta CAPI
                 không được thực thi đồng bộ trong luồng request của người dùng, mà được đẩy vào bảng hàng đợi tác vụ <code>system_jobs</code> / <code>email_queue</code>.
               </p>
               <p>
-                Tiến trình nền <code>cron_queue_worker.php</code> và <code>cron_mailer.php</code> chạy độc lập trên server với chu kỳ 1 phút/lần 
+                Tiến trình nền <code>cron_queue_worker.php</code> và <code>cron_mailer.php</code> chạy độc lập trên server với chu kỳ 1 phút/lần
                 để bốc việc từ hàng đợi, thực hiện gửi với cơ chế thử lại (Retry Policy tối đa 3 lần) và ghi nhận nhật ký thất bại nếu có sự cố mạng.
               </p>
 
@@ -275,16 +309,19 @@ export const DocumentationPage: React.FC = () => {
           description: 'Đặc tả 4 cấp độ dữ liệu (all, team, own, none), ma trận quyền permissions_json, phân lập Multi-tenant và kiến trúc an ninh phòng thủ đa lớp.',
           headings: [
             { id: 'rbac-scopes', text: '4 Cấp Độ Scope Dữ Liệu (Data Access Scopes)' },
+            { id: 'role-definitions', text: 'Đặc Tả Chi Tiết 10 Vai Trò (Roles) Chuẩn Doanh Nghiệp' },
+            { id: 'rbac-matrix-table', text: 'Bảng Ma Trận Phân Quyền Chi Tiết (10 Roles × 9 Phân Hệ)' },
             { id: 'rbac-matrix', text: 'Ma Trận Quyền Hạt Nhân (permissions_json) & Cấu Trúc Đội Nhóm' },
+            { id: 'special-authorizations', text: 'Quyền Hạn Đặc Thù & Cơ Chế Phê Duyệt Nghiệp Vụ' },
             { id: 'security-layers', text: 'Kiến Trúc An Ninh Phòng Thủ Đa Lớp (Defense-in-Depth)' }
           ],
           content: (
             <div className="doc-prose">
               <h2 id="rbac-scopes">4 Cấp Độ Scope Dữ Liệu (Data Access Scopes)</h2>
               <p>
-                Hệ thống <strong>IDEAS MYERP</strong> áp dụng mô hình phân quyền ma trận mở rộng kết hợp giữa 
-                <strong>RBAC (Role-Based Access Control)</strong> và <strong>ABAC (Attribute-Based Access Control)</strong>. 
-                Mọi truy vấn dữ liệu nhạy cảm (Contacts, Deals, Quotes, Doanh số, Học viên) được quy định chặt chẽ qua hàm 
+                Hệ thống <strong>IDEAS MYERP</strong> áp dụng mô hình phân quyền ma trận mở rộng kết hợp giữa
+                <strong>RBAC (Role-Based Access Control)</strong> và <strong>ABAC (Attribute-Based Access Control)</strong>.
+                Mọi truy vấn dữ liệu nhạy cảm (Contacts, Deals, Quotes, Doanh số, Học viên) được quy định chặt chẽ qua hàm
                 kiểm tra phạm vi <code>getScope($auth, $module, $action)</code> với 4 cấp độ:
               </p>
               <table className="doc-table">
@@ -298,32 +335,32 @@ export const DocumentationPage: React.FC = () => {
                 <tbody>
                   <tr>
                     <td><code>all</code></td>
-                    <td><code>superadmin</code>, <code>admin</code>, <code>sale_admin</code>, <code>academic</code></td>
+                    <td><code>superadmin</code>, <code>admin</code>, <code>director</code>, <code>assistant</code></td>
                     <td>
-                      Toàn quyền truy cập và giám sát toàn bộ dữ liệu trong cùng một tổ chức (tenant). 
+                      Toàn quyền truy cập và giám sát toàn bộ dữ liệu trong cùng một tổ chức (tenant).
                       Câu truy vấn chỉ giới hạn theo <code>WHERE tenant_id = :tenant_id</code>.
                     </td>
                   </tr>
                   <tr>
                     <td><code>team</code></td>
-                    <td>Trưởng nhóm (<code>leader_id</code>), Phó nhóm (<code>co_leader_ids</code>)</td>
+                    <td>Trưởng nhóm / Quản lý (<code>manager</code>), Phó nhóm (<code>co_leader_ids</code>)</td>
                     <td>
-                      Được xem và quản lý dữ liệu của chính mình và toàn bộ thành viên cấp dưới trong nhóm. 
-                      Hệ thống tự động liên kết bảng <code>teams</code> và bảng <code>users</code> để mở rộng điều kiện lọc: 
+                      Được xem và quản lý dữ liệu của chính mình và toàn bộ thành viên cấp dưới trong nhóm.
+                      Hệ thống tự động liên kết bảng <code>teams</code> và bảng <code>users</code> để mở rộng điều kiện lọc:
                       <code>WHERE tenant_id = :tenant_id AND (assigned_to = :my_id OR assigned_to IN (SELECT id FROM users WHERE team_id = :my_team_id))</code>.
                     </td>
                   </tr>
                   <tr>
                     <td><code>own</code></td>
-                    <td>Tư vấn viên (<code>sale</code>, <code>sales</code>), Giảng viên, Nhân viên chuyên môn</td>
+                    <td>Tư vấn viên (<code>sale</code>, <code>sales</code>), Giảng viên (<code>teacher</code>), Nhân viên chuyên môn</td>
                     <td>
-                      Chỉ được xem và xử lý hồ sơ/học viên/đơn hàng được phân bổ trực tiếp cho chính mình. 
+                      Chỉ được xem và xử lý hồ sơ/học viên/đơn hàng được phân bổ trực tiếp cho chính mình.
                       Điều kiện lọc bắt buộc: <code>WHERE tenant_id = :tenant_id AND assigned_to = :my_id</code>.
                     </td>
                   </tr>
                   <tr>
                     <td><code>none</code></td>
-                    <td>Tài khoản bị giới hạn quyền theo hành động (VD: nhân viên sale cố xóa lead)</td>
+                    <td>Tài khoản bị giới hạn quyền theo hành động (VD: nhân viên sale cố xóa lead hoặc truy cập cài đặt hệ thống)</td>
                     <td>
                       Bị từ chối truy cập tuyệt đối (HTTP 403 Forbidden). Hệ thống tự động ghi nhật ký vi phạm bảo mật vào <code>admin_logs</code>.
                     </td>
@@ -331,25 +368,296 @@ export const DocumentationPage: React.FC = () => {
                 </tbody>
               </table>
 
+              <h2 id="role-definitions">Đặc Tả Chi Tiết 10 Vai Trò (Roles) Chuẩn Doanh Nghiệp</h2>
+              <p>
+                Hệ thống chuẩn hóa 10 nhóm vai trò (Roles) tương ứng với từng phòng ban và vị trí công tác thực tế trong doanh nghiệp:
+              </p>
+
+              <div style={{ overflowX: 'auto', margin: '16px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th style={{ width: '130px' }}>Mã Role (Slug)</th>
+                      <th style={{ width: '170px' }}>Chức danh vị trí</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Scope</th>
+                      <th style={{ minWidth: '320px' }}>Đặc tả trách nhiệm &amp; Thẩm quyền nghiệp vụ</th>
+                      <th style={{ minWidth: '220px' }}>Quy tắc bảo mật &amp; Giới hạn</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code style={{ color: '#ef4444', fontWeight: 700 }}>superadmin</code></td>
+                      <td><strong>1. Super Admin</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Quản trị viên Tối cao</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all</td>
+                      <td>Tài khoản root cấp hệ thống, sở hữu toàn quyền quản trị multi-tenant, khởi tạo và cấu hình cơ sở dữ liệu, quản lý API Gateway, JWT, Webhook, Cron Jobs, sao lưu phục hồi dữ liệu và kiểm tra Audit Logs.</td>
+                      <td>Toàn quyền không giới hạn; quyền hard-delete dữ liệu khi bảo trì; bảo vệ chống xóa nhầm bằng khóa xác thực cấp cao.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#d97706', fontWeight: 700 }}>admin</code></td>
+                      <td><strong>2. Admin</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Quản trị viên Vận hành</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all</td>
+                      <td>Quản trị vận hành nội bộ một chi nhánh hoặc công ty: tạo mới và khóa tài khoản nhân sự, phân bổ đội nhóm, thiết lập ca làm việc, cấu hình thông báo (Mail SES, Telegram, Zalo), quy tắc tính công và bảng giá.</td>
+                      <td>Toàn quyền Xem, Sửa, Xóa mềm (Soft Delete) và khôi phục từ thùng rác đối với mọi dữ liệu thuộc cùng <code>tenant_id</code>.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#7c3aed', fontWeight: 700 }}>director</code></td>
+                      <td><strong>3. Director</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Ban Giám Đốc / Điều Hành</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all</td>
+                      <td>Giám đốc điều hành, theo dõi toàn bộ dashboard KPI, dòng tiền thực thu/chi, tiến độ tuyển sinh, phê duyệt các khoản chi lớn (≥ 20 triệu), phê duyệt hợp đồng đối tác và chính sách hoa hồng.</td>
+                      <td>Read/Write ở phân hệ kinh doanh và tài chính; Delete: <code>none</code> ở Khách hàng và Cài đặt để bảo vệ cơ sở dữ liệu cốt lõi; không can thiệp cài đặt kỹ thuật.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#2563eb', fontWeight: 700 }}>manager</code></td>
+                      <td><strong>4. Manager</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Trưởng Nhóm / Quản Lý</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#2563eb' }}>team</td>
+                      <td>
+                        Quản lý toàn bộ khách hàng, hợp đồng đặt cọc của thành viên trực thuộc nhóm mình (theo <code>team_id</code>). Duyệt cấp 1 đơn nghỉ phép, bổ sung công bù, tạm ứng và giải trình đi muộn.<br />
+                        <strong>⚡ 2 Chế độ hoạt động đặc thù:</strong><br />
+                        • <em>Trưởng nhóm kiêm Sale (combined):</em> Nhận chia data tự động, chạy đồng hồ SLA, phải chấm công hàng ngày.<br />
+                        • <em>Trưởng nhóm thuần túy (pure):</em> Không nhận data cá nhân, miễn chấm công, chuyên tâm quản trị và duyệt đơn.
+                      </td>
+                      <td>Giới hạn nghiêm ngặt theo <code>team_id</code>; Delete: <code>none</code> ở phân hệ khách hàng; không có quyền truy cập vào sổ quỹ tiền mặt hay cấu hình hệ thống.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#059669', fontWeight: 700 }}>assistant</code></td>
+                      <td><strong>5. Assistant</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Trợ Lý / Điều Phối Data</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all</td>
+                      <td>Tiếp nhận data khách hàng mới từ Form/Ads/Fanpage, rà soát trùng lặp, điều phối chia data (Round-robin hoặc thủ công) cho đội ngũ Sales, hỗ trợ tạo báo giá chuẩn và kiểm tra phiếu hợp tác.</td>
+                      <td>Read: <code>all</code>, Write: <code>all</code> trên Leads, Deals, Quotes, Projects, Companies. Delete: <code>none</code> tuyệt đối nhằm bảo vệ tài sản dữ liệu khách hàng.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#ea580c', fontWeight: 700 }}>sales</code> / <code>sale</code></td>
+                      <td><strong>6. Sales</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Tư Vấn Viên Tuyển Sinh</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>own</td>
+                      <td>Trực tiếp gọi điện tư vấn, cập nhật trạng thái chăm sóc trên phễu 14 bước tuyển sinh, tạo báo giá (Quotes), ghi nhận phiếu đặt cọc (Deals/Deposits). Ràng buộc bởi đồng hồ SLA gọi điện đầu tiên (30 phút).</td>
+                      <td>Chỉ xem và xử lý khách hàng được phân bổ cho chính mình (<code>assigned_to = my_id</code>); Delete: <code>none</code>; tuyệt đối không thấy hồ sơ của TVV khác cùng nhóm.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#db2777', fontWeight: 700 }}>hr</code></td>
+                      <td><strong>7. HR / Nhân Sự</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Quản Trị Nhân Lực &amp; Lương</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all (HRM)</td>
+                      <td>Quản lý hồ sơ nhân sự, hợp đồng lao động, cấu hình BHXH/BHYT/BHTN, lịch xếp ca (Roster), theo dõi máy chấm công/Face AI/GPS. Duyệt cấp 2 đơn phép/công, tính lương, phát hành phiếu lương và khóa bảng lương.</td>
+                      <td>Toàn quyền trên bảng <code>users</code>, <code>check_ins</code>, <code>leaves</code>, <code>shifts</code>, <code>monthly_payslips</code>. Không truy cập vào sổ quỹ tiền mặt hay hợp đồng bán hàng CRM.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#0284c7', fontWeight: 700 }}>accountant</code></td>
+                      <td><strong>8. Accountant</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Kế Toán &amp; Tài Chính</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all (Finance)</td>
+                      <td>Quản lý sổ quỹ tiền mặt và tài khoản ngân hàng, xác nhận thực thu phiếu cọc, kiểm tra chứng từ chi tiêu, đối soát công nợ, phát hành hóa đơn tài chính và tham gia duyệt chi phí cấp 2 trước khi thanh toán.</td>
+                      <td>Toàn quyền phân hệ Tài chính (<code>expenses</code>, <code>incomes</code>, <code>deposits</code>, <code>quotes</code>, <code>invoices</code>). Xem tiến độ đơn bán hàng để xuất hóa đơn; không sửa đổi Lead của Sales.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#0d9488', fontWeight: 700 }}>teacher</code></td>
+                      <td><strong>9. Teacher</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Giảng Viên &amp; Giáo Vụ</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>own / team</td>
+                      <td>Xem thời khóa biểu giảng dạy, danh sách học viên trong các lớp học được phân công, thực hiện điểm danh từng buổi, nhập điểm thi/bài tập và ghi nhận tổng số giờ dạy thực tế để đối soát thù lao.</td>
+                      <td>Chỉ truy cập dữ liệu lớp học và học viên được phân công giảng dạy. Tuyệt đối không xem thông tin chi phí, doanh thu, hợp đồng kinh doanh hay bảng lương người khác.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#9333ea', fontWeight: 700 }}>marketing</code></td>
+                      <td><strong>10. Marketing</strong><br /><small style={{ color: 'var(--color-text-muted)' }}>Tiếp Thị &amp; Nguồn Lead</small></td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: '#059669' }}>all (Campaigns)</td>
+                      <td>Quản lý kênh tiếp thị: tích hợp UTM Tracking, Landing Pages, Form Webhooks, Fanpage Lead Ads. Đo lường tỷ lệ chuyển đổi, chi phí trên từng liên hệ (CPL) và hiệu quả chiến dịch (ROI).</td>
+                      <td>Read: <code>all</code> chiến dịch và nguồn; tự động che giấu số điện thoại khách hàng (chỉ hiển thị 4 số cuối) nhằm chống lộ dữ liệu; Write: <code>own</code> cấu hình chiến dịch.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="rbac-matrix-table">Bảng Ma Trận Phân Quyền Chi Tiết (10 Roles × 9 Phân Hệ)</h2>
+              <p>
+                Bảng đối chiếu tổng quan quyền hạn chuẩn mặc định của từng vai trò trên 9 phân hệ cốt lõi trong hệ thống IDEAS MYERP.
+                Mỗi ô hiển thị trực quan trạng thái 3 hành động: <strong>R (Read - Xem)</strong>, <strong>W (Write - Thêm/Sửa)</strong>, <strong>D (Delete - Xóa)</strong> bằng icon Check xanh (<Check size={13} color="#059669" style={{ display: 'inline', verticalAlign: 'middle' }} />) và icon X (<X size={13} color="#9ca3af" style={{ display: 'inline', verticalAlign: 'middle' }} />) kèm phạm vi Scope tương ứng:
+              </p>
+
+              <div style={{ overflowX: 'auto', margin: '16px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.74rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th style={{ minWidth: '150px' }}>Phân Hệ (Module)</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Super Admin</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Admin</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Director</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Manager</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Assistant</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Sales</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>HR</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Accountant</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Teacher</th>
+                      <th style={{ minWidth: '85px', textAlign: 'center' }}>Marketing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>1. Khách Hàng (Leads/CRM)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="own" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>2. Đặt Cọc &amp; Hợp Đồng (Deals)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>3. Phiếu Hợp Tác (Cooperation)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>4. Báo Giá &amp; Hóa Đơn (Quotes)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>5. Đối Tác &amp; Đại Lý (Companies)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>6. Dự Án &amp; Roster (Projects)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>7. Nhân Sự &amp; Công Lương (HRM)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>8. Đào Tạo &amp; Lớp Học (Academic)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="team" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="team" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="own" w="own" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                    <tr>
+                      <td><strong>9. Cấu Hình Hệ Thống (Settings)</strong></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="all" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="all" w="all" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                      <td style={{ textAlign: 'center' }}><PermCell r="none" w="none" d="none" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
               <h2 id="rbac-matrix">Ma Trận Quyền Hạt Nhân (permissions_json) &amp; Cấu Trúc Đội Nhóm</h2>
               <p>
-                Ngoài vai trò mặc định (Role), mỗi tài khoản người dùng trong bảng <code>users</code> đều có trường <code>permissions_json</code> 
+                Ngoài vai trò mặc định (Role), mỗi tài khoản người dùng trong bảng <code>users</code> đều có trường <code>permissions_json</code>
                 lưu trữ quyền hạn theo cấu trúc ma trận JSON:
               </p>
               <div className="doc-code-box">
                 <code>
                   &#123;<br />
-                  &nbsp;&nbsp;"contacts": &#123; "view": "all", "create": true, "edit": "own", "delete": "none", "export": false &#125;,<br />
-                  &nbsp;&nbsp;"deals": &#123; "view": "team", "create": true, "edit": "team", "delete": "none" &#125;,<br />
-                  &nbsp;&nbsp;"academic": &#123; "view": "all", "edit_grades": true, "approve_hours": false &#125;,<br />
-                  &nbsp;&nbsp;"finance": &#123; "view": "none", "approve_expense": false &#125;<br />
+                  &nbsp;&nbsp;"leads": &#123; "read": "team", "write": "team", "delete": "none" &#125;,<br />
+                  &nbsp;&nbsp;"deals": &#123; "read": "all", "write": "own", "delete": "none" &#125;,<br />
+                  &nbsp;&nbsp;"quotes": &#123; "read": "all", "write": "all", "delete": "none" &#125;,<br />
+                  &nbsp;&nbsp;"academic": &#123; "read": "all", "write": "own", "delete": "none" &#125;,<br />
+                  &nbsp;&nbsp;"finance": &#123; "read": "none", "write": "none", "delete": "none" &#125;<br />
                   &#125;
                 </code>
               </div>
               <p>
-                Cơ chế này cho phép Trưởng phòng hoặc Quản trị viên tùy biến cấp quyền cho từng cá nhân (ví dụ: một nhân viên sale xuất sắc được 
+                Cơ chế này cho phép Trưởng phòng hoặc Quản trị viên tùy biến cấp quyền hạt nhân cho từng cá nhân (ví dụ: một nhân viên sale xuất sắc được
                 cấp thêm quyền xem dữ liệu của toàn team hoặc hỗ trợ duyệt đơn báo giá) mà không cần thay đổi Role gốc của tài khoản.
               </p>
+
+              <h2 id="special-authorizations">Quyền Hạn Đặc Thù &amp; Cơ Chế Phê Duyệt Nghiệp Vụ</h2>
+              <p>
+                Bên cạnh ma trận CRUD, hệ thống tích hợp các luồng phê duyệt và kiểm soát bảo mật đa bước:
+              </p>
+              <ul>
+                <li>
+                  <strong>Luồng Phê Duyệt Đơn Nhân Sự 2 Cấp (Leaves &amp; Supplementary Attendance):</strong>
+                  <br />
+                  - <em>Cấp 1:</em> Trưởng nhóm (<code>manager</code>) hoặc Quản lý trực tiếp duyệt tính xác thực nghiệp vụ.
+                  <br />
+                  - <em>Cấp 2:</em> Phòng Nhân sự (<code>hr</code>) hoặc Ban Giám Đốc duyệt ghi nhận vào bảng công/bảng lương và trừ phép năm.
+                </li>
+                <li>
+                  <strong>Cập Nhật Công / Bổ Sung Công (Missing Check-in):</strong>
+                  <br />
+                  Khi nhân viên quên chấm công cả sáng và chiều trong ngày làm việc quá khứ, giao diện lịch hiển thị huy hiệu <em>"Cập nhật công"</em>. Nhân viên bắt buộc nhập lý do giải trình chi tiết kèm giờ vào/ra thực tế để tạo bản ghi có trạng thái <code>pending_approval</code>, chờ Quản lý duyệt trước khi tính công.
+                </li>
+                <li>
+                  <strong>Bảo Vệ Khách Hàng SLA &amp; Thu Hồi Tự Động (Lead Fair-Share):</strong>
+                  <br />
+                  Tư vấn viên nhận Lead có thời hạn 30 phút để thực hiện cuộc gọi đầu tiên (First Call). Nếu vi phạm SLA, hệ thống tự động thu hồi Lead và đẩy vào hàng đợi tái phân bổ cho tư vấn viên khác.
+                </li>
+                <li>
+                  <strong>Chốt Bảng Lương &amp; Khóa Số Liệu:</strong>
+                  <br />
+                  Chỉ có tài khoản có quyền <code>hr</code> và <code>admin</code> mới được kích hoạt lệnh chốt kỳ công. Sau khi chốt, toàn bộ bản ghi chấm công của tháng đó sẽ chuyển sang trạng thái <em>Read-only</em>, chống mọi hành vi sửa đổi dữ liệu hồi tố.
+                </li>
+              </ul>
 
               <h2 id="security-layers">Kiến Trúc An Ninh Phòng Thủ Đa Lớp (Defense-in-Depth)</h2>
               <div className="doc-stages">
@@ -405,7 +713,7 @@ export const DocumentationPage: React.FC = () => {
           content: (
             <div className="doc-prose">
               <p>
-                Khi nhận được thông tin đăng ký của khách hàng từ Landing Page, Facebook Form hoặc Webhook đối tác, 
+                Khi nhận được thông tin đăng ký của khách hàng từ Landing Page, Facebook Form hoặc Webhook đối tác,
                 <strong>AI Gatekeeper</strong> tiến hành phân tích ngữ cảnh tự động bằng mô hình ngôn ngữ lớn để lượng hóa tiềm năng chốt đơn:
               </p>
 
@@ -852,8 +1160,8 @@ export const DocumentationPage: React.FC = () => {
             <div className="doc-prose">
               <h2 id="ref-sources-partners">Phân Loại Nguồn REF &amp; Đối Tác Giới Thiệu (tier="referrer")</h2>
               <p>
-                Chương trình phát triển mạng lưới giới thiệu (Referral Program) là một trong những trụ cột tuyển sinh quan trọng nhất. 
-                Dữ liệu khách hàng có nguồn gốc giới thiệu được định danh qua điều kiện <code>source IN ('gioi_thieu', 'ref', 'referral', 'ca_nhan')</code>. 
+                Chương trình phát triển mạng lưới giới thiệu (Referral Program) là một trong những trụ cột tuyển sinh quan trọng nhất.
+                Dữ liệu khách hàng có nguồn gốc giới thiệu được định danh qua điều kiện <code>source IN ('gioi_thieu', 'ref', 'referral', 'ca_nhan')</code>.
                 Đồng thời, đối tác giới thiệu được quản lý trong bảng <code>companies</code> với phân hạng chuyên biệt <code>tier = 'referrer'</code>:
               </p>
               <table className="doc-table">
@@ -912,7 +1220,7 @@ export const DocumentationPage: React.FC = () => {
                 <div className="doc-flow-step">4. Nếu &gt; 180 ngày hoặc Trạng thái Lost: Cho phép tái phân bổ Round-Robin</div>
               </div>
               <p>
-                Quy tắc bảo hộ 180 ngày (6 tháng) đảm bảo công sức nuôi dưỡng khách hàng của tư vấn viên được tôn trọng tuyệt đối. Nếu khách hàng quay lại trong vòng 6 tháng, 
+                Quy tắc bảo hộ 180 ngày (6 tháng) đảm bảo công sức nuôi dưỡng khách hàng của tư vấn viên được tôn trọng tuyệt đối. Nếu khách hàng quay lại trong vòng 6 tháng,
                 hệ thống tự động kích hoạt thông báo Zalo/Telegram nhắc nhở tư vấn viên đang phụ trách tiếp tục chăm sóc, không chia cho người mới.
               </p>
 
@@ -1011,20 +1319,21 @@ export const DocumentationPage: React.FC = () => {
         {
           id: 'att-biometrics',
           title: 'Xác Thực Đa Lớp: GPS Geofencing, Wi-Fi BSSID & Selfie Biometrics',
-          description: 'Giải pháp chấm công bảo mật cao, chống gian lận vị trí và xác thực khuôn mặt thời gian thực.',
+          description: 'Giải pháp chấm công bảo mật cao, chống gian lận vị trí, xác thực khuôn mặt và tính toán đi muộn về sớm tự động.',
           headings: [
             { id: 'geofence-wifi', text: 'Xác Thực Tọa Độ GPS & BSSID Mạng Wi-Fi' },
             { id: 'selfie-verification', text: 'Chụp Ảnh Selfie & Nhận Diện Khuôn Mặt' },
-            { id: 'penalty-rules', text: 'Quy Tắc Tự Động Tính Giờ & Phạt Đi Muộn' }
+            { id: 'late-early-rules', text: 'Thuật Toán Tính Đi Trễ, Về Sớm & Cập Nhật Công' },
+            { id: 'penalty-rules', text: 'Khung Giờ Chuẩn & Chế Tài Khấu Trừ Công' }
           ],
           content: (
             <div className="doc-prose">
               <h2 id="geofence-wifi">Xác Thực Tọa Độ GPS &amp; BSSID Mạng Wi-Fi</h2>
               <p>
-                Để chống việc chấm công hộ hoặc giả lập GPS:
+                Để chống việc chấm công hộ hoặc sử dụng phần mềm giả lập GPS (Fake GPS):
               </p>
               <ul>
-                <li><strong>GPS Geofencing:</strong> Thiết bị nhân viên phải nằm trong bán kính cho phép (mặc định 100m) quanh tọa độ văn phòng công ty.</li>
+                <li><strong>GPS Geofencing:</strong> Thiết bị nhân viên phải nằm trong bán kính cho phép (mặc định 100m) quanh tọa độ văn phòng công ty bằng công thức Haversine đối chiếu vĩ độ / kinh độ.</li>
                 <li><strong>Khóa Wi-Fi BSSID / MAC Address:</strong> Hệ thống đối chiếu địa chỉ MAC phần cứng của Router Wi-Fi văn phòng mà thiết bị đang kết nối. Ngay cả khi fake GPS, nếu không bắt đúng sóng Wi-Fi cơ quan thì chấm công sẽ bị từ chối.</li>
               </ul>
 
@@ -1034,14 +1343,159 @@ export const DocumentationPage: React.FC = () => {
               </p>
               <ul>
                 <li>Ngăn chặn 100% tình trạng nhân viên gửi điện thoại nhờ đồng nghiệp chấm công hộ.</li>
-                <li>Ảnh chụp chấm công được lưu trữ và hiển thị trực tiếp trên bảng công để Trưởng phòng và Nhân sự hậu kiểm bất kỳ lúc nào.</li>
+                <li>Ảnh chụp chấm công được lưu trữ an toàn trên máy chủ (`selfie_url` / `checkout_selfie_url`) và hiển thị trực tiếp trên bảng công để Trưởng phòng và Nhân sự hậu kiểm bất kỳ lúc nào.</li>
               </ul>
 
-              <h2 id="penalty-rules">Quy Tắc Tự Động Tính Giờ &amp; Phạt Đi Muộn</h2>
+              <h2 id="late-early-rules">Thuật Toán Tính Đi Trễ, Về Sớm &amp; Cập Nhật Công</h2>
+              <p>
+                Cơ chế tính toán phút đi trễ (<code>late_minutes</code>) và phút về sớm (<code>early_minutes</code>) được thực thi tự động trong <code>CheckInController.php</code>:
+              </p>
+              <div className="doc-code-box">
+                <code>
+                  // 1. Thuật toán tính phút đi trễ đầu ca:<br />
+                  $lateMinutes = (int)ceil((strtotime($currentHM) - strtotime($workStartHM)) / 60);<br />
+                  // Nếu check-in sau giờ nghỉ trưa: so khớp với giờ bắt đầu ca chiều ($afternoonStartHM)<br />
+                  <br />
+                  // 2. Thuật toán tính phút về sớm cuối ca:<br />
+                  $earlyMinutes = (int)ceil((strtotime($workEndHM) - strtotime($currentOutHM)) / 60);
+                </code>
+              </div>
+              <p>
+                <strong>Quy trình "Cập nhật công" (Missing Check-in / Bổ sung công bù):</strong>
+              </p>
               <ul>
-                <li>Khung giờ chuẩn: Sáng 08:00 - 12:00, Chiều 13:30 - 17:30.</li>
-                <li>Đi muộn từ 1 - 15 phút: Cảnh cáo hệ thống. Đi muộn từ 16 - 60 phút: Trừ 0.25 ngày công. Đi muộn trên 60 phút: Tính nửa ngày công hoặc yêu cầu nộp đơn xin đi muộn bù giờ.</li>
+                <li>Khi nhân viên quên chấm công trong ngày làm việc quá khứ, giao diện lịch hiển thị huy hiệu <em>"Cập nhật công"</em>.</li>
+                <li>Nhân viên bắt buộc nhập lý do giải trình chi tiết kèm giờ vào / giờ ra thực tế đề xuất.</li>
+                <li>Hệ thống tạo bản ghi có trạng thái <code>pending_approval</code> và gửi thông báo tới Quản lý trực tiếp (Manager) duyệt Cấp 1 trước khi tính công.</li>
+                <li><strong>Trường hợp đặc biệt:</strong> Nếu Trưởng phòng / Quản lý / Leader tự tạo đơn bổ sung công cho chính mình, hệ thống tự động duyệt (<code>approved</code>) và gán <code>late_minutes = 0</code> nhằm tránh tình trạng nghẽn đơn tự phê duyệt.</li>
               </ul>
+
+              <h2 id="penalty-rules">Khung Giờ Chuẩn &amp; Chế Tài Khấu Trừ Công</h2>
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th>Khung giờ làm việc</th>
+                      <th>Số phút đi muộn / về sớm</th>
+                      <th>Mức chế tài xử lý</th>
+                      <th>Quy tắc công lương tương ứng</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Ca sáng:</strong> 08:00 - 12:00<br /><strong>Ca chiều:</strong> 13:30 - 17:30</td>
+                      <td>1 - 15 phút</td>
+                      <td>Nhắc nhở / Cảnh cáo hệ thống</td>
+                      <td>Ghi nhận số phút trễ vào bảng công; bảo lưu nguyên vẹn 1.0 ngày công chuẩn.</td>
+                    </tr>
+                    <tr>
+                      <td>Theo lịch làm việc chi nhánh</td>
+                      <td>16 - 60 phút</td>
+                      <td>Khấu trừ 0.25 ngày công</td>
+                      <td>Tính 0.75 ngày công thực tế; trừ tiền phạt trễ trong bảng lương tháng.</td>
+                    </tr>
+                    <tr>
+                      <td>Theo lịch làm việc chi nhánh</td>
+                      <td>Trên 60 phút</td>
+                      <td>Tính nửa ngày công (0.5 công)</td>
+                      <td>Yêu cầu nộp đơn xin đi muộn bù giờ hoặc chuyển sang nghỉ nửa ngày phép năm.</td>
+                    </tr>
+                    <tr>
+                      <td>Toàn bộ các ca</td>
+                      <td>Quên check-in / check-out</td>
+                      <td>Ghi nhận vắng mặt tạm thời</td>
+                      <td>Khóa tính công ngày đó cho đến khi đơn "Cập nhật công" được Quản lý phê duyệt.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        },
+        {
+          id: 'att-reminders',
+          title: 'Hệ Thống Tự Động Nhắc Nhở Công & Tiến Trình Tự Động Hóa (Crons)',
+          description: 'Cơ chế kích hoạt thông báo tự động trước ca, sau ca, phát hiện quên check-in/out, nhắc duyệt đơn và điều phối tác vụ qua Master Cron.',
+          headings: [
+            { id: 'attendance-reminders', text: 'Nhắc Chấm Công Vào Ca & Quên Check-in' },
+            { id: 'checkout-reminders', text: 'Nhắc Chấm Công Ra Ca & Quên Check-out' },
+            { id: 'approval-reminders', text: 'Tự Động Nhắc Quản Lý Duyệt Đơn Tồn Đọng' },
+            { id: 'cron-ecosystem', text: 'Hệ Thống Tự Động Nhắc Nhở Khác (Cọc, Học Vụ, Báo Cáo Định Kỳ)' }
+          ],
+          content: (
+            <div className="doc-prose">
+              <h2 id="attendance-reminders">Nhắc Chấm Công Vào Ca &amp; Quên Check-in</h2>
+              <p>
+                Nhằm triệt tiêu tình trạng nhân viên có mặt tại cơ quan nhưng quên check-in dẫn đến mất quyền lợi công lương:
+              </p>
+              <ul>
+                <li><strong>Nhắc vào ca (<code>ATTENDANCE_REMINDER</code>):</strong> Kích hoạt tự động trước giờ bắt đầu ca làm việc 15 phút (ví dụ: 07:45 sáng hoặc 13:15 chiều). Thông báo đẩy tức thì qua In-App Banner, Web Notification và tin nhắn Zalo Bot tới từng nhân viên có lịch làm việc trong ngày.</li>
+                <li><strong>Cảnh báo quên check-in (<code>CHECKIN_MISSING_REMINDER</code>):</strong> Sau giờ vào ca 15 phút (ví dụ: 08:15 sáng), hệ thống quét toàn bộ danh sách nhân sự trực ca. Những nhân sự chưa có bản ghi check-in hợp lệ sẽ nhận cảnh báo khẩn cấp nhắc nhở thực hiện chấm công ngay lập tức để giảm thiểu số phút đi muộn.</li>
+                <li><strong>Ghi nhận đi trễ (<code>CHECKIN_LATE</code>):</strong> Khi nhân sự check-in sau khung giờ quy định, hệ thống tự động bắn thông báo xác nhận số phút trễ và hướng dẫn làm giải trình nếu có lý do chính đáng.</li>
+              </ul>
+
+              <h2 id="checkout-reminders">Nhắc Chấm Công Ra Ca &amp; Quên Check-out</h2>
+              <p>
+                Đảm bảo ghi nhận đầy đủ thời gian cống hiến thực tế và hỗ trợ tính toán làm thêm giờ (OT):
+              </p>
+              <ul>
+                <li><strong>Nhắc ra ca (<code>CHECKOUT_REMINDER</code>):</strong> Đúng thời điểm kết thúc ca làm việc (ví dụ: 17:30), hệ thống gửi thông báo nhắc nhở nhân viên thực hiện chụp ảnh selfie check-out trước khi rời cơ quan.</li>
+                <li><strong>Cảnh báo quên check-out (<code>CHECKOUT_MISSING_REMINDER</code>):</strong> Sau giờ tan ca từ 30 đến 60 phút, nếu nhân sự đã có bản ghi check-in sáng nhưng chưa có bản ghi check-out chiều, hệ thống gửi thông báo nhắc nhở khẩn cấp để nhân sự kịp thời ghi nhận trước khi phiên làm việc trong ngày bị khóa.</li>
+              </ul>
+
+              <h2 id="approval-reminders">Tự Động Nhắc Quản Lý Duyệt Đơn Tồn Đọng</h2>
+              <p>
+                Để chống nghẽn quy trình nội bộ và đảm bảo SLA phê duyệt đơn từ:
+              </p>
+              <ul>
+                <li><strong>Nhắc duyệt định kỳ (<code>APPROVAL_REMINDER</code>):</strong> Tiến trình ngầm định kỳ quét toàn bộ các đơn xin nghỉ phép (Leaves), đơn tạm ứng lương (Advances), đơn cập nhật công bù (Supplementary Check-in), đề xuất chi phí và ticket bồi hoàn Lead đang ở trạng thái <code>pending</code> hoặc <code>pending_approval</code>.</li>
+                <li>Nếu đơn tồn đọng quá 4 giờ làm việc chưa được xử lý, hệ thống tự động gửi thông báo nhắc nhở tới Trưởng nhóm (Manager Cấp 1).</li>
+                <li>Nếu tồn đọng quá 24 giờ, hệ thống tự động leo thang (Escalate) thông báo tới Trưởng phòng Nhân sự và Ban Giám đốc.</li>
+              </ul>
+
+              <h2 id="cron-ecosystem">Hệ Thống Tự Động Nhắc Nhở Khác (Cọc, Học Vụ, Báo Cáo Định Kỳ)</h2>
+              <p>
+                Toàn bộ các tác vụ tự động hóa được điều phối bởi tiến trình <strong>Master Cron Orchestrator</strong> (<code>backend/cron_master.php</code>) chạy mỗi 1 phút trên máy chủ với cơ chế khóa tệp chống xung đột tài nguyên:
+              </p>
+
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th>Hạng mục tự động hóa</th>
+                      <th>Tiến trình thực thi</th>
+                      <th>Chu kỳ kích hoạt</th>
+                      <th>Mô tả chi tiết tác vụ &amp; Đối tượng thụ hưởng</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Nhắc nộp tiền cọc &amp; công nợ</strong></td>
+                      <td><code>cron_deposit_reminders.php</code></td>
+                      <td>Hàng ngày (08:00 sáng)</td>
+                      <td>Tự động quét các hợp đồng đặt cọc giữ chỗ và đợt thanh toán học phí sắp đến hạn (trước 3 ngày, trước 1 ngày). Gửi thông báo nhắc nhở tới Tư vấn viên phụ trách và Kế toán thu tiền.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Nhắc lịch đào tạo &amp; học vụ</strong></td>
+                      <td><code>cron_academic_reminders.php</code></td>
+                      <td>Trước buổi học 30 phút</td>
+                      <td>Nhắc Giảng viên điểm danh buổi học, kiểm tra sĩ số lớp, gửi thông báo lịch thi và lịch bảo vệ luận văn/đồ án tốt nghiệp cho học viên.</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Nhắc nhiệm vụ lặp lại</strong></td>
+                      <td><code>cron_recurring_tasks.php</code></td>
+                      <td>00:05 mỗi ngày</td>
+                      <td>Tự động sinh các đầu việc định kỳ (Daily/Weekly checklist) từ quy trình mẫu, phân công nhân sự và gửi thông báo nhắc hạn hoàn thành (Deadline).</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Báo cáo tự động định kỳ</strong></td>
+                      <td><code>cron_daily_report.php</code><br /><code>cron_weekly_report.php</code><br /><code>cron_monthly_report.php</code></td>
+                      <td>Cuối ngày (22:00)<br />Chủ Nhật (20:00)<br />Ngày 01 đầu tháng</td>
+                      <td>Tổng hợp số liệu doanh thu, chi phí, tỷ lệ chuyển đổi Lead, tỷ lệ chuyên cần và số phút đi muộn về sớm gửi trực tiếp vào Telegram/Zalo Ban Giám Đốc.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )
         }
@@ -1093,11 +1547,13 @@ export const DocumentationPage: React.FC = () => {
         },
         {
           id: 'hrm-payroll-engine',
-          title: 'Bộ Máy Tính Lương Tự Động, Khấu Trừ BHXH & Xuất Phiếu Lương (Payslip)',
-          description: 'Công thức tính toán lương thời gian, hoa hồng doanh số, bảo hiểm bắt buộc và xuất phiếu lương PDF bảo mật.',
+          title: 'Bộ Máy Tính Lương Tự Động, Ký Số Phiếu Lương & Khiếu Nại Lương',
+          description: 'Công thức tính toán lương thời gian, hoa hồng doanh số, bảo hiểm bắt buộc, chữ ký điện tử số và quy trình giải quyết khiếu nại phiếu lương.',
           headings: [
             { id: 'payroll-formula', text: 'Công Thức Tính Lương Toàn Diện' },
-            { id: 'payslip-dispatch', text: 'Xuất Phiếu Lương PDF & Gửi Email Tự Động' }
+            { id: 'payroll-lifecycle', text: 'Vòng Đời 4 Trạng Thái Của Phiếu Lương' },
+            { id: 'payslip-digital-signing', text: 'Ký Nhận Phiếu Lương Số (Digital Signature Canvas)' },
+            { id: 'payslip-dispute-resolution', text: 'Trao Đổi Khiếu Nại & Điều Chỉnh Phiếu Lương' }
           ],
           content: (
             <div className="doc-prose">
@@ -1105,22 +1561,85 @@ export const DocumentationPage: React.FC = () => {
               <div className="doc-code-box">
                 <code>
                   Lương Thực Lĩnh = (Lương Cơ Bản / Ngày Công Chuẩn) * Ngày Công Thực Tế<br />
-                  &nbsp;&nbsp;+ Phụ Cấp (Ăn trưa + Xăng xe + Trách nhiệm)<br />
-                  &nbsp;&nbsp;+ Hoa Hồng Doanh Số Tuyển Sinh (KPI Commission)<br />
-                  &nbsp;&nbsp;- Trích Đóng BHXH/BHYT/BHTN (10.5%)<br />
-                  &nbsp;&nbsp;- Thuế Thu Nhập Cá Nhân (TNCN lũy tiến)<br />
-                  &nbsp;&nbsp;- Khấu Trừ Đi Muộn &amp; Tạm Ứng Trong Tháng
+                  &nbsp;&nbsp;+ Phụ Cấp (Ăn trưa + Xăng xe + Trách nhiệm + Thâm niên)<br />
+                  &nbsp;&nbsp;+ Hoa Hồng Doanh Số Tuyển Sinh (KPI Commission từ Đơn Hàng Thành Công)<br />
+                  &nbsp;&nbsp;+ Thù Lao Giảng Dạy &amp; Phụ Cấp Giờ Dạy (Dành cho Giảng viên)<br />
+                  &nbsp;&nbsp;- Trích Đóng Bảo Hiểm Bắt Buộc: BHXH (8%) + BHYT (1.5%) + BHTN (1%) = 10.5%<br />
+                  &nbsp;&nbsp;- Thuế Thu Nhập Cá Nhân (TNCN lũy tiến từng phần theo luật định)<br />
+                  &nbsp;&nbsp;- Khấu Trừ Phạt Đi Muộn / Về Sớm Trong Tháng (lateness_penalty)<br />
+                  &nbsp;&nbsp;- Khấu Trừ Tạm Ứng Đã Giải Ngân (advance_deduction)
                 </code>
               </div>
 
-              <h2 id="payslip-dispatch">Xuất Phiếu Lương PDF &amp; Gửi Email Tự Động</h2>
+              <h2 id="payroll-lifecycle">Vòng Đời 4 Trạng Thái Của Phiếu Lương</h2>
               <p>
-                Sau khi Kế toán trưởng và Ban Giám đốc bấm <strong>Khóa Bảng Lương</strong>:
+                Mọi phiếu lương trong bảng <code>monthly_payslips</code> đều trải qua quy trình kiểm soát chặt chẽ với 4 trạng thái nối tiếp:
+              </p>
+              <div style={{ overflowX: 'auto', margin: '14px 0', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                <table className="doc-table" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg-secondary)' }}>
+                      <th>Trạng thái (Status)</th>
+                      <th>Ý nghĩa nghiệp vụ</th>
+                      <th>Người thực hiện &amp; Thao tác</th>
+                      <th>Bảo mật &amp; Quyền truy cập</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code style={{ color: '#9ca3af', fontWeight: 700 }}>draft</code></td>
+                      <td>Bản nháp nội bộ</td>
+                      <td>Phòng Nhân sự &amp; Kế toán tính toán từ dữ liệu chấm công và hoa hồng CRM.</td>
+                      <td>Chỉ HR và Kế toán nhìn thấy; nhân viên chưa thể xem phiếu lương này.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#3b82f6', fontWeight: 700 }}>sent</code></td>
+                      <td>Đã phát hành tới nhân viên</td>
+                      <td>HR bấm <strong>Gửi phiếu lương</strong> (<code>sendPayslips</code>) cho từng cá nhân hoặc toàn công ty.</td>
+                      <td>Gửi thông báo <code>HRM_PAYSLIP_PUBLISHED</code>, mở quyền cho nhân viên vào xem tại <code>/my-payslips</code>.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#10b981', fontWeight: 700 }}>confirmed</code></td>
+                      <td>Đã ký nhận xác nhận</td>
+                      <td>Nhân viên kiểm tra số liệu chính xác và thực hiện ký số điện tử trên Canvas.</td>
+                      <td>Lưu trữ URL chữ ký số (<code>signature_url</code>) và thời điểm ký (<code>confirmed_at = NOW()</code>). Chống chối bỏ.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#ef4444', fontWeight: 700 }}>disputed</code></td>
+                      <td>Có khiếu nại / yêu cầu điều chỉnh</td>
+                      <td>Nhân viên phát hiện sai lệch số liệu và bấm nút <em>"Khiếu nại / Phản hồi"</em> kèm ghi chú giải trình.</td>
+                      <td>Bắn thông báo khẩn <code>HRM_PAYSLIP_DISPUTED</code> tới HR &amp; Kế toán để rà soát, chỉnh sửa và phát hành lại.</td>
+                    </tr>
+                    <tr>
+                      <td><code style={{ color: '#7c3aed', fontWeight: 700 }}>locked</code></td>
+                      <td>Đã khóa kỳ lương vĩnh viễn</td>
+                      <td>Ban Giám đốc &amp; Kế toán trưởng kích hoạt lệnh <code>lockPayroll</code> sau khi tất cả khiếu nại đã được giải quyết.</td>
+                      <td>Toàn bộ bảng công và phiếu lương chuyển sang chế độ chỉ đọc (Read-only); tuyệt đối chống sửa đổi hồi tố.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 id="payslip-digital-signing">Ký Nhận Phiếu Lương Số (Digital Signature Canvas)</h2>
+              <p>
+                Để hiện đại hóa quy trình ký nhận lương không cần giấy tờ mà vẫn đảm bảo tính pháp lý nội bộ:
               </p>
               <ul>
-                <li>Hệ thống tự động kết xuất phiếu lương điện tử định dạng PDF bảo mật cho từng nhân viên.</li>
-                <li>Tiến trình ngầm gửi email phiếu lương riêng tư tới hòm thư cá nhân của từng nhân sự.</li>
-                <li>Nhân viên có thể tra cứu lịch sử nhận lương tại trang <code>/my-payslips</code>.</li>
+                <li>Tại trang <code>/my-payslips</code>, sau khi đối soát đầy đủ các mục thu nhập và khấu trừ, nhân viên bấm <strong>Ký xác nhận phiếu lương</strong>.</li>
+                <li>Ứng dụng mở khung vẽ chữ ký cảm ứng chuẩn HTML5 Canvas hỗ trợ cả chuột trên máy tính lẫn thao tác vuốt chạm tay trên màn hình điện thoại.</li>
+                <li>Khi bấm <em>"Xác nhận &amp; Ký số"</em>: Hệ thống mã hóa ảnh chữ ký, lưu đường dẫn vào trường <code>signature_url</code>, ghi nhận thời điểm chính xác đến từng giây vào <code>confirmed_at = NOW()</code> và chuyển trạng thái phiếu lương thành <code>confirmed</code>.</li>
+                <li>Hệ thống tự động kích hoạt thông báo <code>HRM_PAYSLIP_CONFIRMED</code> gửi về hòm thư bộ phận Nhân sự và Kế toán để lưu hồ sơ đối soát chi trả.</li>
+              </ul>
+
+              <h2 id="payslip-dispute-resolution">Trao Đổi Khiếu Nại &amp; Điều Chỉnh Phiếu Lương</h2>
+              <p>
+                Quy trình xử lý thấu đáo mọi vướng mắc công lương giữa người lao động và doanh nghiệp:
+              </p>
+              <ul>
+                <li><strong>Gửi khiếu nại trực tuyến:</strong> Nếu nhân viên phát hiện sai sót (ví dụ: ngày làm việc thực tế bị tính thiếu do quên bổ sung công, thiếu hoa hồng từ đơn hàng SO-012 đã thanh toán, tính nhầm mức giảm trừ gia cảnh), nhân viên bấm <strong>"Khiếu nại / Phản hồi"</strong> ngay trên phiếu lương.</li>
+                <li><strong>Ghi nhận nguyên nhân:</strong> Nhân viên nhập chi tiết lý do và đính kèm bằng chứng giải trình trong modal đối thoại. Hệ thống gọi API <code>confirmPayslip</code> với tham số <code>action: 'dispute'</code>, cập nhật trạng thái phiếu lương sang <code>disputed</code> và lưu nội dung vào trường <code>note</code>.</li>
+                <li><strong>Cảnh báo khẩn cấp tới HR:</strong> Sự kiện <code>HRM_PAYSLIP_DISPUTED</code> được phát đi, thông báo ngay lập tức cho Chuyên viên Nhân sự và Kế toán trưởng kèm theo họ tên nhân viên và nội dung khiếu nại.</li>
+                <li><strong>Đối soát &amp; Tái phát hành:</strong> Phòng Nhân sự và Kế toán kiểm tra lại nhật ký chấm công (<code>check_ins</code>) và đơn hàng CRM. Sau khi điều chỉnh số liệu đúng, HR bấm nút phát hành lại (chuyển trạng thái về <code>sent</code>) để nhân viên xem lại và thực hiện ký số xác nhận.</li>
               </ul>
             </div>
           )
@@ -1445,11 +1964,11 @@ export const DocumentationPage: React.FC = () => {
 
               <h2 id="academic-sla-audits">Cơ Chế Giám Sát Giờ Giảng &amp; Kiểm Định Chất Lượng</h2>
               <p>
-                Quy trình nghiệm thu giờ giảng 4 bước nghiêm ngặt: 
-                <strong>Giảng viên điểm danh</strong> $\rightarrow$ 
-                <strong>Trợ giảng xác nhận sĩ số &amp; biên bản buổi học</strong> $\rightarrow$ 
-                <strong>Phòng Học vụ thẩm định giờ dạy thực tế</strong> $\rightarrow$ 
-                <strong>Phòng Tài chính - Kế toán lập bảng chi trả thù lao</strong>. 
+                Quy trình nghiệm thu giờ giảng 4 bước nghiêm ngặt:
+                <strong>Giảng viên điểm danh</strong> $\rightarrow$
+                <strong>Trợ giảng xác nhận sĩ số &amp; biên bản buổi học</strong> $\rightarrow$
+                <strong>Phòng Học vụ thẩm định giờ dạy thực tế</strong> $\rightarrow$
+                <strong>Phòng Tài chính - Kế toán lập bảng chi trả thù lao</strong>.
                 Mọi bước đều có lưu vết người duyệt và chữ ký số.
               </p>
             </div>
@@ -1517,15 +2036,15 @@ export const DocumentationPage: React.FC = () => {
           content: (
             <div className="doc-prose">
               <p>
-                Hệ thống gửi Email của <strong>IDEAS MYERP</strong> được xây dựng theo mô hình kiến trúc hàng đợi bất đồng bộ 
-                (Asynchronous Message Queue) kết hợp trực tiếp với dịch vụ thư điện tử doanh nghiệp <strong>Amazon Simple Email Service (Amazon SES)</strong> 
-                qua giao thức SMTP bảo mật STARTTLS. Kiến trúc này triệt tiêu hoàn toàn độ trễ I/O mạng, giải phóng tiến trình web server ngay lập tức 
+                Hệ thống gửi Email của <strong>IDEAS MYERP</strong> được xây dựng theo mô hình kiến trúc hàng đợi bất đồng bộ
+                (Asynchronous Message Queue) kết hợp trực tiếp với dịch vụ thư điện tử doanh nghiệp <strong>Amazon Simple Email Service (Amazon SES)</strong>
+                qua giao thức SMTP bảo mật STARTTLS. Kiến trúc này triệt tiêu hoàn toàn độ trễ I/O mạng, giải phóng tiến trình web server ngay lập tức
                 và đảm bảo 100% email giao dịch, biên lai thu tiền, thông báo lịch học và cảnh báo quản trị được chuyển giao tin cậy.
               </p>
 
               <h2 id="ses-queue-architecture">1. Kiến Trúc Hàng Đợi Bất Đồng Bộ (mail_queue &amp; Worker)</h2>
               <p>
-                Mọi tác vụ gửi mail trong toàn bộ 39 Controllers và dịch vụ <code>NotificationService.php</code> đều không gọi SMTP trực tiếp 
+                Mọi tác vụ gửi mail trong toàn bộ 39 Controllers và dịch vụ <code>NotificationService.php</code> đều không gọi SMTP trực tiếp
                 ở luồng chính (trừ kiểm tra kết nối đơn lẻ). Thay vào đó, payload được ghi nhận vào bảng cơ sở dữ liệu <code>mail_queue</code>:
               </p>
               <table className="doc-table">
@@ -1591,25 +2110,25 @@ export const DocumentationPage: React.FC = () => {
               </p>
               <ul>
                 <li><strong>Khóa hàng đợi không nghẽn (Non-blocking Queue Lock):</strong> Sử dụng câu truy vấn chuyên sâu:
-                  <pre><code>SELECT id, to_email, cc_email, subject, body_html, attempts, lead_id 
-FROM mail_queue 
-WHERE status = 'pending' OR (status = 'failed' AND attempts &lt; 3) 
-ORDER BY id ASC LIMIT 50 FOR UPDATE SKIP LOCKED;</code></pre>
+                  <pre><code>SELECT id, to_email, cc_email, subject, body_html, attempts, lead_id
+                    FROM mail_queue
+                    WHERE status = 'pending' OR (status = 'failed' AND attempts &lt; 3)
+                    ORDER BY id ASC LIMIT 50 FOR UPDATE SKIP LOCKED;</code></pre>
                   Cơ chế <code>FOR UPDATE SKIP LOCKED</code> cho phép nhiều worker tiến trình chạy song song mà không bao giờ bị nghẽn khóa (Deadlock) hay gửi trùng email.
                 </li>
                 <li><strong>Khởi tạo kết nối SMTP Keep-Alive:</strong> Đối tượng <code>PHPMailer</code> được khởi tạo duy nhất một lần ở đầu vòng lặp và bật <code>$mail-&gt;SMTPKeepAlive = true</code>. Kết nối TCP/TLS tới cổng 587 của Amazon SES được giữ sống qua nhiều lượt gửi, giảm 85% chi phí bắt tay SSL (TLS Handshake overhead).</li>
                 <li><strong>Bộ đệm điều tiết tốc độ (Anti-Throttle Pacing):</strong> Sau mỗi email được gửi, worker thực thi lệnh tạm nghỉ <code>usleep(100000);</code> (100 mili-giây). Độ trễ này đảm bảo hệ thống không bao giờ vượt ngưỡng băng thông cấp phép (Max Send Rate) của Amazon SES, bảo vệ uy tín IP và domain của Viện Đào tạo.</li>
                 <li><strong>Cơ chế tự giải cứu tiến trình kẹt (Stuck Job Auto-Recovery):</strong> Nếu một worker bị đứt kết nối đột ngột giữa chừng, câu lệnh:
-                  <pre><code>UPDATE mail_queue SET status = 'pending' 
-WHERE status = 'processing' 
-  AND (updated_at IS NULL OR updated_at &lt;= DATE_SUB(NOW(), INTERVAL 10 MINUTE));</code></pre>
+                  <pre><code>UPDATE mail_queue SET status = 'pending'
+                    WHERE status = 'processing'
+                    AND (updated_at IS NULL OR updated_at &lt;= DATE_SUB(NOW(), INTERVAL 10 MINUTE));</code></pre>
                   sẽ tự động khôi phục các email bị treo quá 10 phút trở lại hàng đợi để lượt chạy tiếp theo xử lý ngay.
                 </li>
               </ul>
 
               <h2 id="ses-brand-templates">3. Chuẩn Hóa Template Email Thương Hiệu IDEAS &amp; Phân Lập Đối Tượng</h2>
               <p>
-                Mọi email phát ra từ hệ thống đều được chuẩn hóa qua hàm lõi <code>_getBaseHtml()</code> và <code>sendEmailNotification()</code> 
+                Mọi email phát ra từ hệ thống đều được chuẩn hóa qua hàm lõi <code>_getBaseHtml()</code> và <code>sendEmailNotification()</code>
                 trong <code>backend/mailer.php</code>, đảm bảo tính thẩm mỹ, hiển thị chuẩn mực trên mọi ứng dụng di động và phân lập nghiêm ngặt:
               </p>
               <div className="doc-callout doc-callout-info">
@@ -1657,8 +2176,8 @@ WHERE status = 'processing'
           content: (
             <div className="doc-prose">
               <p>
-                Kênh thông báo Zalo đóng vai trò huyết mạch trong việc kết nối tức thời giữa hệ thống ERP với đội ngũ Tư vấn tuyển sinh 
-                và Ban Quản trị. Thông qua <code>backend/zalo_bot.php</code> và hàng đợi <code>zalo_queue</code>, hệ thống hỗ trợ cả phương thức 
+                Kênh thông báo Zalo đóng vai trò huyết mạch trong việc kết nối tức thời giữa hệ thống ERP với đội ngũ Tư vấn tuyển sinh
+                và Ban Quản trị. Thông qua <code>backend/zalo_bot.php</code> và hàng đợi <code>zalo_queue</code>, hệ thống hỗ trợ cả phương thức
                 gửi tin hàng loạt không nghẽn tiến trình và gửi tin đồng bộ tức thì cho các sự kiện khẩn cấp.
               </p>
 
@@ -1674,8 +2193,8 @@ WHERE status = 'processing'
                 <li><code>attempts</code>: Đếm số lần gửi (thử lại tối đa 3 lần).</li>
               </ul>
               <p>
-                Hàm <code>runZaloMailerCron($conn)</code> trong <code>backend/cron_mailer.php</code> tự động rút từng lô 50 tin nhắn Zalo 
-                bằng kỹ thuật <code>FOR UPDATE SKIP LOCKED</code>, giải cứu các tin bị kẹt quá 10 phút, giãn cách 100ms giữa các tin 
+                Hàm <code>runZaloMailerCron($conn)</code> trong <code>backend/cron_mailer.php</code> tự động rút từng lô 50 tin nhắn Zalo
+                bằng kỹ thuật <code>FOR UPDATE SKIP LOCKED</code>, giải cứu các tin bị kẹt quá 10 phút, giãn cách 100ms giữa các tin
                 và tự động dọn dẹp các bản ghi hoàn tất sau 30 ngày.
               </p>
 
@@ -1702,7 +2221,7 @@ WHERE status = 'processing'
                       <code>SO_CREATED_FOR_SALE</code>
                     </td>
                     <td>
-                      Chỉ gửi đích danh tới Zalo của Tư vấn viên được giao khách hàng hoặc phát sinh đơn hàng. 
+                      Chỉ gửi đích danh tới Zalo của Tư vấn viên được giao khách hàng hoặc phát sinh đơn hàng.
                       Nếu tư vấn viên tắt nhận kênh Zalo trong bảng <code>user_notification_settings</code> (Ma trận thông báo cá nhân), hệ thống sẽ tự động bỏ qua.
                     </td>
                   </tr>
@@ -1715,8 +2234,8 @@ WHERE status = 'processing'
                       Sự kiện Lead toàn hệ thống
                     </td>
                     <td>
-                      Chỉ bắn vào Group Admin Zalo các sự kiện mang tính chất phân bổ dữ liệu toàn công ty, 
-                      cảnh báo khiếu nại chất lượng số (Ticket lỗi data) và Báo cáo tổng kết ngày lúc 22:00. 
+                      Chỉ bắn vào Group Admin Zalo các sự kiện mang tính chất phân bổ dữ liệu toàn công ty,
+                      cảnh báo khiếu nại chất lượng số (Ticket lỗi data) và Báo cáo tổng kết ngày lúc 22:00.
                       Tuyệt đối không bắn các thông báo nội bộ cá nhân (chấm công, nghỉ phép) vào nhóm Zalo chung.
                     </td>
                   </tr>
@@ -1747,8 +2266,8 @@ WHERE status = 'processing'
           content: (
             <div className="doc-prose">
               <p>
-                Hệ sinh thái Telegram Bot trong <strong>IDEAS MYERP</strong> được vận hành thông qua thư viện kết nối 
-                <code>backend/telegram_bot.php</code>. Đây là kênh phản ứng nhanh dành cho đội ngũ quản trị cấp cao và lực lượng bán hàng, 
+                Hệ sinh thái Telegram Bot trong <strong>IDEAS MYERP</strong> được vận hành thông qua thư viện kết nối
+                <code>backend/telegram_bot.php</code>. Đây là kênh phản ứng nhanh dành cho đội ngũ quản trị cấp cao và lực lượng bán hàng,
                 đảm bảo thời gian phản hồi trước các cơ hội kinh doanh mới luôn đạt chuẩn SLA dưới 5 phút.
               </p>
 
@@ -1809,14 +2328,14 @@ WHERE status = 'processing'
           content: (
             <div className="doc-prose">
               <p>
-                Khả năng tự động hóa báo cáo và nhắc nhở đúng giờ là xương sống trong công tác điều hành của Viện Đào tạo. 
-                Hệ sinh thái cron jobs của <strong>IDEAS MYERP</strong> bao gồm báo cáo tổng kết ngày, báo cáo tuần, báo cáo tháng 
+                Khả năng tự động hóa báo cáo và nhắc nhở đúng giờ là xương sống trong công tác điều hành của Viện Đào tạo.
+                Hệ sinh thái cron jobs của <strong>IDEAS MYERP</strong> bao gồm báo cáo tổng kết ngày, báo cáo tuần, báo cáo tháng
                 và các tiến trình nhắc nhở tài chính, học vụ độc lập.
               </p>
 
               <h2 id="daily-report-engine">1. Cơ Chế Báo Cáo Tổng Kết Ngày (Daily Report 22:00)</h2>
               <p>
-                Tệp tiến trình <code>backend/cron_daily_report.php</code> được kích hoạt tự động vào <strong>22:00 hàng ngày</strong> 
+                Tệp tiến trình <code>backend/cron_daily_report.php</code> được kích hoạt tự động vào <strong>22:00 hàng ngày</strong>
                 (hoặc theo cấu hình <code>zalo_daily_report_time</code> trong hệ thống). Báo cáo tổng kết toàn bộ bức tranh vận hành ngày:
               </p>
               <table className="doc-table">
@@ -1832,8 +2351,8 @@ WHERE status = 'processing'
                     <td><strong>Tổng Quan Chia Số (Data Stats)</strong></td>
                     <td><code>distribution_logs</code> JOIN <code>consultants</code></td>
                     <td>
-                      Tổng số data phát sinh trong kỳ; Phân loại chi tiết theo từng Tư vấn viên: 
-                      Số lượng <em>chia vòng (round-robin)</em>, số lượng <em>bù vé lỗi (compensation)</em>, 
+                      Tổng số data phát sinh trong kỳ; Phân loại chi tiết theo từng Tư vấn viên:
+                      Số lượng <em>chia vòng (round-robin)</em>, số lượng <em>bù vé lỗi (compensation)</em>,
                       và số lượng <em>nhắc lại khách hàng cũ (reminder)</em>. Sắp xếp thứ tự giảm dần theo tổng lượng nhận.
                     </td>
                   </tr>
@@ -1841,7 +2360,7 @@ WHERE status = 'processing'
                     <td><strong>AI Pre-Screener Stats</strong></td>
                     <td><code>leads</code> (status = 'pending_approval', 'rejected', 'blacklisted')</td>
                     <td>
-                      Số lượng data bị AI chấm dưới chuẩn hoặc tạm giữ chờ duyệt; 
+                      Số lượng data bị AI chấm dưới chuẩn hoặc tạm giữ chờ duyệt;
                       Tổng số lượng data đang tồn đọng trên toàn hệ thống cần Giám đốc Tuyển sinh rà soát.
                     </td>
                   </tr>
@@ -1849,7 +2368,7 @@ WHERE status = 'processing'
                     <td><strong>Báo Cáo Lỗi Dữ Liệu (Tickets)</strong></td>
                     <td><code>data_reports</code></td>
                     <td>
-                      Tổng số khiếu nại data rác/sai số do TVV mở; Số lượng đã được Quản lý duyệt hoàn bù, 
+                      Tổng số khiếu nại data rác/sai số do TVV mở; Số lượng đã được Quản lý duyệt hoàn bù,
                       số lượng bị từ chối và số lượng ticket đang chờ giải quyết.
                     </td>
                   </tr>
@@ -1865,7 +2384,7 @@ WHERE status = 'processing'
 
               <h2 id="sliding-time-window">2. Thuật Toán Cửa Sổ Thời Gian Trượt (Sliding Time Window)</h2>
               <p>
-                Để triệt tiêu lỗi mất mát số liệu do giờ chạy cron bị lệch vài phút, <code>cron_daily_report.php</code> 
+                Để triệt tiêu lỗi mất mát số liệu do giờ chạy cron bị lệch vài phút, <code>cron_daily_report.php</code>
                 sử dụng thuật toán <strong>Cửa sổ Thời Gian Trượt (Sliding Time Window)</strong>:
               </p>
               <ul>
@@ -1888,8 +2407,8 @@ WHERE status = 'processing'
               <ul>
                 <li>
                   <strong>Tự Động Nhắc Thanh Toán Cọc Học Phí (<code>cron_deposit_reminders.php</code>):</strong>
-                  <br />Quét các mốc thanh toán trong bảng <code>deposit_milestones</code> liên kết với hợp đồng <code>deposits</code>. 
-                  Kiểm tra điều kiện: <code>auto_remind = 1</code>, mốc tiền chưa đóng (<code>pending</code>), cách ngày đến hạn theo cấu hình <code>remind_days_before</code> (ví dụ: 3 ngày trước hạn), và đạt khung giờ gửi <code>remind_at_hour</code> (ví dụ: 08:30 sáng). 
+                  <br />Quét các mốc thanh toán trong bảng <code>deposit_milestones</code> liên kết với hợp đồng <code>deposits</code>.
+                  Kiểm tra điều kiện: <code>auto_remind = 1</code>, mốc tiền chưa đóng (<code>pending</code>), cách ngày đến hạn theo cấu hình <code>remind_days_before</code> (ví dụ: 3 ngày trước hạn), và đạt khung giờ gửi <code>remind_at_hour</code> (ví dụ: 08:30 sáng).
                   Tự động gửi email chuyên biệt cho học viên kèm số tiền, mốc hạn và thông tin số tài khoản ngân hàng của Viện.
                 </li>
                 <li>
@@ -1905,7 +2424,7 @@ WHERE status = 'processing'
 
               <h2 id="cron-master-orchestrator">4. Bộ Điều Phối Tổng Thể Master Orchestrator (cron_master.php)</h2>
               <p>
-                Để đơn giản hóa việc triển khai trên cPanel hoặc máy chủ Linux/Windows, toàn bộ hệ sinh thái cron được điều phối 
+                Để đơn giản hóa việc triển khai trên cPanel hoặc máy chủ Linux/Windows, toàn bộ hệ sinh thái cron được điều phối
                 qua duy nhất <strong>một dòng lệnh Crontab định kỳ mỗi 1 phút</strong>:
               </p>
               <pre><code>* * * * * php /home/user/public_html/backend/cron_master.php &gt; /dev/null 2&gt;&amp;1</code></pre>
@@ -1916,10 +2435,10 @@ WHERE status = 'processing'
                 <li>Tự động nhận diện phiên bản PHP CLI tối ưu trên máy chủ (ưu tiên PHP 8.1 / 8.2 như <code>/usr/local/bin/ea-php81</code>).</li>
                 <li>Kiểm tra khóa an toàn <code>cron_master_*.lock</code> để chống chạy song song trùng lặp.</li>
                 <li>Kích hoạt song song ngầm các tiến trình con độc lập:
-                  <code>cron_sync.php</code> (đồng bộ sheets, chia số, kiểm tra báo cáo ngày/tuần/tháng), 
-                  <code>cron_recurring_tasks.php</code> (sinh công việc định kỳ), 
-                  <code>cron_deposit_reminders.php</code> (nhắc tiền cọc), 
-                  <code>cron_academic_reminders.php</code> (nhắc lịch học vụ), 
+                  <code>cron_sync.php</code> (đồng bộ sheets, chia số, kiểm tra báo cáo ngày/tuần/tháng),
+                  <code>cron_recurring_tasks.php</code> (sinh công việc định kỳ),
+                  <code>cron_deposit_reminders.php</code> (nhắc tiền cọc),
+                  <code>cron_academic_reminders.php</code> (nhắc lịch học vụ),
                   và <code>cron_mailer.php</code> (xử lý hàng đợi email và Zalo).
                 </li>
               </ul>
@@ -1967,8 +2486,8 @@ WHERE status = 'processing'
     const query = searchQuery.toLowerCase();
     return sections.map(section => ({
       ...section,
-      items: section.items.filter(item => 
-        item.title.toLowerCase().includes(query) || 
+      items: section.items.filter(item =>
+        item.title.toLowerCase().includes(query) ||
         item.description.toLowerCase().includes(query) ||
         section.title.toLowerCase().includes(query)
       )
@@ -2015,9 +2534,9 @@ WHERE status = 'processing'
 
         <div className="doc-header-search-bar">
           <Search size={15} className="doc-search-icon" />
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm nhanh phân hệ, tính năng, quy trình (Ctrl + K)..." 
+          <input
+            type="text"
+            placeholder="Tìm kiếm nhanh phân hệ, tính năng, quy trình (Ctrl + K)..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="doc-search-input"
@@ -2028,7 +2547,7 @@ WHERE status = 'processing'
         </div>
 
         <div className="doc-header-right">
-          <button 
+          <button
             onClick={() => navigate('/api-docs')}
             className="doc-nav-btn doc-nav-btn-secondary"
             title="Xem Tài Liệu API & SDK Reference"
@@ -2036,7 +2555,7 @@ WHERE status = 'processing'
             <Code size={15} />
             <span>API Docs & SDKs</span>
           </button>
-          <button 
+          <button
             onClick={() => navigate('/')}
             className="doc-nav-btn doc-nav-btn-primary"
             title="Trở về Trang Chủ MYERP"
@@ -2061,7 +2580,7 @@ WHERE status = 'processing'
 
               return (
                 <div key={section.id} className="doc-nav-section">
-                  <div 
+                  <div
                     className={`doc-nav-section-title ${isSectionActive ? 'active' : ''}`}
                     onClick={() => {
                       setActiveSectionId(section.id);
@@ -2075,9 +2594,9 @@ WHERE status = 'processing'
                       <SectionIcon size={16} className="doc-nav-section-icon" />
                       <span>{section.title}</span>
                     </div>
-                    <ChevronDown 
-                      size={14} 
-                      className={`doc-chevron-icon ${isExpanded ? 'open' : ''}`} 
+                    <ChevronDown
+                      size={14}
+                      className={`doc-chevron-icon ${isExpanded ? 'open' : ''}`}
                     />
                   </div>
 
@@ -2087,7 +2606,7 @@ WHERE status = 'processing'
                         {section.items.map(item => {
                           const isItemActive = item.id === activeItemId;
                           return (
-                            <div 
+                            <div
                               key={item.id}
                               className={`doc-nav-subitem ${isItemActive ? 'active' : ''}`}
                               onClick={(e) => {
@@ -2139,7 +2658,7 @@ WHERE status = 'processing'
                 <strong>{currentSection.title}</strong>
               </div>
               <div className="doc-footer-action">
-                <button 
+                <button
                   onClick={() => navigate('/api-docs')}
                   className="doc-nav-btn doc-nav-btn-secondary"
                 >
@@ -2158,7 +2677,7 @@ WHERE status = 'processing'
             {currentItem?.headings && currentItem.headings.length > 0 ? (
               <div className="doc-toc-links">
                 {currentItem.headings.map(h => (
-                  <div 
+                  <div
                     key={h.id}
                     className={`doc-toc-link ${activeHeadingId === h.id ? 'active' : ''}`}
                     onClick={() => scrollToHeading(h.id)}
@@ -2174,7 +2693,7 @@ WHERE status = 'processing'
             <div className="doc-toc-quick-box">
               <div className="doc-quick-title">Cần Hỗ Trợ Kỹ Thuật?</div>
               <p className="doc-quick-desc">Tra cứu nhanh toàn bộ tham số REST API và bộ code mẫu tại API Docs.</p>
-              <button 
+              <button
                 onClick={() => navigate('/api-docs')}
                 className="doc-quick-btn"
               >

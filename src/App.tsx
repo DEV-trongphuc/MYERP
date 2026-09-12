@@ -605,6 +605,7 @@ export default function App() {
                   <Route path="/public-schedule/lecturer/:lecturerId" element={<PublicSchedulePage />} />
                   <Route path="/public-schedule/:customerId" element={<PublicSchedulePage />} />
                   <Route path="/docs" element={<DocumentationPage />} />
+                  <Route path="/documentation" element={<DocumentationPage />} />
                   <Route path="/api-docs" element={<ApiDocumentationPage />} />
 
                   {/* All authenticated users (sharing a single persistent AppTabs instance) */}

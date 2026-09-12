@@ -732,6 +732,15 @@ class CheckInController {
         
         $newId = (int)$this->db->lastInsertId();
 
+        if ($isSupplementary && !empty($b['check_out_time'])) {
+            $outTimeRaw = trim($b['check_out_time']);
+            $outTimeStr = (strpos($outTimeRaw, ' ') !== false) ? $outTimeRaw : ($today . ' ' . $outTimeRaw);
+            try {
+                $stmtUpdateOut = $this->db->prepare("UPDATE check_ins SET check_out_time = ? WHERE id = ?");
+                $stmtUpdateOut->execute([$outTimeStr, $newId]);
+            } catch (\Throwable $eOut) {}
+        }
+
         logActivity($this->db, $auth['tenant_id'], $auth['user_id'], 'CHECK_IN', 'check_in', $newId, json_encode([
             'date' => $today,
             'time' => $currentTime,

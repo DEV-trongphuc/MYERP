@@ -113,14 +113,27 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   // New Creation Modal States & Helpers for Leave/Attendance Requests
   const [showCreateLeaveModal, setShowCreateLeaveModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
-  const [createLeaveType, setCreateLeaveType] = useState('leave'); // 'leave' | 'late_early' | 'overtime' | 'remote_work'
+  const [createLeaveType, setCreateLeaveType] = useState<'leave' | 'late_early' | 'overtime' | 'remote_work' | 'supplementary'>('leave');
   
   // Form fields states
+  const [supplementaryDateField, setSupplementaryDateField] = useState(() => new Date().toISOString().split('T')[0]);
+  const [supplementaryInTimeField, setSupplementaryInTimeField] = useState('08:00');
+  const [supplementaryOutTimeField, setSupplementaryOutTimeField] = useState('17:30');
+  
   const [leaveTypeField, setLeaveTypeField] = useState('annual'); // 'annual' | 'sick' | 'compensatory' | 'unpaid'
   const [leaveSessionField, setLeaveSessionField] = useState('full'); // 'full' | 'morning' | 'afternoon' | 'range'
   const [leaveFromField, setLeaveFromField] = useState(() => new Date().toISOString().split('T')[0]);
   const [leaveToField, setLeaveToField] = useState(() => new Date().toISOString().split('T')[0]);
   const [leaveReasonField, setLeaveReasonField] = useState('');
+
+  const handleOpenSupplementaryForDate = (dateStr: string) => {
+    setSupplementaryDateField(dateStr);
+    setSupplementaryInTimeField('08:00');
+    setSupplementaryOutTimeField('17:30');
+    setLeaveReasonField(t('Quên chấm công ca sáng và ca chiều ngày ') + dateStr);
+    setCreateLeaveType('supplementary');
+    setShowCreateLeaveModal(true);
+  };
   
   const [lateEarlyTypeField, setLateEarlyTypeField] = useState('late'); // 'late' | 'early'
   const [lateEarlyMinutesField, setLateEarlyMinutesField] = useState(30);
@@ -437,6 +450,29 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           approver_id_2: approverId2Field ? Number(approverId2Field) : null,
           related_user_ids: relatedUserIds
         };
+      } else if (createLeaveType === 'supplementary') {
+        if (!leaveReasonField.trim()) {
+          toast.error(t('Vui lòng nhập lý do giải trình cập nhật công!'));
+          return;
+        }
+        const res = await api.post('/check-ins', {
+          check_in_date: supplementaryDateField,
+          check_in_time: supplementaryInTimeField ? `${supplementaryInTimeField}:00` : '08:00:00',
+          check_out_time: supplementaryOutTimeField ? `${supplementaryOutTimeField}:00` : '17:30:00',
+          is_supplementary: 1,
+          reason: leaveReasonField,
+          approver_id: approverIdField ? Number(approverIdField) : undefined
+        });
+
+        if (res && res.data && (res.data.success !== false)) {
+          toast.success(t('Đã gửi yêu cầu cập nhật công thành công! Vui lòng đợi quản lý phê duyệt.'));
+          setShowCreateLeaveModal(false);
+          fetchCalendarCheckIns();
+          fetchCheckInsList();
+        } else {
+          toast.error(res?.data?.message || t('Có lỗi xảy ra khi gửi yêu cầu cập nhật công!'));
+        }
+        return;
       }
       
       const res = await api.post('/hrm/leaves', payload);
@@ -4889,7 +4925,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 key={opt.id}
                 onClick={() => {
                   setShowMenuModal(false);
-                  setCreateLeaveType(opt.id);
+                  setCreateLeaveType(opt.id as any);
                   setShowCreateLeaveModal(true);
                 }}
                 style={{
