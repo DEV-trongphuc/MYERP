@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
+import { getSystemTitle } from '../config/env';
 
 export function useDocumentTitle(title: string) {
   useEffect(() => {
-    document.title = title ? `${title} | IDEAS ERP` : 'IDEAS ERP';
+    const sysTitle = getSystemTitle();
+    document.title = title ? `${title} | ${sysTitle}` : sysTitle;
   }, [title]);
 }

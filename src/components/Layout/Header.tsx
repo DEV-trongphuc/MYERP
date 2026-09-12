@@ -215,8 +215,31 @@ export const Header = ({
       } catch (e) {}
     }
 
-    const dayConfig = rawSchedule?.[String(dayOfWeek)] || rawSchedule?.[dayOfWeek];
-    const isDayOff = Boolean(dayConfig && dayConfig.active === false);
+    let isDayOff = false;
+    let dayConfig: any = null;
+
+    if (rawSchedule) {
+      try {
+        const scheduleObj = typeof rawSchedule === 'string' ? JSON.parse(rawSchedule) : rawSchedule;
+        dayConfig = scheduleObj?.[String(dayOfWeek)] || scheduleObj?.[dayOfWeek];
+        if (!dayConfig) {
+          // Ngày này hoàn toàn không có trong cấu hình làm việc -> Không có set lịch làm việc
+          isDayOff = true;
+        } else if (dayConfig.active === false || dayConfig.active === 'false' || dayConfig.active === 0 || dayConfig.active === '0') {
+          // Ngày này được đánh dấu nghỉ / không active
+          isDayOff = true;
+        } else if (!dayConfig.start && !dayConfig.end && !dayConfig.end_afternoon) {
+          // Không có giờ làm việc nào được set
+          isDayOff = true;
+        }
+      } catch (e) {
+        isDayOff = dayOfWeek === 7;
+      }
+    } else {
+      // Mặc định nếu chưa cấu hình lịch làm việc, Chủ Nhật là ngày nghỉ
+      isDayOff = dayOfWeek === 7;
+    }
+
     const morningStart = String(dayConfig?.start || consultantProfile?.work_start_time || (user as any)?.work_start_time || sysSettings?.global_work_start_time || '08:00').substring(0, 5);
     const afternoonEnd = String(dayConfig?.end_afternoon || dayConfig?.end || consultantProfile?.work_end_time || (user as any)?.work_end_time || sysSettings?.global_work_end_time || '17:00').substring(0, 5);
 
@@ -3030,11 +3053,17 @@ export const Header = ({
             const needsCheckOut = requireCheckout && isApprovedCheckIn && !activeCheckIn.check_out_time;
             const isCompletedCheckIn = isApprovedCheckIn && (!requireCheckout || Boolean(activeCheckIn.check_out_time));
 
-            // Quá giờ tan ca hôm nay mà cả ngày chưa chấm công (trừ ngày nghỉ)
-            const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd && !activeCheckIn?.pending_explanation_today;
+            // Ngày không có set lịch làm việc / không cần chấm công
+            const isNoWorkScheduled = Boolean(todayScheduleInfo.isDayOff);
+
+            // Quá giờ tan ca hôm nay mà cả ngày chưa chấm công (chỉ áp dụng ngày có đi làm)
+            const isPastShiftEndWithoutCheckIn = !isNoWorkScheduled && isNotCheckedIn && todayScheduleInfo.isPastShiftEnd && !activeCheckIn?.pending_explanation_today;
 
             const handleClick = () => {
-              if (isPastShiftEndWithoutCheckIn) {
+              if (isNoWorkScheduled && isNotCheckedIn) {
+                // Ngày không có set lịch làm việc: Bấm nhảy sang xem bảng chấm công cá nhân, không mở modal chấm công
+                navigate('/attendance?user_id=' + (user?.id || ''));
+              } else if (isPastShiftEndWithoutCheckIn) {
                 const todayStr = new Date().toISOString().split('T')[0];
                 navigate(`/approvals?create=attendance_bulk&date=${todayStr}`);
               } else if (isPendingApproval) {
@@ -3049,33 +3078,39 @@ export const Header = ({
 
             const btnBg = isPastShiftEndWithoutCheckIn
               ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)'
-              : isNotCheckedIn 
-                ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
-                : needsCheckOut || isPendingApproval
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                  : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+              : (isNoWorkScheduled && isNotCheckedIn)
+                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                : isNotCheckedIn 
+                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                  : needsCheckOut || isPendingApproval
+                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                    : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
 
             const btnShadow = isPastShiftEndWithoutCheckIn
               ? '0 10px 25px rgba(124, 58, 237, 0.45)'
-              : isNotCheckedIn
-                ? '0 10px 25px rgba(239, 68, 68, 0.45)'
-                : needsCheckOut || isPendingApproval
-                  ? '0 10px 25px rgba(245, 158, 11, 0.45)'
-                  : '0 8px 20px rgba(16, 185, 129, 0.35)';
+              : (isNoWorkScheduled && isNotCheckedIn)
+                ? '0 8px 20px rgba(16, 185, 129, 0.35)'
+                : isNotCheckedIn
+                  ? '0 10px 25px rgba(239, 68, 68, 0.45)'
+                  : needsCheckOut || isPendingApproval
+                    ? '0 10px 25px rgba(245, 158, 11, 0.45)'
+                    : '0 8px 20px rgba(16, 185, 129, 0.35)';
 
-            const btnTitle = isPastShiftEndWithoutCheckIn
-              ? t('Đã quá giờ tan ca hôm nay - Click để tạo phiếu Cập nhật công')
-              : isNotCheckedIn
-                ? t('Chưa chấm công - Click để chấm công ngay')
-                : needsCheckOut
-                  ? t('Đã vào ca - Click để chấm công ra về')
-                  : isPendingApproval
-                    ? t('Chấm công đang chờ duyệt - Click để xem bảng chấm công')
-                    : t('Đã hoàn tất chấm công hôm nay - Click để xem bảng chấm công');
+            const btnTitle = (isNoWorkScheduled && isNotCheckedIn)
+              ? t('Hôm nay không có lịch làm việc - Click để xem bảng chấm công')
+              : isPastShiftEndWithoutCheckIn
+                ? t('Đã quá giờ tan ca hôm nay - Click để tạo phiếu Cập nhật công')
+                : isNotCheckedIn
+                  ? t('Chưa chấm công - Click để chấm công ngay')
+                  : needsCheckOut
+                    ? t('Đã vào ca - Click để chấm công ra về')
+                    : isPendingApproval
+                      ? t('Chấm công đang chờ duyệt - Click để xem bảng chấm công')
+                      : t('Đã hoàn tất chấm công hôm nay - Click để xem bảng chấm công');
 
             return (
               <button
-                className={`floating-checkin-btn ${isNotCheckedIn && !isPastShiftEndWithoutCheckIn ? 'floating-checkin-uncompleted' : ''}`}
+                className={`floating-checkin-btn ${isNotCheckedIn && !isPastShiftEndWithoutCheckIn && !isNoWorkScheduled ? 'floating-checkin-uncompleted' : ''}`}
                 onTouchStart={prewarmSmartCheckInGPS}
                 onClick={handleClick}
                 style={{

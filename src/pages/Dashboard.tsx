@@ -588,7 +588,51 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
   }, [hrProfiles]);
 
   const hrTopLatenessList = useMemo(() => {
-    // 1. Tính từ hrDashboardPayslips nếu đã có số phút đi trễ
+    // 1. Ưu tiên tính Realtime từ check-ins tháng (hoặc tuần)
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
+    const checkinSource = hrMonthCheckIns.length > 0 ? hrMonthCheckIns : hrWeeklyCheckIns;
+    checkinSource.forEach((c: any) => {
+      const lateness = Number(c.late_minutes ?? c.lateness_minutes ?? 0);
+      let actualLate = lateness;
+      if (actualLate <= 0 && c.check_in_time && c.work_start_time) {
+        const inStr = c.check_in_time.length > 8 ? c.check_in_time.substring(11, 16) : c.check_in_time.substring(0, 5);
+        const startStr = String(c.work_start_time).substring(0, 5);
+        const [ih, im] = inStr.split(':').map(Number);
+        const [sh, sm] = startStr.split(':').map(Number);
+        if (!isNaN(ih) && !isNaN(im) && !isNaN(sh) && !isNaN(sm)) {
+          const diff = (ih * 60 + im) - (sh * 60 + sm);
+          if (diff > 0) actualLate = diff;
+        }
+      }
+      const isLate = c.status === 'late' || actualLate > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
+      if (isLate) {
+        const uid = c.user_id;
+        const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
+        if (!map[uid]) {
+          map[uid] = { 
+            id: uid, 
+            name: prof?.full_name || prof?.name || c.user_name || t('Nhân viên'), 
+            avatar: prof?.avatar || prof?.avatar_url || c.user_avatar,
+            department: prof?.department_name || prof?.department || '',
+            count: 0,
+            value: 0 
+          };
+        }
+        map[uid].count += 1;
+        map[uid].value += actualLate > 0 ? actualLate : 15;
+      }
+    });
+
+    const list = Object.values(map).sort((a, b) => b.value - a.value || b.count - a.count);
+    if (list.length > 0) {
+      const maxVal = Math.max(...list.map(x => x.value)) || 1;
+      return list.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // 2. Fallback từ hrDashboardPayslips nếu chưa có check-in realtime
     const fromPayslips = [...hrDashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
       .map(p => {
@@ -611,37 +655,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       })).slice(0, 10);
     }
 
-    // 2. Tính Realtime từ check-ins tháng (hoặc tuần)
-    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
-    const checkinSource = hrMonthCheckIns.length > 0 ? hrMonthCheckIns : hrWeeklyCheckIns;
-    checkinSource.forEach((c: any) => {
-      const lateness = Number(c.lateness_minutes || 0);
-      const isLate = c.status === 'late' || lateness > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
-      if (isLate) {
-        const uid = c.user_id;
-        const prof = hrProfileMap.get(Number(uid)) || hrProfileMap.get(uid);
-        if (!map[uid]) {
-          map[uid] = { 
-            id: uid, 
-            name: prof?.full_name || prof?.name || c.user_name || t('Nhân viên'), 
-            avatar: prof?.avatar || prof?.avatar_url || c.user_avatar,
-            department: prof?.department_name || prof?.department || '',
-            count: 0,
-            value: 0 
-          };
-        }
-        map[uid].count += 1;
-        map[uid].value += lateness > 0 ? lateness : 15;
-      }
-    });
-
-    const list = Object.values(map).sort((a, b) => b.value - a.value || b.count - a.count);
-    if (list.length === 0) return [];
-    const maxVal = Math.max(...list.map(x => x.value)) || 1;
-    return list.map(item => ({
-      ...item,
-      percent: Math.min(100, (item.value / maxVal) * 100)
-    })).slice(0, 10);
+    return [];
   }, [hrDashboardPayslips, hrMonthCheckIns, hrWeeklyCheckIns, hrProfileMap, t]);
 
   const hrTopOTList = useMemo(() => {
@@ -670,8 +684,12 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
         const diff = (eh * 60 + em) - (sh * 60 + sm);
         if (diff > 0) shiftHours = Math.round((diff / 60) * 10) / 10;
       }
-      if (shiftHours <= 0) shiftHours = 2;
-      map[uid].value = Math.round((map[uid].value + shiftHours) * 10) / 10;
+      if (shiftHours <= 0 && s.total_days) {
+        shiftHours = Number(s.total_days) * 8;
+      }
+      if (shiftHours > 0) {
+        map[uid].value = Math.round((map[uid].value + shiftHours) * 10) / 10;
+      }
     });
 
     hrLeaves.filter((l: any) => l.leave_type === 'overtime' && (Number(l.approved) === 1 || l.status === 'approved')).forEach((l: any) => {
@@ -688,13 +706,28 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
           unit: t('giờ')
         };
       }
-      const days = Number(l.total_days || 0.25);
-      const hours = Number(l.total_hours || (days * 8) || 2);
-      map[uid].count += 1;
-      map[uid].value = Math.round((map[uid].value + hours) * 10) / 10;
+      let hours = 0;
+      if (l.total_hours && Number(l.total_hours) > 0) {
+        hours = Number(l.total_hours);
+      } else if (l.start_time && l.end_time) {
+        const [sh, sm] = String(l.start_time).split(':').map(Number);
+        const [eh, em] = String(l.end_time).split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0) hours = Math.round((diff / 60) * 10) / 10;
+      } else if (l.reason) {
+        const m = String(l.reason).match(/(\d+(\.\d+)?)\s*giờ/i);
+        if (m) hours = Number(m[1]);
+      }
+      if (hours <= 0 && l.total_days) {
+        hours = Number(l.total_days) * 8;
+      }
+      if (hours > 0) {
+        map[uid].count += 1;
+        map[uid].value = Math.round((map[uid].value + hours) * 10) / 10;
+      }
     });
 
-    const shiftAndLeaveList = Object.values(map);
+    const shiftAndLeaveList = Object.values(map).filter(item => item.value > 0);
     if (shiftAndLeaveList.length > 0) {
       const sorted = shiftAndLeaveList.sort((a, b) => b.value - a.value);
       const maxVal = Math.max(...sorted.map(x => x.value)) || 1;
@@ -724,7 +757,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
     if (fromPayslips.length > 0) {
       fromPayslips.sort((a, b) => b.value - a.value);
-      const maxVal = Math.max(...fromPayslips.map(x => x.value));
+      const maxVal = Math.max(...fromPayslips.map(x => x.value)) || 1;
       return fromPayslips.map(item => ({
         ...item,
         percent: Math.min(100, (item.value / maxVal) * 100)
@@ -732,7 +765,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
     }
 
     return [];
-  }, [hrShifts, hrLeaves, hrDashboardPayslips, hrProfileMap, t]);
+  }, [hrDashboardPayslips, hrShifts, hrLeaves, hrProfileMap, t]);
 
   const syncDateFilterToModal = (filter: string) => {
     let mode = 'this_month';

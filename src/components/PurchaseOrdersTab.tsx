@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from './ui/Avatar';
 import { resolveTeamLeaderId } from '../utils/teamLeader';
 import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
+import { getSystemTitle } from '../config/env';
 
 interface Props {
   showModal: boolean;
@@ -873,7 +874,7 @@ export const PurchaseOrdersTab: React.FC<Props> = ({ showModal, setShowModal, de
                           }}>
                             <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
                               {emp.bank_account 
-                                ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || '').toUpperCase()})` 
+                                ? `✓ Số tài khoản đồng bộ ${getSystemTitle()}: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || '').toUpperCase()})` 
                                 : '⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân'}
                             </span>
                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>

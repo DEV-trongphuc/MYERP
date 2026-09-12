@@ -665,7 +665,54 @@ export default function HRM() {
   }, [activeTab]);
 
   const topLatenessList = React.useMemo(() => {
-    // 1. Nếu dashboardPayslips đã có dữ liệu đi trễ
+    // 1. Ưu tiên tính Realtime từ danh sách chấm công của tháng được chọn
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
+    
+    if (dashboardCheckIns && dashboardCheckIns.length > 0) {
+      dashboardCheckIns.forEach((c: any) => {
+        const lateness = Number(c.late_minutes ?? c.lateness_minutes ?? 0);
+        let actualLate = lateness;
+        if (actualLate <= 0 && c.check_in_time && c.work_start_time) {
+          const inStr = c.check_in_time.length > 8 ? c.check_in_time.substring(11, 16) : c.check_in_time.substring(0, 5);
+          const startStr = String(c.work_start_time).substring(0, 5);
+          const [ih, im] = inStr.split(':').map(Number);
+          const [sh, sm] = startStr.split(':').map(Number);
+          if (!isNaN(ih) && !isNaN(im) && !isNaN(sh) && !isNaN(sm)) {
+            const diff = (ih * 60 + im) - (sh * 60 + sm);
+            if (diff > 0) actualLate = diff;
+          }
+        }
+        const isLate = c.status === 'late' || actualLate > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
+        if (isLate) {
+          const uid = c.user_id;
+          const prof = profiles.find(x => Number(x.id) === Number(uid));
+          if (!map[uid]) {
+            map[uid] = {
+              id: uid,
+              name: c.user_name || prof?.full_name || t('Nhân viên'),
+              avatar: c.user_avatar || prof?.avatar_url || prof?.avatar,
+              department: prof?.department || prof?.team_name || t('Chung'),
+              count: 0,
+              value: 0
+            };
+          }
+          map[uid].count += 1;
+          map[uid].value += actualLate > 0 ? actualLate : 15;
+        }
+      });
+    }
+
+    const realtimeList = Object.values(map);
+    if (realtimeList.length > 0) {
+      const sorted = realtimeList.sort((a, b) => b.value - a.value || b.count - a.count);
+      const maxVal = Math.max(...sorted.map(x => x.value)) || 1;
+      return sorted.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // 2. Fallback từ dashboardPayslips nếu chưa có dữ liệu chấm công realtime
     const fromPayslips = [...dashboardPayslips]
       .filter(p => Number(p.lateness_minutes || 0) > 0)
       .map(p => {
@@ -689,39 +736,89 @@ export default function HRM() {
       })).slice(0, 10);
     }
 
-    // 2. Tính Realtime từ dashboardCheckIns của tháng
-    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number }> = {};
-    dashboardCheckIns.forEach(c => {
-      const lateness = Number(c.lateness_minutes || 0);
-      const isLate = c.status === 'late' || lateness > 0 || (c.check_in_time && c.work_start_time && c.check_in_time > c.work_start_time);
-      if (isLate) {
-        const uid = c.user_id;
-        const prof = profiles.find(x => Number(x.id) === Number(uid));
-        if (!map[uid]) {
-          map[uid] = {
-            id: uid,
-            name: c.user_name || prof?.full_name || t('Nhân viên'),
-            avatar: c.user_avatar || prof?.avatar_url || prof?.avatar,
-            department: prof?.department || prof?.team_name || t('Chung'),
-            count: 0,
-            value: 0
-          };
-        }
-        map[uid].count += 1;
-        map[uid].value += lateness > 0 ? lateness : 15;
-      }
-    });
-
-    const list = Object.values(map).sort((a, b) => b.value - a.value || b.count - a.count);
-    const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
-    return list.map(item => ({
-      ...item,
-      percent: Math.min(100, (item.value / maxVal) * 100)
-    })).slice(0, 10);
+    return [];
   }, [dashboardPayslips, dashboardCheckIns, profiles, t]);
 
   const topOTList = React.useMemo(() => {
-    // 1. Nếu dashboardPayslips đã có
+    // 1. Ưu tiên tính Realtime từ dashboardShifts và dashboardLeaves (đã duyệt trong tháng được chọn)
+    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; unit: string }> = {};
+    
+    dashboardShifts.filter(s => s.shift_type === 'overtime' && (Number(s.approved) === 1 || s.status === 'approved')).forEach(s => {
+      const uid = s.user_id;
+      const prof = profiles.find(x => Number(x.id) === Number(uid));
+      if (!map[uid]) {
+        map[uid] = {
+          id: uid,
+          name: s.user_name || prof?.full_name || t('Nhân viên'),
+          avatar: s.user_avatar || prof?.avatar_url || prof?.avatar,
+          department: prof?.department || prof?.team_name || t('Chung'),
+          count: 0,
+          value: 0,
+          unit: t('giờ')
+        };
+      }
+      map[uid].count += 1;
+      let shiftHours = Number(s.hours || s.total_hours || s.duration_hours || 0);
+      if (shiftHours <= 0 && s.start_time && s.end_time) {
+        const [sh, sm] = String(s.start_time).split(':').map(Number);
+        const [eh, em] = String(s.end_time).split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0) shiftHours = Math.round((diff / 60) * 10) / 10;
+      }
+      if (shiftHours <= 0 && s.total_days) {
+        shiftHours = Number(s.total_days) * 8;
+      }
+      if (shiftHours > 0) {
+        map[uid].value = Math.round((map[uid].value + shiftHours) * 10) / 10;
+      }
+    });
+
+    dashboardLeaves.filter(l => l.leave_type === 'overtime' && (Number(l.approved) === 1 || l.status === 'approved')).forEach(l => {
+      const uid = l.user_id;
+      const prof = profiles.find(x => Number(x.id) === Number(uid));
+      if (!map[uid]) {
+        map[uid] = {
+          id: uid,
+          name: l.user_name || prof?.full_name || t('Nhân viên'),
+          avatar: l.user_avatar || prof?.avatar_url || prof?.avatar,
+          department: prof?.department || prof?.team_name || t('Chung'),
+          count: 0,
+          value: 0,
+          unit: t('giờ')
+        };
+      }
+      let hours = 0;
+      if (l.total_hours && Number(l.total_hours) > 0) {
+        hours = Number(l.total_hours);
+      } else if (l.start_time && l.end_time) {
+        const [sh, sm] = String(l.start_time).split(':').map(Number);
+        const [eh, em] = String(l.end_time).split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        if (diff > 0) hours = Math.round((diff / 60) * 10) / 10;
+      } else if (l.reason) {
+        const m = String(l.reason).match(/(\d+(\.\d+)?)\s*giờ/i);
+        if (m) hours = Number(m[1]);
+      }
+      if (hours <= 0 && l.total_days) {
+        hours = Number(l.total_days) * 8;
+      }
+      if (hours > 0) {
+        map[uid].count += 1;
+        map[uid].value = Math.round((map[uid].value + hours) * 10) / 10;
+      }
+    });
+
+    const shiftAndLeaveList = Object.values(map).filter(item => item.value > 0);
+    if (shiftAndLeaveList.length > 0) {
+      const sorted = shiftAndLeaveList.sort((a, b) => b.value - a.value);
+      const maxVal = Math.max(...sorted.map(x => x.value)) || 1;
+      return sorted.map(item => ({
+        ...item,
+        percent: Math.min(100, (item.value / maxVal) * 100)
+      })).slice(0, 10);
+    }
+
+    // 2. Fallback từ dashboardPayslips nếu không có đơn OT realtime
     const fromPayslips = [...dashboardPayslips]
       .filter(p => Number(p.overtime_days || 0) > 0 || Number(p.overtime_hours || 0) > 0)
       .map(p => {
@@ -749,61 +846,7 @@ export default function HRM() {
       })).slice(0, 10);
     }
 
-    // 2. Tính Realtime từ dashboardShifts và dashboardLeaves
-    const map: Record<string, { id: any; name: string; avatar?: string; department?: string; count: number; value: number; unit: string }> = {};
-    
-    dashboardShifts.filter(s => s.shift_type === 'overtime' && (Number(s.approved) === 1 || s.status === 'approved')).forEach(s => {
-      const uid = s.user_id;
-      const prof = profiles.find(x => Number(x.id) === Number(uid));
-      if (!map[uid]) {
-        map[uid] = {
-          id: uid,
-          name: s.user_name || prof?.full_name || t('Nhân viên'),
-          avatar: s.user_avatar || prof?.avatar_url || prof?.avatar,
-          department: prof?.department || prof?.team_name || t('Chung'),
-          count: 0,
-          value: 0,
-          unit: t('giờ')
-        };
-      }
-      map[uid].count += 1;
-      let shiftHours = Number(s.hours || s.total_hours || s.duration_hours || 0);
-      if (shiftHours <= 0 && s.start_time && s.end_time) {
-        const [sh, sm] = String(s.start_time).split(':').map(Number);
-        const [eh, em] = String(s.end_time).split(':').map(Number);
-        const diff = (eh * 60 + em) - (sh * 60 + sm);
-        if (diff > 0) shiftHours = Math.round((diff / 60) * 10) / 10;
-      }
-      if (shiftHours <= 0) shiftHours = 4;
-      map[uid].value = Math.round((map[uid].value + shiftHours) * 10) / 10;
-    });
-
-    dashboardLeaves.filter(l => l.leave_type === 'overtime' && (Number(l.approved) === 1 || l.status === 'approved')).forEach(l => {
-      const uid = l.user_id;
-      const prof = profiles.find(x => Number(x.id) === Number(uid));
-      if (!map[uid]) {
-        map[uid] = {
-          id: uid,
-          name: l.user_name || prof?.full_name || t('Nhân viên'),
-          avatar: l.user_avatar || prof?.avatar_url || prof?.avatar,
-          department: prof?.department || prof?.team_name || t('Chung'),
-          count: 0,
-          value: 0,
-          unit: t('giờ')
-        };
-      }
-      const days = Number(l.total_days || 0.5);
-      const hours = Number(l.total_hours || (days * 8) || 4);
-      map[uid].count += 1;
-      map[uid].value = Math.round((map[uid].value + hours) * 10) / 10;
-    });
-
-    const list = Object.values(map).sort((a, b) => b.value - a.value);
-    const maxVal = list.length > 0 ? Math.max(...list.map(x => x.value)) : 1;
-    return list.map(item => ({
-      ...item,
-      percent: Math.min(100, (item.value / maxVal) * 100)
-    })).slice(0, 10);
+    return [];
   }, [dashboardPayslips, dashboardShifts, dashboardLeaves, profiles, t]);
 
   const loadData = async () => {
@@ -1912,7 +1955,9 @@ export default function HRM() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--color-text)' }}>
-                                {req.title || `${t('Đơn xin')} ${leaveTypeText} (${req.total_days || 1} ${t('ngày')})`}
+                                {req.title || (req.leave_type === 'remote_work' 
+                                  ? `${t('Đăng ký')} ${leaveTypeText} (${req.total_days || 1} ${t('ngày')} • ${req.salary_rate !== undefined && req.salary_rate !== null ? `${req.salary_rate}% lương` : '50% lương'})`
+                                  : `${t('Đơn xin')} ${leaveTypeText} (${req.total_days || 1} ${t('ngày')})`)}
                               </div>
                               <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
                                 {req.reason || `${new Date(req.start_date).toLocaleDateString('vi-VN')} đến ${new Date(req.end_date).toLocaleDateString('vi-VN')}`}

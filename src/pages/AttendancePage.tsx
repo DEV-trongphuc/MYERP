@@ -55,6 +55,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const location = useLocation();
   const navigate = useNavigate();
   const [isOpeningBulkModal, setIsOpeningBulkModal] = useState(false);
+  useEffect(() => {
+    setIsOpeningBulkModal(false);
+  }, [location.pathname, location.search]);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [sysSettings, setSysSettings] = useState<any>(null);
   const managerBehaviorMode = user?.manager_behavior_mode || 'combined';
@@ -130,6 +133,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   const [otEndField, setOtEndField] = useState('21:00');
   const [otTypeField, setOtTypeField] = useState<'compensatory' | 'salary'>('compensatory');
   const [otRateField, setOtRateField] = useState<number>(1.5);
+  const [wfhSalaryRateField, setWfhSalaryRateField] = useState<number>(50);
   
   const [approverIdField, setApproverIdField] = useState('');
   const [approverId2Field, setApproverId2Field] = useState('');
@@ -413,10 +417,18 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           daysVal = calculateWorkingDays(leaveFromField, leaveToField, 'range');
         }
 
-        const descStr = `[Đăng ký làm việc từ xa] Lý do: ${leaveReasonField}`;
+        const safeRate = Number(wfhSalaryRateField);
+        if (isNaN(safeRate) || safeRate < 0 || safeRate > 100) {
+          toast.error(t('Tỷ lệ hưởng lương làm việc từ xa phải từ 0% đến 100% (không được vượt quá 100%)!'));
+          return;
+        }
+
+        const paidDaysCalc = Number((daysVal * (safeRate / 100)).toFixed(2));
+        const descStr = `[Đăng ký làm việc từ xa] [Tỷ lệ hưởng lương: ${safeRate}% ~ ${paidDaysCalc} công] Lý do: ${leaveReasonField}`;
         
         payload = {
           leave_type: 'remote_work',
+          salary_rate: safeRate,
           reason: descStr,
           from_date: fromVal,
           to_date: toVal,
@@ -480,9 +492,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   }, []);
 
   // Filter states
-  const [period, setPeriod] = useState<Period>('7d');
+  const [period, setPeriod] = useState<Period>('this_month');
   const [customRange, setCustomRange] = useState<DateRange>(() => {
-    return getDateRange('7d');
+    return getDateRange('this_month');
   });
   const [filterUser, setFilterUser] = useState<string>((!canSelectUser || isSales) && user?.id ? String(user.id) : 'all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -523,7 +535,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
+  const ITEMS_PER_PAGE = 30;
 
   // Selected date for detail modal
   const [selectedDateForDetail, setSelectedDateForDetail] = useState<string | null>(null);
@@ -1087,7 +1099,15 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           } else if (type === 'compensatory') {
             compDays += days;
           } else if (type === 'remote_work') {
-            wfhDays += days;
+            const rawRate = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? Number(lv.salary_rate) : null;
+            let effRate = 50;
+            if (rawRate !== null && !isNaN(rawRate)) {
+              effRate = rawRate;
+            } else {
+              const rateMatch = String(lv.reason || '').match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
+              if (rateMatch) effRate = Number(rateMatch[1]);
+            }
+            wfhDays += Number((days * (effRate / 100)).toFixed(2));
           } else if (type === 'unpaid') {
             unpaidDays += days;
           } else if (['special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip', 'sick'].includes(type)) {
@@ -1100,11 +1120,12 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
             halfLeaveDates.add(sDate);
           }
 
+          const rateStr = (lv.salary_rate !== undefined && lv.salary_rate !== null) ? `${lv.salary_rate}%` : '50%';
           detailLeaveRows.push([
             uid,
             empName,
             empDept,
-            type === 'annual' ? 'Phép năm' : (type === 'compensatory' ? 'Nghỉ bù' : (type === 'remote_work' ? 'WFH' : (type === 'unpaid' ? 'Không lương' : (type === 'late_early' ? 'Đi muộn/về sớm' : 'Chế độ/Khác')))),
+            type === 'annual' ? 'Phép năm' : (type === 'compensatory' ? 'Nghỉ bù' : (type === 'remote_work' ? `WFH (${rateStr})` : (type === 'unpaid' ? 'Không lương' : (type === 'late_early' ? 'Đi muộn/về sớm' : 'Chế độ/Khác')))),
             sDate,
             eDate,
             days,
@@ -1478,6 +1499,9 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
   useEffect(() => {
     fetchCheckInsList();
     setCurrentPage(1);
+    if (calendarShifts.length === 0) {
+      fetchCalendarCheckIns();
+    }
   }, [period, customRange, filterUser, filterStatus]);
 
   useEffect(() => {
@@ -1966,6 +1990,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               onClick={() => {
                 setIsOpeningBulkModal(true);
                 navigate('/approvals?create=attendance_bulk&scan=1');
+                setTimeout(() => setIsOpeningBulkModal(false), 1200);
               }}
               disabled={isOpeningBulkModal}
               className="btn outline hover-lift"
@@ -4328,6 +4353,138 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   </div>
                 )}
               </div>
+
+              {/* Tỷ lệ hưởng lương (%) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {t('Tỷ lệ hưởng lương (%)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                    {t('Mặc định 50%, tối đa 100%')}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', width: isMobile ? '100%' : '180px' }}>
+                    <input
+                      type="number"
+                      className="leave-modal-input"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={wfhSalaryRateField}
+                      onChange={e => {
+                        const val = e.target.value === '' ? '' : Number(e.target.value);
+                        setWfhSalaryRateField(val as any);
+                      }}
+                      onBlur={() => {
+                        if (wfhSalaryRateField === '' as any || isNaN(Number(wfhSalaryRateField))) {
+                          setWfhSalaryRateField(50);
+                        } else if (Number(wfhSalaryRateField) > 100) {
+                          setWfhSalaryRateField(100);
+                        } else if (Number(wfhSalaryRateField) < 0) {
+                          setWfhSalaryRateField(0);
+                        }
+                      }}
+                      style={{
+                        height: '38px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        paddingRight: '30px',
+                        borderColor: Number(wfhSalaryRateField) > 100 ? 'var(--color-danger)' : undefined
+                      }}
+                      required
+                    />
+                    <span style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      color: 'var(--color-text-muted)',
+                      pointerEvents: 'none'
+                    }}>%</span>
+                  </div>
+
+                  {/* Quick selection presets */}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {[
+                      { label: '50% (Mặc định)', val: 50 },
+                      { label: '70%', val: 70 },
+                      { label: '100% (Đủ lương)', val: 100 }
+                    ].map(p => (
+                      <button
+                        key={p.val}
+                        type="button"
+                        onClick={() => setWfhSalaryRateField(p.val)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.72rem',
+                          fontWeight: Number(wfhSalaryRateField) === p.val ? 700 : 500,
+                          border: Number(wfhSalaryRateField) === p.val ? '1px solid #10b981' : '1px solid var(--color-border)',
+                          background: Number(wfhSalaryRateField) === p.val ? 'rgba(16, 185, 129, 0.12)' : 'var(--color-bg-secondary)',
+                          color: Number(wfhSalaryRateField) === p.val ? '#059669' : 'var(--color-text)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {Number(wfhSalaryRateField) > 100 && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>⚠️</span> {t('Tỷ lệ hưởng lương không được vượt quá 100%')}
+                  </div>
+                )}
+              </div>
+
+              {/* Conversion preview */}
+              {(() => {
+                let calcDays = 1.0;
+                if (leaveSessionField === 'morning' || leaveSessionField === 'afternoon') calcDays = 0.5;
+                else if (leaveSessionField === 'range') calcDays = calculateWorkingDays(leaveFromField, leaveToField, 'range');
+                const effRate = Math.max(0, Math.min(100, Number(wfhSalaryRateField) || 50));
+                const paidDaysEquiv = Number((calcDays * (effRate / 100)).toFixed(2));
+                return (
+                  <div style={{ 
+                    padding: '10px 14px', 
+                    background: 'rgba(16, 185, 129, 0.06)', 
+                    border: '1px solid rgba(16, 185, 129, 0.2)', 
+                    borderRadius: '8px', 
+                    fontSize: '0.8rem', 
+                    display: 'flex', 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'flex-start' : 'center', 
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    color: 'var(--color-text)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.1rem' }}>🏠</span>
+                      <span>
+                        <strong>{t('Thời gian WFH:')}</strong> <strong style={{ color: '#059669' }}>{calcDays} {t('ngày')}</strong>
+                        {' • '}
+                        <strong>{t('Tỷ lệ:')}</strong> <strong style={{ color: '#059669' }}>{effRate}%</strong>
+                      </span>
+                    </div>
+                    <div style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#059669',
+                      fontWeight: 700,
+                      fontSize: '0.8rem'
+                    }}>
+                      ➔ {t('Tương đương:')} <strong>{paidDaysEquiv} {t('công hưởng lương')}</strong>
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -5570,6 +5727,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               onClick={() => {
                 setIsOpeningBulkModal(true);
                 navigate('/approvals?create=attendance_bulk&scan=1');
+                setTimeout(() => setIsOpeningBulkModal(false), 1200);
               }}
               disabled={isOpeningBulkModal}
               className="btn outline hover-lift"
@@ -5687,24 +5845,25 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         const paginatedCheckIns = checkIns.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
         return (
           <div className="card" style={{ padding: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', overflow: 'hidden' }}>
-            <div className="table-wrap" style={{ border: 'none', borderRadius: 0, maxHeight: '600px', overflowY: 'auto' }}>
+            <div className="table-wrap" style={{ border: 'none', borderRadius: 0, maxHeight: '580px', overflowY: 'auto' }}>
               <table className="mobile-table-compact" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--color-bg)' }}>
                   <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left', background: 'var(--color-bg)' }}>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{t('NGÀY')}</th>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('NHÂN VIÊN')}</th>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('GIỜ CHECK-IN')}</th>
                     <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'center' }}>{t('ẢNH SELFIE')}</th>
-                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('LÝ DO TRỄ / GHI CHÚ')}</th>
-                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('TRẠNG THÁI')}</th>
-                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textAlign: 'right' }}>{t('HÀNH ĐỘNG')}</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{t('TỔNG GIỜ LÀM')}</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{t('ĐI MUỘN / VỀ SỚM')}</th>
+                    <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{t('TĂNG CA (OT)')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    [...Array(4)].map((_, i) => <TableRowSkeleton key={i} cols={6} />)
+                    [...Array(4)].map((_, i) => <TableRowSkeleton key={i} cols={7} />)
                   ) : checkIns.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
                         <Info size={24} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.5 }} />
                         {t('Không tìm thấy dữ liệu chấm công cho ngày đã chọn.')}
                       </td>
@@ -5712,8 +5871,22 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                   ) : (
                     paginatedCheckIns.map((row) => {
                       const isLate = row.check_in_time > (row.work_start_time || '08:00');
+                      const formattedDate = row.check_in_date ? row.check_in_date.split('-').reverse().join('/') : '--';
+                      const dayName = row.check_in_date ? getDayOfWeek(row.check_in_date) : '';
                       return (
                         <tr key={row.id} style={{ borderBottom: '1px solid var(--color-border)', fontSize: '0.8125rem' }} className="group table-row-hover">
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.8125rem' }}>
+                                {formattedDate}
+                              </span>
+                              {dayName && (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                  {dayName}
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td style={{ padding: '12px 16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <Avatar src={resolveAttachmentUrl(row.user_avatar)} name={row.user_name} size={32} />
@@ -5816,133 +5989,116 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             </div>
                           </td>
 
-                          <td style={{ padding: '12px 16px', color: 'var(--color-text)', maxWidth: '250px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                            {row.reason || row.admin_note ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {row.reason && (
-                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                                    <ShieldAlert size={14} style={{ color: 'var(--color-warning)', flexShrink: 0, marginTop: '2px' }} />
-                                    <span>{row.reason}</span>
-                                  </div>
-                                )}
-                                {row.admin_note && (
-                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.75rem', color: 'var(--color-text-muted)', backgroundColor: 'var(--color-bg-light)', padding: '2px 8px', borderRadius: '6px', width: 'fit-content' }}>
-                                    <span style={{ fontWeight: 600, color: '#3b82f6', flexShrink: 0 }}>{t('Ghi chú duyệt')}:</span>
-                                    <span>{row.admin_note}</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{ color: 'var(--color-text-light)', fontStyle: 'italic' }}>{t('Không có')}</span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '12px 16px' }}>
+                          {/* CỘT TỔNG GIỜ LÀM */}
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                             {(() => {
-                              const isSupplementary = !row.selfie_url;
-
-                              let bg = row.status === 'approved' ? (isLate ? 'rgba(0, 122, 255, 0.08)' : 'var(--color-success-light)') : row.status === 'pending_approval' ? 'var(--color-warning-light)' : 'var(--color-danger-light)';
-                              let color = row.status === 'approved' ? (isLate ? '#007aff' : 'var(--color-success)') : row.status === 'pending_approval' ? 'var(--color-warning)' : 'var(--color-danger)';
-                              let label = row.status === 'approved' ? (isLate ? t('Đã duyệt') : t('Đúng giờ')) : row.status === 'pending_approval' ? t('Chờ duyệt đi trễ') : t('Bị từ chối');
-
-                              if (isSupplementary) {
-                                bg = 'rgba(139, 92, 246, 0.1)';
-                                color = '#8B5CF6';
-                                if (row.status === 'pending_approval') {
-                                  label = t('Đang chờ cập nhật công');
-                                } else if (row.status === 'approved') {
-                                  label = t('Cập nhật công');
-                                } else {
-                                  label = t('Từ chối cập nhật công');
-                                }
+                              if (!row.check_in_time || !row.check_out_time) {
+                                return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>--</span>;
                               }
-
+                              const inClean = row.check_in_time.length > 8 ? row.check_in_time.substring(11, 16) : row.check_in_time.substring(0, 5);
+                              const outClean = row.check_out_time.length > 8 ? row.check_out_time.substring(11, 16) : row.check_out_time.substring(0, 5);
+                              const [ih, im] = inClean.split(':').map(Number);
+                              const [oh, om] = outClean.split(':').map(Number);
+                              if (isNaN(ih) || isNaN(im) || isNaN(oh) || isNaN(om)) {
+                                return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>--</span>;
+                              }
+                              let diff = (oh * 60 + om) - (ih * 60 + im);
+                              if (diff < 0) diff += 24 * 60;
+                              const h = Math.floor(diff / 60);
+                              const m = diff % 60;
+                              const text = h === 0 ? `${m}p` : m === 0 ? `${h}h` : `${h}h ${m}p`;
                               return (
-                                <span style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 10px',
-                                  borderRadius: '12px',
-                                  fontSize: '0.7rem',
-                                  fontWeight: 600,
-                                  backgroundColor: bg,
-                                  color: color,
-                                  border: isSupplementary ? '1px solid rgba(139, 92, 246, 0.2)' : 'none'
-                                }}>
-                                  {row.status === 'approved' && <CheckCircle size={12} />}
-                                  {row.status === 'pending_approval' && <AlertCircle size={12} />}
-                                  {row.status === 'rejected' && <X size={12} />}
-                                  {label}
+                                <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.82rem' }}>
+                                  {text}
                                 </span>
                               );
                             })()}
                           </td>
 
-                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                              {row.status === 'pending_approval' && canApprove && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      showConfirm({
-                                        title: t('Phê duyệt đi trễ'),
-                                        message: t('Bạn có chắc chắn muốn phê duyệt yêu cầu đi trễ này?'),
-                                        optionalPromptInput: true,
-                                        promptPlaceholder: t('Nhập lưu ý/nội dung phê duyệt (tùy chọn)...'),
-                                        confirmText: t('Phê duyệt'),
-                                        cancelText: t('Hủy'),
-                                        onConfirm: (reason) => {
-                                          handleUpdateStatus(row.id, 'approved', reason ? reason.trim() : undefined);
-                                        }
-                                      });
-                                    }}
-                                    disabled={actionSubmittingId === row.id}
-                                    className="btn success sm icon-only"
-                                    title={t('Duyệt đi trễ')}
-                                    style={{ width: 28, height: 28, padding: 0, borderRadius: '6px' }}
-                                  >
-                                    <Check size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      showConfirm({
-                                        title: t('Từ chối chấm công'),
-                                        message: t('Vui lòng nhập lý do từ chối chấm công này:'),
-                                        requirePromptInput: true,
-                                        promptPlaceholder: t('Nhập lý do từ chối...'),
-                                        confirmText: t('Từ chối'),
-                                        cancelText: t('Hủy'),
-                                        isDanger: true,
-                                        onConfirm: (reason) => {
-                                          if (reason && reason.trim()) {
-                                            handleUpdateStatus(row.id, 'rejected', reason.trim());
-                                          } else {
-                                            toast.error(t('Lý do từ chối là bắt buộc'));
-                                          }
-                                        }
-                                      });
-                                    }}
-                                    disabled={actionSubmittingId === row.id}
-                                    className="btn danger sm icon-only"
-                                    title={t('Từ chối nhận lead')}
-                                    style={{ width: 28, height: 28, padding: 0, borderRadius: '6px' }}
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                </>
-                              )}
-                              {['admin', 'superadmin', 'super_admin', 'director'].includes(user?.role || '') && (
-                                <button
-                                  onClick={() => openDeleteConfirm(row.id)}
-                                  className="btn outline sm danger icon-only"
-                                  title={t('Xóa bản ghi')}
-                                  style={{ width: 28, height: 28, padding: 0, borderRadius: '6px', border: '1px solid var(--color-border)' }}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
+                          {/* CỘT ĐI MUỘN / VỀ SỚM */}
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                            {(() => {
+                              const lateMin = Number(row.late_minutes ?? row.lateness_minutes ?? 0);
+                              const earlyMin = Number(row.early_minutes ?? 0);
+                              const totalPenalty = lateMin + earlyMin;
+                              if (totalPenalty <= 0) {
+                                return (
+                                  <span style={{ color: 'var(--color-success)', fontWeight: 600, fontSize: '0.78rem' }}>
+                                    ✓ {t('Đúng giờ')}
+                                  </span>
+                                );
+                              }
+                              const pHours = Math.floor(totalPenalty / 60);
+                              const pMins = totalPenalty % 60;
+                              const totalText = pHours > 0 ? `${pHours}h ${pMins > 0 ? `${pMins}p` : ''}`.trim() : `${totalPenalty}p`;
+                              const details = [];
+                              if (lateMin > 0) details.push(`${t('Trễ')} ${lateMin}p`);
+                              if (earlyMin > 0) details.push(`${t('Sớm')} ${earlyMin}p`);
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{ color: 'var(--color-danger)', fontWeight: 700, fontSize: '0.82rem' }}>
+                                    {totalText}
+                                  </span>
+                                  {details.length > 0 && (
+                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>
+                                      {details.join(', ')}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+
+                          {/* CỘT TĂNG CA (OT) */}
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                            {(() => {
+                              const otShift = calendarShifts.find((s: any) => 
+                                s.shift_type === 'overtime' && 
+                                s.shift_date === row.check_in_date && 
+                                Number(s.user_id) === Number(row.user_id) && 
+                                (Number(s.approved) === 1 || s.status === 'approved')
+                              );
+                              let otHours = 0;
+                              if (otShift) {
+                                otHours = Number(otShift.hours || otShift.total_hours || (Number(otShift.total_days || 0) * 8) || 0);
+                                if (otHours <= 0 && otShift.start_time && otShift.end_time) {
+                                  const [sh, sm] = String(otShift.start_time).split(':').map(Number);
+                                  const [eh, em] = String(otShift.end_time).split(':').map(Number);
+                                  const diff = (eh * 60 + em) - (sh * 60 + sm);
+                                  if (diff > 0) otHours = Math.round((diff / 60) * 10) / 10;
+                                }
+                              }
+                              if (otHours <= 0 && row.check_out_time && row.work_end_time) {
+                                const outStr = row.check_out_time.length > 8 ? row.check_out_time.substring(11, 16) : row.check_out_time.substring(0, 5);
+                                const endStr = String(row.work_end_time).substring(0, 5);
+                                const [oh, om] = outStr.split(':').map(Number);
+                                const [eh, em] = endStr.split(':').map(Number);
+                                if (!isNaN(oh) && !isNaN(om) && !isNaN(eh) && !isNaN(em)) {
+                                  const diff = (oh * 60 + om) - (eh * 60 + em);
+                                  if (diff >= 30) {
+                                    otHours = Math.round((diff / 60) * 10) / 10;
+                                  }
+                                }
+                              }
+                              if (otHours > 0) {
+                                return (
+                                  <span style={{
+                                    color: '#7c3aed',
+                                    fontWeight: 700,
+                                    backgroundColor: 'rgba(124, 58, 237, 0.08)',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.78rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}>
+                                    ⚡ {otHours}h OT
+                                  </span>
+                                );
+                              }
+                              return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>0h</span>;
+                            })()}
                           </td>
                         </tr>
                       );

@@ -226,7 +226,7 @@ class CheckInController {
                                      DATE(r.start_date) as start_date_only, DATE(r.end_date) as end_date_only,
                                      TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
                                      TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
-                                     r.total_days, r.unpaid_days, r.reason, r.status, r.created_at,
+                                     r.total_days, r.unpaid_days, r.salary_rate, r.reason, r.status, r.created_at,
                                      IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved,
                                      u.full_name as user_name, u.avatar_url as user_avatar, u.email as user_email
                               FROM hrm_leave_requests r 
@@ -317,7 +317,7 @@ class CheckInController {
                                      DATE(r.start_date) as start_date_only, DATE(r.end_date) as end_date_only,
                                      TIME_FORMAT(TIME(r.start_date), '%H:%i') as start_time,
                                      TIME_FORMAT(TIME(r.end_date), '%H:%i') as end_time,
-                                     r.total_days, r.unpaid_days, r.reason, r.status, r.created_at,
+                                     r.total_days, r.unpaid_days, r.salary_rate, r.reason, r.status, r.created_at,
                                      IF(r.status = 'approved', 1, IF(r.status = 'pending', 0, -1)) as approved,
                                      u.full_name as user_name, u.avatar_url as user_avatar, u.email as user_email
                               FROM hrm_leave_requests r 

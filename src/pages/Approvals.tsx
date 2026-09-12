@@ -38,6 +38,7 @@ import type { Period, DateRange } from '../components/ui/PeriodFilter';
 import { numberToVietnameseText } from '../utils/numberToText';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
 import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
+import { getSystemTitle } from '../config/env';
 
 const workflowList = [
   { id: 'payment', name: 'Đề nghị thanh toán', description: 'Đề xuất thanh toán nhà cung cấp, chi phí vận hành, đối tác.', category: 'finance', icon: FileSignature, bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981' },
@@ -583,6 +584,7 @@ export default function Approvals() {
   const [otEnd, setOtEnd] = useState('21:30');
   const [otType, setOtType] = useState<'compensatory' | 'salary'>('compensatory');
   const [otRate, setOtRate] = useState<number>(1.5);
+  const [wfhSalaryRate, setWfhSalaryRate] = useState<number>(50);
   const [expenseTitle, setExpenseTitle] = useState('');
   const [workflowTitleSuffix, setWorkflowTitleSuffix] = useState('');
 
@@ -1359,13 +1361,21 @@ export default function Approvals() {
           daysVal = calculateWorkingDays(leaveFrom, leaveTo, 'range');
         }
 
-        const descStr = `[Đăng ký làm việc từ xa] Lý do: ${leaveReason}`;
+        const safeSalaryRate = Number(wfhSalaryRate);
+        if (isNaN(safeSalaryRate) || safeSalaryRate < 0 || safeSalaryRate > 100) {
+          toast.error(t('Tỷ lệ hưởng lương làm việc từ xa phải từ 0% đến 100% (không được vượt quá 100%)!'));
+          return;
+        }
+
+        const paidDaysCalc = Number((daysVal * (safeSalaryRate / 100)).toFixed(2));
+        const descStr = `[Đăng ký làm việc từ xa] [Tỷ lệ hưởng lương: ${safeSalaryRate}% ~ ${paidDaysCalc} công] Lý do: ${leaveReason}`;
 
         await fetchAPI('hrm/leaves', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             leave_type: 'remote_work',
+            salary_rate: safeSalaryRate,
             reason: descStr,
             from_date: fromVal,
             to_date: toVal,
@@ -2181,6 +2191,7 @@ export default function Approvals() {
       lateEarlyMinutes: lateEarlyMinutes || 0,
       otType: otType || '',
       otRate: otRate || 1.5,
+      wfhSalaryRate: wfhSalaryRate ?? 50,
       otDate: otDate || '',
       otStart: otStart || '',
       otEnd: otEnd || '',
@@ -2496,6 +2507,7 @@ export default function Approvals() {
     if (fd.lateEarlyMinutes) setLateEarlyMinutes(fd.lateEarlyMinutes);
     if (fd.otType) setOtType(fd.otType);
     if (fd.otRate) setOtRate(fd.otRate);
+    if (fd.wfhSalaryRate !== undefined) setWfhSalaryRate(Number(fd.wfhSalaryRate));
     if (fd.otDate) setOtDate(fd.otDate);
     if (fd.otStart) setOtStart(fd.otStart);
     if (fd.otEnd) setOtEnd(fd.otEnd);
@@ -2590,6 +2602,7 @@ export default function Approvals() {
       lateEarlyMinutes: lateEarlyMinutes || 0,
       otType: otType || '',
       otRate: otRate || 1.5,
+      wfhSalaryRate: wfhSalaryRate ?? 50,
       otDate: otDate || '',
       otStart: otStart || '',
       otEnd: otEnd || '',
@@ -3289,10 +3302,16 @@ export default function Approvals() {
             setFormType('remote_work');
             setExpenseTitle(def.name);
             setLeaveFrom(found.start_date || found.from_date || '');
-            setLeaveTo(found.end_date || found.to_date || '');
             const r = found.reason || '';
             const baseReasonMatch = r.match(/Lý do:\s*(.*)$/i);
             setLeaveReason(baseReasonMatch ? baseReasonMatch[1].trim() : r);
+            if (found.salary_rate !== undefined && found.salary_rate !== null) {
+              setWfhSalaryRate(Number(found.salary_rate));
+            } else {
+              const rateMatch = r.match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
+              if (rateMatch) setWfhSalaryRate(Number(rateMatch[1]));
+              else setWfhSalaryRate(50);
+            }
           } else {
             const def = workflowList.find(w => w.id === 'leave_late') || matchingDef;
             setSelectedWorkflowDef(def);
@@ -6063,6 +6082,7 @@ export default function Approvals() {
                                   setFormType('overtime');
                                 } else if (item.id === 'remote_work') {
                                   setFormType('remote_work');
+                                  setWfhSalaryRate(50);
                                 } else {
                                   setFormType('general');
                                 }
@@ -6518,20 +6538,20 @@ export default function Approvals() {
                           /* BULK ATTENDANCE FORM FIELDS */
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flex: 1, minWidth: '220px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                                    {t('Kỳ công / Tháng')}
-                                  </label>
-                                  <input
-                                    type="month"
-                                    value={bulkMonth}
-                                    onChange={(e) => setBulkMonth(e.target.value)}
-                                    className="form-input"
-                                    style={{ height: '36px', fontSize: '0.8rem', fontWeight: 600 }}
-                                  />
-                                </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                  {t('Kỳ công / Tháng')}
+                                </label>
+                                <input
+                                  type="month"
+                                  value={bulkMonth}
+                                  onChange={(e) => setBulkMonth(e.target.value)}
+                                  className="form-input"
+                                  style={{ height: '36px', fontSize: '0.8rem', fontWeight: 600 }}
+                                />
+                              </div>
 
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -6570,19 +6590,19 @@ export default function Approvals() {
                                   <Plus size={14} />
                                   {t('Thêm ngày')}
                                 </button>
-                              </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleScanMissingDays(bulkMonth)}
-                                disabled={suggestedLoading}
-                                className="btn outline"
-                                style={{ height: '36px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', color: '#7c3aed', borderColor: 'rgba(124, 58, 237, 0.4)', background: 'rgba(124, 58, 237, 0.05)' }}
-                                title={t('Tự động quét và liệt kê toàn bộ các ngày thiếu công trong tháng đã chọn')}
-                              >
-                                <RefreshCw size={14} className={suggestedLoading ? 'spin' : ''} />
-                                {suggestedLoading ? t('Đang quét...') : t('Quét ngày thiếu công cả tháng')}
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleScanMissingDays(bulkMonth)}
+                                  disabled={suggestedLoading}
+                                  className="btn outline"
+                                  style={{ height: '36px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', color: '#7c3aed', borderColor: 'rgba(124, 58, 237, 0.4)', background: 'rgba(124, 58, 237, 0.05)' }}
+                                  title={t('Tự động quét và liệt kê toàn bộ các ngày thiếu công trong tháng đã chọn')}
+                                >
+                                  <RefreshCw size={14} className={suggestedLoading ? 'spin' : ''} />
+                                  {suggestedLoading ? t('Đang quét...') : t('Quét ngày thiếu công cả tháng')}
+                                </button>
+                              </div>
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
@@ -7595,6 +7615,95 @@ export default function Approvals() {
                               </div>
                             )}
 
+                            {/* Tỷ lệ hưởng lương (%) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                                  {t('Tỷ lệ hưởng lương (%)')} <span style={{ color: 'var(--color-danger)' }}>*</span>
+                                </label>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                  {t('Mặc định 50%, tối đa 100%')}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative', width: isMobile ? '100%' : '180px' }}>
+                                  <input
+                                    type="number"
+                                    className="form-input"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={wfhSalaryRate}
+                                    onChange={e => {
+                                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                                      setWfhSalaryRate(val as any);
+                                    }}
+                                    onBlur={() => {
+                                      if (wfhSalaryRate === '' as any || isNaN(Number(wfhSalaryRate))) {
+                                        setWfhSalaryRate(50);
+                                      } else if (Number(wfhSalaryRate) > 100) {
+                                        setWfhSalaryRate(100);
+                                      } else if (Number(wfhSalaryRate) < 0) {
+                                        setWfhSalaryRate(0);
+                                      }
+                                    }}
+                                    style={{
+                                      height: '36px',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 700,
+                                      paddingRight: '30px',
+                                      borderColor: Number(wfhSalaryRate) > 100 ? 'var(--color-danger)' : undefined
+                                    }}
+                                    required
+                                  />
+                                  <span style={{
+                                    position: 'absolute',
+                                    right: '10px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    color: 'var(--color-text-muted)',
+                                    pointerEvents: 'none'
+                                  }}>%</span>
+                                </div>
+
+                                {/* Quick selection presets */}
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                  {[
+                                    { label: '50% (Mặc định)', val: 50 },
+                                    { label: '70%', val: 70 },
+                                    { label: '100% (Đủ lương)', val: 100 }
+                                  ].map(p => (
+                                    <button
+                                      key={p.val}
+                                      type="button"
+                                      onClick={() => setWfhSalaryRate(p.val)}
+                                      style={{
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: Number(wfhSalaryRate) === p.val ? 700 : 500,
+                                        border: Number(wfhSalaryRate) === p.val ? '1px solid #0284c7' : '1px solid var(--color-border)',
+                                        background: Number(wfhSalaryRate) === p.val ? 'rgba(14, 165, 233, 0.12)' : 'var(--color-bg-secondary)',
+                                        color: Number(wfhSalaryRate) === p.val ? '#0284c7' : 'var(--color-text)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      {p.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {Number(wfhSalaryRate) > 100 && (
+                                <div style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>⚠️</span> {t('Tỷ lệ hưởng lương không được vượt quá 100%')}
+                                </div>
+                              )}
+                            </div>
+
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{t('Kế hoạch công việc từ xa')}</label>
                               <textarea
@@ -7607,23 +7716,46 @@ export default function Approvals() {
                               />
                             </div>
 
-                            {/* Duration preview alert */}
-                            <div className="card-panel" style={{ 
-                              padding: '10px 14px', 
-                              background: 'rgba(234, 179, 8, 0.06)', 
-                              border: '1px solid rgba(234, 179, 8, 0.15)', 
-                              borderRadius: '8px', 
-                              fontSize: '0.8rem', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'space-between',
-                              color: 'var(--color-text)'
-                            }}>
-                              <span><strong>{t('Thời gian WFH quy đổi:')}</strong></span>
-                              <strong style={{ color: '#eab308' }}>
-                                {calculateWorkingDays(leaveFrom, leaveTo, leaveSession)} {t('ngày')}
-                              </strong>
-                            </div>
+                            {/* Duration & Salary rate preview alert */}
+                            {(() => {
+                              const calcDays = calculateWorkingDays(leaveFrom, leaveTo, leaveSession);
+                              const effRate = Math.max(0, Math.min(100, Number(wfhSalaryRate) || 50));
+                              const paidDaysEquiv = Number((calcDays * (effRate / 100)).toFixed(2));
+                              return (
+                                <div className="card-panel" style={{ 
+                                  padding: '10px 14px', 
+                                  background: 'rgba(14, 165, 233, 0.06)', 
+                                  border: '1px solid rgba(14, 165, 233, 0.2)', 
+                                  borderRadius: '8px', 
+                                  fontSize: '0.8rem', 
+                                  display: 'flex', 
+                                  flexDirection: isMobile ? 'column' : 'row',
+                                  alignItems: isMobile ? 'flex-start' : 'center', 
+                                  justifyContent: 'space-between',
+                                  gap: '8px',
+                                  color: 'var(--color-text)'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '1.1rem' }}>🏠</span>
+                                    <span>
+                                      <strong>{t('Thời gian WFH quy đổi:')}</strong> <strong style={{ color: '#0284c7' }}>{calcDays} {t('ngày')}</strong>
+                                      {' • '}
+                                      <strong>{t('Tỷ lệ:')}</strong> <strong style={{ color: '#0284c7' }}>{effRate}%</strong>
+                                    </span>
+                                  </div>
+                                  <div style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(16, 185, 129, 0.12)',
+                                    color: '#059669',
+                                    fontWeight: 700,
+                                    fontSize: '0.8rem'
+                                  }}>
+                                    ➔ {t('Tương đương:')} <strong>{paidDaysEquiv} {t('công hưởng lương')}</strong>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : formType === 'advance' ? (
                           /* SALARY ADVANCE FORM FIELDS */
@@ -9554,7 +9686,7 @@ export default function Approvals() {
                                     }}>
                                       <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
                                         {emp.bank_account 
-                                          ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
+                                          ? `✓ ${t('Số tài khoản đồng bộ')} ${getSystemTitle()}: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
                                           : t('⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân. Vui lòng nhập STK bên dưới.')}
                                       </span>
                                       <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>
@@ -13154,6 +13286,48 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     </div>
                   </div>
                 )}
+                {isWFH && (() => {
+                  let effSalaryRate = detail?.salary_rate ?? (item as any)?.salary_rate;
+                  if (effSalaryRate === undefined || effSalaryRate === null) {
+                    const match = String(rawDesc || '').match(/Tỷ lệ hưởng lương:\s*(\d+(\.\d+)?)%/i);
+                    effSalaryRate = match ? Number(match[1]) : 50;
+                  }
+                  effSalaryRate = Number(effSalaryRate);
+                  const totalDaysVal = Number(detail?.total_days ?? (item as any)?.total_days ?? 1);
+                  const paidWorkDays = Number((totalDaysVal * (effSalaryRate / 100)).toFixed(2));
+                  const unpaidWorkDays = Number(Math.max(0, totalDaysVal - paidWorkDays).toFixed(2));
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+                      <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                        {t('Tỷ lệ hưởng lương làm việc từ xa (WFH)')}
+                      </label>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(14, 165, 233, 0.08)',
+                        border: '1px solid rgba(14, 165, 233, 0.25)',
+                        color: '#0369a1',
+                        fontSize: isMobile ? '0.8125rem' : '0.875rem'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '1.1rem' }}>🏠</span>
+                          <span>
+                            <strong>{t('Tỷ lệ hưởng lương:')}</strong> <span style={{ color: '#0284c7', fontSize: '1rem', fontWeight: 800 }}>{effSalaryRate}%</span>
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                          {t('Quy đổi công hưởng lương:')} <strong style={{ color: '#059669' }}>{paidWorkDays} {t('công')}</strong> {effSalaryRate < 100 && <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}> ({unpaidWorkDays} công không lương)</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
                   <label style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{periodLabel}</label>
                   <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px', alignItems: 'center' }}>

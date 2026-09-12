@@ -53,7 +53,11 @@ class HRMController {
         $reason = trim($l['reason'] ?? '');
         $reasonStr = $reason ? " - {$reason}" : '';
 
-        if ($type === 'remote_work') return "Đăng ký WFH{$dateStr}{$daysStr}{$reasonStr}";
+        if ($type === 'remote_work') {
+            $salaryRate = isset($l['salary_rate']) ? (float)$l['salary_rate'] : null;
+            $rateStr = ($salaryRate !== null) ? " ({$salaryRate}% lương)" : '';
+            return "Đăng ký WFH{$dateStr}{$daysStr}{$rateStr}{$reasonStr}";
+        }
         if ($type === 'overtime') return "Đăng ký OT{$dateStr}{$daysStr}{$reasonStr}";
         if ($type === 'late_early') return "Đăng ký đi muộn/về sớm{$dateStr}{$reasonStr}";
         if ($type === 'business_trip') return "Đăng ký công tác{$dateStr}{$daysStr}{$reasonStr}";
@@ -478,7 +482,11 @@ class HRMController {
         $leaveType = $b['leave_type'];
         $otType = null;
         $otRate = null;
+        $salaryRate = 100.0;
+        $totalDays = (float)($b['total_days'] ?? 1.0);
+        $unpaidDays = 0.0;
         $reason = $b['reason'] ?? '';
+
         if ($leaveType === 'overtime') {
             $otType = (!empty($b['ot_type']) && in_array($b['ot_type'], ['compensatory', 'salary'], true)) ? $b['ot_type'] : 'salary';
             $otRate = !empty($b['ot_rate']) ? (float)$b['ot_rate'] : 1.5;
@@ -491,6 +499,21 @@ class HRMController {
             if (strpos($reason, '[Hình thức:') === false) {
                 $reason = trim($tag . ' ' . $reason);
             }
+        } elseif ($leaveType === 'remote_work') {
+            $salaryRate = isset($b['salary_rate']) ? (float)$b['salary_rate'] : 50.0;
+            if ($salaryRate < 0.0 || $salaryRate > 100.0) {
+                respond(400, null, 'Tỷ lệ hưởng lương làm việc từ xa phải từ 0% đến 100% (không được vượt quá 100%).', false);
+                return;
+            }
+            $unpaidDays = round($totalDays * (1.0 - ($salaryRate / 100.0)), 2);
+            $paidDaysCalc = round($totalDays - $unpaidDays, 2);
+            $tag = "[Tỷ lệ hưởng lương: {$salaryRate}% ~ {$paidDaysCalc} công]";
+            if (strpos($reason, '[Tỷ lệ hưởng lương:') === false) {
+                $reason = trim($tag . ' ' . $reason);
+            }
+        } elseif ($leaveType === 'unpaid') {
+            $unpaidDays = $totalDays;
+            $salaryRate = 0.0;
         }
 
         $isSelfApproved = ($approverId > 0 && $approverId === (int)$auth['user_id'] && (empty($approverId2) || $approverId2 === (int)$auth['user_id']));
@@ -501,17 +524,19 @@ class HRMController {
         $approvedAt = $isSelfApproved ? date('Y-m-d H:i:s') : null;
 
         $stmt = $this->db->prepare("
-            INSERT INTO hrm_leave_requests (user_id, leave_type, ot_type, ot_rate, start_date, end_date, total_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, approved_by, approved_at, related_user_ids)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO hrm_leave_requests (user_id, leave_type, ot_type, ot_rate, salary_rate, start_date, end_date, total_days, unpaid_days, reason, status, approver_id, approver_id_2, status_level_1, status_level_2, approved_by, approved_at, related_user_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $auth['user_id'],
             $leaveType,
             $otType,
             $otRate,
+            $salaryRate,
             $startDate,
             $endDate,
-            (float)($b['total_days'] ?? 1.0),
+            $totalDays,
+            $unpaidDays,
             $reason,
             $initialStatus,
             $approverId,
@@ -828,6 +853,15 @@ class HRMController {
             } elseif ($type === 'unpaid') {
                 $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET unpaid_days = ? WHERE id = ?");
                 $updReason->execute([$days, (int)$leaveRow['id']]);
+            } elseif ($type === 'remote_work') {
+                $salaryRate = isset($leaveRow['salary_rate']) ? (float)$leaveRow['salary_rate'] : 50.0;
+                if ($salaryRate < 0.0) $salaryRate = 0.0;
+                if ($salaryRate > 100.0) $salaryRate = 100.0;
+                $unpaidDays = round($days * (1.0 - ($salaryRate / 100.0)), 2);
+                $paidDays = round($days - $unpaidDays, 2);
+                $wfhLog = " [Đã duyệt WFH: Hưởng {$salaryRate}% lương ~ {$paidDays} công]";
+                $updReason = $this->db->prepare("UPDATE hrm_leave_requests SET reason = CONCAT(COALESCE(reason, ''), ?), unpaid_days = ?, salary_rate = ? WHERE id = ?");
+                $updReason->execute([$wfhLog, $unpaidDays, $salaryRate, (int)$leaveRow['id']]);
             }
 
             // Sync to consultant_leaves so the lead assignment / check-in rotation excludes this user when on leave
@@ -1422,7 +1456,12 @@ class HRMController {
                 $paidLeaveDays = 0;
             } else {
                 $lvStmt = $this->db->prepare("
-                    SELECT SUM(total_days - unpaid_days) as paid_days
+                    SELECT SUM(
+                        CASE 
+                            WHEN leave_type = 'remote_work' THEN total_days * (COALESCE(salary_rate, 50.0) / 100.0)
+                            ELSE (total_days - unpaid_days)
+                        END
+                    ) as paid_days
                     FROM hrm_leave_requests
                     WHERE user_id = ? AND status = 'approved' AND leave_type IN ('annual', 'sick', 'compensatory', 'remote_work', 'special_paid', 'maternity', 'paternity', 'marriage', 'funeral', 'business_trip')
                       AND DATE_FORMAT(start_date, '%Y-%m') = ?
@@ -2031,9 +2070,10 @@ class HRMController {
         // 1. Pending Leaves (Chỉ hiển thị đơn người khác gửi đến cần user duyệt, loại trừ đơn của chính mình)
         $stmtLeaves = $this->db->prepare("
             SELECT l.id, l.user_id, u.full_name as employee_name, l.leave_type, 
-                   l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                   l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                    l.approver_id, l.approver_id_2, l.status_level_1, l.status_level_2,
                    l.approved_by, l.approved_at, l.related_user_ids,
+                   l.salary_rate, l.ot_type, l.ot_rate,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -2099,6 +2139,9 @@ class HRMController {
                     'start_date' => $l['start_date'],
                     'end_date' => $l['end_date'],
                     'total_days' => (float)$l['total_days'],
+                    'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
+                    'ot_type' => $l['ot_type'] ?? null,
+                    'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                     'leave_type' => $l['leave_type'],
                     'reason' => $l['reason'],
                     'title' => self::formatLeaveTitle($l) . ' - ' . $levelText,
@@ -2422,9 +2465,10 @@ class HRMController {
 
         // 1. My Leaves
         $stmtLeaves = $this->db->prepare("
-            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+            SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                    l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids, u.full_name as employee_name,
                    l.approved_by, l.approved_at,
+                   l.salary_rate, l.ot_type, l.ot_rate,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_real.full_name as approved_by_name
@@ -2468,6 +2512,9 @@ class HRMController {
                 'start_date' => $l['start_date'],
                 'end_date' => $l['end_date'],
                 'total_days' => (float)$l['total_days'],
+                'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
+                'ot_type' => $l['ot_type'] ?? null,
+                'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                 'leave_type' => $l['leave_type'],
                 'reason' => $l['reason'],
                 'title' => self::formatLeaveTitle($l),
@@ -2687,8 +2734,9 @@ class HRMController {
         // 1. Leaves where user is in related_user_ids or user is HR (excluding leaves created by self)
         if ($role === 'hr') {
             $stmtLeaves = $this->db->prepare("
-                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
@@ -2705,8 +2753,9 @@ class HRMController {
             $stmtLeaves->execute([$auth['tenant_id'], $userId]);
         } else {
             $stmtLeaves = $this->db->prepare("
-                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
@@ -2751,6 +2800,9 @@ class HRMController {
                     'start_date' => $l['start_date'] ?? null,
                     'end_date' => $l['end_date'] ?? null,
                     'total_days' => $l['total_days'] ?? null,
+                    'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
+                    'ot_type' => $l['ot_type'] ?? null,
+                    'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                     'leave_type' => $l['leave_type'] ?? null,
                     'reason' => $l['reason'] ?? '',
                     'related_user_ids' => $relArr,
@@ -2977,8 +3029,9 @@ class HRMController {
         // 1. All Leaves
         if ($isHrAdmin) {
             $stmtLeaves = $this->db->prepare("
-                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
@@ -2995,8 +3048,9 @@ class HRMController {
             $stmtLeaves->execute([$auth['tenant_id']]);
         } else {
             $sqlL = "
-                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.reason, l.status, l.created_at,
+                SELECT l.id, l.leave_type, l.start_date, l.end_date, l.total_days, l.unpaid_days, l.reason, l.status, l.created_at,
                        l.status_level_1, l.status_level_2, l.approver_id, l.approver_id_2, l.user_id, l.related_user_ids,
+                       l.salary_rate, l.ot_type, l.ot_rate,
                        u.full_name as employee_name,
                        ap1.full_name as approver_name,
                        ap2.full_name as approver_name_2,
@@ -3040,6 +3094,9 @@ class HRMController {
                 'start_date' => $l['start_date'] ?? null,
                 'end_date' => $l['end_date'] ?? null,
                 'total_days' => $l['total_days'] ?? null,
+                'salary_rate' => isset($l['salary_rate']) ? (float)$l['salary_rate'] : 50.0,
+                'ot_type' => $l['ot_type'] ?? null,
+                'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                 'leave_type' => $l['leave_type'] ?? null,
                 'reason' => $l['reason'] ?? '',
                 'related_user_ids' => $relArr,

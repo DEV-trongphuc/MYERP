@@ -39,6 +39,7 @@ import { resolveTeamLeaderId } from '../utils/teamLeader';
 import { DraftExitConfirmModal } from './ui/DraftExitConfirmModal';
 import { BankSelect } from './ui/BankSelect';
 import { getVietQrUrl, findBank } from '../utils/vietnamBanks';
+import { getSystemTitle } from '../config/env';
 
 const CATEGORIES = [
   { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
@@ -1513,7 +1514,7 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                           }}>
                             <span style={{ color: emp.bank_account ? '#059669' : '#d97706', fontWeight: 650 }}>
                               {emp.bank_account 
-                                ? `✓ STK tự động: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
+                                ? `✓ Số tài khoản đồng bộ ${getSystemTitle()}: ${emp.bank_name || 'Ngân hàng'} - ${emp.bank_account} (Chủ TK: ${(emp.full_name || emp.name || '').toUpperCase()})` 
                                 : '⚠️ Nhân viên chưa cập nhật STK trong hồ sơ cá nhân. Vui lòng nhập STK bên dưới.'}
                             </span>
                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontWeight: 600 }}>

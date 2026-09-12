@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 269;
+$targetVersion = 270;
 $currentVersion = 186;
 
 // Query current DB version
@@ -464,6 +464,9 @@ try {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `user_id` INT NOT NULL,
         `leave_type` VARCHAR(30) DEFAULT 'annual',
+        `ot_type` VARCHAR(20) DEFAULT 'salary',
+        `ot_rate` DECIMAL(3,2) DEFAULT 1.50,
+        `salary_rate` DECIMAL(5,2) DEFAULT 100.00,
         `start_date` DATETIME NOT NULL,
         `end_date` DATETIME NOT NULL,
         `total_days` DECIMAL(3,1) DEFAULT 1.0,
@@ -3142,8 +3145,26 @@ try {
         $logMsg("Nâng cấp lên phiên bản 269 hoàn tất.", "success");
     }
 
+    // 75. Upgrade to 270: Add salary_rate column to hrm_leave_requests for WFH remote work salary percentage
+    if ($currentVersion < 270 && $targetVersion >= 270) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 270: Thêm cột salary_rate vào bảng hrm_leave_requests...", "info");
+        try {
+            $colCheck = $conn->query("SHOW COLUMNS FROM `hrm_leave_requests` LIKE 'salary_rate'");
+            if ($colCheck->num_rows === 0) {
+                $conn->query("ALTER TABLE `hrm_leave_requests` ADD COLUMN `salary_rate` DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER `ot_rate`");
+                $logMsg("Đã bổ sung thành công cột `salary_rate` vào bảng `hrm_leave_requests`.", "success");
+            } else {
+                $logMsg("Cột `salary_rate` đã tồn tại trong `hrm_leave_requests`.", "info");
+            }
+        } catch (Throwable $ex) {
+            $logMsg("Lỗi khi thêm cột salary_rate: " . $ex->getMessage(), "error");
+        }
+
+        $logMsg("Nâng cấp lên phiên bản 270 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '269') ON DUPLICATE KEY UPDATE setting_value = '269'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '270') ON DUPLICATE KEY UPDATE setting_value = '270'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

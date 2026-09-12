@@ -639,7 +639,12 @@ try {
             $db->exec("ALTER TABLE attendance_bulk_requests ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at");
         }
 
-        // Ensure company_id and supplier_id exist on deposits table
+        // Ensure salary_rate exists on hrm_leave_requests
+        $hlrCols = $db->query("SHOW COLUMNS FROM hrm_leave_requests")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        if (!in_array('salary_rate', $hlrCols, true)) {
+            $db->exec("ALTER TABLE hrm_leave_requests ADD COLUMN salary_rate DECIMAL(5,2) DEFAULT 100.00 COMMENT 'Tỷ lệ % hưởng lương (0-100). WFH mặc định 50%' AFTER ot_rate");
+        }
+
         $depositCols = $db->query("SHOW COLUMNS FROM deposits")->fetchAll(PDO::FETCH_COLUMN) ?: [];
         if (!in_array('company_id', $depositCols, true)) {
             $db->exec("ALTER TABLE deposits ADD COLUMN company_id INT NULL DEFAULT NULL AFTER contact_id");
