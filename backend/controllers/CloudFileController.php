@@ -635,4 +635,206 @@ class CloudFileController {
         @unlink($tmpZip);
         exit;
     }
+
+    public function extractIdDocument(array $auth): void {
+        $tid = $auth['tenant_id'];
+        $b = getBody();
+        $fileId = isset($b['file_id']) ? (int)$b['file_id'] : 0;
+        $fileUrl = $b['file_url'] ?? '';
+
+        $localPath = null;
+        $originalFileName = '';
+
+        if ($fileId > 0) {
+            $stmt = $this->db->prepare("SELECT id, name, file_path, mime_type FROM cloud_files WHERE id = ? AND tenant_id = ?");
+            $stmt->execute([$fileId, $tid]);
+            $fileRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$fileRow) {
+                respond(404, null, 'Không tìm thấy tệp tài liệu trong hệ thống', false);
+            }
+            $originalFileName = $fileRow['name'];
+            $relPath = $fileRow['file_path'];
+            $candidates = [
+                __DIR__ . '/../' . $relPath,
+                __DIR__ . '/../../' . $relPath,
+                $_SERVER['DOCUMENT_ROOT'] . '/' . $relPath,
+                (defined('UPLOAD_DIR') ? UPLOAD_DIR : __DIR__ . '/../uploads') . '/' . str_replace('uploads/', '', $relPath),
+                (defined('UPLOAD_DIR') ? UPLOAD_DIR : __DIR__ . '/../uploads') . '/' . $relPath
+            ];
+            foreach ($candidates as $cand) {
+                if (file_exists($cand) && is_file($cand)) {
+                    $localPath = $cand;
+                    break;
+                }
+            }
+        } elseif (!empty($fileUrl)) {
+            $parsed = parse_url($fileUrl, PHP_URL_PATH);
+            $parsed = ltrim($parsed, '/');
+            $originalFileName = basename($parsed);
+            $candidates = [
+                __DIR__ . '/../' . $parsed,
+                __DIR__ . '/../../' . $parsed,
+                $_SERVER['DOCUMENT_ROOT'] . '/' . $parsed,
+                (defined('UPLOAD_DIR') ? UPLOAD_DIR : __DIR__ . '/../uploads') . '/' . str_replace('uploads/', '', $parsed),
+                (defined('UPLOAD_DIR') ? UPLOAD_DIR : __DIR__ . '/../uploads') . '/' . $parsed
+            ];
+            foreach ($candidates as $cand) {
+                if (file_exists($cand) && is_file($cand)) {
+                    $localPath = $cand;
+                    break;
+                }
+            }
+        }
+
+        if (!$localPath || !file_exists($localPath)) {
+            respond(404, null, 'Tệp tin không tồn tại trên máy chủ hoặc không thể đọc được', false);
+        }
+
+        // Kiểm tra extension
+        $ext = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
+        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+        if (!in_array($ext, $allowedExts)) {
+            respond(422, null, 'Định dạng tệp không hợp lệ. Chỉ chấp nhận tệp hình ảnh (JPG, PNG, WEBP) hoặc PDF.', false);
+        }
+
+        // Xác định mimeType
+        $mimeType = 'image/jpeg';
+        if ($ext === 'pdf') {
+            $mimeType = 'application/pdf';
+        } elseif ($ext === 'png') {
+            $mimeType = 'image/png';
+        } elseif ($ext === 'webp') {
+            $mimeType = 'image/webp';
+        }
+
+        // Lấy Gemini API key
+        require_once __DIR__ . '/../db_connect.php';
+        $apiKey = function_exists('get_system_setting') ? get_system_setting($this->db, 'gemini_api_key') : null;
+        if (empty($apiKey)) {
+            $apiKey = getenv('GEMINI_API_KEY') ?: '';
+        }
+        if (empty($apiKey)) {
+            respond(500, null, 'Hệ thống chưa cấu hình Gemini API Key trong Cài đặt hệ thống. Vui lòng kiểm tra lại.', false);
+        }
+
+        // Đọc nội dung file
+        $fileBytes = file_get_contents($localPath);
+        if (empty($fileBytes)) {
+            respond(422, null, 'Không thể đọc nội dung tệp tin (tệp rỗng).', false);
+        }
+        $base64 = base64_encode($fileBytes);
+
+        // Prompt hướng dẫn Gemini
+        $prompt = <<<EOT
+Bạn là chuyên gia phân tích và trích xuất tài liệu tùy thân (OCR & Document AI) của hệ thống ERP.
+Nhiệm vụ của bạn:
+1. Xác định xem tài liệu trong ảnh/PDF này CÓ PHẢI là Căn cước công dân (CCCD), Chứng minh nhân dân (CMND) hoặc Hộ chiếu (Passport) hay KHÔNG.
+- NẾU KHÔNG PHẢI là CCCD/CMND hoặc Hộ chiếu (ví dụ: là hợp đồng, hóa đơn, bằng cấp, bảng điểm, CV, chứng chỉ, giấy báo điểm, ảnh chân dung thường, phong cảnh, biên lai...):
+  Trả về JSON:
+  {
+    "is_valid": false,
+    "document_type": "invalid",
+    "invalid_reason": "Tài liệu này không phải là CCCD hoặc Hộ chiếu (Passport). Vui lòng chọn đúng tệp ảnh hoặc PDF của CCCD hoặc Hộ chiếu."
+  }
+- NẾU ĐÚNG là CCCD/CMND hoặc Hộ chiếu (Passport):
+  Trích xuất và chuẩn hóa tất cả các trường sau:
+  {
+    "is_valid": true,
+    "document_type": "passport" HOẶC "cccd",
+    "full_name": "Họ và tên viết IN HOA có dấu (ví dụ: LÊ THỊ BÍCH VÂN)",
+    "citizen_id": "Số định danh cá nhân / Số CCCD / Số CMND (chỉ số, nếu có)",
+    "passport": "Số hộ chiếu / Passport No (ví dụ: C1234567, nếu là passport hoặc có ghi trên tài liệu)",
+    "birthday": "Ngày sinh định dạng YYYY-MM-DD (hoặc DD/MM/YYYY)",
+    "gender": "male hoặc female (nếu là Nam ghi 'male', Nữ ghi 'female')",
+    "nationality": "Quốc tịch (ví dụ: Việt Nam / VIETNAMESE)",
+    "place_of_birth": "Nơi sinh",
+    "place_of_origin": "Quê quán",
+    "address": "Nơi thường trú / Địa chỉ cư trú đầy đủ nhất ghi trên giấy tờ",
+    "issue_date": "Ngày cấp định dạng YYYY-MM-DD (hoặc DD/MM/YYYY)",
+    "expiry_date": "Ngày hết hạn định dạng YYYY-MM-DD (hoặc DD/MM/YYYY)",
+    "issue_place": "Nơi cấp (ví dụ: Cục Cảnh sát QLHC về TTXH hoặc Cục Quản lý xuất nhập cảnh)"
+  }
+
+CHÚ Ý QUAN TRỌNG:
+- Chỉ trả về duy nhất 1 chuỗi JSON hợp lệ.
+- Không bọc trong markdown ```json ... ```, không thêm bất kỳ văn bản giải thích nào ngoài JSON.
+EOT;
+
+        $payload = [
+            'contents' => [[
+                'parts' => [
+                    [
+                        'inlineData' => [
+                            'mimeType' => $mimeType,
+                            'data' => $base64
+                        ]
+                    ],
+                    [
+                        'text' => $prompt
+                    ]
+                ]
+            ]],
+            'generationConfig' => [
+                'temperature' => 0.1,
+                'responseMimeType' => 'application/json'
+            ]
+        ];
+
+        // Ưu tiên gemini-2.5-flash
+        $model = function_exists('get_system_setting') ? (get_system_setting($this->db, 'gemini_model') ?: 'gemini-2.5-flash') : 'gemini-2.5-flash';
+        if (strpos($model, 'embedding') !== false) {
+            $model = 'gemini-2.5-flash';
+        }
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $apiKey;
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if (!$response) {
+            respond(500, null, 'Lỗi kết nối đến dịch vụ AI trích xuất: ' . $curlErr, false);
+        }
+
+        $resJson = json_decode($response, true);
+        if ($httpCode !== 200) {
+            $errDetail = $resJson['error']['message'] ?? 'Mã lỗi HTTP ' . $httpCode;
+            respond(500, null, 'Lỗi từ Gemini AI: ' . $errDetail, false);
+        }
+
+        $rawText = $resJson['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        $rawText = trim($rawText);
+        $rawText = preg_replace('/^```json\s*/i', '', $rawText);
+        $rawText = preg_replace('/\s*```$/', '', $rawText);
+        $parsedData = json_decode($rawText, true);
+
+        if (!$parsedData) {
+            respond(500, null, 'Không thể giải mã dữ liệu trích xuất từ AI: ' . substr($rawText, 0, 150), false);
+        }
+
+        if (empty($parsedData['is_valid'])) {
+            $reason = $parsedData['invalid_reason'] ?? 'Tài liệu không phải là CCCD hoặc Hộ chiếu (Passport) hợp lệ.';
+            respond(422, [
+                'is_valid' => false,
+                'invalid_reason' => $reason,
+                'raw_text' => $rawText
+            ], $reason, false);
+        }
+
+        respond(200, [
+            'is_valid' => true,
+            'document_type' => $parsedData['document_type'] ?? 'passport',
+            'data' => $parsedData,
+            'file_name' => $originalFileName
+        ], 'Trích xuất dữ liệu thành công');
+    }
 }
+

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRe
 import toast from 'react-hot-toast';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Users, UserPlus, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap, Bell } from 'lucide-react';
+import { X, User, Users, UserPlus, Phone, PhoneOff, Mail, MapPin, Briefcase, Plus, Search, Send, History, CheckSquare, DollarSign, HelpCircle, FileText, ShoppingCart, Tag as TagIcon, Target, Pencil, Trash2, LifeBuoy, AlertCircle, AlertTriangle, Clock, UserCheck, Activity, Calendar, CheckCircle2, ChevronLeft, ChevronRight, ChevronDown, Check, Camera, Loader2, MessageSquare, PenTool, Lightbulb, Upload, Paperclip, CreditCard, Ban, ShieldAlert, Copy, Folder, FolderPlus, ArrowRightLeft, List, LayoutGrid, RotateCcw, RefreshCw, Layers, Save, LogOut, XCircle, Eye, TrendingUp, Wallet, Lock, Zap, Link2, BookOpen, ExternalLink, Archive, Download, GraduationCap, Bell, Sparkles } from 'lucide-react';
 import JSZip from 'jszip';
 import { triggerFullConfetti } from '../utils/confettiHelper';
 import { LeadScoreRing } from '../components/ui/LeadScoreRing';
@@ -18,6 +18,7 @@ import { QuoteEditorModal } from '../components/ui/QuoteEditorModal';
 import { Avatar } from '../components/ui/Avatar';
 import { CustomModal } from '../components/ui/CustomModal';
 import { SignaturePadModal } from '../components/ui/SignaturePadModal';
+import { ExtractIdDocumentModal } from '../components/ui/ExtractIdDocumentModal';
 import { compressToWebP } from '../utils/imageCompress';
 import { downloadFileWithWebpToJpg, convertWebpBlobToJpgBlob, isWebpFile, downloadFileWithName } from '../utils/fileDownloader';
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
@@ -1490,6 +1491,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [tabRenderReady, setTabRenderReady] = useState(true);
   const [drawerOpenComplete, setDrawerOpenComplete] = useState(false);
   const [hasNavigated, setHasNavigated] = useState(false);
+  const [showExtractIdModal, setShowExtractIdModal] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -9198,8 +9200,34 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                       </div>
 
                       <div className="card-panel">
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between mb-4" style={{ flexWrap: 'wrap', gap: '8px' }}>
                           <h4 className="panel-title" style={{ margin: 0 }}>Thông tin liên hệ & Công việc</h4>
+                          {isOwnerOrAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setShowExtractIdModal(true)}
+                              className="hover-lift"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '5px 12px',
+                                borderRadius: '10px',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.16) 100%)',
+                                color: '#6366f1',
+                                border: '1px solid rgba(99, 102, 241, 0.3)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                boxShadow: '0 2px 6px rgba(99, 102, 241, 0.12)'
+                              }}
+                              title="Trích xuất Họ tên, CCCD, Passport, Ngày sinh, Địa chỉ từ tệp tài liệu trong hồ sơ bằng AI"
+                            >
+                              <Sparkles size={14} style={{ color: '#8b5cf6' }} />
+                              <span>Trích xuất Passport / CCCD</span>
+                            </button>
+                          )}
                         </div>
                         <div className="grid grid-2">
                           {/* Row 1: Họ tên & SĐT chính */}
@@ -17825,6 +17853,40 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             zIndex={effectiveZIndex + 20}
           />
         </Suspense>
+      )}
+      {showExtractIdModal && (
+        <ExtractIdDocumentModal
+          isOpen={showExtractIdModal}
+          onClose={() => setShowExtractIdModal(false)}
+          docs={docs}
+          contactId={effectiveContactId || contact?.id}
+          effectiveZIndex={effectiveZIndex}
+          onApplyData={async (extracted) => {
+            const updatePayload: any = {};
+            if (extracted.full_name) updatePayload.full_name = extracted.full_name;
+            if (extracted.citizen_id) updatePayload.citizen_id = extracted.citizen_id;
+            if (extracted.passport) updatePayload.passport = extracted.passport;
+            if (extracted.birthday) updatePayload.birthday = extracted.birthday;
+            if (extracted.gender) updatePayload.gender = extracted.gender;
+            if (extracted.address) updatePayload.address = extracted.address;
+            if (extracted.nationality) updatePayload.nationality = extracted.nationality;
+
+            setFormData((prev: any) => ({
+              ...prev,
+              ...updatePayload
+            }));
+
+            if (effectiveContactId) {
+              try {
+                await api.put(`/contacts/${effectiveContactId}`, updatePayload);
+                addToast('Đã trích xuất và cập nhật hồ sơ khách hàng thành công!', 'success');
+                onUpdate?.({ ...formData, ...updatePayload });
+              } catch (err: any) {
+                addToast('Đã điền thông tin vào form (Vui lòng bấm nút Lưu để hoàn tất).', 'info');
+              }
+            }
+          }}
+        />
       )}
     </>,
     document.body
