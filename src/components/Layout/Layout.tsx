@@ -130,6 +130,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   // Global Check-In State
   const [todayCheckIn, setTodayCheckIn] = useState<any>(null);
+  const [isCheckInLoading, setIsCheckInLoading] = useState<boolean>(true);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [consultantProfile, setConsultantProfile] = useState<any>(null);
   const [dismissTelegramReminder, setDismissTelegramReminder] = useState(false);
@@ -187,6 +188,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       }
     } catch (err) {
       console.error("Error loading check-in status:", err);
+    } finally {
+      setIsCheckInLoading(false);
     }
   };
 
@@ -864,6 +867,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           onUnifiedInboxClick={() => setIsUnifiedInboxOpen(true)}
           requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
           todayCheckIn={todayCheckIn}
+          isCheckInLoading={isCheckInLoading}
           consultantProfile={consultantProfile}
           sysSettings={sysSettings}
         />

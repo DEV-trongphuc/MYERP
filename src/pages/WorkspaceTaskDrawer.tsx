@@ -2686,7 +2686,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                 }}
                 title={t("Chế độ tập trung (Focus Mode)")}
               >
-                <Maximize2 size={18} />
+                <Target size={18} />
               </button>
             )}
 

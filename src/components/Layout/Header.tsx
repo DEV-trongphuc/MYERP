@@ -178,6 +178,7 @@ export const Header = ({
   onUnifiedInboxClick,
   requireCheckout = false,
   todayCheckIn = null,
+  isCheckInLoading,
   consultantProfile = null,
   sysSettings = null
 }: { 
@@ -188,6 +189,7 @@ export const Header = ({
   onUnifiedInboxClick?: () => void;
   requireCheckout?: boolean;
   todayCheckIn?: any;
+  isCheckInLoading?: boolean;
   consultantProfile?: any;
   sysSettings?: any;
 }) => {
@@ -267,6 +269,7 @@ export const Header = ({
 
   const [headerVacationMode, setHeaderVacationMode] = useState<boolean>(false);
   const [headerCheckIn, setHeaderCheckIn] = useState<any>(null);
+  const [internalCheckInLoading, setInternalCheckInLoading] = useState<boolean>(true);
   const [headerNightShiftRegistered, setHeaderNightShiftRegistered] = useState<boolean>(false);
   const managerBehaviorMode = user?.manager_behavior_mode || 'combined';
   const isSales = user?.role && !['admin', 'superadmin', 'super_admin', 'director'].includes(user.role.toLowerCase());
@@ -1108,6 +1111,8 @@ export const Header = ({
       }
     } catch (err) {
       console.error("Error fetching check-in in Header:", err);
+    } finally {
+      setInternalCheckInLoading(false);
     }
     try {
       const json = await fetchAPI('get_sale_portal_data');
@@ -1569,6 +1574,9 @@ export const Header = ({
           <div className="responsive-hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px' }}>
             {(() => {
               const activeCheckIn = todayCheckIn || headerCheckIn;
+              const isStillLoadingCheckIn = !activeCheckIn && (isCheckInLoading !== undefined ? isCheckInLoading : internalCheckInLoading);
+              if (isStillLoadingCheckIn) return null;
+
               const isPendingApproval = activeCheckIn && (activeCheckIn.status === 'pending_approval' || Boolean(activeCheckIn.pending_explanation_today));
               const isNotCheckedIn = (!activeCheckIn || activeCheckIn.status === 'rejected') && !isPendingApproval;
               const isPastShiftEndWithoutCheckIn = isNotCheckedIn && todayScheduleInfo.isPastShiftEnd && !activeCheckIn?.pending_explanation_today;
@@ -1602,7 +1610,7 @@ export const Header = ({
                 );
               }
 
-              if (headerCheckIn && headerCheckIn.status === 'approved') {
+              if (activeCheckIn && activeCheckIn.status === 'approved') {
                 return (
                   <div 
                     onMouseEnter={prewarmSmartCheckInGPS}
@@ -1614,9 +1622,9 @@ export const Header = ({
                       display: 'flex', 
                       alignItems: 'center', 
                       gap: '4px', 
-                      background: headerCheckIn.check_out_time ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                      border: headerCheckIn.check_out_time ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)', 
-                      color: headerCheckIn.check_out_time ? '#2563eb' : 'var(--color-success)', 
+                      background: activeCheckIn.check_out_time ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                      border: activeCheckIn.check_out_time ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)', 
+                      color: activeCheckIn.check_out_time ? '#2563eb' : 'var(--color-success)', 
                       borderRadius: '8px', 
                       padding: '4px 10px', 
                       height: '36px', 
@@ -1625,13 +1633,13 @@ export const Header = ({
                       whiteSpace: 'nowrap', 
                       cursor: 'pointer' 
                     }}
-                    title={requireCheckout && !headerCheckIn.check_out_time ? t('Click để Chấm công Ra ca') : t('Click để Xem bảng chấm công cá nhân')}
+                    title={requireCheckout && !activeCheckIn.check_out_time ? t('Click để Chấm công Ra ca') : t('Click để Xem bảng chấm công cá nhân')}
                   >
-                    <CheckCircle2 size={12} color={headerCheckIn.check_out_time ? '#2563eb' : undefined} />
+                    <CheckCircle2 size={12} color={activeCheckIn.check_out_time ? '#2563eb' : undefined} />
                     <span>
-                      {headerCheckIn.check_out_time 
-                        ? `${t('Đã Ra ca')} (${headerCheckIn.check_out_time.substring(11, 16) || headerCheckIn.check_out_time.substring(0, 5)})` 
-                        : `${t('Đã Vào ca')} (${headerCheckIn.check_in_time.substring(0, 5)})`
+                      {activeCheckIn.check_out_time 
+                        ? `${t('Đã Ra ca')} (${activeCheckIn.check_out_time.substring(11, 16) || activeCheckIn.check_out_time.substring(0, 5)})` 
+                        : `${t('Đã Vào ca')} (${activeCheckIn.check_in_time.substring(0, 5)})`
                       }
                     </span>
                   </div>
@@ -3079,6 +3087,9 @@ export const Header = ({
           `}</style>
           {(() => {
             const activeCheckIn = todayCheckIn || headerCheckIn;
+            const isStillLoadingCheckIn = !activeCheckIn && (isCheckInLoading !== undefined ? isCheckInLoading : internalCheckInLoading);
+            if (isStillLoadingCheckIn) return null;
+
             const isPendingApproval = activeCheckIn && (activeCheckIn.status === 'pending_approval' || Boolean(activeCheckIn.pending_explanation_today));
             const isNotCheckedIn = (!activeCheckIn || activeCheckIn.status === 'rejected') && !isPendingApproval;
             const isApprovedCheckIn = activeCheckIn && (activeCheckIn.status === 'approved' || Boolean(activeCheckIn.check_in_time));
