@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment, useMemo } from 'react';
 import api from '../api/axios';
 import { createPortal } from 'react-dom';
-import { Database, Search, Filter, ChevronLeft, ChevronRight, Download, RefreshCw, User, Users, Phone, Mail, Clock, Tag, ExternalLink, AlertTriangle, CheckCircle2, XCircle, ShieldAlert, Calendar, LayoutList, Sparkles, Check, X, Edit, Bell, Copy, CheckCircle, BarChart2, Scale, Info, Ban, UserPlus, Send, Plus } from 'lucide-react';
+import { Database, Search, Filter, ChevronLeft, ChevronRight, Download, RefreshCw, User, Users, Phone, Mail, Clock, Tag, ExternalLink, AlertTriangle, CheckCircle2, XCircle, ShieldAlert, Calendar, LayoutList, Sparkles, Check, X, Edit, Bell, Copy, CheckCircle, BarChart2, Scale, Info, Ban, UserPlus, Send, Plus, Eye } from 'lucide-react';
 import { ExpenseCreateDrawer } from '../components/ExpenseCreateDrawer';
 import { DepositDetailDrawer } from '../components/DepositDetailDrawer';
 import {
@@ -958,6 +958,242 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
   const [showCreateExpenseModal, setShowCreateExpenseModal] = useState<boolean>(false);
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<string>('');
   const [editingExpense, setEditingExpense] = useState<any>(null);
+
+  const usersMap = useMemo(() => {
+    const map = new Map<number, any>();
+    (users || []).forEach((u: any) => {
+      if (u?.id) map.set(Number(u.id), u);
+    });
+    return map;
+  }, [users]);
+
+  const renderWorkflowStepsAndWatchers = (item: any) => {
+    interface StepInfo {
+      stepIndex: number;
+      title: string;
+      userId?: number;
+      userName?: string;
+      userAvatar?: string | null;
+      status: 'approved' | 'rejected' | 'pending' | 'waiting';
+    }
+
+    const steps: StepInfo[] = [];
+    const overall = String(item.status || 'pending').toLowerCase();
+    const isDraft = overall === 'draft' || Boolean(item.is_draft);
+    const isPaid = Boolean(item.is_refunded) || overall === 'paid' || overall === 'refunded';
+
+    const s1 = String(item.status_level_1 || (overall === 'level1_approved' || overall === 'approved' || isPaid ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')).toLowerCase();
+    const s2 = String(item.status_level_2 || 'none').toLowerCase();
+    const s3 = String(item.status_level_3 || 'none').toLowerCase();
+
+    // Step 1
+    const app1Id = Number(item.approver_id || 0);
+    const app1User = app1Id > 0 ? usersMap.get(app1Id) : null;
+    const app1Name = item.approver_name || app1User?.full_name || app1User?.name || '';
+    const app1Avatar = item.approver_avatar || app1User?.avatar_url || app1User?.avatar || null;
+    if (app1Id > 0 || app1Name || item.approver_id_2) {
+      let stepStatus: StepInfo['status'] = 'pending';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s1 === 'approved' || overall === 'approved' || isPaid || overall === 'level1_approved') stepStatus = 'approved';
+      else if (s1 === 'rejected' || (overall === 'rejected' && s1 !== 'approved')) stepStatus = 'rejected';
+      else stepStatus = 'pending';
+
+      steps.push({
+        stepIndex: 1,
+        title: 'Cấp 1',
+        userId: app1Id,
+        userName: app1Name,
+        userAvatar: app1Avatar,
+        status: stepStatus
+      });
+    }
+
+    // Step 2
+    const app2Id = Number(item.approver_id_2 || 0);
+    const app2User = app2Id > 0 ? usersMap.get(app2Id) : null;
+    const app2Name = item.approver_name_2 || app2User?.full_name || app2User?.name || '';
+    const app2Avatar = item.approver_avatar_2 || app2User?.avatar_url || app2User?.avatar || null;
+    if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s2 === 'approved' || (overall === 'approved' && s2 !== 'rejected')) stepStatus = 'approved';
+      else if (s2 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && s2 !== 'approved' && s2 !== 'rejected') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 2,
+        title: 'Cấp 2',
+        userId: app2Id,
+        userName: app2Name,
+        userAvatar: app2Avatar,
+        status: stepStatus
+      });
+    }
+
+    // Step 3
+    const app3Id = Number(item.approver_id_3 || 0);
+    const app3User = app3Id > 0 ? usersMap.get(app3Id) : null;
+    const app3Name = item.approver_name_3 || app3User?.full_name || app3User?.name || '';
+    const app3Avatar = item.approver_avatar_3 || app3User?.avatar_url || app3User?.avatar || null;
+    if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+      let stepStatus: StepInfo['status'] = 'waiting';
+      if (isDraft) stepStatus = 'waiting';
+      else if (s3 === 'approved' || (overall === 'approved' && s3 !== 'rejected')) stepStatus = 'approved';
+      else if (s3 === 'rejected') stepStatus = 'rejected';
+      else if (s1 === 'approved' && (s2 === 'approved' || s2 === 'none') && s3 !== 'approved' && s3 !== 'rejected') stepStatus = 'pending';
+      else stepStatus = 'waiting';
+
+      steps.push({
+        stepIndex: 3,
+        title: 'Cấp 3',
+        userId: app3Id,
+        userName: app3Name,
+        userAvatar: app3Avatar,
+        status: stepStatus
+      });
+    }
+
+    if (steps.length === 0) {
+      steps.push({
+        stepIndex: 1,
+        title: 'Duyệt',
+        userId: app1Id,
+        userName: app1Name || 'Người duyệt',
+        userAvatar: app1Avatar,
+        status: isDraft ? 'waiting' : (overall === 'approved' || isPaid ? 'approved' : overall === 'rejected' ? 'rejected' : 'pending')
+      });
+    }
+
+    // Watchers list
+    let watchersList: Array<{ id?: number; name?: string; avatar?: string | null }> = [];
+    if (Array.isArray(item.watchers) && item.watchers.length > 0) {
+      watchersList = item.watchers;
+    } else if (item.related_user_ids) {
+      let relIds: number[] = [];
+      const rawWatchers = item.related_user_ids;
+      if (Array.isArray(rawWatchers)) {
+        relIds = rawWatchers.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+      } else if (typeof rawWatchers === 'string') {
+        const trimmed = rawWatchers.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              relIds = parsed.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+            }
+          } catch {
+            relIds = trimmed.slice(1, -1).split(',').map((id: string) => Number(id.trim().replace(/^['"]|['"]$/g, ''))).filter((id: number) => id > 0);
+          }
+        } else {
+          relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+        }
+      }
+      watchersList = relIds.map(id => {
+        const u = usersMap.get(id);
+        return { id, name: u?.full_name || u?.name || `ID ${id}`, avatar: u?.avatar_url || u?.avatar || null };
+      });
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+        {/* Step Approvers Chain */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          {steps.map((st, idx) => {
+            const displayName = st.userName || st.title;
+            const avatarUrl = st.userAvatar;
+
+            const isApproved = !isDraft && st.status === 'approved';
+            const isRejected = !isDraft && st.status === 'rejected';
+            const isPending = !isDraft && st.status === 'pending';
+
+            const borderColor = isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : 'var(--color-border)';
+            const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : isDraft ? 'Dự kiến duyệt (Bản nháp)' : 'Chưa đến lượt';
+
+            return (
+              <Fragment key={`po-step-${st.stepIndex}`}>
+                {idx > 0 && (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: '0 1px' }}>➔</span>
+                )}
+                <div 
+                  title={`${st.title}: ${displayName} (${statusText})`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{
+                    borderRadius: '50%',
+                    padding: '1.5px',
+                    border: `2px solid ${borderColor}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'var(--color-surface, #ffffff)',
+                    opacity: isDraft ? 0.95 : (st.status === 'waiting' ? 0.6 : 1)
+                  }}>
+                    <Avatar src={avatarUrl || undefined} name={displayName} size={24} />
+                  </div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-2px',
+                    right: '-2px',
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : isDraft ? '#64748B' : '#8E8E93',
+                    border: '1.5px solid #ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '8px',
+                    fontWeight: 800
+                  }}>
+                    {isApproved ? '✓' : isRejected ? '✕' : isPending ? '•' : st.stepIndex}
+                  </div>
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+
+        {/* Related Watchers Avatars */}
+        {watchersList.length > 0 && (
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              marginLeft: '4px',
+              paddingLeft: '6px',
+              borderLeft: '1px solid var(--color-border)'
+            }}
+            title={`Người liên quan (${watchersList.length}): ${watchersList.map(w => w.name).join(', ')}`}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', marginRight: '1px' }}>
+              <Eye size={12} />
+            </div>
+            {watchersList.slice(0, 3).map((w, wIdx) => (
+              <Avatar
+                key={`rel-${w.id || wIdx}`}
+                src={w.avatar || undefined}
+                name={w.name || `User ${w.id}`}
+                size={22}
+              />
+            ))}
+            {watchersList.length > 3 && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+                +{watchersList.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const handleOpenPO = (poId: number) => {
     setActivePOId(poId);
@@ -5576,17 +5812,18 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                           <table className="premium-table">
                             <thead>
                               <tr>
-                                <th>Mã phiếu / Ngày lập</th>
-                                <th>Tiêu đề chi phí</th>
-                                <th>Số tiền</th>
-                                <th>Trạng thái</th>
-                                <th>Người đề xuất</th>
+                                <th style={{ width: '105px', minWidth: '95px', whiteSpace: 'nowrap' }}>{t('Mã phiếu / Ngày')}</th>
+                                <th style={{ width: '170px', minWidth: '150px' }}>{t('Người đề xuất')}</th>
+                                <th>{t('Tiêu đề chi phí')}</th>
+                                <th style={{ whiteSpace: 'nowrap', width: '130px' }}>{t('Số tiền')}</th>
+                                <th style={{ minWidth: '220px' }}>{t('Các bước & Người liên quan')}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {dayDetails.expenses.map((item: any, idx: number) => (
                                 <tr key={item.id || idx} onClick={() => handleOpenPO(item.id)} style={{ cursor: 'pointer' }}>
-                                  <td>
+                                  {/* 1. Mã phiếu / Ngày lập (ngắn gọn) */}
+                                  <td style={{ width: '105px', whiteSpace: 'nowrap' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
                                       <strong style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontSize: '0.8rem' }}>#EXP-{item.id}</strong>
                                       <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
@@ -5594,22 +5831,39 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
                                       </span>
                                     </div>
                                   </td>
-                                  <td>{item.title}</td>
-                                  <td>
-                                    <strong style={{ color: 'var(--color-text)' }}>
-                                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.amount)}
-                                    </strong>
-                                  </td>
-                                  <td>
-                                    <span className={`badge ${item.is_refunded ? 'success' : (item.status === 'approved' ? 'warning' : item.status === 'rejected' ? 'danger' : 'warning')}`}>
-                                      {item.is_refunded ? 'Đã thanh toán' : (item.status === 'approved' ? 'Chờ thanh toán' : item.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt')}
-                                    </span>
-                                  </td>
-                                  <td style={{ verticalAlign: 'middle' }}>
+
+                                  {/* 2. Người đề xuất (kế cột mã) */}
+                                  <td style={{ verticalAlign: 'middle', width: '170px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <Avatar name={item.creator_name} src={item.creator_avatar} size={24} />
-                                      <span style={{ fontSize: '0.8125rem' }}>{item.creator_name || 'N/A'}</span>
+                                      <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{item.creator_name || 'N/A'}</span>
                                     </div>
+                                  </td>
+
+                                  {/* 3. Tiêu đề chi phí */}
+                                  <td>
+                                    <span style={{ fontSize: '0.84rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                                      {item.title}
+                                    </span>
+                                  </td>
+
+                                  {/* 4. Số tiền */}
+                                  <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      <strong style={{ color: 'var(--color-text)', fontSize: '0.85rem' }}>
+                                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.amount)}
+                                      </strong>
+                                      {Boolean(item.is_refunded) && (
+                                        <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 600 }}>
+                                          ✓ {t('Đã thanh toán')}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* 5. Trạng thái: Style UI step bên Quy trình */}
+                                  <td style={{ verticalAlign: 'middle', minWidth: '220px' }}>
+                                    {renderWorkflowStepsAndWatchers(item)}
                                   </td>
                                 </tr>
                               ))}
