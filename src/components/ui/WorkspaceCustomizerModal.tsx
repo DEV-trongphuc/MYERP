@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, UploadCloud, RotateCcw, Image as ImageIcon, LayoutGrid, Sparkles, Layers, Sliders } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -24,33 +25,85 @@ const PRESET_WALLPAPERS = [
     preview: 'linear-gradient(135deg, rgba(200,200,200,0.2) 0%, rgba(150,150,150,0.1) 100%)',
     tag: 'Tối giản'
   },
-  {
-    id: 'mountain_mist',
-    name: 'Sương mù đỉnh núi',
-    url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80',
-    preview: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=360&q=70',
-    tag: 'Thiên nhiên'
-  },
+  // Văn phòng & Không gian làm việc (6)
   {
     id: 'modern_office',
     name: 'Văn phòng hiện đại',
     url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1920&q=80',
     preview: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=360&q=70',
-    tag: 'Không gian'
+    tag: 'Văn phòng'
   },
   {
-    id: 'aurora_borealis',
-    name: 'Cực quang Bắc cực',
-    url: 'https://images.unsplash.com/photo-1579033461380-adb47c3eb938?auto=format&fit=crop&w=1920&q=80',
-    preview: 'https://images.unsplash.com/photo-1579033461380-adb47c3eb938?auto=format&fit=crop&w=360&q=70',
-    tag: 'Nghệ thuật'
+    id: 'skyline_office',
+    name: 'Tòa cao ốc Skyline',
+    url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=360&q=70',
+    tag: 'Văn phòng'
   },
   {
-    id: 'dark_silk_waves',
-    name: 'Lụa đen lượn sóng',
-    url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80',
-    preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=360&q=70',
-    tag: 'Trừu tượng'
+    id: 'creative_studio',
+    name: 'Creative Studio',
+    url: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=360&q=70',
+    tag: 'Văn phòng'
+  },
+  {
+    id: 'luxury_boardroom',
+    name: 'Executive Boardroom',
+    url: 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=360&q=70',
+    tag: 'Văn phòng'
+  },
+  {
+    id: 'warm_lamp_desk',
+    name: 'Bàn làm việc đèn ấm',
+    url: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=360&q=70',
+    tag: 'Văn phòng'
+  },
+  {
+    id: 'industrial_loft',
+    name: 'Loft công nghiệp',
+    url: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=360&q=70',
+    tag: 'Văn phòng'
+  },
+
+  // Phong cảnh & Thiên nhiên (6)
+  {
+    id: 'sunset_beach',
+    name: 'Hoàng hôn biển êm đềm',
+    url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=360&q=70',
+    tag: 'Thiên nhiên'
+  },
+  {
+    id: 'swiss_alps',
+    name: 'Dãy núi tuyết Alps',
+    url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=360&q=70',
+    tag: 'Thiên nhiên'
+  },
+  {
+    id: 'mountain_lake',
+    name: 'Hồ nước phẳng lặng mùa thu',
+    url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=360&q=70',
+    tag: 'Thiên nhiên'
+  },
+  {
+    id: 'kyoto_bamboo',
+    name: 'Rừng tre sương mù Kyoto',
+    url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=360&q=70',
+    tag: 'Thiên nhiên'
+  },
+  {
+    id: 'cloud_pass',
+    name: 'Cung đường đèo mây',
+    url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=360&q=70',
+    tag: 'Thiên nhiên'
   },
   {
     id: 'forest_sunlight',
@@ -58,6 +111,73 @@ const PRESET_WALLPAPERS = [
     url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1920&q=80',
     preview: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=360&q=70',
     tag: 'Thiên nhiên'
+  },
+
+  // Trừu tượng & Vũ trụ (5)
+  {
+    id: 'nebula_space',
+    name: 'Dải Ngân hà Nebula',
+    url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=360&q=70',
+    tag: 'Trừu tượng'
+  },
+  {
+    id: 'silk_wave',
+    name: 'Sóng lụa Gradient 3D',
+    url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=360&q=70',
+    tag: 'Trừu tượng'
+  },
+  {
+    id: 'aurora_borealis',
+    name: 'Cực quang Bắc cực',
+    url: 'https://images.unsplash.com/photo-1579033461380-adb47c3eb938?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1579033461380-adb47c3eb938?auto=format&fit=crop&w=360&q=70',
+    tag: 'Trừu tượng'
+  },
+  {
+    id: 'particles_flow',
+    name: 'Dòng chảy hạt phát sáng',
+    url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=360&q=70',
+    tag: 'Trừu tượng'
+  },
+  {
+    id: 'minimal_glass_geo',
+    name: 'Khối kính Minimal 3D',
+    url: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=360&q=70',
+    tag: 'Trừu tượng'
+  },
+
+  // Tối giản & Nghệ thuật Pastel (4)
+  {
+    id: 'scandinavian_arch',
+    name: 'Kiến trúc Scandinavian',
+    url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=360&q=70',
+    tag: 'Tối giản'
+  },
+  {
+    id: 'desert_dunes',
+    name: 'Đồi cát uốn lượn dưới nắng',
+    url: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=360&q=70',
+    tag: 'Tối giản'
+  },
+  {
+    id: 'window_shadows',
+    name: 'Ánh sáng xuyên rèm cửa',
+    url: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=360&q=70',
+    tag: 'Tối giản'
+  },
+  {
+    id: 'marble_arch',
+    name: 'Kiến trúc vòm cẩm thạch',
+    url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
+    preview: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=360&q=70',
+    tag: 'Tối giản'
   }
 ];
 
@@ -111,8 +231,9 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
 }) => {
   const [selectedBg, setSelectedBg] = useState<string>(currentBg || '');
   const [selectedCols, setSelectedCols] = useState<number>(currentCols || 4);
-  const [selectedOverlay, setSelectedOverlay] = useState<number>(currentOverlay ?? 50);
+  const [selectedOverlay, setSelectedOverlay] = useState<number>(currentOverlay ?? 0);
   const [activeTab, setActiveTab] = useState<'wallpapers' | 'patterns' | 'custom'>('wallpapers');
+  const [wallpaperTag, setWallpaperTag] = useState<string>('all');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedPreview, setUploadedPreview] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -208,21 +329,21 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
   const handleReset = () => {
     setSelectedBg('');
     setSelectedCols(4);
-    setSelectedOverlay(50);
+    setSelectedOverlay(0);
     setUploadedPreview('');
-    onSave('', 4, 50);
+    onSave('', 4, 0);
     toast.success('Đã đặt lại giao diện mặc định (4 cột)!');
     onClose();
   };
 
-  return (
+  return createPortal(
     <div 
       style={{
         position: 'fixed',
         inset: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.65)',
         backdropFilter: 'blur(5px)',
-        zIndex: 9999,
+        zIndex: 2147483640,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -432,59 +553,96 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
 
             {/* Tab 1: Wallpapers */}
             {activeTab === 'wallpapers' && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                {PRESET_WALLPAPERS.map(wp => {
-                  const isSelected = selectedBg === wp.url;
-                  return (
-                    <div
-                      key={wp.id}
-                      onClick={() => setSelectedBg(wp.url)}
-                      style={{
-                        position: 'relative',
-                        height: '90px',
-                        borderRadius: '12px',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        border: isSelected ? '2.5px solid var(--color-primary)' : '1px solid var(--color-border)',
-                        boxShadow: isSelected ? '0 0 0 3px rgba(189, 29, 45, 0.2)' : 'none',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      {wp.url ? (
-                        <img 
-                          src={wp.preview} 
-                          alt={wp.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Mặc định</span>
-                        </div>
-                      )}
-                      
-                      {/* Name pill */}
-                      <div style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        insetInline: 0,
-                        padding: '4px 6px',
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                        <span style={{ fontSize: '0.7rem', color: '#fff', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {wp.name}
-                        </span>
-                        {isSelected && (
-                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Check size={11} color="#fff" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* Category Filter Pills */}
+                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }} className="custom-scrollbar-hidden">
+                  {[
+                    { id: 'all', label: 'Tất cả (22)' },
+                    { id: 'Văn phòng', label: '💼 Văn phòng' },
+                    { id: 'Thiên nhiên', label: '🏔️ Thiên nhiên' },
+                    { id: 'Trừu tượng', label: '✨ Trừu tượng' },
+                    { id: 'Tối giản', label: '🪴 Tối giản' }
+                  ].map(cat => {
+                    const isActive = wallpaperTag === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setWallpaperTag(cat.id)}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '16px',
+                          border: isActive ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          backgroundColor: isActive ? 'rgba(189, 29, 45, 0.08)' : 'var(--color-bg)',
+                          color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                          fontSize: '0.725rem',
+                          fontWeight: isActive ? 700 : 500,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {cat.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Wallpapers Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', maxHeight: '290px', overflowY: 'auto', paddingRight: '4px' }} className="custom-scrollbar">
+                  {PRESET_WALLPAPERS.filter(wp => wallpaperTag === 'all' || wp.tag === wallpaperTag || wp.id === 'default').map(wp => {
+                    const isSelected = selectedBg === wp.url;
+                    return (
+                      <div
+                        key={wp.id}
+                        onClick={() => setSelectedBg(wp.url)}
+                        style={{
+                          position: 'relative',
+                          height: '90px',
+                          borderRadius: '12px',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          border: isSelected ? '2.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                          boxShadow: isSelected ? '0 0 0 3px rgba(189, 29, 45, 0.2)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {wp.url ? (
+                          <img 
+                            src={wp.preview} 
+                            alt={wp.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Mặc định</span>
                           </div>
                         )}
+                        
+                        {/* Name pill */}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          insetInline: 0,
+                          padding: '4px 6px',
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <span style={{ fontSize: '0.7rem', color: '#fff', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {wp.name}
+                          </span>
+                          {isSelected && (
+                            <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Check size={11} color="#fff" />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -639,7 +797,7 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
               </div>
               <input
                 type="range"
-                min={10}
+                min={0}
                 max={85}
                 step={5}
                 value={selectedOverlay}
@@ -647,8 +805,8 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                 style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                <span>10% (Nhìn rõ ảnh)</span>
-                <span>50% (Khuyến nghị)</span>
+                <span>0% (Nguyên bản - Nhìn rõ ảnh)</span>
+                <span>40% (Cân bằng)</span>
                 <span>85% (Tối đa tương phản)</span>
               </div>
             </div>
@@ -728,6 +886,7 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
         </div>
 
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 };

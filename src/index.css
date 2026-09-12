@@ -3119,6 +3119,9 @@ th.col-check {
   .portal-main-content {
     padding: 0.75rem !important;
   }
+  .portal-main-content.workspace-full-bleed {
+    padding: 0 !important;
+  }
 
   .portal-filters-row {
     padding: 0.75rem !important;
@@ -6297,6 +6300,12 @@ img[data-mention-avatar]:hover,
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* Full bleed workspace container: removes padding on parent <main> */
+.responsive-main.workspace-full-bleed,
+.portal-main-content.workspace-full-bleed {
+  padding: 0 !important;
 }
 
 

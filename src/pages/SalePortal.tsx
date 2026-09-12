@@ -591,7 +591,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [wsOverlay, setWsOverlay] = useState<number>(() => {
     const uid = currentUser?.id || user?.id;
     const val = uid ? localStorage.getItem(`ws_custom_overlay_${uid}`) : null;
-    return val ? Number(val) : 50;
+    return val !== null ? Number(val) : 0;
   });
 
   useEffect(() => {
@@ -603,6 +603,25 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       setWsBg(savedBg);
       if (savedCols) setWsCols(Number(savedCols));
       if (savedOverlay) setWsOverlay(Number(savedOverlay));
+
+      // Synchronize with backend database for cross-device consistency
+      fetchAPI('get_workspace_settings').then(res => {
+        if (res && res.success && res.data) {
+          const { bg, cols, overlay } = res.data;
+          if (bg !== undefined && bg !== null) {
+            setWsBg(bg);
+            localStorage.setItem(`ws_custom_bg_${uid}`, bg);
+          }
+          if (cols !== undefined && cols >= 2 && cols <= 6) {
+            setWsCols(cols);
+            localStorage.setItem(`ws_custom_cols_${uid}`, String(cols));
+          }
+          if (overlay !== undefined && overlay >= 0 && overlay <= 100) {
+            setWsOverlay(overlay);
+            localStorage.setItem(`ws_custom_overlay_${uid}`, String(overlay));
+          }
+        }
+      }).catch(() => {});
     }
   }, [currentUser?.id, user?.id]);
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
@@ -5051,36 +5070,19 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         style={{ 
           position: 'relative',
           borderRadius: '0',
-          overflow: 'hidden',
           display: 'flex', 
           flexDirection: 'column', 
           gap: wsViewMode === 'focus' ? '0' : '1rem', 
-          padding: wsBg ? (isMobile ? '12px' : '1.5rem 2.5rem') : '0',
+          padding: isMobile ? '12px 14px' : '1.5rem 2.5rem',
           paddingBottom: wsViewMode === 'focus' ? '0' : (isMobile ? '120px' : '200px'),
           height: wsViewMode === 'focus' ? 'calc(100vh - 120px)' : 'auto',
           minHeight: wsBg ? 'calc(100vh - 120px)' : 'auto',
           width: '100%',
           maxWidth: '100%',
           boxSizing: 'border-box',
-          backgroundImage: wsBg ? (wsBg.startsWith('linear-gradient') || wsBg.startsWith('radial-gradient') ? wsBg : `url("${wsBg}")`) : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundAttachment: 'fixed',
+          background: 'transparent',
           transition: 'all 0.3s ease'
         }}>
-        {wsBg && (
-          <div 
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundColor: `rgba(15, 23, 42, ${((wsOverlay ?? 50) / 100)})`,
-              backdropFilter: (wsOverlay ?? 50) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 50) / 5)}px)` : 'none',
-              WebkitBackdropFilter: (wsOverlay ?? 50) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 50) / 5)}px)` : 'none',
-              zIndex: 0,
-              pointerEvents: 'none'
-            }}
-          />
-        )}
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: wsViewMode === 'focus' ? '0' : '1rem', width: '100%' }}>
         {wsViewMode !== 'focus' && (
           <>
@@ -5101,15 +5103,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 width: '100%',
                 gap: '8px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                   <h1 className="page-title" style={{ 
                     margin: 0, 
                     fontSize: isMobile ? '1.15rem' : '1.35rem', 
                     fontWeight: 800, 
                     whiteSpace: 'nowrap', 
                     flexShrink: 0,
+                    padding: '2px 4px',
                     color: wsBg ? '#ffffff' : 'var(--color-text)',
-                    textShadow: wsBg ? '0 2px 8px rgba(0,0,0,0.7)' : 'none'
+                    textShadow: wsBg ? '0 1px 3px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4)' : 'none'
                   }}>
                     {t("Bàn làm việc")}
                   </h1>
@@ -5123,20 +5126,21 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',
-                        background: wsBg ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.08)',
-                        border: wsBg ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(16, 185, 129, 0.15)',
+                        background: wsBg ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.08)',
+                        border: wsBg ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(16, 185, 129, 0.15)',
                         backdropFilter: wsBg ? 'blur(8px)' : 'none',
                         WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
                         padding: '2px 8px',
                         borderRadius: '20px',
                         fontSize: '0.7rem',
                         fontWeight: 700,
-                        color: wsBg ? '#6ee7b7' : '#10b981',
+                        color: wsBg ? '#a7f3d0' : '#10b981',
                         cursor: 'pointer',
                         userSelect: 'none',
                         whiteSpace: 'nowrap',
                         height: '24px',
-                        flexShrink: 0
+                        flexShrink: 0,
+                        textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
                       }}
                     >
                       <Phone size={10} style={{ flexShrink: 0 }} />
@@ -5181,25 +5185,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         <button
                           onClick={() => setHideWorkspaceAlerts(false)}
                           style={{
-                            background: 'rgba(189, 29, 45, 0.06)',
-                            border: '1px solid rgba(189, 29, 45, 0.2)',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
+                            background: wsBg ? 'rgba(255, 255, 255, 0.2)' : 'rgba(189, 29, 45, 0.06)',
+                            border: wsBg ? '1px solid rgba(255, 255, 255, 0.35)' : '1px solid rgba(189, 29, 45, 0.2)',
+                            backdropFilter: wsBg ? 'blur(10px)' : 'none',
+                            WebkitBackdropFilter: wsBg ? 'blur(10px)' : 'none',
+                            padding: '2px 9px',
+                            borderRadius: '14px',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
                             cursor: 'pointer',
-                            color: 'var(--color-primary)',
+                            color: wsBg ? '#ffffff' : 'var(--color-primary)',
                             fontSize: '0.7rem',
                             fontWeight: 700,
                             height: '24px',
                             flexShrink: 0,
-                            transition: 'all 0.15s'
+                            transition: 'all 0.15s',
+                            boxShadow: wsBg ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
+                            textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
                           }}
                           className="hover-lift"
                           title={t('Hiện lại gợi ý xử lý')}
                         >
-                          <Sparkles size={11} style={{ color: 'var(--color-primary)' }} />
+                          <Sparkles size={11} style={{ color: '#ef4444' }} />
                           <span>{t('Gợi ý')}</span>
                         </button>
                       );
@@ -5214,9 +5222,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       className="btn secondary"
                       onClick={handleStartFocusSession}
                       style={{
-                        background: 'rgba(189, 29, 45, 0.06)',
-                        border: '1px solid rgba(189, 29, 45, 0.25)',
-                        color: 'var(--color-primary, #BD1D2D)',
+                        background: wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)',
+                        border: wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid rgba(189, 29, 45, 0.25)',
+                        backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)',
                         fontWeight: 700,
                         fontSize: '0.85rem',
                         borderRadius: '10px',
@@ -5225,10 +5235,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         alignItems: 'center',
                         gap: '6px',
                         cursor: 'pointer',
-                        transition: 'all 0.2s'
+                        transition: 'all 0.2s',
+                        boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                        textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none'
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(189, 29, 45, 0.12)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(189, 29, 45, 0.06)'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.32)' : 'rgba(189, 29, 45, 0.12)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)'; }}
                     >
                       <Play size={14} />
                       <span>{t('Bắt đầu Phiên Làm Việc')}</span>
@@ -5249,7 +5261,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       alignItems: 'center',
                       gap: '4px',
                       whiteSpace: 'nowrap',
-                      boxShadow: '0 2px 6px rgba(189, 29, 45, 0.2)'
+                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-primary)',
+                      boxShadow: wsBg ? '0 4px 16px rgba(189, 29, 45, 0.5), 0 2px 8px rgba(0,0,0,0.3)' : '0 2px 6px rgba(189, 29, 45, 0.2)'
                     }}
                     onClick={() => {
                       setSelectedTaskForDetails({
@@ -5290,31 +5303,34 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '3px',
-                      border: '1px solid var(--color-border)',
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text-light)',
+                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid var(--color-border)',
+                      background: wsBg ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-surface)',
+                      backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                      color: wsBg ? '#ffffff' : 'var(--color-text-light)',
                       padding: '2px 8px',
                       borderRadius: '6px',
                       cursor: 'pointer',
                       fontSize: '0.7rem',
                       fontWeight: 700,
                       transition: 'all 0.15s',
-                      flexShrink: 0
+                      flexShrink: 0,
+                      textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none'
                     }}
                     className="hover-lift"
                   >
                     <ArrowLeft size={11} /> {t('Quay lại')}
                   </button>
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ fontSize: '0.725rem', color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none' }}>
                     <span>{t('Đang xem nhóm:')}</span>
-                    <strong style={{ color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <strong style={{ color: wsBg ? '#fbbf24' : 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.8), 0 0 10px rgba(251, 191, 36, 0.4)' : 'none' }}>
                       {wsTeamId === 'all_teams_bypass' ? t('Tất cả các Nhóm') : (teamsList.find(t => String(t.id) === wsTeamId)?.name || wsTeamId)}
                     </strong>
                   </span>
                 </div>
               ) : (
                 !isMobile && (
-                  <p className="page-subtitle" style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                  <p className="page-subtitle" style={{ fontSize: '0.825rem', color: wsBg ? '#e2e8f0' : 'var(--color-text-muted)', margin: 0, textShadow: wsBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none' }}>
                     {t("Quản lý toàn bộ công việc cần thực hiện, lọc chi tiết theo tiến độ và độ ưu tiên.")}
                   </p>
                 )
@@ -5417,12 +5433,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
           return (
             <div style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border-light)',
+              background: wsBg ? (theme === 'dark' ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.88)') : 'var(--color-surface)',
+              backdropFilter: wsBg ? 'blur(16px)' : 'none',
+              WebkitBackdropFilter: wsBg ? 'blur(16px)' : 'none',
+              border: wsBg ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid var(--color-border-light)',
               borderRadius: '12px',
               padding: isMobile ? '10px 12px' : '10px 16px',
               marginBottom: '0.75rem',
-              boxShadow: 'var(--shadow-sm)',
+              boxShadow: wsBg ? '0 8px 32px 0 rgba(0, 0, 0, 0.25)' : 'var(--shadow-sm)',
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
@@ -5430,10 +5448,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               overflow: 'hidden'
             }}>
               {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: wsBg ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid var(--color-border-light)', paddingBottom: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={16} style={{ color: 'var(--color-primary)' }} />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--color-text)' }}>
+                  <Sparkles size={16} style={{ color: '#ef4444' }} />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em', color: '#ef4444' }}>
                     {t('Cảnh báo & Gợi ý xử lý')}
                   </span>
                 </div>
@@ -5442,7 +5460,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   style={{
                     border: 'none',
                     background: 'transparent',
-                    color: 'var(--color-text-muted)',
+                    color: wsBg ? '#cbd5e1' : 'var(--color-text-muted)',
                     cursor: 'pointer',
                     padding: '2px',
                     display: 'flex',
@@ -5520,8 +5538,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 {aiCount > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '4px 0', borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(189, 29, 45, 0.08)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Sparkles size={14} />
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Sparkles size={14} style={{ color: '#ef4444' }} />
                       </div>
                       <span style={{ fontSize: isMobile ? '0.78rem' : '0.825rem', color: 'var(--color-text)', lineHeight: 1.35, wordBreak: 'break-word' }}>
                         {aiMessage}
@@ -5574,11 +5592,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
         {/* Consolidated Workspace Toolbar Row (Pills + Search + Filters + View Controls) */}
         <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-light)',
+          background: wsBg ? (theme === 'dark' ? 'rgba(15, 23, 42, 0.78)' : 'rgba(255, 255, 255, 0.88)') : 'var(--color-surface)',
+          backdropFilter: wsBg ? 'blur(16px)' : 'none',
+          WebkitBackdropFilter: wsBg ? 'blur(16px)' : 'none',
+          border: wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(255, 255, 255, 0.65)') : '1px solid var(--color-border-light)',
           borderRadius: isMobile ? '12px' : '16px',
           padding: isMobile ? '8px 10px' : '6px 10px',
-          boxShadow: '0 4px 20px -8px rgba(0,0,0,0.05)',
+          boxShadow: wsBg ? (theme === 'dark' ? '0 8px 32px 0 rgba(0, 0, 0, 0.35)' : '0 8px 24px -4px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04)') : '0 4px 20px -8px rgba(0,0,0,0.05)',
           display: 'flex',
           flexDirection: 'column',
           gap: '8px',
@@ -5616,9 +5636,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               style={{
                 padding: isMobile ? '4px 10px' : '5px 12px',
                 borderRadius: '20px',
-                border: wsDatePreset === 'all' && wsTaskFilter === 'all' ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
-                background: wsDatePreset === 'all' && wsTaskFilter === 'all' ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
-                color: wsDatePreset === 'all' && wsTaskFilter === 'all' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                border: wsDatePreset === 'all' && wsTaskFilter === 'all' 
+                  ? '1.5px solid var(--color-primary)' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
+                background: wsDatePreset === 'all' && wsTaskFilter === 'all' 
+                  ? 'rgba(189, 29, 45, 0.15)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: wsDatePreset === 'all' && wsTaskFilter === 'all' 
+                  ? (wsBg ? (theme === 'dark' ? '#ffffff' : 'var(--color-primary)') : 'var(--color-primary)') 
+                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : 'var(--color-text-muted)'),
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5626,7 +5654,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 fontSize: isMobile ? '0.725rem' : '0.78rem',
                 fontWeight: 700,
                 flexShrink: 0,
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
               }}
             >
               <span>{t('Tất cả')}</span>
@@ -5647,9 +5676,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               style={{
                 padding: isMobile ? '4px 10px' : '5px 12px',
                 borderRadius: '20px',
-                border: wsTaskFilter === 'assigned_to_me' ? '1.5px solid #2563eb' : '1px solid var(--color-border)',
-                background: wsTaskFilter === 'assigned_to_me' ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
-                color: '#2563eb',
+                border: wsTaskFilter === 'assigned_to_me' 
+                  ? '1.5px solid #3b82f6' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
+                background: wsTaskFilter === 'assigned_to_me' 
+                  ? 'rgba(37, 99, 235, 0.25)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: wsTaskFilter === 'assigned_to_me' 
+                  ? (theme === 'dark' ? '#60a5fa' : '#2563eb') 
+                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : '#2563eb'),
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5657,10 +5694,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 fontSize: isMobile ? '0.725rem' : '0.78rem',
                 fontWeight: 700,
                 flexShrink: 0,
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
               }}
             >
-              <User size={isMobile ? 12 : 13} />
+              <User size={isMobile ? 12 : 13} style={{ color: wsTaskFilter === 'assigned_to_me' ? (theme === 'dark' ? '#60a5fa' : '#2563eb') : '#2563eb' }} />
               <span>{t('Tôi thực hiện')}</span>
               <span style={{ background: '#2563eb', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
                 {workspaceStats.assignedToMe || 0}
@@ -5682,9 +5720,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               style={{
                 padding: isMobile ? '4px 10px' : '5px 12px',
                 borderRadius: '20px',
-                border: wsDatePreset === 'overdue' ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border)',
-                background: wsDatePreset === 'overdue' ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                color: 'var(--color-danger)',
+                border: wsDatePreset === 'overdue' 
+                  ? '1.5px solid #ef4444' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
+                background: wsDatePreset === 'overdue' 
+                  ? 'rgba(239, 68, 68, 0.25)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: wsDatePreset === 'overdue' 
+                  ? (theme === 'dark' ? '#f87171' : '#dc2626') 
+                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : 'var(--color-danger)'),
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5692,10 +5738,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 fontSize: isMobile ? '0.725rem' : '0.78rem',
                 fontWeight: 700,
                 flexShrink: 0,
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
               }}
             >
-              <Clock size={isMobile ? 12 : 13} />
+              <Clock size={isMobile ? 12 : 13} style={{ color: 'var(--color-danger)' }} />
               <span>{t('Quá hạn')}</span>
               <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
                 {workspaceStats.overdue}
@@ -5717,9 +5764,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               style={{
                 padding: isMobile ? '4px 10px' : '5px 12px',
                 borderRadius: '20px',
-                border: wsDatePreset === 'today' ? '1.5px solid var(--color-warning)' : '1px solid var(--color-border)',
-                background: wsDatePreset === 'today' ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
-                color: 'var(--color-warning)',
+                border: wsDatePreset === 'today' 
+                  ? '1.5px solid #f59e0b' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
+                background: wsDatePreset === 'today' 
+                  ? 'rgba(245, 158, 11, 0.25)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: wsDatePreset === 'today' 
+                  ? (theme === 'dark' ? '#fbbf24' : '#d97706') 
+                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : 'var(--color-warning)'),
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5727,10 +5782,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 fontSize: isMobile ? '0.725rem' : '0.78rem',
                 fontWeight: 700,
                 flexShrink: 0,
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
               }}
             >
-              <Calendar size={isMobile ? 12 : 13} />
+              <Calendar size={isMobile ? 12 : 13} style={{ color: 'var(--color-warning)' }} />
               <span>{t('Đến hạn')}</span>
               <span style={{ background: 'var(--color-warning)', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
                 {workspaceStats.dueToday}
@@ -5752,9 +5808,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               style={{
                 padding: isMobile ? '4px 10px' : '5px 12px',
                 borderRadius: '20px',
-                border: wsTaskFilter === 'approve_by_me' ? '1.5px solid #8b5cf6' : '1px solid var(--color-border)',
-                background: wsTaskFilter === 'approve_by_me' ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-                color: '#8b5cf6',
+                border: wsTaskFilter === 'approve_by_me' 
+                  ? '1.5px solid #a855f7' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
+                background: wsTaskFilter === 'approve_by_me' 
+                  ? 'rgba(168, 85, 247, 0.25)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: wsTaskFilter === 'approve_by_me' 
+                  ? (theme === 'dark' ? '#c084fc' : '#7c3aed') 
+                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : '#8b5cf6'),
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5762,10 +5826,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 fontSize: isMobile ? '0.725rem' : '0.78rem',
                 fontWeight: 700,
                 flexShrink: 0,
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
               }}
             >
-              <UserCheck size={isMobile ? 12 : 13} />
+              <UserCheck size={isMobile ? 12 : 13} style={{ color: '#8b5cf6' }} />
               <span>{t('Chờ tôi duyệt')}</span>
               <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
                 {workspaceStats.pendingApproval}
@@ -5787,9 +5852,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               style={{
                 padding: isMobile ? '4px 10px' : '5px 12px',
                 borderRadius: '20px',
-                border: wsTaskFilter === 'collaborator' ? '1.5px solid #475569' : '1px solid var(--color-border)',
-                background: wsTaskFilter === 'collaborator' ? 'rgba(71, 85, 105, 0.1)' : 'transparent',
-                color: '#475569',
+                border: wsTaskFilter === 'collaborator' 
+                  ? '1.5px solid #64748b' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
+                background: wsTaskFilter === 'collaborator' 
+                  ? 'rgba(100, 116, 139, 0.25)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: wsTaskFilter === 'collaborator' 
+                  ? (theme === 'dark' ? '#94a3b8' : '#475569') 
+                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : '#475569'),
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5797,10 +5870,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 fontSize: isMobile ? '0.725rem' : '0.78rem',
                 fontWeight: 700,
                 flexShrink: 0,
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
               }}
             >
-              <Users size={isMobile ? 12 : 13} />
+              <Users size={isMobile ? 12 : 13} style={{ color: '#64748b' }} />
               <span>{t('Tôi liên quan')}</span>
               <span style={{ background: '#475569', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
                 {workspaceStats.collaborator || 0}
@@ -5843,8 +5917,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   borderRadius: '8px', 
                   width: '100%',
                   boxSizing: 'border-box',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface)'
+                  border: wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.15)') : '1px solid var(--color-border)',
+                  background: wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.9)') : 'var(--color-surface)',
+                  color: wsBg ? (theme === 'dark' ? '#ffffff' : '#0f172a') : 'var(--color-text)',
+                  backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                  WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none'
                 }}
               />
               <Search 
@@ -5854,7 +5931,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   right: wsSearch ? '28px' : '10px', 
                   top: '50%', 
                   transform: 'translateY(-50%)', 
-                  color: 'var(--color-text-muted)', 
+                  color: wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-muted)', 
                   pointerEvents: 'none' 
                 }} 
               />
@@ -5871,7 +5948,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     border: 'none',
                     padding: 0,
                     cursor: 'pointer',
-                    color: 'var(--color-text-muted)',
+                    color: wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-muted)',
                     display: 'flex',
                     alignItems: 'center'
                   }}
@@ -5888,9 +5965,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 height: '32px',
                 padding: '0 10px',
                 borderRadius: '6px',
-                border: showAdvancedFilters ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
-                background: showAdvancedFilters ? 'var(--color-primary-light)' : 'transparent',
-                color: showAdvancedFilters ? 'var(--color-primary)' : 'var(--color-text)',
+                border: showAdvancedFilters 
+                  ? '1.5px solid var(--color-primary)' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.15)') : '1px solid var(--color-border)'),
+                background: showAdvancedFilters 
+                  ? 'var(--color-primary-light)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                color: showAdvancedFilters ? 'var(--color-primary)' : (wsBg ? (theme === 'dark' ? '#ffffff' : '#1e293b') : 'var(--color-text)'),
                 fontSize: '0.78rem',
                 fontWeight: 700,
                 display: 'flex',
@@ -5899,10 +5982,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 whiteSpace: 'nowrap',
-                flexShrink: 0
+                flexShrink: 0,
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.6)' : 'none'
               }}
             >
-              <Filter size={12} />
+              <Filter size={12} style={{ color: wsBg ? (theme === 'dark' ? '#ffffff' : '#475569') : 'var(--color-text)' }} />
               <span>{t('Bộ lọc')}</span>
               {(() => {
                 let count = 0;
@@ -5955,8 +6039,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 height: '32px',
                 padding: '0 8px',
                 borderRadius: '6px',
-                border: showDoneTasks ? '1.5px solid #10b981' : '1px solid var(--color-border)',
-                background: showDoneTasks ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+                border: showDoneTasks 
+                  ? '1.5px solid #10b981' 
+                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.15)') : '1px solid var(--color-border)'),
+                background: showDoneTasks 
+                  ? 'rgba(16, 185, 129, 0.15)' 
+                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
                 cursor: 'pointer',
                 userSelect: 'none',
                 flexShrink: 0,
@@ -5974,9 +6064,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <span style={{
                 fontSize: '0.78rem',
                 fontWeight: showDoneTasks ? 700 : 600,
-                color: showDoneTasks ? '#10b981' : 'var(--color-text)',
+                color: showDoneTasks ? (theme === 'dark' ? '#34d399' : '#059669') : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#1e293b') : 'var(--color-text)'),
                 whiteSpace: 'nowrap',
-                pointerEvents: 'none'
+                pointerEvents: 'none',
+                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.6)' : 'none'
               }}>
                 {t('Hiện việc đã xong')}
               </span>
@@ -6015,8 +6106,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   height: '32px',
                   padding: '0 8px',
                   borderRadius: '6px',
-                  border: adminViewFull ? '1.5px solid var(--color-primary, #BD1D2D)' : '1px solid var(--color-border)',
-                  background: adminViewFull ? 'rgba(189, 29, 45, 0.08)' : 'transparent',
+                  border: adminViewFull 
+                    ? '1.5px solid var(--color-primary, #BD1D2D)' 
+                    : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.15)') : '1px solid var(--color-border)'),
+                  background: adminViewFull 
+                    ? 'rgba(189, 29, 45, 0.15)' 
+                    : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
+                  backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                  WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
                   cursor: 'pointer',
                   userSelect: 'none',
                   flexShrink: 0,
@@ -6034,14 +6131,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 <span style={{
                   fontSize: '0.78rem',
                   fontWeight: adminViewFull ? 700 : 600,
-                  color: adminViewFull ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text)',
+                  color: adminViewFull ? (theme === 'dark' ? '#f87171' : '#dc2626') : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#1e293b') : 'var(--color-text)'),
                   whiteSpace: 'nowrap',
                   pointerEvents: 'none',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: '4px',
+                  textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.6)' : 'none'
                 }}>
-                  <Shield size={12} style={{ color: adminViewFull ? 'var(--color-primary, #BD1D2D)' : 'var(--color-text-muted)' }} />
+                  <Shield size={12} style={{ color: adminViewFull ? 'var(--color-primary, #BD1D2D)' : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-muted)') }} />
                   {t('Admin view full')}
                 </span>
               </div>
@@ -6052,8 +6150,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               {!isMobile && (
                 <div style={{
                   display: 'flex',
-                  background: 'var(--color-border-light)',
-                  border: '1px solid var(--color-border)',
+                  background: wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.06)') : 'var(--color-border-light)',
+                  border: wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)',
+                  backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                  WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
                   padding: '2px',
                   borderRadius: '8px',
                   gap: '2px'
@@ -6068,9 +6168,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       border: 'none',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
-                      background: wsViewMode === 'grid' ? 'var(--color-surface)' : 'transparent',
-                      color: wsViewMode === 'grid' ? 'var(--color-text)' : 'var(--color-text-light)',
-                      boxShadow: wsViewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      background: wsViewMode === 'grid' ? (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : '#ffffff') : 'var(--color-surface)') : 'transparent',
+                      color: wsViewMode === 'grid' ? (wsBg ? (theme === 'dark' ? '#ffffff' : '#0f172a') : 'var(--color-text)') : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-light)'),
+                      boxShadow: wsViewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -6094,9 +6194,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       border: 'none',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
-                      background: wsViewMode === 'kanban' ? 'var(--color-surface)' : 'transparent',
-                      color: wsViewMode === 'kanban' ? 'var(--color-text)' : 'var(--color-text-light)',
-                      boxShadow: wsViewMode === 'kanban' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                      background: wsViewMode === 'kanban' ? (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : '#ffffff') : 'var(--color-surface)') : 'transparent',
+                      color: wsViewMode === 'kanban' ? (wsBg ? (theme === 'dark' ? '#ffffff' : '#0f172a') : 'var(--color-text)') : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-light)'),
+                      boxShadow: wsViewMode === 'kanban' ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -6118,9 +6218,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   height: '32px',
                   padding: isMobile ? '0 8px' : '0 10px',
                   borderRadius: '6px',
-                  border: '1px solid var(--color-border)',
-                  background: showWorkspaceCustomizer ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                  color: showWorkspaceCustomizer ? 'var(--color-primary)' : 'var(--color-text)',
+                  border: wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(0, 0, 0, 0.15)') : '1px solid var(--color-border)',
+                  background: showWorkspaceCustomizer 
+                    ? 'var(--color-primary-light)' 
+                    : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.04)') : 'var(--color-surface)'),
+                  backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                  WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                  color: showWorkspaceCustomizer ? 'var(--color-primary)' : (wsBg ? (theme === 'dark' ? '#ffffff' : '#1e293b') : 'var(--color-text)'),
                   fontSize: '0.78rem',
                   fontWeight: 700,
                   display: 'inline-flex',
@@ -6128,11 +6232,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   gap: '5px',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  flexShrink: 0
+                  flexShrink: 0,
+                  boxShadow: wsBg ? (theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,0,0,0.06)') : 'none',
+                  textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.6)' : 'none'
                 }}
                 className="hover-lift"
               >
-                <Palette size={14} style={{ color: 'var(--color-primary)' }} />
+                <Palette size={14} style={{ color: '#ef4444' }} />
                 {!isMobile && <span>{t('Giao diện')}</span>}
               </button>
             </div>
@@ -6666,12 +6772,20 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               const progressVal = task.progress || 0;
 
               const isPinned = pinnedTaskIds.includes(Number(task.id));
-              let cardBorder = '1px solid var(--color-border-light)';
-              let cardBg = 'var(--color-surface)';
-              let cardShadow = 'var(--shadow-sm)';
+              let cardBorder = wsBg
+                ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(255, 255, 255, 0.75)')
+                : '1px solid var(--color-border-light)';
+              let cardBg = wsBg
+                ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.82)' : 'rgba(255, 255, 255, 0.88)')
+                : 'var(--color-surface)';
+              let cardShadow = wsBg
+                ? (theme === 'dark' ? '0 8px 24px rgba(0, 0, 0, 0.35)' : '0 8px 24px -4px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04)')
+                : 'var(--shadow-sm)';
               if (isPinned) {
                 cardBorder = '2px solid var(--color-danger)';
-                cardBg = 'rgba(239, 68, 68, 0.03)';
+                cardBg = wsBg 
+                  ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 242, 242, 0.92)')
+                  : 'rgba(239, 68, 68, 0.03)';
                 cardShadow = 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)';
               } else if (isOverdue && task.status !== 'done') {
                 cardBorder = '1.5px solid var(--color-danger)';
@@ -6685,6 +6799,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     padding: isMobile ? '12px 14px' : '1rem 1.25rem',
                     background: cardBg,
                     border: cardBorder,
+                    backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
                     borderRadius: '14px',
                     display: 'flex',
                     flexDirection: 'column',
@@ -7047,8 +7163,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       }
                     }}
                     style={{
-                      background: '#f8fafc',
-                      border: isOver ? '2px dashed var(--color-primary)' : '1px solid #e2e8f0',
+                      background: wsBg 
+                        ? (theme === 'dark' ? 'rgba(15, 23, 42, 0.65)' : 'rgba(241, 245, 249, 0.82)')
+                        : '#f8fafc',
+                      border: isOver 
+                        ? '2px dashed var(--color-primary)' 
+                        : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.65)') : '1px solid #e2e8f0'),
+                      backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
                       borderRadius: '16px',
                       padding: '0.75rem',
                       minHeight: '450px',
@@ -7056,7 +7178,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       flexDirection: 'column',
                       gap: '0.75rem',
                       transition: 'all 0.2s',
-                      boxShadow: isOver ? '0 4px 12px rgba(189, 29, 45, 0.08)' : 'none',
+                      boxShadow: isOver ? '0 4px 12px rgba(189, 29, 45, 0.08)' : (wsBg ? '0 4px 16px rgba(0,0,0,0.06)' : 'none'),
                       width: '100%',
                       minWidth: 0
                     }}
@@ -7147,17 +7269,21 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                               setSelectedTaskForDetails(parsedTask);
                             }}
                             style={{
-                              background: isPinned ? 'rgba(239, 68, 68, 0.03)' : 'var(--color-surface)',
+                              background: isPinned 
+                                ? (wsBg ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 242, 242, 0.92)') : 'rgba(239, 68, 68, 0.03)')
+                                : (wsBg ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.82)' : 'rgba(255, 255, 255, 0.88)') : 'var(--color-surface)'),
                               border: isPinned 
                                 ? '2px solid var(--color-danger)' 
-                                : (isOverdue && task.status !== 'done' ? '1.5px solid var(--color-danger)' : '1px solid var(--color-border-light)'),
+                                : (isOverdue && task.status !== 'done' ? '1.5px solid var(--color-danger)' : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.75)') : '1px solid var(--color-border-light)')),
+                              backdropFilter: wsBg ? 'blur(10px)' : 'none',
+                              WebkitBackdropFilter: wsBg ? 'blur(10px)' : 'none',
                               borderRadius: '12px',
                               padding: '0.875rem',
                               cursor: 'grab',
                               opacity: task.status === 'done' ? 0.7 : 1,
                               boxShadow: isPinned 
                                 ? 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)' 
-                                : 'var(--shadow-sm)',
+                                : (wsBg ? '0 4px 12px rgba(0,0,0,0.06)' : 'var(--shadow-sm)'),
                               transition: 'all 0.2s',
                               position: 'relative',
                               minWidth: 0,
@@ -15519,7 +15645,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       )}
 
       {/* Right Side Content Panel */}
-      <div style={embedMode ? { width: '100%' } : { flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <div style={embedMode ? { width: '100%' } : { flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', position: 'relative' }}>
 
         {/* Top Header Navigation */}
         {!embedMode && (
@@ -15976,8 +16102,54 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         </header>
         )}
 
+        {/* Workspace Fixed Background Layer (Full-bleed, stays completely static when scrolling) */}
+        {activeTab === 'workspace' && wsBg && (
+          <div 
+            className="workspace-fixed-bg-layer"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 0,
+              pointerEvents: 'none',
+              backgroundImage: wsBg.startsWith('linear-gradient') || wsBg.startsWith('radial-gradient') ? wsBg : `url("${wsBg}")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              transition: 'background-image 0.4s ease'
+            }}
+          >
+            <div 
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundColor: (wsOverlay ?? 0) > 0 
+                  ? (theme === 'dark' 
+                      ? `rgba(15, 23, 42, ${((wsOverlay ?? 0) / 100)})`
+                      : `rgba(255, 255, 255, ${((wsOverlay ?? 0) / 100) * 0.45})`)
+                  : 'transparent',
+                backdropFilter: (wsOverlay ?? 0) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 0) / 5)}px)` : 'none',
+                WebkitBackdropFilter: (wsOverlay ?? 0) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 0) / 5)}px)` : 'none'
+              }}
+            />
+          </div>
+        )}
+
         {/* Scrollable View Area */}
-        <main className={embedMode ? "" : "no-scrollbar responsive-main portal-main-content"} style={embedMode ? { width: '100%', maxWidth: '100%', boxSizing: 'border-box' } : { flex: 1, padding: isMobile ? '0' : '2rem 3rem', width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowY: 'auto', overflowX: 'hidden' }}>
+        <main 
+          className={embedMode ? "" : `no-scrollbar responsive-main portal-main-content ${activeTab === 'workspace' && wsBg ? 'workspace-full-bleed' : ''}`} 
+          style={embedMode ? { width: '100%', maxWidth: '100%', boxSizing: 'border-box' } : { 
+            flex: 1, 
+            padding: (activeTab === 'workspace' && wsBg) ? 0 : (isMobile ? '0' : '2rem 3rem'), 
+            width: '100%', 
+            maxWidth: '100%', 
+            boxSizing: 'border-box', 
+            overflowY: 'auto', 
+            overflowX: 'hidden',
+            position: 'relative',
+            zIndex: 1,
+            background: 'transparent'
+          }}
+        >
           <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
 
 
@@ -18564,6 +18736,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               localStorage.setItem(`ws_custom_bg_${uid}`, bg);
               localStorage.setItem(`ws_custom_cols_${uid}`, String(cols));
               localStorage.setItem(`ws_custom_overlay_${uid}`, String(overlay));
+
+              // Save to backend database for persistent user profile
+              fetchAPI('save_workspace_settings', {
+                method: 'POST',
+                body: JSON.stringify({ bg, cols, overlay })
+              }).catch(err => {
+                console.error('Lỗi khi lưu cài đặt bàn làm việc lên backend:', err);
+              });
             }
           }}
           userId={currentUser?.id || user?.id}

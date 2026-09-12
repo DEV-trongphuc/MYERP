@@ -874,11 +874,27 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
 
 
-        <main className="responsive-main" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative', zIndex: 10 }}>
-          <div style={{ width: '100%', minHeight: '100%' }}>
-            {children}
-          </div>
-        </main>
+        {/* Main Content Viewport */}
+        {(() => {
+          const isWorkspaceRoute = location.pathname === '/workspace' || location.pathname === '/portal';
+          return (
+            <main 
+              className={`responsive-main ${isWorkspaceRoute ? 'workspace-full-bleed' : ''}`} 
+              style={{ 
+                flex: 1, 
+                overflowY: 'auto', 
+                overflowX: 'hidden', 
+                position: 'relative', 
+                zIndex: 10,
+                ...(isWorkspaceRoute ? { padding: 0 } : {})
+              }}
+            >
+              <div style={{ width: '100%', minHeight: '100%' }}>
+                {children}
+              </div>
+            </main>
+          );
+        })()}
       </div>
       <AlertToast />
       <QuickAddLeadModal />

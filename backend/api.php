@@ -792,7 +792,9 @@ if (!in_array($action, $publicActions)) {
         'dashboard',
         'update_profile',
         'change_password',
-        'get_my_activity_logs'
+        'get_my_activity_logs',
+        'save_workspace_settings',
+        'get_workspace_settings'
     ];
 
     // Read the input body to check for self-operation
@@ -806,7 +808,9 @@ if (!in_array($action, $publicActions)) {
         'update_profile',
         'change_password',
         'upload_avatar',
-        'unlink_telegram'
+        'unlink_telegram',
+        'save_workspace_settings',
+        'get_workspace_settings'
     ], true)) {
         $isSelfEdit = true;
     }
@@ -859,7 +863,9 @@ if (!in_array($action, $publicActions)) {
         'custom_fields',
         'get_sale_portal_data',
         'get_logs',
-        'get_all_pending_counts'
+        'get_all_pending_counts',
+        'save_workspace_settings',
+        'get_workspace_settings'
     ], true)) {
         $resolvedScope = 'all';
     }
@@ -12261,6 +12267,81 @@ switch ($action) {
         }
         $data['backend_version'] = defined('BACKEND_VERSION') ? BACKEND_VERSION : '1.5.3';
         echo json_encode(['success' => true, 'data' => $data]);
+        break;
+
+    case 'save_workspace_settings':
+        $userId = (int)($decodedUser['id'] ?? 0);
+        if (!$userId) {
+            echo json_encode(['success' => false, 'message' => 'Vui lòng đăng nhập để lưu cấu hình']);
+            break;
+        }
+        $raw = file_get_contents('php://input');
+        $b = json_decode($raw, true);
+        if (!is_array($b)) $b = [];
+
+        $bg = isset($b['bg']) ? trim((string)$b['bg']) : '';
+        $cols = isset($b['cols']) ? max(2, min(6, (int)$b['cols'])) : 4;
+        $overlay = isset($b['overlay']) ? max(0, min(100, (int)$b['overlay'])) : 50;
+
+        // Fetch current extra_fields_json
+        $stmt = $conn->prepare("SELECT extra_fields_json FROM users WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $userRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $extra = [];
+        if (!empty($userRow['extra_fields_json'])) {
+            $decodedExtra = json_decode($userRow['extra_fields_json'], true);
+            if (is_array($decodedExtra)) {
+                $extra = $decodedExtra;
+            }
+        }
+
+        $extra['workspace_settings'] = [
+            'bg' => $bg,
+            'cols' => $cols,
+            'overlay' => $overlay,
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+
+        $jsonStr = json_encode($extra, JSON_UNESCAPED_UNICODE);
+        $upStmt = $conn->prepare("UPDATE users SET extra_fields_json = ? WHERE id = ?");
+        $upStmt->bind_param("si", $jsonStr, $userId);
+        $success = $upStmt->execute();
+        $upStmt->close();
+
+        echo json_encode([
+            'success' => $success,
+            'data' => $extra['workspace_settings'],
+            'message' => $success ? 'Đã lưu cấu hình bàn làm việc thành công' : 'Không thể cập nhật cấu hình'
+        ]);
+        break;
+
+    case 'get_workspace_settings':
+        $userId = (int)($decodedUser['id'] ?? 0);
+        if (!$userId) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $stmt = $conn->prepare("SELECT extra_fields_json FROM users WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $userRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $wsSettings = [
+            'bg' => '',
+            'cols' => 4,
+            'overlay' => 50
+        ];
+        if (!empty($userRow['extra_fields_json'])) {
+            $decodedExtra = json_decode($userRow['extra_fields_json'], true);
+            if (is_array($decodedExtra) && isset($decodedExtra['workspace_settings']) && is_array($decodedExtra['workspace_settings'])) {
+                $wsSettings = array_merge($wsSettings, $decodedExtra['workspace_settings']);
+            }
+        }
+        echo json_encode(['success' => true, 'data' => $wsSettings]);
         break;
 
     case 'get_db_stats':

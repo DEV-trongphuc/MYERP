@@ -125,7 +125,8 @@ if (!function_exists('getActionModuleAndType')) {
             'delete_mapping', 'approve_report', 'reject_report', 'compensate_approved_no_comp',
             'reassign_lead', 'force_sync', 'save_ticket_settings', 'unlink_zalo',
             'test_email', 'block_lead', 'rollback_admin_action', 'update_lead_fields',
-            'send_lead_reminder', 'register_night_shift', 'add_consultant_leave', 'delete_consultant_leave'
+            'send_lead_reminder', 'register_night_shift', 'add_consultant_leave', 'delete_consultant_leave',
+            'save_workspace_settings'
         ];
         
         $actionType = in_array($action, $writeActions) ? 'write' : 'read';
