@@ -19,8 +19,15 @@ export interface WorkspaceCustomizerModalProps {
 // Curated high quality wallpaper samples (optimized for dashboard backgrounds)
 const PRESET_WALLPAPERS = [
   {
-    id: 'default',
-    name: 'Mặc định hệ thống',
+    id: 'myerp_brand',
+    name: 'MYERP Brand (Độc quyền - Mặc định)',
+    url: '/imgs/myerp_dark_brand_wallpaper.jpg',
+    preview: '/imgs/myerp_dark_brand_wallpaper.jpg',
+    tag: 'Tối giản'
+  },
+  {
+    id: 'clean_light',
+    name: 'Mặc định phẳng (Không ảnh nền)',
     url: '',
     preview: 'linear-gradient(135deg, rgba(200,200,200,0.2) 0%, rgba(150,150,150,0.1) 100%)',
     tag: 'Tối giản'
@@ -327,12 +334,12 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
   };
 
   const handleReset = () => {
-    setSelectedBg('');
+    setSelectedBg('/imgs/myerp_dark_brand_wallpaper.jpg');
     setSelectedCols(4);
     setSelectedOverlay(0);
     setUploadedPreview('');
-    onSave('', 4, 0);
-    toast.success('Đã đặt lại giao diện mặc định (4 cột)!');
+    onSave('/imgs/myerp_dark_brand_wallpaper.jpg', 4, 0);
+    toast.success('Đã đặt lại giao diện mặc định (4 cột & MYERP Brand)!');
     onClose();
   };
 
@@ -557,7 +564,7 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                 {/* Category Filter Pills */}
                 <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }} className="custom-scrollbar-hidden">
                   {[
-                    { id: 'all', label: 'Tất cả (22)' },
+                    { id: 'all', label: `Tất cả (${PRESET_WALLPAPERS.length})` },
                     { id: 'Văn phòng', label: '💼 Văn phòng' },
                     { id: 'Thiên nhiên', label: '🏔️ Thiên nhiên' },
                     { id: 'Trừu tượng', label: '✨ Trừu tượng' },

@@ -3083,6 +3083,9 @@ export const Header = ({
             const isStillLoadingCheckIn = !activeCheckIn && (isCheckInLoading !== undefined ? isCheckInLoading : internalCheckInLoading);
             if (isStillLoadingCheckIn) return null;
 
+            const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
+            if (isWeekend && (!activeCheckIn || activeCheckIn.status === 'rejected')) return null; // Thứ 7 & CN: Không hiện nút nhắc chấm công nếu chưa chấm
+
             const isPendingApproval = activeCheckIn && (activeCheckIn.status === 'pending_approval' || Boolean(activeCheckIn.pending_explanation_today));
             const isNotCheckedIn = (!activeCheckIn || activeCheckIn.status === 'rejected') && !isPendingApproval;
             const isApprovedCheckIn = activeCheckIn && (activeCheckIn.status === 'approved' || Boolean(activeCheckIn.check_in_time));

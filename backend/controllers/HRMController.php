@@ -29,6 +29,16 @@ class HRMController {
         return $map[$type] ?? ($type ?: 'Nghỉ phép');
     }
 
+    public static function cleanLeaveReason(?string $reason): string {
+        if (!$reason) return '';
+        $r = trim($reason);
+        $r = preg_replace('/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*/iu', '', $r);
+        $r = preg_replace('/^\[(?:Tỷ lệ hưởng lương|Hình thức):[^\]]+\]\s*/iu', '', $r);
+        $r = preg_replace('/^Thời gian:\s*[^.]+\.\s*/iu', '', $r);
+        $r = preg_replace('/^Lý do:\s*/iu', '', $r);
+        return trim($r);
+    }
+
     public static function formatLeaveTitle(array|string $l): string {
         if (is_string($l)) {
             $type = $l;
@@ -50,13 +60,12 @@ class HRMController {
         } elseif ($start) {
             $dateStr = ": {$start}";
         }
-        $reason = trim($l['reason'] ?? '');
-        $reasonStr = $reason ? " - {$reason}" : '';
+
+        $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+        $reasonStr = $cleanReason ? " - {$cleanReason}" : '';
 
         if ($type === 'remote_work') {
-            $salaryRate = isset($l['salary_rate']) ? (float)$l['salary_rate'] : null;
-            $rateStr = ($salaryRate !== null) ? " ({$salaryRate}% lương)" : '';
-            return "Đăng ký WFH{$dateStr}{$daysStr}{$rateStr}{$reasonStr}";
+            return "Đăng ký WFH{$dateStr}{$daysStr}{$reasonStr}";
         }
         if ($type === 'overtime') return "Đăng ký OT{$dateStr}{$daysStr}{$reasonStr}";
         if ($type === 'late_early') return "Đăng ký đi muộn/về sớm{$dateStr}{$reasonStr}";
@@ -355,6 +364,8 @@ class HRMController {
             $r['compensatory_leave_used'] = (float)$r['compensatory_leave_used'];
             $r['remaining_annual_leave'] = max(0.0, $r['annual_leave_total'] - $r['annual_leave_used']);
             $r['remaining_compensatory_leave'] = max(0.0, $r['compensatory_leave_total'] - $r['compensatory_leave_used']);
+            $r['reason'] = self::cleanLeaveReason($r['reason'] ?? '');
+            $r['title'] = self::formatLeaveTitle($r);
         }
         unset($r);
 
@@ -408,6 +419,8 @@ class HRMController {
         $row['compensatory_leave_used'] = (float)$row['compensatory_leave_used'];
         $row['remaining_annual_leave'] = max(0.0, $row['annual_leave_total'] - $row['annual_leave_used']);
         $row['remaining_compensatory_leave'] = max(0.0, $row['compensatory_leave_total'] - $row['compensatory_leave_used']);
+        $row['reason'] = self::cleanLeaveReason($row['reason'] ?? '');
+        $row['title'] = self::formatLeaveTitle($row);
 
         respond(200, $row);
     }
@@ -485,20 +498,12 @@ class HRMController {
         $salaryRate = 100.0;
         $totalDays = (float)($b['total_days'] ?? 1.0);
         $unpaidDays = 0.0;
-        $reason = $b['reason'] ?? '';
+        $reason = self::cleanLeaveReason($b['reason'] ?? '');
 
         if ($leaveType === 'overtime') {
             $otType = (!empty($b['ot_type']) && in_array($b['ot_type'], ['compensatory', 'salary'], true)) ? $b['ot_type'] : 'salary';
             $otRate = !empty($b['ot_rate']) ? (float)$b['ot_rate'] : 1.5;
             if ($otRate <= 0) $otRate = 1.5;
-
-            $rateText = ($otRate == 1.0) ? 'Loại 1.0x (1:1)' : "Loại {$otRate}x";
-            $tag = ($otType === 'compensatory') 
-                ? "[Hình thức: Lấy OT bù (Nghỉ bù) | Hệ số {$rateText}]" 
-                : "[Hình thức: Tính vào lương OT | Hệ số {$rateText}]";
-            if (strpos($reason, '[Hình thức:') === false) {
-                $reason = trim($tag . ' ' . $reason);
-            }
         } elseif ($leaveType === 'remote_work') {
             $salaryRate = isset($b['salary_rate']) ? (float)$b['salary_rate'] : 50.0;
             if ($salaryRate < 0.0 || $salaryRate > 100.0) {
@@ -506,11 +511,6 @@ class HRMController {
                 return;
             }
             $unpaidDays = round($totalDays * (1.0 - ($salaryRate / 100.0)), 2);
-            $paidDaysCalc = round($totalDays - $unpaidDays, 2);
-            $tag = "[Tỷ lệ hưởng lương: {$salaryRate}% ~ {$paidDaysCalc} công]";
-            if (strpos($reason, '[Tỷ lệ hưởng lương:') === false) {
-                $reason = trim($tag . ' ' . $reason);
-            }
         } elseif ($leaveType === 'unpaid') {
             $unpaidDays = $totalDays;
             $salaryRate = 0.0;
@@ -578,7 +578,7 @@ class HRMController {
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'total_days' => (float)($b['total_days'] ?? 1.0),
-                'reason' => $b['reason'] ?? '',
+                'reason' => $reason,
                 'date' => date('Y-m-d'),
                 'ref_id' => $leaveId
             ]);
@@ -598,7 +598,7 @@ class HRMController {
                             'start_date' => $startDate,
                             'end_date' => $endDate,
                             'total_days' => (float)($b['total_days'] ?? 1.0),
-                            'reason' => ($b['reason'] ?? '') . ' (Bạn được gắn là Người theo dõi)',
+                            'reason' => $reason ? ($reason . ' (Bạn được gắn là Người theo dõi)') : '(Bạn được gắn là Người theo dõi)',
                             'date' => date('Y-m-d'),
                             'ref_id' => $leaveId
                         ]);
@@ -2121,6 +2121,8 @@ class HRMController {
                 $relArr = array_values(array_filter(array_map('intval', (array)$relArr)));
 
                 $levelText = ($l['status_level_1'] === 'approved') ? 'Cấp 2 (Giám đốc)' : 'Cấp 1 (Quản lý)';
+                $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+                $l['reason'] = $cleanReason;
                 $pending[] = [
                     'id' => (int)$l['id'],
                     'type' => 'leave',
@@ -2143,9 +2145,9 @@ class HRMController {
                     'ot_type' => $l['ot_type'] ?? null,
                     'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                     'leave_type' => $l['leave_type'],
-                    'reason' => $l['reason'],
+                    'reason' => $cleanReason,
                     'title' => self::formatLeaveTitle($l) . ' - ' . $levelText,
-                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                     'status' => $l['status'] ?? 'pending',
                     'created_at' => $l['created_at']
                 ];
@@ -2494,6 +2496,8 @@ class HRMController {
             }
             $relArr = array_values(array_filter(array_map('intval', (array)$relArr)));
 
+            $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+            $l['reason'] = $cleanReason;
             $pending[] = [
                 'id' => (int)$l['id'],
                 'type' => 'leave',
@@ -2516,9 +2520,9 @@ class HRMController {
                 'ot_type' => $l['ot_type'] ?? null,
                 'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                 'leave_type' => $l['leave_type'],
-                'reason' => $l['reason'],
+                'reason' => $cleanReason,
                 'title' => self::formatLeaveTitle($l),
-                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                 'status' => $statusText,
                 'created_at' => $l['created_at']
             ];
@@ -2785,6 +2789,8 @@ class HRMController {
                 if ($l['status'] === 'pending' && $l['status_level_1'] === 'approved' && !empty($l['approver_id_2'])) {
                     $statusText = 'level1_approved';
                 }
+                $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+                $l['reason'] = $cleanReason;
                 $pending[] = [
                     'id' => (int)$l['id'],
                     'type' => 'leave',
@@ -2804,10 +2810,10 @@ class HRMController {
                     'ot_type' => $l['ot_type'] ?? null,
                     'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                     'leave_type' => $l['leave_type'] ?? null,
-                    'reason' => $l['reason'] ?? '',
+                    'reason' => $cleanReason,
                     'related_user_ids' => $relArr,
                     'title' => self::formatLeaveTitle($l),
-                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                    'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                     'status' => $statusText,
                     'created_at' => $l['created_at'],
                     'is_following' => true
@@ -3079,6 +3085,8 @@ class HRMController {
                 continue;
             }
 
+            $cleanReason = self::cleanLeaveReason($l['reason'] ?? '');
+            $l['reason'] = $cleanReason;
             $all[] = [
                 'id' => (int)$l['id'],
                 'type' => 'leave',
@@ -3098,10 +3106,10 @@ class HRMController {
                 'ot_type' => $l['ot_type'] ?? null,
                 'ot_rate' => isset($l['ot_rate']) ? (float)$l['ot_rate'] : null,
                 'leave_type' => $l['leave_type'] ?? null,
-                'reason' => $l['reason'] ?? '',
+                'reason' => $cleanReason,
                 'related_user_ids' => $relArr,
                 'title' => self::formatLeaveTitle($l),
-                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ). Lý do: "' . $l['reason'] . '"',
+                'description' => 'Thời gian: ' . $l['start_date'] . ' -> ' . $l['end_date'] . ' (' . $l['total_days'] . ' ngày/giờ).' . ($cleanReason ? ' Lý do: "' . $cleanReason . '"' : ''),
                 'status' => $l['status'],
                 'created_at' => $l['created_at']
             ];

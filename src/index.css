@@ -4015,6 +4015,24 @@ textarea, .form-textarea, textarea.form-input, textarea.form-control {
   font-size: 0.725rem !important;
 }
 
+/* Synchronize workspace search input with header action buttons */
+.ws-search-input {
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  line-height: 38px !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 768px) {
+  .ws-search-input {
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    line-height: 32px !important;
+  }
+}
+
 /* Secure z-index hierarchy */
 .overlay-backdrop,
 .custom-modal-overlay,

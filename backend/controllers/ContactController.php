@@ -84,7 +84,8 @@ class ContactController {
         if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'DESC';
 
         if ($sortBy === 'created_at') {
-            $orderByClause = "GREATEST(IFNULL(c.created_at, '1970-01-01'), IFNULL(c.last_contact, '1970-01-01'), IFNULL(c.updated_at, '1970-01-01')) $order, c.id $order";
+            $safeDlSql = "IF(dl.received_at IS NOT NULL AND dl.received_at <= DATE_ADD(NOW(), INTERVAL 1 DAY), dl.received_at, '1970-01-01')";
+            $orderByClause = "GREATEST(IFNULL(c.created_at, '1970-01-01'), IFNULL(c.last_contact, '1970-01-01'), IFNULL(c.updated_at, '1970-01-01'), $safeDlSql) $order, c.id $order";
         } elseif ($sortBy === 'last_contact') {
             $orderByClause = "COALESCE(c.last_contact, c.updated_at, c.created_at, '1970-01-01') $order, c.id $order";
         } else {

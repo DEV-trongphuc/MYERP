@@ -948,7 +948,8 @@ switch ($resource) {
     case 'activities':
         $auth = requireAuth();
         $ctrl = new ActivityController($db);
-        if     ($resourceId && $subResource === 'comments' && $method === 'GET')  $ctrl->getComments($auth, (int)$resourceId);
+        if     ($resourceId === 'workspace-stats' && $method === 'GET') $ctrl->workspaceStats($auth);
+        elseif ($resourceId && $subResource === 'comments' && $method === 'GET')  $ctrl->getComments($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'timeline' && $method === 'GET')  $ctrl->getTimeline($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'dependencies' && $method === 'GET')  $ctrl->getDependencies($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'dependencies' && $method === 'POST') $ctrl->updateDependencies($auth, (int)$resourceId);

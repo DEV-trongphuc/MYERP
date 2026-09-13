@@ -3203,8 +3203,9 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
         return true;
     };
 
-    // A. Check-in reminders
-    if ($attendanceEnabled === 1) {
+    // A. Check-in & Check-out reminders (Thứ 7 & Chủ Nhật: Sale vẫn nhận data nhưng không báo/nhắc chấm công)
+    $isWeekendToday = (int)$now->format('N') >= 6;
+    if (!$isWeekendToday && $attendanceEnabled === 1) {
         // Pre-fetch holiday settings to avoid querying inside loop
         $holidayName = '';
         $holidaySchedulesJson = '[]';
@@ -3854,7 +3855,8 @@ function sendCheckOutReminders($conn) {
         }
     }
 
-    // If require_checkout is explicitly disabled or attendance notification is disabled, skip
+    // If require_checkout is explicitly disabled or attendance notification is disabled, or weekend (Sat & Sun), skip
+    if ((int)date('N') >= 6) return; // Thứ 7 & Chủ Nhật: không gửi cảnh báo / nhắc nhở chấm công
     if (isset($settings['require_checkout']) && (int)$settings['require_checkout'] === 0) return;
     if (isset($settings['attendance_notification_enabled']) && (int)$settings['attendance_notification_enabled'] === 0) return;
 

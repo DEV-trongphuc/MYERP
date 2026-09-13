@@ -654,6 +654,7 @@ class NotificationService {
                 ];
 
             case 'ATTENDANCE_REMINDER':
+                if ((int)date('N') >= 6) return null; // Thứ 7 & Chủ Nhật: không gửi nhắc nhở chấm công
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
                 $todayDate = date('Y-m-d');
                 $recipients = array_values(array_filter($recipients, function($r) use ($db, $todayDate) {
@@ -705,6 +706,7 @@ class NotificationService {
                 ];
 
             case 'CHECKIN_MISSING_REMINDER':
+                if ((int)date('N') >= 6) return null; // Thứ 7 & Chủ Nhật: không gửi cảnh báo chưa chấm công
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
                 // Do NOT send attendance reminders to directors or users on leave/vacation
                 $todayDate = date('Y-m-d');
@@ -758,6 +760,7 @@ class NotificationService {
 
             case 'CHECKOUT_REMINDER':
             case 'CHECKOUT_MISSING_REMINDER':
+                if ((int)date('N') >= 6) return null; // Thứ 7 & Chủ Nhật: không gửi nhắc nhở / cảnh báo ra ca
                 $recipients = !empty($payload['recipients']) ? $payload['recipients'] : self::getRecipientById($db, (int)($payload['user_id'] ?? 0));
                 // Do NOT send attendance reminders to directors or users on leave/vacation
                 $todayDate = date('Y-m-d');
@@ -1750,6 +1753,12 @@ class NotificationService {
                 $leaveType = $payload['leave_type_text'] ?? 'Nghỉ phép';
                 $leaveDays = $payload['total_days'] ?? 1;
                 $leavePeriod = ($payload['start_date'] ?? '') . ' -> ' . ($payload['end_date'] ?? '');
+
+                $rawReason = trim($payload['reason'] ?? '');
+                $cleanReason = preg_replace('/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm)\]\s*(?:\[[^\]]+\]\s*)*Lý do:\s*/iu', '', $rawReason);
+                $cleanReason = preg_replace('/^\[(?:Tỷ lệ hưởng lương|Hình thức):[^\]]+\]\s*/iu', '', $cleanReason);
+                $cleanReason = trim($cleanReason);
+                $reasonDisplay = $cleanReason !== '' ? $cleanReason : 'Không có';
                 
                 $isWFH = strpos(mb_strtolower($leaveType), 'làm việc từ xa') !== false || strpos(mb_strtolower($leaveType), 'remote') !== false;
                 $isOT = strpos(mb_strtolower($leaveType), 'tăng ca') !== false || strpos(mb_strtolower($leaveType), 'overtime') !== false;
@@ -1765,25 +1774,25 @@ class NotificationService {
                 return [
                     'recipients' => $recipients,
                     'title' => "{$codePrefix}Yêu cầu phê duyệt ($leaveType)",
-                    'body' => "{$codePrefix}Nhân viên $userName vừa gửi $actionName từ $leavePeriod ($leaveDays ngày/giờ). Lý do: \"$reason\"",
+                    'body' => "{$codePrefix}Nhân viên $userName vừa gửi $actionName từ $leavePeriod ($leaveDays ngày/giờ). Lý do: \"$reasonDisplay\"",
                     'type' => "leave",
                     'link' => "/approvals?open_id=" . $refId . "&open_type=leave",
                     'zalo_msg' => "$icon [ $headerTitle MỚI ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "Nhân viên: $userName\n"
                         . "Thời gian: $leavePeriod ($leaveDays ngày/giờ)\n"
-                        . "Lý do: \"$reason\"\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
+                        . "Lý do: \"$reasonDisplay\"\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
                     'tg_msg' => "$icon <b>[ $headerTitle MỚI ]</b>\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
                         . "Nhân viên: <b>$userName</b>\n"
                         . "Thời gian: <code>$leavePeriod</code> ($leaveDays ngày/giờ)\n"
-                        . "Lý do: <i>\"$reason\"</i>\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
+                        . "Lý do: <i>\"" . htmlspecialchars($reasonDisplay) . "\"</i>\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
                     'email_subject' => "[IDEAS] {$codePrefix}$headerTitle mới - $userName",
                     'email_title' => $headerTitle . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào quản lý,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
                                     "Nhân viên <strong>$userName</strong> vừa gửi <strong>$actionName</strong> từ <strong>$leavePeriod</strong> ($leaveDays ngày/giờ).<br/>" .
-                                    "Lý do: <em>\"$reason\"</em>.<br/>" .
+                                    "Lý do: <em>\"" . htmlspecialchars($reasonDisplay) . "\"</em>.<br/>" .
                                     "Vui lòng truy cập hệ thống IDEAS ERP để xem chi tiết và phê duyệt."
                 ];
 

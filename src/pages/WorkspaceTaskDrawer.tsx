@@ -74,7 +74,7 @@ let cachedProjects: CacheEntry<any[]> | null = null;
 let cachedCampaigns: CacheEntry<any[]> | null = null;
 let cachedTeams: CacheEntry<any[]> | null = null;
 let cachedContacts: CacheEntry<any[]> | null = null;
-const METADATA_CACHE_TTL = 3 * 60 * 1000; // 3 minutes cache
+const METADATA_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache
 
 // Helper to automatically recognize URLs and wrap them in <a> tags
 export const linkifyHtml = (html: string): string => {
@@ -878,18 +878,23 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
     if (cachedContacts && (now - cachedContacts.timestamp < METADATA_CACHE_TTL)) {
       applyContacts(cachedContacts.data);
-    } else {
+    } else if (activeContactId) {
       setLoadingContacts(true);
-      api.get('/contacts?limit=200').then(res => {
-        if (res.data && res.data.success) {
-          const list = res.data.data?.items || res.data.data || [];
-          cachedContacts = { data: list, timestamp: Date.now() };
-          applyContacts(list);
+      api.get(`/contacts/${activeContactId}`).then(res => {
+        const cObj = res.data?.data || res.data;
+        if (cObj && cObj.id) {
+          applyContacts([cObj]);
+        } else {
+          applyContacts([]);
         }
-      }).catch(err => {
-        console.error("Lỗi tải danh sách khách hàng:", err);
+      }).catch(() => {
+        applyContacts([]);
+      }).finally(() => {
         setLoadingContacts(false);
       });
+    } else {
+      setContacts([]);
+      setLoadingContacts(false);
     }
   }, [isOpen, task?.id, task?.contact_id, task?.related_id]);
 

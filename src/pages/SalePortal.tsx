@@ -9,11 +9,29 @@ import {
   Sun, Moon, ChevronDown, ChevronUp, AlertTriangle, ChevronLeft, ChevronRight,
   LayoutDashboard, Database, Ticket, Calendar, RefreshCw, Menu, Tag, Server, Scale, Settings, Info, Cpu,
   Camera, Video, Layers, Plus, Receipt, CreditCard, Building2, Users, User, UserCheck, UserPlus, Trash2, CheckSquare, Square, X, Paperclip, LifeBuoy, Fingerprint, LayoutGrid, Monitor, Tv, Phone, Save, Award, Ban, RotateCcw, MoreHorizontal, Check, KeyRound, Loader2, Shield, Mail, ShieldCheck, Lock as LockIcon, Bell,
-  Play, Sparkles, ArrowRight, Eye, EyeOff, MapPin, Pin, Palette
+  Play, Sparkles, ArrowRight, Eye, EyeOff, MapPin, Pin, Palette, BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { triggerFullConfetti } from '../utils/confettiHelper';
+import {
+  DndContext,
+  closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  type DragEndEvent,
+  type DragStartEvent
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  arrayMove,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const WarRoomFlightDeck = lazy(() => import('../components/Dashboard/WarRoomFlightDeck').then(module => ({ default: module.WarRoomFlightDeck })));
 const MyPayslips = lazy(() => import('./MyPayslips'));
@@ -62,6 +80,8 @@ import api from '../api/axios';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
 import { WorkspaceCustomizerModal } from '../components/ui/WorkspaceCustomizerModal';
+import { WorkspaceTaskStatsModal } from '../components/ui/WorkspaceTaskStatsModal';
+import { WORKSPACE_INSPIRATIONAL_QUOTES } from '../data/inspirationalQuotes';
 import styles from './EntityDrawer.module.css';
 
 
@@ -170,6 +190,482 @@ const getDueDateLabel = (dateStr: string | null | undefined, isDone: boolean, t:
   const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
   if (diff <= 7) return `${t('Còn')} ${diff} ${t('ngày')}`;
   return d.toLocaleDateString('vi-VN');
+};
+
+const formatVietnameseFullName = (nameStr: string) => {
+  if (!nameStr || typeof nameStr !== 'string') return '';
+  const parts = nameStr.trim().split(/\s+/);
+  if (parts.length <= 1) return nameStr;
+  const lastName = parts.pop();
+  return `${lastName} ${parts.join(' ')}`;
+};
+
+interface WorkspaceCardInnerProps {
+  task: any;
+  isMobile: boolean;
+  wsBg: string;
+  theme: string;
+  isPinned: boolean;
+  togglePinTask: (id: number) => void;
+  users: any[];
+  t: (key: string) => string;
+  getDueDateLabel: (dateStr: string | null | undefined, isDone: boolean, t: any) => string;
+  parseDescriptionAndChecklist: (descText: string) => any;
+  setChecklist: (cl: any) => void;
+  setSelectedTaskForDetails: (task: any) => void;
+  handleOpenContactProfile: (id: number, tab?: string, initData?: any) => void;
+  setSelectedTaskParticipants: (users: any[]) => void;
+  setParticipantsModalOpen: (open: boolean) => void;
+  isDragging?: boolean;
+  isOverlay?: boolean;
+}
+
+const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
+  task,
+  isMobile,
+  wsBg,
+  theme,
+  isPinned,
+  togglePinTask,
+  users,
+  t,
+  getDueDateLabel,
+  parseDescriptionAndChecklist,
+  setChecklist,
+  setSelectedTaskForDetails,
+  handleOpenContactProfile,
+  setSelectedTaskParticipants,
+  setParticipantsModalOpen,
+  isDragging,
+  isOverlay
+}) => {
+  const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
+  const isToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
+
+  let dateBadgeColor = 'var(--color-text-muted)';
+  let dateBadgeBg = 'var(--color-bg)';
+  if (isOverdue) {
+    dateBadgeColor = 'var(--color-danger)';
+    dateBadgeBg = 'rgba(239, 68, 68, 0.08)';
+  } else if (isToday) {
+    dateBadgeColor = 'var(--color-warning)';
+    dateBadgeBg = 'rgba(245, 158, 11, 0.08)';
+  }
+
+  const link = task.body && !task.body.startsWith('{"erp_task":') 
+    ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '') 
+    : '';
+
+  let description = '';
+  if (task.body) {
+    if (task.body.startsWith('{"erp_task":')) {
+      try {
+        const parsed = JSON.parse(task.body);
+        description = parsed.erp_task?.description || '';
+      } catch (e) {
+        description = task.body;
+      }
+    } else {
+      description = task.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
+    }
+  }
+
+  const cleanDesc = description
+    ? stripHtml(description)
+        .replace(/\[MISA_IMPORT\]/g, '')
+        .replace(/Project:\s*ALL IN ONE\s*-\s*VẬN HÀNH/gi, '')
+        .trim()
+    : '';
+
+  const progressVal = task.progress || 0;
+
+  let cardBorder = wsBg
+    ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(255, 255, 255, 0.85)')
+    : '1px solid var(--color-border-light)';
+  let cardBg = wsBg
+    ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.95)')
+    : 'var(--color-surface)';
+  let cardShadow = wsBg
+    ? (theme === 'dark' ? '0 8px 24px rgba(0, 0, 0, 0.35)' : '0 8px 24px -4px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04)')
+    : 'var(--shadow-sm)';
+  if (isPinned) {
+    cardBorder = '2px solid var(--color-danger)';
+    cardBg = wsBg 
+      ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(254, 242, 242, 0.96)')
+      : 'rgba(239, 68, 68, 0.03)';
+    cardShadow = 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)';
+  } else if (isOverdue && task.status !== 'done') {
+    cardBorder = '1.5px solid var(--color-danger)';
+    cardShadow = 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.08)';
+  }
+
+  if (isOverlay) {
+    cardShadow = '0 24px 48px -8px rgba(0, 0, 0, 0.38), 0 0 0 2px var(--color-primary)';
+    cardBorder = '2px solid var(--color-primary)';
+  }
+
+  return (
+    <div 
+      style={{
+        padding: isMobile ? '12px 14px' : '1rem 1.25rem',
+        background: cardBg,
+        border: cardBorder,
+        backdropFilter: wsBg ? 'blur(6px)' : 'none',
+        WebkitBackdropFilter: wsBg ? 'blur(6px)' : 'none',
+        borderRadius: '14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: isMobile ? '0.5rem' : '0.75rem',
+        boxShadow: cardShadow,
+        transition: isMobile ? 'none' : (isOverlay ? 'none' : 'box-shadow 0.2s ease, border-color 0.2s ease'),
+        cursor: isOverlay ? 'grabbing' : 'grab',
+        position: 'relative',
+        width: '100%',
+        maxWidth: '100%',
+        height: isOverlay ? 'auto' : '100%',
+        flex: isOverlay ? 'none' : '1 1 auto',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        transform: isOverlay ? 'scale(1.02)' : 'none',
+        opacity: isDragging ? 0.35 : 1,
+        userSelect: 'none'
+      }}
+      className={isMobile ? 'active-press' : (isOverlay ? '' : 'hover-lift active-press')}
+      onClick={() => {
+        if (isDragging) return;
+        const parsed = parseDescriptionAndChecklist(description);
+        const parsedTask = {
+          id: task.id,
+          title: task.subject,
+          done: task.status === 'done',
+          priority: task.priority,
+          due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+          link,
+          description: parsed.pureDescription,
+          user_id: task.user_id,
+          user_name: task.user_name || 'Hệ thống',
+          tags: task.tags || '',
+          participant_ids: task.participant_ids || '',
+          progress: task.progress || 0,
+          require_approval: task.require_approval || 0,
+          approver_id: task.approver_id,
+          approval_status: task.approval_status,
+          contact_id: task.contact_id,
+          contact_name: task.contact_name,
+          contact_avatar: task.contact_avatar,
+          related_type: task.related_type,
+          related_id: task.related_id,
+          body: task.body,
+          created_by: task.created_by,
+          created_by_name: task.created_by_name,
+          created_by_avatar: task.created_by_avatar
+        };
+        setChecklist(parsed.checklist);
+        setSelectedTaskForDetails(parsedTask);
+      }}
+    >
+      {/* Top Tags & Priority */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+          {task.tags && task.tags.split(',').filter(Boolean).map((tag: string) => {
+            const trimmedTag = tag.trim();
+            if (trimmedTag === 'internal_task') return null;
+            return (
+              <span 
+                key={tag} 
+                style={{ 
+                  fontSize: '0.65rem', 
+                  padding: '1px 6px', 
+                  borderRadius: '20px', 
+                  background: 'var(--color-bg)', 
+                  color: 'var(--color-text-light)', 
+                  fontWeight: 700 
+                }}
+              >
+                #{trimmedTag}
+              </span>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {task.priority === 'high' && (
+            <span style={{ fontSize: '0.625rem', fontWeight: 800, padding: '1px 6px', borderRadius: '20px', background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
+              {t('Khẩn cấp')}
+            </span>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePinTask(task.id);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              border: 'none',
+              background: isPinned ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+              color: isPinned ? 'var(--color-danger)' : 'var(--color-text-light)',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s'
+            }}
+            title={isPinned ? t('Bỏ ghim công việc') : t('Ghim công việc')}
+          >
+            <Pin size={14} style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)', transition: 'transform 0.2s' }} />
+          </button>
+        </div>
+      </div>
+
+      {/* Task Image Preview */}
+      {task.first_image_url && (
+        <div style={{
+          width: '100%',
+          height: '120px',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          border: '1px solid var(--color-border-light)',
+          background: 'var(--color-bg-alt)',
+          marginBottom: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <img 
+            src={task.first_image_url.startsWith('http') || task.first_image_url.startsWith('blob:') || task.first_image_url.startsWith('data:')
+              ? task.first_image_url 
+              : `${import.meta.env.VITE_API_URL || '/backend'}/${task.first_image_url}`} 
+            alt="Task Preview" 
+            loading="lazy"
+            decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+            onError={(e) => {
+              (e.currentTarget as HTMLElement).parentElement!.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
+      {/* Title & Description */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <h3 style={{ fontWeight: 700, fontSize: isMobile ? '0.875rem' : '0.925rem', color: 'var(--color-text)', margin: 0, lineHeight: 1.35 }}>
+          {task.subject}
+        </h3>
+        {cleanDesc && (
+          <p style={{
+            fontSize: isMobile ? '0.725rem' : '0.75rem',
+            color: 'var(--color-text-muted)',
+            margin: 0,
+            lineHeight: 1.4,
+            display: '-webkit-box',
+            WebkitLineClamp: isMobile ? 2 : 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {cleanDesc}
+          </p>
+        )}
+      </div>
+
+      {/* Progress Bar indicator */}
+      <div style={{ marginTop: 'auto', paddingTop: '2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Tiến độ:</span>
+          <span style={{ fontSize: '0.68rem', fontWeight: 800, color: progressVal === 100 ? 'var(--color-success)' : 'var(--color-primary)' }}>{progressVal}%</span>
+        </div>
+        <div style={{ width: '100%', height: '6px', background: 'var(--color-border-light)', borderRadius: '99px', overflow: 'hidden' }}>
+          <div 
+            style={{ 
+              width: `${progressVal}%`, 
+              height: '100%', 
+              background: progressVal === 100 
+                ? 'var(--color-success)' 
+                : 'linear-gradient(90deg, #BD1D2D, #F97316)', 
+              borderRadius: '99px',
+              transition: 'width 0.4s var(--transition-fluid)' 
+            }} 
+          />
+        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--color-border-light)', margin: '4px 0 6px 0' }} />
+
+      {/* Customer row */}
+      {(() => {
+        const hasCustomer = Boolean((task.related_type === 'contact' && task.related_id) || task.contact_name || task.contact_id);
+        const customerId = task.contact_id || (task.related_type === 'contact' ? task.related_id : null);
+        const customerDisplayName = formatVietnameseFullName(task.contact_name || (task.related_type === 'contact' ? t('Khách hàng') : ''));
+
+        if (!hasCustomer || !customerDisplayName) return null;
+
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
+            <span
+              style={{
+                fontSize: '0.725rem',
+                fontWeight: 700,
+                padding: '3px 10px',
+                borderRadius: '20px',
+                color: 'var(--color-text, #334155)',
+                background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))',
+                border: '1px solid var(--color-border-light, rgba(0,0,0,0.06))',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                cursor: customerId ? 'pointer' : 'default',
+                maxWidth: '100%',
+                transition: 'all 0.15s ease'
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                if (customerId) {
+                  e.stopPropagation();
+                  handleOpenContactProfile(Number(customerId), 'info', {
+                    id: Number(customerId),
+                    full_name: customerDisplayName,
+                    avatar_url: task.contact_avatar,
+                    _isLoading: true
+                  });
+                }
+              }}
+              title={customerDisplayName}
+            >
+              <Avatar 
+                src={task.contact_avatar} 
+                name={customerDisplayName} 
+                size={15} 
+              />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {customerDisplayName}
+              </span>
+            </span>
+          </div>
+        );
+      })()}
+
+      {/* Footer metadata */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', minHeight: '26px' }}>
+        <div>
+          {task.due_date && (
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', color: dateBadgeColor, background: dateBadgeBg, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+              <Calendar size={11} /> {getDueDateLabel(task.due_date, task.status === 'done', t)}
+              {isOverdue && task.status !== 'done' && <ShieldAlert size={10} style={{ marginLeft: 2 }} />}
+            </span>
+          )}
+        </div>
+
+        {(() => {
+          const assigneeUser = users.find((u: any) => String(u.id) === String(task.user_id));
+          const approverUser = task.approver_id ? users.find((u: any) => String(u.id) === String(task.approver_id)) : null;
+          const participantIds = task.participant_ids ? task.participant_ids.split(',').filter(Boolean) : [];
+          const participantUsers = participantIds.map((id: string) => users.find((u: any) => String(u.id) === String(id))).filter(Boolean);
+
+          return (
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }} 
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                if (participantUsers.length > 0) {
+                  e.stopPropagation();
+                  setSelectedTaskParticipants(participantUsers);
+                  setParticipantsModalOpen(true);
+                }
+              }}
+            >
+              {/* Assignee Avatar */}
+              {assigneeUser && (
+                <div title={`Chịu trách nhiệm: ${assigneeUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
+                  <Avatar src={assigneeUser.avatar_url || assigneeUser.avatar} name={assigneeUser.full_name} size={24} />
+                  <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-primary)', borderRadius: '50%', width: 10, height: 10, border: '1.5px solid var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                </div>
+              )}
+
+              {/* Approver Avatar */}
+              {approverUser && (
+                <div title={`Người duyệt: ${approverUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
+                  <Avatar src={approverUser.avatar_url || approverUser.avatar} name={approverUser.full_name} size={24} />
+                  <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-warning)', borderRadius: '50%', width: 10, height: 10, border: '1.5px solid var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                </div>
+              )}
+
+              {/* Overlapping Participant Avatars */}
+              {participantUsers.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '2px', position: 'relative' }}>
+                  {participantUsers.slice(0, 3).map((pUser: any, pIdx: number) => (
+                    <div
+                      key={pUser.id}
+                      title={`Người liên quan: ${pUser.full_name}`}
+                      style={{
+                        marginLeft: pIdx > 0 ? '-8px' : '0px',
+                        border: '1.5px solid var(--color-surface)',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        zIndex: 10 - pIdx,
+                        display: 'flex'
+                      }}
+                    >
+                      <Avatar src={pUser.avatar_url || pUser.avatar} name={pUser.full_name} size={22} />
+                    </div>
+                  ))}
+                  {participantUsers.length > 3 && (
+                    <div
+                      style={{
+                        marginLeft: '-8px',
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '50%',
+                        background: 'var(--color-border)',
+                        color: 'var(--color-text-muted)',
+                        fontSize: '0.65rem',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1.5px solid var(--color-surface)',
+                        zIndex: 5,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      +{participantUsers.length - 3}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+};
+
+const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = (props) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: props.task.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 1,
+    touchAction: 'none',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column'
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <WorkspaceCardInner {...props} isDragging={isDragging} />
+    </div>
+  );
 };
 
 const DebouncedSearchInput: React.FC<{
@@ -565,6 +1061,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   // Filter states for workspace tasks
   const [wsSearch, setWsSearch] = useState('');
+  const [isWsSearchFocused, setIsWsSearchFocused] = useState(false);
   const [debouncedWsSearch, setDebouncedWsSearch] = useState('');
 
   useEffect(() => {
@@ -579,9 +1076,27 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [wsViewMode, setWsViewMode] = useState<'grid' | 'kanban' | 'focus'>('grid');
   const [hideWorkspaceAlerts, setHideWorkspaceAlerts] = useState(true);
   const [showWorkspaceCustomizer, setShowWorkspaceCustomizer] = useState(false);
+  const [isWorkspaceStatsModalOpen, setIsWorkspaceStatsModalOpen] = useState(false);
+  const [currentQuoteIdx, setCurrentQuoteIdx] = useState(() => Math.floor(Math.random() * WORKSPACE_INSPIRATIONAL_QUOTES.length));
+
+  const handleNextQuote = () => {
+    setCurrentQuoteIdx(prev => (prev + 1) % WORKSPACE_INSPIRATIONAL_QUOTES.length);
+  };
+
+  const handlePrevQuote = () => {
+    setCurrentQuoteIdx(prev => (prev - 1 + WORKSPACE_INSPIRATIONAL_QUOTES.length) % WORKSPACE_INSPIRATIONAL_QUOTES.length);
+  };
+
+  const handleShuffleQuote = () => {
+    setCurrentQuoteIdx(prev => {
+      let next = Math.floor(Math.random() * WORKSPACE_INSPIRATIONAL_QUOTES.length);
+      if (next === prev) next = (next + 1) % WORKSPACE_INSPIRATIONAL_QUOTES.length;
+      return next;
+    });
+  };
   const [wsBg, setWsBg] = useState<string>(() => {
     const uid = currentUser?.id || user?.id;
-    return uid ? localStorage.getItem(`ws_custom_bg_${uid}`) || '' : '';
+    return uid ? (localStorage.getItem(`ws_custom_bg_${uid}`) || '/imgs/myerp_dark_brand_wallpaper.jpg') : '/imgs/myerp_dark_brand_wallpaper.jpg';
   });
   const [wsCols, setWsCols] = useState<number>(() => {
     const uid = currentUser?.id || user?.id;
@@ -594,31 +1109,93 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     return val !== null ? Number(val) : 0;
   });
 
+  const [wsTaskOrder, setWsTaskOrder] = useState<number[]>(() => {
+    const uid = currentUser?.id || user?.id;
+    if (!uid) return [];
+    try {
+      const raw = localStorage.getItem(`ws_task_order_${uid}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const saveTaskOrderDebounceRef = useRef<any>(null);
+  const handlePersistTaskOrder = (newOrder: number[]) => {
+    const uid = currentUser?.id || user?.id;
+    setWsTaskOrder(newOrder);
+    if (uid) {
+      localStorage.setItem(`ws_task_order_${uid}`, JSON.stringify(newOrder));
+    }
+    if (saveTaskOrderDebounceRef.current) {
+      clearTimeout(saveTaskOrderDebounceRef.current);
+    }
+    saveTaskOrderDebounceRef.current = setTimeout(() => {
+      fetchAPI('save_workspace_task_order', {
+        method: 'POST',
+        body: JSON.stringify({ task_order: newOrder })
+      }).catch(err => {
+        console.error('Lỗi khi lưu thứ tự task:', err);
+      });
+    }, 400);
+  };
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 6,
+      },
+    })
+  );
+  const [activeDragTask, setActiveDragTask] = useState<any | null>(null);
+
   useEffect(() => {
     const uid = currentUser?.id || user?.id;
     if (uid) {
-      const savedBg = localStorage.getItem(`ws_custom_bg_${uid}`) || '';
-      const savedCols = localStorage.getItem(`ws_custom_cols_${uid}`);
+      // Auto-migrate local cache to default MYERP Brand wallpaper & 4 columns
+      const hasBrandMigrated = localStorage.getItem(`ws_brand_migrated_v271_${uid}`);
+      let savedBg = localStorage.getItem(`ws_custom_bg_${uid}`);
+      let savedCols = localStorage.getItem(`ws_custom_cols_${uid}`);
       const savedOverlay = localStorage.getItem(`ws_custom_overlay_${uid}`);
-      setWsBg(savedBg);
-      if (savedCols) setWsCols(Number(savedCols));
+
+      if (!hasBrandMigrated || !savedBg) {
+        savedBg = '/imgs/myerp_dark_brand_wallpaper.jpg';
+        savedCols = '4';
+        localStorage.setItem(`ws_custom_bg_${uid}`, savedBg);
+        localStorage.setItem(`ws_custom_cols_${uid}`, savedCols);
+        localStorage.setItem(`ws_brand_migrated_v271_${uid}`, '1');
+      }
+
+      setWsBg(savedBg || '/imgs/myerp_dark_brand_wallpaper.jpg');
+      setWsCols(savedCols ? Number(savedCols) : 4);
       if (savedOverlay) setWsOverlay(Number(savedOverlay));
 
       // Synchronize with backend database for cross-device consistency
       fetchAPI('get_workspace_settings').then(res => {
         if (res && res.success && res.data) {
-          const { bg, cols, overlay } = res.data;
-          if (bg !== undefined && bg !== null) {
-            setWsBg(bg);
-            localStorage.setItem(`ws_custom_bg_${uid}`, bg);
-          }
-          if (cols !== undefined && cols >= 2 && cols <= 6) {
-            setWsCols(cols);
-            localStorage.setItem(`ws_custom_cols_${uid}`, String(cols));
-          }
+          const { bg, cols, overlay, task_order } = res.data;
+          const finalBg = bg || '/imgs/myerp_dark_brand_wallpaper.jpg';
+          const finalCols = (cols !== undefined && cols >= 2 && cols <= 6) ? cols : 4;
+
+          setWsBg(finalBg);
+          localStorage.setItem(`ws_custom_bg_${uid}`, finalBg);
+
+          setWsCols(finalCols);
+          localStorage.setItem(`ws_custom_cols_${uid}`, String(finalCols));
+
           if (overlay !== undefined && overlay >= 0 && overlay <= 100) {
             setWsOverlay(overlay);
             localStorage.setItem(`ws_custom_overlay_${uid}`, String(overlay));
+          }
+          if (task_order && Array.isArray(task_order) && task_order.length > 0) {
+            setWsTaskOrder(task_order);
+            localStorage.setItem(`ws_task_order_${uid}`, JSON.stringify(task_order));
           }
         }
       }).catch(() => {});
@@ -1352,15 +1929,24 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       return true;
     });
 
-    // Sắp xếp đưa pinned tasks lên đầu danh sách đã lọc
+    // Sắp xếp đưa pinned tasks lên đầu danh sách đã lọc, và theo wsTaskOrder nếu có
     return [...filtered].sort((a, b) => {
       const aPinned = pinnedTaskIds.includes(Number(a.id));
       const bPinned = pinnedTaskIds.includes(Number(b.id));
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
+
+      if (wsTaskOrder.length > 0) {
+        const aIdx = wsTaskOrder.indexOf(Number(a.id));
+        const bIdx = wsTaskOrder.indexOf(Number(b.id));
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+        if (aIdx !== -1) return -1;
+        if (bIdx !== -1) return 1;
+      }
+
       return 0;
     });
-  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin]);
+  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, wsTaskOrder]);
 
   const workspaceStats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -1453,6 +2039,38 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     const startIndex = (wsTasksPage - 1) * wsTasksPageSize;
     return filteredWsTasks.slice(startIndex, startIndex + wsTasksPageSize);
   }, [filteredWsTasks, wsTasksPage, wsTasksPageSize]);
+
+  const handleGridDragStart = (event: DragStartEvent) => {
+    const found = paginatedWsTasks.find(t => String(t.id) === String(event.active.id));
+    setActiveDragTask(found || null);
+  };
+
+  const handleGridDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragTask(null);
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = paginatedWsTasks.findIndex(t => String(t.id) === String(active.id));
+    const newIndex = paginatedWsTasks.findIndex(t => String(t.id) === String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    let baseOrder = wsTaskOrder.length > 0 
+      ? [...wsTaskOrder] 
+      : filteredWsTasks.map(t => Number(t.id));
+
+    const activeIdNum = Number(active.id);
+    const overIdNum = Number(over.id);
+
+    if (!baseOrder.includes(activeIdNum)) baseOrder.push(activeIdNum);
+    if (!baseOrder.includes(overIdNum)) baseOrder.push(overIdNum);
+
+    const fromIdx = baseOrder.indexOf(activeIdNum);
+    const toIdx = baseOrder.indexOf(overIdNum);
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const updatedOrder = arrayMove(baseOrder, fromIdx, toIdx);
+      handlePersistTaskOrder(updatedOrder);
+    }
+  };
 
   const [loadingWsTasks, setLoadingWsTasks] = useState(false);
   const [wsContacts, setWsContacts] = useState<any[]>([]);
@@ -5216,7 +5834,139 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 </div>
 
                 {/* Top Right Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  {/* Ô tìm kiếm chuyển lên trên cạnh Chế độ tập trung */}
+                  <div style={{ 
+                    position: 'relative', 
+                    width: isMobile ? '160px' : (isWsSearchFocused ? '400px' : '340px'),
+                    height: isMobile ? '32px' : '38px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                    boxSizing: 'border-box'
+                  }}>
+                    <input
+                      type="text"
+                      className="ws-search-input"
+                      placeholder={t('Tìm theo tên, mô tả...')}
+                      value={wsSearch}
+                      onChange={e => setWsSearch(e.target.value)}
+                      onFocus={() => setIsWsSearchFocused(true)}
+                      onBlur={() => setIsWsSearchFocused(false)}
+                      style={{ 
+                        height: isMobile ? '32px' : '38px', 
+                        minHeight: isMobile ? '32px' : '38px',
+                        maxHeight: isMobile ? '32px' : '38px',
+                        lineHeight: isMobile ? '32px' : '38px',
+                        fontSize: '0.85rem', 
+                        padding: wsSearch ? '0 46px 0 14px' : '0 36px 0 14px', 
+                        borderRadius: '10px', 
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        border: isWsSearchFocused 
+                          ? '1.5px solid var(--color-primary, #BD1D2D)' 
+                          : (wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-border)'),
+                        background: wsBg 
+                          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                          : 'var(--color-surface)',
+                        color: wsBg ? '#ffffff' : 'var(--color-text)',
+                        textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                        backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                        boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                        transition: 'all 0.2s ease',
+                        outline: 'none'
+                      }}
+                    />
+                    <Search 
+                      size={15} 
+                      style={{ 
+                        position: 'absolute', 
+                        right: wsSearch ? '28px' : '12px', 
+                        top: '50%', 
+                        transform: isWsSearchFocused 
+                          ? 'translateY(-50%) rotate(15deg) scale(1.15)' 
+                          : 'translateY(-50%) rotate(0deg) scale(1)', 
+                        color: wsBg ? '#ffffff' : 'var(--color-text-muted)', 
+                        pointerEvents: 'none',
+                        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                        filter: wsBg ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none'
+                      }} 
+                    />
+                    {wsSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setWsSearch('')}
+                        style={{
+                          position: 'absolute',
+                          right: '8px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          padding: '2px',
+                          cursor: 'pointer',
+                          color: wsBg ? '#ffffff' : 'var(--color-text-muted)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          borderRadius: '50%',
+                          transition: 'transform 0.15s ease, color 0.15s ease'
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.color = 'var(--color-primary, #BD1D2D)';
+                          e.currentTarget.style.transform = 'translateY(-50%) scale(1.15)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.color = wsBg ? '#ffffff' : 'var(--color-text-muted)';
+                          e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Nút Thống Kê Công Việc */}
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => {
+                      setShowDoneTasks(true);
+                      setWsStatus('all');
+                      setIsWorkspaceStatsModalOpen(true);
+                    }}
+                    title={t('Báo cáo & Thống kê công việc')}
+                    style={{
+                      background: wsBg 
+                        ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' 
+                        : 'rgba(189, 29, 45, 0.06)',
+                      border: wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid rgba(189, 29, 45, 0.25)',
+                      backdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
+                      color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)',
+                      textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      borderRadius: '10px',
+                      padding: isMobile ? '0 10px' : '0 14px',
+                      height: '38px',
+                      boxSizing: 'border-box',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.32)' : 'rgba(189, 29, 45, 0.12)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)'; }}
+                  >
+                    <BarChart3 size={15} style={{ color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)' }} />
+                    {!isMobile && <span>{t('Thống kê')}</span>}
+                  </button>
+
                   {!isMobile && (
                     <button
                       className="btn secondary"
@@ -5228,22 +5978,26 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
                         color: wsBg ? '#ffffff' : 'var(--color-primary, #BD1D2D)',
                         fontWeight: 700,
-                        fontSize: '0.85rem',
+                        fontSize: '0.82rem',
                         borderRadius: '10px',
-                        padding: '8px 14px',
-                        display: 'flex',
+                        padding: '0 14px',
+                        height: '38px',
+                        boxSizing: 'border-box',
+                        display: 'inline-flex',
                         alignItems: 'center',
+                        justifyContent: 'center',
                         gap: '6px',
                         cursor: 'pointer',
                         transition: 'all 0.2s',
                         boxShadow: wsBg ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
-                        textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none'
+                        textShadow: wsBg ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                        whiteSpace: 'nowrap'
                       }}
                       onMouseEnter={e => { e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.32)' : 'rgba(189, 29, 45, 0.12)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = wsBg ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.1) 100%)' : 'rgba(189, 29, 45, 0.06)'; }}
                     >
                       <Play size={14} />
-                      <span>{t('Bắt đầu Phiên Làm Việc')}</span>
+                      <span>{t('Chế độ tập trung')}</span>
                     </button>
                   )}
 
@@ -5252,13 +6006,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     style={{ 
                       background: 'var(--color-primary, #BD1D2D)', 
                       borderColor: 'var(--color-primary, #BD1D2D)',
-                      height: '32px',
-                      padding: isMobile ? '0 10px' : '0 14px',
-                      borderRadius: '8px',
+                      height: '38px',
+                      padding: isMobile ? '0 12px' : '0 16px',
+                      borderRadius: '10px',
                       fontSize: isMobile ? '0.78rem' : '0.85rem',
                       fontWeight: 700,
-                      display: 'flex',
+                      boxSizing: 'border-box',
+                      display: 'inline-flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       gap: '4px',
                       whiteSpace: 'nowrap',
                       border: wsBg ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--color-primary)',
@@ -5896,67 +6652,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             minWidth: 0,
             boxSizing: 'border-box'
           }}>
-            {/* Search Input (Dài hơn và nằm bên trái cụm điều khiển) */}
-            <div style={{ 
-              position: 'relative', 
-              flex: isMobile ? '1 1 100%' : '0 1 320px', 
-              width: isMobile ? '100%' : 'auto',
-              minWidth: isMobile ? '100%' : '260px',
-              boxSizing: 'border-box'
-            }}>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Tìm theo tên, mô tả..."
-                value={wsSearch}
-                onChange={e => setWsSearch(e.target.value)}
-                style={{ 
-                  height: '34px', 
-                  fontSize: '0.8rem', 
-                  padding: wsSearch ? '4px 48px 4px 12px' : '4px 30px 4px 12px', 
-                  borderRadius: '8px', 
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  border: wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.15)') : '1px solid var(--color-border)',
-                  background: wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.9)') : 'var(--color-surface)',
-                  color: wsBg ? (theme === 'dark' ? '#ffffff' : '#0f172a') : 'var(--color-text)',
-                  backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                  WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none'
-                }}
-              />
-              <Search 
-                size={14} 
-                style={{ 
-                  position: 'absolute', 
-                  right: wsSearch ? '28px' : '10px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)', 
-                  color: wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-muted)', 
-                  pointerEvents: 'none' 
-                }} 
-              />
-              {wsSearch && (
-                <button
-                  type="button"
-                  onClick={() => setWsSearch('')}
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: wsBg ? (theme === 'dark' ? '#cbd5e1' : '#64748b') : 'var(--color-text-muted)',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
 
             {/* Filter Trigger Button */}
             <button
@@ -6723,404 +7418,234 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 </div>
               )
             ) : wsViewMode !== 'focus' && filteredWsTasks.length === 0 ? (
-          <div style={{ padding: '4rem 2rem', textAlign: 'center', background: 'var(--color-surface)', borderRadius: '16px', border: '1px solid var(--color-border-light)', color: 'var(--color-text-muted)' }}>
-            <CheckSquare size={36} style={{ opacity: 0.3, marginBottom: '0.75rem' }} />
-            <p style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>Không tìm thấy công việc nào phù hợp với bộ lọc.</p>
+          <div style={{ 
+            margin: isMobile ? '3.5rem auto 4rem auto' : '7.5rem auto 8rem auto', 
+            maxWidth: '1000px',
+            width: '100%',
+            padding: isMobile ? '1rem 0.5rem' : '1.5rem 1.5rem', 
+            textAlign: 'center',
+            position: 'relative',
+            boxSizing: 'border-box'
+          }}>
+            {/* Quote En & Vi */}
+            <div style={{ marginBottom: '1.75rem', minHeight: '90px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <p style={{
+                fontSize: isMobile ? '1.25rem' : '1.65rem',
+                fontWeight: 700,
+                lineHeight: 1.45,
+                color: wsBg ? '#ffffff' : 'var(--color-text)',
+                margin: '0 0 0.75rem 0',
+                fontStyle: 'italic',
+                textShadow: wsBg ? '0 2px 14px rgba(0, 0, 0, 0.85)' : 'none',
+                letterSpacing: '-0.2px'
+              }}>
+                "{WORKSPACE_INSPIRATIONAL_QUOTES[currentQuoteIdx]?.en}"
+              </p>
+              <p style={{
+                fontSize: isMobile ? '0.95rem' : '1.1rem',
+                fontWeight: 500,
+                color: wsBg ? 'rgba(255, 255, 255, 0.88)' : 'var(--color-text-muted)',
+                margin: '0 0 0.75rem 0',
+                lineHeight: 1.55,
+                textShadow: wsBg ? '0 1px 6px rgba(0, 0, 0, 0.75)' : 'none'
+              }}>
+                {WORKSPACE_INSPIRATIONAL_QUOTES[currentQuoteIdx]?.vi}
+              </p>
+              <p style={{
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                color: wsBg ? 'rgba(255, 255, 255, 0.7)' : 'var(--color-primary, #BD1D2D)',
+                margin: 0,
+                letterSpacing: '0.5px',
+                textShadow: wsBg ? '0 1px 4px rgba(0, 0, 0, 0.7)' : 'none'
+              }}>
+                — {WORKSPACE_INSPIRATIONAL_QUOTES[currentQuoteIdx]?.author}
+              </p>
+            </div>
+
+            {/* Navigation Controls: Prev, Shuffle, Next */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px'
+            }}>
+              <button
+                type="button"
+                onClick={handlePrevQuote}
+                title={t('Câu trước')}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: wsBg ? 'rgba(255, 255, 255, 0.15)' : 'var(--color-bg)',
+                  border: wsBg ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid var(--color-border)',
+                  color: wsBg ? '#ffffff' : 'var(--color-text)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.28)' : 'var(--color-border)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.15)' : 'var(--color-bg)'; }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShuffleQuote}
+                title={t('Đổi câu ngẫu nhiên')}
+                style={{
+                  padding: '0 16px',
+                  height: '36px',
+                  borderRadius: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: wsBg ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-bg)',
+                  border: wsBg ? '1px solid rgba(255, 255, 255, 0.28)' : '1px solid var(--color-border)',
+                  color: wsBg ? '#ffffff' : 'var(--color-text)',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.3)' : 'var(--color-border)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.18)' : 'var(--color-bg)'; }}
+              >
+                <RefreshCw size={13} />
+                <span>{t('Đổi câu')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleNextQuote}
+                title={t('Câu kế tiếp')}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: wsBg ? 'rgba(255, 255, 255, 0.15)' : 'var(--color-bg)',
+                  border: wsBg ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid var(--color-border)',
+                  color: wsBg ? '#ffffff' : 'var(--color-text)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.28)' : 'var(--color-border)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = wsBg ? 'rgba(255, 255, 255, 0.15)' : 'var(--color-bg)'; }}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            {/* Subtitle note & Quick create button */}
+            <div style={{
+              marginTop: '1.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}>
+              <span style={{
+                fontSize: '0.82rem',
+                color: wsBg ? 'rgba(255, 255, 255, 0.65)' : 'var(--color-text-muted)',
+                textShadow: wsBg ? '0 1px 4px rgba(0, 0, 0, 0.7)' : 'none'
+              }}>
+                {t('Không có công việc nào phù hợp với bộ lọc hiện tại.')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowTaskModal(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-primary, #BD1D2D)',
+                  color: '#ffffff',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(189, 29, 45, 0.4)',
+                  transition: 'transform 0.15s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                <Plus size={13} />
+                <span>{t('Tạo việc mới')}</span>
+              </button>
+            </div>
           </div>
         ) : wsViewMode === 'grid' ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : `repeat(${wsCols || 4}, minmax(0, 1fr))`, gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '100px' : '40px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
-            {paginatedWsTasks.map(task => {
-              const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
-              const isToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
-              
-              let dateBadgeColor = 'var(--color-text-muted)';
-              let dateBadgeBg = 'var(--color-bg)';
-              if (isOverdue) {
-                dateBadgeColor = 'var(--color-danger)';
-                dateBadgeBg = 'rgba(239, 68, 68, 0.08)';
-              } else if (isToday) {
-                dateBadgeColor = 'var(--color-warning)';
-                dateBadgeBg = 'rgba(245, 158, 11, 0.08)';
-              }
-
-              const link = task.body && !task.body.startsWith('{"erp_task":') 
-                ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '') 
-                : '';
-              
-              let description = '';
-              if (task.body) {
-                if (task.body.startsWith('{"erp_task":')) {
-                  try {
-                    const parsed = JSON.parse(task.body);
-                    description = parsed.erp_task?.description || '';
-                  } catch (e) {
-                    description = task.body;
-                  }
-                } else {
-                  description = task.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
-                }
-              }
-
-              const cleanDesc = description
-                ? stripHtml(description)
-                    .replace(/\[MISA_IMPORT\]/g, '')
-                    .replace(/Project:\s*ALL IN ONE\s*-\s*VẬN HÀNH/gi, '')
-                    .trim()
-                : '';
-              
-              const progressVal = task.progress || 0;
-
-              const isPinned = pinnedTaskIds.includes(Number(task.id));
-              let cardBorder = wsBg
-                ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(255, 255, 255, 0.75)')
-                : '1px solid var(--color-border-light)';
-              let cardBg = wsBg
-                ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.82)' : 'rgba(255, 255, 255, 0.88)')
-                : 'var(--color-surface)';
-              let cardShadow = wsBg
-                ? (theme === 'dark' ? '0 8px 24px rgba(0, 0, 0, 0.35)' : '0 8px 24px -4px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04)')
-                : 'var(--shadow-sm)';
-              if (isPinned) {
-                cardBorder = '2px solid var(--color-danger)';
-                cardBg = wsBg 
-                  ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 242, 242, 0.92)')
-                  : 'rgba(239, 68, 68, 0.03)';
-                cardShadow = 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.1)';
-              } else if (isOverdue && task.status !== 'done') {
-                cardBorder = '1.5px solid var(--color-danger)';
-                cardShadow = 'var(--shadow-md), 0 0 12px rgba(239, 68, 68, 0.08)';
-              }
-
-              return (
-                <div 
-                  key={task.id} 
-                  style={{
-                    padding: isMobile ? '12px 14px' : '1rem 1.25rem',
-                    background: cardBg,
-                    border: cardBorder,
-                    backdropFilter: wsBg ? 'blur(12px)' : 'none',
-                    WebkitBackdropFilter: wsBg ? 'blur(12px)' : 'none',
-                    borderRadius: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: isMobile ? '0.5rem' : '0.75rem',
-                    boxShadow: cardShadow,
-                    transition: isMobile ? 'none' : 'all var(--transition-fluid)',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    width: '100%',
-                    maxWidth: '100%',
-                    boxSizing: 'border-box',
-                    overflow: 'hidden',
-                    contain: 'content',
-                    transform: 'translateZ(0)',
-                    contentVisibility: 'auto'
-                  }}
-                  className={isMobile ? 'active-press' : 'hover-lift active-press'}
-                  onClick={() => {
-                    const parsed = parseDescriptionAndChecklist(description);
-                    const parsedTask = {
-                      id: task.id,
-                      title: task.subject,
-                      done: task.status === 'done',
-                      priority: task.priority,
-                      due_date: task.due_date ? task.due_date.slice(0, 10) : '',
-                      link,
-                      description: parsed.pureDescription,
-                      user_id: task.user_id,
-                      user_name: task.user_name || 'Hệ thống',
-                      tags: task.tags || '',
-                      participant_ids: task.participant_ids || '',
-                      progress: task.progress || 0,
-                      require_approval: task.require_approval || 0,
-                      approver_id: task.approver_id,
-                      approval_status: task.approval_status,
-                      contact_id: task.contact_id,
-                      contact_name: task.contact_name,
-                      contact_avatar: task.contact_avatar,
-                      related_type: task.related_type,
-                      related_id: task.related_id,
-                      body: task.body,
-                      created_by: task.created_by,
-                      created_by_name: task.created_by_name,
-                      created_by_avatar: task.created_by_avatar
-                    };
-                    setChecklist(parsed.checklist);
-                    setSelectedTaskForDetails(parsedTask);
-                  }}
-                >
-                  {/* Top Tags & Priority */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
-                      {task.tags && task.tags.split(',').filter(Boolean).map((tag: string) => {
-                        const trimmedTag = tag.trim();
-                        if (trimmedTag === 'internal_task') return null;
-                        return (
-                          <span 
-                            key={tag} 
-                            style={{ 
-                              fontSize: '0.65rem', 
-                              padding: '1px 6px', 
-                              borderRadius: '20px', 
-                              background: 'var(--color-bg)', 
-                              color: 'var(--color-text-light)', 
-                              fontWeight: 700 
-                            }}
-                          >
-                            #{trimmedTag}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                      {task.priority === 'high' && (
-                        <span style={{ fontSize: '0.625rem', fontWeight: 800, padding: '1px 6px', borderRadius: '20px', background: 'var(--color-danger-light)', color: 'var(--color-danger)' }}>
-                          {t('Khẩn cấp')}
-                        </span>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePinTask(task.id);
-                        }}
-                        style={{
-                          border: 'none',
-                          background: isPinned ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
-                          color: isPinned ? 'var(--color-danger)' : 'var(--color-text-light)',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s'
-                        }}
-                        title={isPinned ? t('Bỏ ghim công việc') : t('Ghim công việc')}
-                      >
-                        <Pin size={14} style={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)', transition: 'transform 0.2s' }} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Task Image Preview */}
-                  {task.first_image_url && (
-                    <div style={{
-                      width: '100%',
-                      height: '120px',
-                      borderRadius: '8px',
-                      overflow: 'hidden',
-                      border: '1px solid var(--color-border-light)',
-                      background: 'var(--color-bg-alt)',
-                      marginBottom: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
-                      <img 
-                        src={task.first_image_url.startsWith('http') || task.first_image_url.startsWith('blob:') || task.first_image_url.startsWith('data:')
-                          ? task.first_image_url 
-                          : `${import.meta.env.VITE_API_URL || '/backend'}/${task.first_image_url}`} 
-                        alt="Task Preview" 
-                        loading="lazy"
-                        decoding="async"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLElement).parentElement!.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* Title & Description */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <h3 style={{ fontWeight: 700, fontSize: isMobile ? '0.875rem' : '0.925rem', color: 'var(--color-text)', margin: 0, lineHeight: 1.35 }}>
-                      {task.subject}
-                    </h3>
-                    {cleanDesc && (
-                      <p style={{
-                        fontSize: isMobile ? '0.725rem' : '0.75rem',
-                        color: 'var(--color-text-muted)',
-                        margin: 0,
-                        lineHeight: 1.4,
-                        display: '-webkit-box',
-                        WebkitLineClamp: isMobile ? 2 : 3,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
-                        {cleanDesc}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Progress Bar indicator */}
-                  <div style={{ marginTop: 'auto', paddingTop: '2px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>Tiến độ:</span>
-                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: progressVal === 100 ? 'var(--color-success)' : 'var(--color-primary)' }}>{progressVal}%</span>
-                    </div>
-                    <div style={{ width: '100%', height: '6px', background: 'var(--color-border-light)', borderRadius: '99px', overflow: 'hidden' }}>
-                      <div 
-                        style={{ 
-                          width: `${progressVal}%`, 
-                          height: '100%', 
-                          background: progressVal === 100 
-                            ? 'var(--color-success)' 
-                            : 'linear-gradient(90deg, #BD1D2D, #F97316)', 
-                          borderRadius: '99px',
-                          transition: 'width 0.4s var(--transition-fluid)' 
-                        }} 
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid var(--color-border-light)', margin: '4px 0 6px 0' }} />
-
-                  {/* Customer row (công việc có khách hàng thì tên khách hàng nằm 1 hàng trên) */}
-                  {(() => {
-                    const hasCustomer = Boolean((task.related_type === 'contact' && task.related_id) || task.contact_name || task.contact_id);
-                    const customerId = task.contact_id || (task.related_type === 'contact' ? task.related_id : null);
-                    const customerDisplayName = formatVietnameseFullName(task.contact_name || (task.related_type === 'contact' ? t('Khách hàng') : ''));
-
-                    if (!hasCustomer || !customerDisplayName) return null;
-
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleGridDragStart}
+              onDragEnd={handleGridDragEnd}
+            >
+              <SortableContext
+                items={paginatedWsTasks.map(t => t.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : `repeat(${wsCols || 4}, minmax(0, 1fr))`, gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '100px' : '40px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                  {paginatedWsTasks.map(task => {
+                    const isPinned = pinnedTaskIds.includes(Number(task.id));
                     return (
-                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
-                        <span
-                          style={{
-                            fontSize: '0.725rem',
-                            fontWeight: 700,
-                            padding: '3px 10px',
-                            borderRadius: '20px',
-                            color: 'var(--color-text, #334155)',
-                            background: 'var(--color-bg-subtle, rgba(0,0,0,0.03))',
-                            border: '1px solid var(--color-border-light, rgba(0,0,0,0.06))',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            cursor: customerId ? 'pointer' : 'default',
-                            maxWidth: '100%',
-                            transition: 'all 0.15s ease'
-                          }}
-                          onClick={(e) => {
-                            if (customerId) {
-                              e.stopPropagation();
-                              handleOpenContactProfile(Number(customerId), 'info', {
-                                id: Number(customerId),
-                                full_name: customerDisplayName,
-                                avatar_url: task.contact_avatar,
-                                _isLoading: true
-                              });
-                            }
-                          }}
-                          title={customerDisplayName}
-                        >
-                          <Avatar 
-                            src={task.contact_avatar} 
-                            name={customerDisplayName} 
-                            size={15} 
-                          />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {customerDisplayName}
-                          </span>
-                        </span>
-                      </div>
+                      <SortableWorkspaceCard
+                        key={task.id}
+                        task={task}
+                        isMobile={isMobile}
+                        wsBg={wsBg}
+                        theme={theme}
+                        isPinned={isPinned}
+                        togglePinTask={togglePinTask}
+                        users={users}
+                        t={t}
+                        getDueDateLabel={getDueDateLabel}
+                        parseDescriptionAndChecklist={parseDescriptionAndChecklist}
+                        setChecklist={setChecklist}
+                        setSelectedTaskForDetails={setSelectedTaskForDetails}
+                        handleOpenContactProfile={handleOpenContactProfile}
+                        setSelectedTaskParticipants={setSelectedTaskParticipants}
+                        setParticipantsModalOpen={setParticipantsModalOpen}
+                      />
                     );
-                  })()}
-
-                  {/* Footer metadata: Deadline bên dưới và Người thực hiện */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', minHeight: '26px' }}>
-                    <div>
-                      {task.due_date && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', color: dateBadgeColor, background: dateBadgeBg, display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                          <Calendar size={11} /> {getDueDateLabel(task.due_date, task.status === 'done', t)}
-                          {isOverdue && task.status !== 'done' && <ShieldAlert size={10} style={{ marginLeft: 2 }} />}
-                        </span>
-                      )}
-                    </div>
-
-                    {(() => {
-                      const assigneeUser = users.find((u: any) => String(u.id) === String(task.user_id));
-                      const approverUser = task.approver_id ? users.find((u: any) => String(u.id) === String(task.approver_id)) : null;
-                      const participantIds = task.participant_ids ? task.participant_ids.split(',').filter(Boolean) : [];
-                      const participantUsers = participantIds.map((id: string) => users.find((u: any) => String(u.id) === String(id))).filter(Boolean);
-
-                      return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => {
-                          if (participantUsers.length > 0) {
-                            e.stopPropagation();
-                            setSelectedTaskParticipants(participantUsers);
-                            setParticipantsModalOpen(true);
-                          }
-                        }}>
-                          {/* Assignee Avatar */}
-                          {assigneeUser && (
-                            <div title={`Chịu trách nhiệm: ${assigneeUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
-                              <Avatar src={assigneeUser.avatar_url || assigneeUser.avatar} name={assigneeUser.full_name} size={24} />
-                              <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-primary)', borderRadius: '50%', width: 10, height: 10, border: '1.5px solid var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-                            </div>
-                          )}
-
-                          {/* Approver Avatar */}
-                          {approverUser && (
-                            <div title={`Người duyệt: ${approverUser.full_name}`} style={{ position: 'relative', display: 'flex' }}>
-                              <Avatar src={approverUser.avatar_url || approverUser.avatar} name={approverUser.full_name} size={24} />
-                              <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--color-warning)', borderRadius: '50%', width: 10, height: 10, border: '1.5px solid var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-                            </div>
-                          )}
-
-                          {/* Overlapping Participant Avatars */}
-                          {participantUsers.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', marginLeft: '2px', position: 'relative' }}>
-                              {participantUsers.slice(0, 3).map((pUser: any, pIdx: number) => (
-                                <div
-                                  key={pUser.id}
-                                  title={`Người liên quan: ${pUser.full_name}`}
-                                  style={{
-                                    marginLeft: pIdx > 0 ? '-8px' : '0px',
-                                    border: '1.5px solid var(--color-surface)',
-                                    borderRadius: '50%',
-                                    overflow: 'hidden',
-                                    zIndex: 10 - pIdx,
-                                    display: 'flex'
-                                  }}
-                                >
-                                  <Avatar src={pUser.avatar_url || pUser.avatar} name={pUser.full_name} size={22} />
-                                </div>
-                              ))}
-                              {participantUsers.length > 3 && (
-                                <div
-                                  style={{
-                                    marginLeft: '-8px',
-                                    width: '22px',
-                                    height: '22px',
-                                    borderRadius: '50%',
-                                    background: 'var(--color-border)',
-                                    color: 'var(--color-text-muted)',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 800,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    border: '1.5px solid var(--color-surface)',
-                                    zIndex: 5,
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  +{participantUsers.length - 3}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                  })}
                 </div>
-              );
-            })}
-            </div>
+              </SortableContext>
+              <DragOverlay adjustScale={false}>
+                {activeDragTask ? (
+                  <WorkspaceCardInner
+                    task={activeDragTask}
+                    isMobile={isMobile}
+                    wsBg={wsBg}
+                    theme={theme}
+                    isPinned={pinnedTaskIds.includes(Number(activeDragTask.id))}
+                    togglePinTask={togglePinTask}
+                    users={users}
+                    t={t}
+                    getDueDateLabel={getDueDateLabel}
+                    parseDescriptionAndChecklist={parseDescriptionAndChecklist}
+                    setChecklist={setChecklist}
+                    setSelectedTaskForDetails={setSelectedTaskForDetails}
+                    handleOpenContactProfile={handleOpenContactProfile}
+                    setSelectedTaskParticipants={setSelectedTaskParticipants}
+                    setParticipantsModalOpen={setParticipantsModalOpen}
+                    isOverlay={true}
+                  />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
             {filteredWsTasks.length > wsTasksPageSize && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
                 <Pagination
@@ -7270,13 +7795,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             }}
                             style={{
                               background: isPinned 
-                                ? (wsBg ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(254, 242, 242, 0.92)') : 'rgba(239, 68, 68, 0.03)')
-                                : (wsBg ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.82)' : 'rgba(255, 255, 255, 0.88)') : 'var(--color-surface)'),
+                                ? (wsBg ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(254, 242, 242, 0.96)') : 'rgba(239, 68, 68, 0.03)')
+                                : (wsBg ? (theme === 'dark' ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.95)') : 'var(--color-surface)'),
                               border: isPinned 
                                 ? '2px solid var(--color-danger)' 
-                                : (isOverdue && task.status !== 'done' ? '1.5px solid var(--color-danger)' : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.75)') : '1px solid var(--color-border-light)')),
-                              backdropFilter: wsBg ? 'blur(10px)' : 'none',
-                              WebkitBackdropFilter: wsBg ? 'blur(10px)' : 'none',
+                                : (isOverdue && task.status !== 'done' ? '1.5px solid var(--color-danger)' : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(255, 255, 255, 0.85)') : '1px solid var(--color-border-light)')),
+                              backdropFilter: wsBg ? 'blur(6px)' : 'none',
+                              WebkitBackdropFilter: wsBg ? 'blur(6px)' : 'none',
                               borderRadius: '12px',
                               padding: '0.875rem',
                               cursor: 'grab',
@@ -7982,11 +8507,14 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
     const profile = impersonatedSale || data.consultant_profile;
     let isWorkDay = true;
-    if (profile && profile.work_schedule) {
-      const now = new Date();
-      let dayOfWeek = now.getDay();
-      if (dayOfWeek === 0) dayOfWeek = 7;
-      const dayConfig = profile.work_schedule[String(dayOfWeek)] || profile.work_schedule[dayOfWeek];
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    if (isWeekend) {
+      isWorkDay = false; // Thứ 7 & Chủ Nhật: không cảnh báo chấm công
+    } else if (profile && profile.work_schedule) {
+      let d = dayOfWeek === 0 ? 7 : dayOfWeek;
+      const dayConfig = profile.work_schedule[String(d)] || profile.work_schedule[d];
       if (dayConfig && !dayConfig.active) {
         isWorkDay = false;
       }
@@ -8602,6 +9130,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           {/* Right section: Quick Actions */}
           <div style={{ display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'nowrap', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'stretch' : 'flex-end' }}>
             {isCheckInLoaded && (() => {
+              const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
+              if (isWeekend && (!todayCheckIn || todayCheckIn.status === 'rejected')) return null;
               const requireCheckout = sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1;
               return (
                 <button 
@@ -15811,6 +16341,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
             {/* Check-in Button */}
             {Boolean(displayUser || user) && (() => {
+              const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
+              if (isWeekend && (!todayCheckIn || todayCheckIn.status === 'rejected')) return null;
               const requireCheckout = sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1;
               return (
                 <div style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}>
@@ -18747,6 +19279,50 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             }
           }}
           userId={currentUser?.id || user?.id}
+        />
+      )}
+
+      {/* Workspace Task Analytics & Stats Modal */}
+      {isWorkspaceStatsModalOpen && (
+        <WorkspaceTaskStatsModal
+          isOpen={isWorkspaceStatsModalOpen}
+          onClose={() => setIsWorkspaceStatsModalOpen(false)}
+          tasks={wsTasks}
+          users={users}
+          currentUserId={currentUser?.id || user?.id}
+          currentUserRole={currentUser?.role || user?.role}
+          currentUserTeamId={(currentUser as any)?.team_id || (user as any)?.team_id}
+          teamsList={teamsList || allowedTeams || []}
+          onSelectTask={(task) => {
+            const parsed = parseDescriptionAndChecklist(task.body || task.description || '');
+            const parsedTask = {
+              id: task.id,
+              title: task.subject,
+              done: task.status === 'done',
+              priority: task.priority,
+              due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+              link: task.link || '',
+              description: parsed.pureDescription,
+              user_id: task.user_id,
+              user_name: task.user_name || 'Hệ thống',
+              tags: task.tags || '',
+              participant_ids: task.participant_ids || '',
+              progress: task.progress || 0,
+              require_approval: task.require_approval || 0,
+              approver_id: task.approver_id,
+              approval_status: task.approval_status,
+              contact_id: task.contact_id,
+              contact_name: task.contact_name,
+              contact_avatar: task.contact_avatar,
+              related_type: task.related_type,
+              related_id: task.related_id,
+              created_by: task.created_by,
+              created_by_name: task.created_by_name,
+              created_by_avatar: task.created_by_avatar
+            };
+            setChecklist(parsed.checklist);
+            setSelectedTaskForDetails(parsedTask);
+          }}
         />
       )}
 

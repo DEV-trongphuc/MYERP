@@ -4282,6 +4282,7 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                         pipeline_status = IF(pipeline_status IS NULL OR pipeline_status = '' OR pipeline_status = 'chua_xac_dinh', ?, pipeline_status),
                         notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Khách hàng nhắc lại / tương tác mới]\n')), ?)),
                         customer_type = IF(? != '', ?, customer_type),
+                        lead_status = IF(lead_status IN ('nurture', 'lost'), 'active', lead_status),
                         updated_at = NOW()
                     WHERE id = ?
                 ");
@@ -4306,8 +4307,9 @@ function ensurePersonAndContact($conn, $leadId, $creatorUserId = null) {
                             phone = IF(? != '' AND (phone = '' OR phone IS NULL), ?, phone),
                             source = IF(? != '' AND ? != 'other', ?, source),
                             status = 'lead',
-                            pipeline_status = IF(pipeline_status IS NULL OR pipeline_status = '' OR pipeline_status = 'chua_xac_dinh', ?, pipeline_status),
-                            stage_id = IF(stage_id IS NULL OR stage_id = 0, ?, stage_id),
+                            lead_status = 'active',
+                            pipeline_status = ?,
+                            stage_id = ?,
                             security_expires_at = ?,
                             notes = IF(TRIM(?) = '', notes, CONCAT(IFNULL(notes, ''), IF(IFNULL(notes, '') = '', '', CONCAT('\n___\n[Ngày ', DATE_FORMAT(NOW(), '%d/%m/%Y'), ' - Tái phân bổ cho Sale mới]\n')), ?)),
                             customer_type = IF(? != '', ?, customer_type),

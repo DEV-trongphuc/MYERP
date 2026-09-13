@@ -378,6 +378,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           related_user_ids: relatedUserIds
         };
       } else if (createLeaveType === 'late_early') {
+        if (!leaveReasonField.trim()) {
+          toast.error(t('Vui lòng nhập lý do đi muộn / về sớm!'));
+          return;
+        }
         const d = lateEarlyDateField ? lateEarlyDateField.split('T')[0] : new Date().toISOString().split('T')[0];
         const timeVal = lateEarlyTimeField || (lateEarlyTypeField === 'early' ? '16:30' : '08:00');
         const [sh, sm] = timeVal.split(':').map(Number);
@@ -392,11 +396,10 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
 
         const fromStr = `${d} ${startHStr}:${startMStr}:00`;
         const toStr = `${d} ${endHStr}:${endMStr}:00`;
-        const descStr = `[Đăng ký ${lateEarlyTypeField === 'late' ? 'Đi muộn' : 'Về sớm'}] Thời gian: ${startHStr}:${startMStr} - ${endHStr}:${endMStr} (${lateEarlyMinutesField || 30} phút). Lý do: ${leaveReasonField}`;
         
         payload = {
           leave_type: 'late_early',
-          reason: descStr,
+          reason: leaveReasonField.trim(),
           from_date: fromStr,
           to_date: toStr,
           total_days: 0.0,
@@ -405,19 +408,20 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           related_user_ids: relatedUserIds
         };
       } else if (createLeaveType === 'overtime') {
+        if (!leaveReasonField.trim()) {
+          toast.error(t('Vui lòng nhập lý do tăng ca!'));
+          return;
+        }
         const fromStr = `${otDateField}T${otStartField}`;
         const toStr = `${otDateField}T${otEndField}`;
         const hours = diffHours(otStartField, otEndField);
         const daysVal = Number((hours / 8).toFixed(2));
-        const otTypeLabel = otTypeField === 'compensatory' ? 'Lấy OT bù (Nghỉ bù)' : 'Tính vào lương OT';
-        const rateLabel = (otRateField === 1.0) ? 'Loại 1.0x (1:1)' : `Loại ${otRateField}x`;
-        const descStr = `[Đăng ký Tăng ca] [Hình thức: ${otTypeLabel} | ${rateLabel}] Thời gian: ${otStartField} - ${otEndField} (${hours} giờ = ${daysVal} ngày công OT). Lý do: ${leaveReasonField}`;
         
         payload = {
           leave_type: 'overtime',
           ot_type: otTypeField,
           ot_rate: otRateField,
-          reason: descStr,
+          reason: leaveReasonField.trim(),
           from_date: fromStr,
           to_date: toStr,
           total_days: daysVal,
@@ -448,13 +452,15 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
           return;
         }
 
-        const paidDaysCalc = Number((daysVal * (safeRate / 100)).toFixed(2));
-        const descStr = `[Đăng ký làm việc từ xa] [Tỷ lệ hưởng lương: ${safeRate}% ~ ${paidDaysCalc} công] Lý do: ${leaveReasonField}`;
-        
+        if (!leaveReasonField.trim()) {
+          toast.error(t('Vui lòng nhập lý do làm việc từ xa!'));
+          return;
+        }
+
         payload = {
           leave_type: 'remote_work',
           salary_rate: safeRate,
-          reason: descStr,
+          reason: leaveReasonField.trim(),
           from_date: fromVal,
           to_date: toVal,
           total_days: daysVal,

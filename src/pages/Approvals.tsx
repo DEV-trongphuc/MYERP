@@ -1248,7 +1248,14 @@ export default function Approvals() {
           daysVal = calculateWorkingDays(leaveFrom, leaveTo, 'range');
         }
 
-        let leaveReasonStr = leaveReason;
+        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        if (!effectiveReason) {
+          toast.error(t('Vui lòng nhập lý do xin nghỉ phép!'));
+          setSubmitting(false);
+          return;
+        }
+
+        let leaveReasonStr = effectiveReason;
         if (leaveSession === 'intermittent') {
           const datesLog = intermittentDates
             .filter(item => item.date)
@@ -1280,6 +1287,12 @@ export default function Approvals() {
           setSubmitting(false);
           return;
         }
+        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        if (!effectiveReason) {
+          toast.error(t('Vui lòng nhập lý do đi muộn/về sớm!'));
+          setSubmitting(false);
+          return;
+        }
         const d = leaveFrom ? leaveFrom.split('T')[0] : new Date().toISOString().split('T')[0];
         const timeVal = otStart || (lateEarlyType === 'early' ? '16:30' : '08:30');
         const [sh, sm] = timeVal.split(':').map(Number);
@@ -1297,14 +1310,12 @@ export default function Approvals() {
         const formattedFrom = `${d} ${startHStr}:${startMStr}:00`;
         const formattedTo = `${d} ${endHStr}:${endMStr}:00`;
 
-        const descStr = `[${lateEarlyType === 'late' ? 'Đăng ký Đi muộn' : 'Đăng ký Về sớm'}] Thời gian: ${startHStr}:${startMStr} (${lateEarlyMinutes || 30} phút). Lý do: ${leaveReason}`;
-
         await fetchAPI('hrm/leaves', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             leave_type: 'late_early',
-            reason: descStr,
+            reason: effectiveReason,
             from_date: formattedFrom,
             to_date: formattedTo,
             total_days: 0.0,
@@ -1313,14 +1324,16 @@ export default function Approvals() {
           })
         });
       } else if (formType === 'overtime') {
+        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        if (!effectiveReason) {
+          toast.error(t('Vui lòng nhập lý do tăng ca!'));
+          setSubmitting(false);
+          return;
+        }
         const fromStr = `${otDate}T${otStart}`;
         const toStr = `${otDate}T${otEnd}`;
         const hours = diffHours(otStart, otEnd);
         const daysVal = Number((hours / 8).toFixed(2));
-        const otTypeLabel = otType === 'compensatory' ? 'Lấy OT bù (Nghỉ bù)' : 'Tính vào lương OT';
-        const rateLabel = (otRate === 1.0) ? 'Loại 1.0x (1:1)' : `Loại ${otRate}x`;
-
-        const descStr = `[Đăng ký Tăng ca] [Hình thức: ${otTypeLabel} | ${rateLabel}] Thời gian: ${otStart} - ${otEnd} (${hours} giờ = ${daysVal} ngày công OT). Lý do: ${leaveReason}`;
 
         await fetchAPI('hrm/leaves', {
           method: 'POST',
@@ -1329,7 +1342,7 @@ export default function Approvals() {
             leave_type: 'overtime',
             ot_type: otType,
             ot_rate: otRate,
-            reason: descStr,
+            reason: effectiveReason,
             from_date: fromStr,
             to_date: toStr,
             total_days: daysVal,
@@ -1365,11 +1378,16 @@ export default function Approvals() {
         const safeSalaryRate = Number(wfhSalaryRate);
         if (isNaN(safeSalaryRate) || safeSalaryRate < 0 || safeSalaryRate > 100) {
           toast.error(t('Tỷ lệ hưởng lương làm việc từ xa phải từ 0% đến 100% (không được vượt quá 100%)!'));
+          setSubmitting(false);
           return;
         }
 
-        const paidDaysCalc = Number((daysVal * (safeSalaryRate / 100)).toFixed(2));
-        const descStr = `[Đăng ký làm việc từ xa] [Tỷ lệ hưởng lương: ${safeSalaryRate}% ~ ${paidDaysCalc} công] Lý do: ${leaveReason}`;
+        const effectiveReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+        if (!effectiveReason) {
+          toast.error(t('Vui lòng nhập lý do / kế hoạch làm việc từ xa!'));
+          setSubmitting(false);
+          return;
+        }
 
         await fetchAPI('hrm/leaves', {
           method: 'POST',
@@ -1377,7 +1395,7 @@ export default function Approvals() {
           body: JSON.stringify({
             leave_type: 'remote_work',
             salary_rate: safeSalaryRate,
-            reason: descStr,
+            reason: effectiveReason,
             from_date: fromVal,
             to_date: toVal,
             total_days: daysVal,
@@ -1386,7 +1404,8 @@ export default function Approvals() {
           })
         });
       } else if (formType === 'advance') {
-        let advReasonStr = leaveReason || 'Tạm ứng';
+        const effectiveAdvReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || 'Tạm ứng';
+        let advReasonStr = effectiveAdvReason;
         if (isRecurring) {
           advReasonStr += ` [Lặp lại định kỳ: ${recurringFrequency} - Hạn: ${recurringEndDate || 'Vô thời hạn'}]`;
         }
@@ -1465,7 +1484,8 @@ export default function Approvals() {
         }
         
         if (selectedWorkflowDef?.id !== 'print_stamp_send') {
-          generalDesc += `Vị trí: ${jobPosition}\nPhòng ban: ${departmentName}\nNội dung đề xuất: ${paymentDetails}\nLý do: ${leaveReason}`;
+          const effectiveGeneralReason = [workflowTitleSuffix?.trim(), leaveReason?.trim()].filter(Boolean).join(' - ') || leaveReason?.trim() || workflowTitleSuffix?.trim() || '';
+          generalDesc += `Vị trí: ${jobPosition}\nPhòng ban: ${departmentName}\nNội dung đề xuất: ${paymentDetails || workflowTitleSuffix || ''}\nLý do: ${effectiveGeneralReason}`;
           if (isRecurring) {
             generalDesc += `\n[Lặp lại định kỳ]: Tần suất ${recurringFrequency} (Kết thúc: ${recurringEndDate || 'Vô thời hạn'})`;
           }
@@ -2968,7 +2988,13 @@ export default function Approvals() {
 
   const getApprovalDisplayTitle = useCallback((it: ApprovalItem): string => {
     let t = (it.title || '').trim();
-    t = t.replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '');
+    t = t.replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '')
+      .replace(/\s*\(\d+%\s*lương\)/gi, '')
+      .replace(/\s*-\s*\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\].*$/i, '')
+      .replace(/\s*-\s*\[Tỷ lệ hưởng lương:[^\]]+\]\s*(?:Lý do:.*)?$/i, '')
+      .replace(/\s*-\s*\[Hình thức:[^\]]+\]\s*(?:Thời gian:.*)?$/i, '')
+      .replace(/\s*Lý do:\s*.*$/i, '')
+      .trim();
 
     const genericNames = [
       'đề nghị thanh toán',
@@ -5142,7 +5168,7 @@ export default function Approvals() {
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '190px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Người tạo & Thời gian')}</th>
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '220px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Các bước & Người liên quan')}</th>
                     <th style={{ padding: '14px 16px', fontSize: '0.8125rem', minWidth: '170px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Người duyệt')}</th>
-                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '130px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Thao tác')}</th>
+                    <th style={{ padding: '14px 16px', fontSize: '0.8125rem', textAlign: 'right', minWidth: '80px', background: '#f8fafc', position: 'sticky', top: 0 }}>{t('Thao tác')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5338,14 +5364,6 @@ export default function Approvals() {
                                     >
                                       <Copy size={12} />
                                     </button>
-                                    <button
-                                      onClick={() => setSelectedTimelineItem(item)}
-                                      className="btn secondary"
-                                      style={{ height: '28px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
-                                      title={t('Chi tiết')}
-                                    >
-                                      <Eye size={12} />
-                                    </button>
                                   </>
                                 )}
                               </div>
@@ -5354,23 +5372,9 @@ export default function Approvals() {
                                 <span style={{ fontSize: '0.75rem', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
                                   <Eye size={12} /> {t('Theo dõi')}
                                 </span>
-                                <button
-                                  onClick={() => setSelectedTimelineItem(item)}
-                                  className="btn secondary"
-                                  style={{ height: '28px', padding: '0 8px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
-                                >
-                                  {t('Chi tiết')}
-                                </button>
                               </div>
                             ) : (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <button
-                                  onClick={() => setSelectedTimelineItem(item)}
-                                  className="btn secondary"
-                                  style={{ height: '28px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '6px' }}
-                                >
-                                  <Eye size={12} /> {t('Chi tiết')}
-                                </button>
                                 {(Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || (isManagement(user) || isHR(user))) && item.status !== 'approved' && item.status !== 'completed' && (
                                   <button
                                     onClick={() => handleDeleteRequest(item)}
@@ -12685,13 +12689,24 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const departmentVal = extractMetaField(rawDesc, 'Phòng ban') || detail?.department || '';
     const contentVal = extractMetaField(rawDesc, 'Nội dung đề xuất') || extractMetaField(rawDesc, 'Nội dung') || detail?.content || '';
     
-    let reasonVal = extractMetaField(rawDesc, 'Lý do');
+    const cleanRawReason = (str?: string) => {
+      if (!str) return '';
+      let r = String(str).trim();
+      r = r.replace(/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*/i, '')
+           .replace(/^\[(?:Tỷ lệ hưởng lương|Hình thức):[^\]]+\]\s*/i, '')
+           .replace(/^Thời gian:\s*[^.]+\.\s*/i, '')
+           .replace(/^Lý do:\s*/i, '')
+           .trim();
+      return r;
+    };
+
+    let reasonVal = cleanRawReason(extractMetaField(rawDesc, 'Lý do'));
     if (!reasonVal && detail?.reason) {
       const extracted = extractMetaField(detail.reason, 'Lý do');
-      reasonVal = extracted || detail.reason;
+      reasonVal = cleanRawReason(extracted || detail.reason);
     }
     if (!reasonVal && detail?.notes && !contentVal) {
-      reasonVal = detail.notes;
+      reasonVal = cleanRawReason(detail.notes);
     }
 
     const parseMeetingInfo = (text: string) => {
@@ -12852,6 +12867,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         .replace(/\[Hồ sơ chi phí\]:\s*[^\n]+/gi, '')
         .replace(/\[Thông tin chuyển khoản\]:\s*[^\n]+/gi, '')
         .replace(/\[Hình thức\]:\s*[^\n]+/gi, '')
+        .replace(/^\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\]\s*(?:\[[^\]]+\]\s*)*/gim, '')
+        .replace(/^\[(?:Tỷ lệ hưởng lương|Hình thức):[^\]]+\]\s*/gim, '')
+        .replace(/^Thời gian:\s*[^.]+\.\s*/gim, '')
+        .replace(/^Lý do:\s*/gim, '')
         .replace(/Thụ hưởng[^:\n]*:\s*[^\n]+/gi, '')
         .replace(/^Phòng ban:\s*[^\n]+/gim, '')
         .replace(/^Đối tượng:\s*[^\n]+/gim, '')
@@ -12917,11 +12936,19 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     );
 
     let cleanHeaderTitle = (rawTitle || `IDEAS - ${t('Quy trình')} #${item.id}`)
-      .replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '');
+      .replace(/^Yêu cầu chi phí(?:\s*-\s*Cấp \d+)?:\s*/i, '')
+      .replace(/\s*\(\d+%\s*lương\)/gi, '')
+      .replace(/\s*-\s*\[(?:Đăng ký làm việc từ xa|Tăng ca|Đi muộn\/Về sớm|Nghỉ phép)\].*$/i, '')
+      .replace(/\s*-\s*\[Tỷ lệ hưởng lương:[^\]]+\]\s*(?:Lý do:.*)?$/i, '')
+      .replace(/\s*-\s*\[Hình thức:[^\]]+\]\s*(?:Thời gian:.*)?$/i, '')
+      .replace(/\s*-\s*Lý do:\s*$/i, '')
+      .replace(/\s*Lý do:\s*$/i, '')
+      .replace(/\s*-\s*$/, '')
+      .trim();
 
     // Nếu tiêu đề bị cắt lửng bởi dấu ... ở cuối nhưng có lý do chi tiết thì hiển thị trọn vẹn
     if (cleanHeaderTitle.endsWith('...')) {
-      const fullReason = (detail?.reason || (item as any)?.reason || detail?.description || item?.description || '').trim();
+      const fullReason = cleanRawReason(detail?.reason || (item as any)?.reason || detail?.description || item?.description || '');
       if (fullReason) {
         const lastDashIndex = cleanHeaderTitle.lastIndexOf(' - ');
         if (lastDashIndex !== -1) {
@@ -12930,7 +12957,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       }
     }
 
-    const cleanNoteText = (detail?.reason || detail?.notes || detail?.description || rawDesc || '')
+    const cleanNoteText = cleanRawReason(detail?.reason || detail?.notes || detail?.description || rawDesc || '')
       .replace(/^\[.*?\]\s*Thời gian:.*?\.\s*Lý do:\s*/i, '')
       .replace(/^Số tiền:\s*[\d.,]+\s*đ\.\s*Ghi chú:\s*"?/i, '')
       .replace(/^Số tiền:\s*[\d.,]+\s*đ\s*"?/i, '')

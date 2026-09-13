@@ -12279,10 +12279,6 @@ switch ($action) {
         $b = json_decode($raw, true);
         if (!is_array($b)) $b = [];
 
-        $bg = isset($b['bg']) ? trim((string)$b['bg']) : '';
-        $cols = isset($b['cols']) ? max(2, min(6, (int)$b['cols'])) : 4;
-        $overlay = isset($b['overlay']) ? max(0, min(100, (int)$b['overlay'])) : 50;
-
         // Fetch current extra_fields_json
         $stmt = $conn->prepare("SELECT extra_fields_json FROM users WHERE id = ? LIMIT 1");
         $stmt->bind_param("i", $userId);
@@ -12298,12 +12294,19 @@ switch ($action) {
             }
         }
 
-        $extra['workspace_settings'] = [
-            'bg' => $bg,
-            'cols' => $cols,
-            'overlay' => $overlay,
-            'updated_at' => date('Y-m-d H:i:s')
-        ];
+        if (!isset($extra['workspace_settings']) || !is_array($extra['workspace_settings'])) {
+            $extra['workspace_settings'] = [];
+        }
+
+        if (isset($b['bg'])) $extra['workspace_settings']['bg'] = trim((string)$b['bg']);
+        if (isset($b['cols'])) $extra['workspace_settings']['cols'] = max(2, min(6, (int)$b['cols']));
+        if (isset($b['overlay'])) $extra['workspace_settings']['overlay'] = max(0, min(100, (int)$b['overlay']));
+        if (isset($b['task_order']) && is_array($b['task_order'])) {
+            $cleanedOrder = array_values(array_unique(array_filter(array_map('intval', $b['task_order']), fn($id) => $id > 0)));
+            $extra['workspace_settings']['task_order'] = $cleanedOrder;
+            $extra['workspace_task_order'] = $cleanedOrder;
+        }
+        $extra['workspace_settings']['updated_at'] = date('Y-m-d H:i:s');
 
         $jsonStr = json_encode($extra, JSON_UNESCAPED_UNICODE);
         $upStmt = $conn->prepare("UPDATE users SET extra_fields_json = ? WHERE id = ?");
@@ -12315,6 +12318,55 @@ switch ($action) {
             'success' => $success,
             'data' => $extra['workspace_settings'],
             'message' => $success ? 'Đã lưu cấu hình bàn làm việc thành công' : 'Không thể cập nhật cấu hình'
+        ]);
+        break;
+
+    case 'save_workspace_task_order':
+        $userId = (int)($decodedUser['id'] ?? 0);
+        if (!$userId) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+            break;
+        }
+        $b = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($b)) $b = [];
+
+        $rawOrder = $b['task_order'] ?? ($b['order'] ?? []);
+        $cleanedOrder = is_array($rawOrder)
+            ? array_values(array_unique(array_filter(array_map('intval', $rawOrder), fn($id) => $id > 0)))
+            : [];
+
+        $stmt = $conn->prepare("SELECT extra_fields_json FROM users WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $userRow = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $extra = [];
+        if (!empty($userRow['extra_fields_json'])) {
+            $decodedExtra = json_decode($userRow['extra_fields_json'], true);
+            if (is_array($decodedExtra)) {
+                $extra = $decodedExtra;
+            }
+        }
+
+        if (!isset($extra['workspace_settings']) || !is_array($extra['workspace_settings'])) {
+            $extra['workspace_settings'] = [];
+        }
+
+        $extra['workspace_settings']['task_order'] = $cleanedOrder;
+        $extra['workspace_task_order'] = $cleanedOrder;
+        $extra['workspace_settings']['task_order_updated_at'] = date('Y-m-d H:i:s');
+
+        $jsonStr = json_encode($extra, JSON_UNESCAPED_UNICODE);
+        $upStmt = $conn->prepare("UPDATE users SET extra_fields_json = ? WHERE id = ?");
+        $upStmt->bind_param("si", $jsonStr, $userId);
+        $success = $upStmt->execute();
+        $upStmt->close();
+
+        echo json_encode([
+            'success' => $success,
+            'data' => ['task_order' => $cleanedOrder],
+            'message' => $success ? 'Đã lưu thứ tự thẻ bàn làm việc' : 'Lỗi cập nhật'
         ]);
         break;
 
@@ -12331,14 +12383,26 @@ switch ($action) {
         $stmt->close();
 
         $wsSettings = [
-            'bg' => '',
+            'bg' => '/imgs/myerp_dark_brand_wallpaper.jpg',
             'cols' => 4,
-            'overlay' => 50
+            'overlay' => 0,
+            'task_order' => []
         ];
         if (!empty($userRow['extra_fields_json'])) {
             $decodedExtra = json_decode($userRow['extra_fields_json'], true);
-            if (is_array($decodedExtra) && isset($decodedExtra['workspace_settings']) && is_array($decodedExtra['workspace_settings'])) {
-                $wsSettings = array_merge($wsSettings, $decodedExtra['workspace_settings']);
+            if (is_array($decodedExtra)) {
+                if (isset($decodedExtra['workspace_settings']) && is_array($decodedExtra['workspace_settings'])) {
+                    $wsSettings = array_merge($wsSettings, $decodedExtra['workspace_settings']);
+                    if (empty($wsSettings['bg'])) {
+                        $wsSettings['bg'] = '/imgs/myerp_dark_brand_wallpaper.jpg';
+                    }
+                    if (empty($wsSettings['cols'])) {
+                        $wsSettings['cols'] = 4;
+                    }
+                }
+                if (!empty($decodedExtra['workspace_task_order']) && is_array($decodedExtra['workspace_task_order'])) {
+                    $wsSettings['task_order'] = $decodedExtra['workspace_task_order'];
+                }
             }
         }
         echo json_encode(['success' => true, 'data' => $wsSettings]);

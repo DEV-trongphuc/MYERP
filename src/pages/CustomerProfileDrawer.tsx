@@ -4087,10 +4087,10 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         shouldFetchContact ? api.get(`/contacts/${currentCId}`) : Promise.resolve(null),
         needStages ? api.get('/pipeline-stages') : Promise.resolve(null),
         needProjects ? api.get(`/projects${currentUser?.role === 'sale' ? '' : '?bypass_roster=1'}`) : Promise.resolve(null),
-        needCompanies ? api.get('/companies?limit=2000') : Promise.resolve(null),
+        needCompanies ? api.get('/companies?limit=100') : Promise.resolve(null),
         needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
         needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`) : Promise.resolve(null),
-        (shouldFetchContact || isTaskOrTimelineTab) ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=500`) : Promise.resolve(null)
+        isTaskOrTimelineTab ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=100`) : Promise.resolve(null)
       ]);
 
       // 2. Xử lý Fresh Contact Details

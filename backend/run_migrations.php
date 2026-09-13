@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 270;
+$targetVersion = 272;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3164,8 +3164,65 @@ try {
         $logMsg("Nâng cấp lên phiên bản 270 hoàn tất.", "success");
     }
 
+    // 76. Upgrade to 271: Migrate all users workspace settings to 4 columns and exclusive MYERP Brand wallpaper
+    if ($currentVersion < 271 && $targetVersion >= 271) {
+        $logMsg("Bắt đầu nâng cấp CSDL lên phiên bản 271: Chuẩn hóa bàn làm việc cho toàn bộ nhân sự (4 cột & hình nền độc quyền MYERP Brand)...", "info");
+        try {
+            $usersRes = $conn->query("SELECT id, extra_fields_json FROM users");
+            $migratedCount = 0;
+            if ($usersRes) {
+                while ($u = $usersRes->fetch_assoc()) {
+                    $uId = (int)$u['id'];
+                    $extra = [];
+                    if (!empty($u['extra_fields_json'])) {
+                        $dec = json_decode($u['extra_fields_json'], true);
+                        if (is_array($dec)) $extra = $dec;
+                    }
+                    if (!isset($extra['workspace_settings']) || !is_array($extra['workspace_settings'])) {
+                        $extra['workspace_settings'] = [];
+                    }
+                    $extra['workspace_settings']['bg'] = '/imgs/myerp_dark_brand_wallpaper.jpg';
+                    $extra['workspace_settings']['cols'] = 4;
+                    if (!isset($extra['workspace_settings']['overlay'])) {
+                        $extra['workspace_settings']['overlay'] = 0;
+                    }
+                    $extra['workspace_settings']['updated_at'] = date('Y-m-d H:i:s');
+                    $jsonStr = json_encode($extra, JSON_UNESCAPED_UNICODE);
+                    $up = $conn->prepare("UPDATE users SET extra_fields_json = ? WHERE id = ?");
+                    $up->bind_param("si", $jsonStr, $uId);
+                    $up->execute();
+                    $up->close();
+                    $migratedCount++;
+                }
+            }
+            $logMsg("Đã chuẩn hóa bàn làm việc thành công cho {$migratedCount} nhân sự sang 4 cột và hình nền độc quyền MYERP Brand.", "success");
+        } catch (Throwable $ex) {
+            $logMsg("Lỗi khi chuẩn hóa cấu hình bàn làm việc: " . $ex->getMessage(), "error");
+        }
+
+        $logMsg("Nâng cấp lên phiên bản 271 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 272: TỐI ƯU HÓA CHỈ MỤC (INDEXES) TĂNG TỐC BÀN LÀM VIỆC & HOẠT ĐỘNG ---
+    if ($currentVersion < 272) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 272: Thêm các chỉ mục tăng tốc bàn làm việc và chi tiết hoạt động...", "info");
+        try {
+            $conn->query("ALTER TABLE `task_hidden_users` ADD INDEX `idx_thu_user_task` (`user_id`, `task_id`)");
+        } catch (Throwable $e) {}
+        try {
+            $conn->query("ALTER TABLE `activity_comments` ADD INDEX `idx_ac_activity_id` (`activity_id`, `id`)");
+        } catch (Throwable $e) {}
+        try {
+            $conn->query("ALTER TABLE `activities` ADD INDEX `idx_act_tenant_user_due` (`tenant_id`, `user_id`, `status`, `due_date`)");
+        } catch (Throwable $e) {}
+        try {
+            $conn->query("ALTER TABLE `activities` ADD INDEX `idx_act_approver` (`tenant_id`, `approver_id`, `require_approval`, `approval_status`)");
+        } catch (Throwable $e) {}
+        $logMsg("Nâng cấp lên phiên bản 272 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '270') ON DUPLICATE KEY UPDATE setting_value = '270'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '272') ON DUPLICATE KEY UPDATE setting_value = '272'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

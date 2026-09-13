@@ -559,14 +559,16 @@ class ActivityController {
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Pre-fetch activity comments to resolve the N+1 queries bottleneck
+        // OPTIMIZATION: Only fetch comments if items count is reasonable (<= 150) AND only for comments with images/attachments
         $activityIds = array_column($items, 'id');
         $preFetchedComments = [];
-        if (!empty($activityIds)) {
+        if (!empty($activityIds) && count($activityIds) <= 150) {
             $placeholders = implode(',', array_fill(0, count($activityIds), '?'));
             $cStmt = $this->db->prepare("
                 SELECT activity_id, content, attachments 
                 FROM activity_comments 
                 WHERE activity_id IN ($placeholders) 
+                  AND (content LIKE '%<img%' OR content LIKE '%![]%' OR (attachments IS NOT NULL AND attachments != '' AND attachments != '[]'))
                 ORDER BY id ASC
             ");
             $cStmt->execute($activityIds);
@@ -587,6 +589,93 @@ class ActivityController {
             }
         }
         respond(200,['items'=>$items,'total'=>$total,'page'=>$page,'limit'=>$limit]);
+    }
+
+    public function workspaceStats(array $auth): void {
+        $tid = (int)$auth['tenant_id'];
+        $uid = (int)$auth['user_id'];
+        $role = strtolower($auth['role'] ?? '');
+        $hasBroadOversight = in_array($role, ['super_admin', 'superadmin', 'admin'], true);
+        $isSaleAdmin = in_array($role, ['sale_admin', 'saleadmin'], true);
+
+        $where = ["a.tenant_id = $tid", "a.deleted_at IS NULL"];
+
+        // Team filter if provided
+        $teamId = isset($_GET['team_id']) && $_GET['team_id'] !== 'all_teams_bypass' ? (int)$_GET['team_id'] : null;
+        if ($teamId) {
+            $where[] = "(a.user_id IN (SELECT id FROM users WHERE team_id = $teamId) OR (a.related_type = 'team' AND a.related_id = $teamId))";
+        }
+
+        // Subtab filter if provided
+        $subTab = $_GET['sub_tab'] ?? '';
+        if ($subTab === 'customer') {
+            $where[] = "a.related_type IN ('contact', 'deal', 'company', 'lead')";
+        } elseif ($subTab === 'personal') {
+            $where[] = "a.tags LIKE '%personal_task%'";
+        } elseif ($subTab === 'team') {
+            $where[] = "(a.related_type NOT IN ('contact', 'deal', 'company', 'lead') OR a.related_type IS NULL) AND (a.tags NOT LIKE '%personal_task%' OR a.tags IS NULL)";
+        }
+
+        // Activity type filter
+        $type = $_GET['type'] ?? '';
+        if ($type === 'task') {
+            $where[] = "(a.type = 'task' OR (a.type = 'meeting' AND a.status = 'planned'))";
+        } elseif ($type && $type !== 'all') {
+            $where[] = "a.type = " . $this->db->quote($type);
+        }
+
+        if ($hasBroadOversight) {
+            // Admin broad visibility
+        } elseif ($isSaleAdmin) {
+            $where[] = '(a.user_id IN (SELECT id FROM users WHERE tenant_id = ' . $tid . ' AND LOWER(role) IN (\'sale\', \'sales\', \'telesale\', \'consultant\', \'sale_admin\', \'saleadmin\')) OR a.user_id = ' . $uid . ' OR a.created_by = ' . $uid . ')';
+        } else {
+            $where[] = '(
+                a.user_id = ' . $uid . ' 
+                OR a.created_by = ' . $uid . '
+                OR a.approver_id = ' . $uid . '
+                OR FIND_IN_SET(' . $uid . ', a.participant_ids)
+                OR (((a.related_type IN (\'contact\', \'lead\') AND a.related_id > 0) OR (a.contact_id IS NOT NULL AND a.contact_id > 0)) AND EXISTS (
+                    SELECT 1 FROM contacts ct WHERE (ct.id = a.related_id OR ct.id = a.contact_id) AND (
+                        ct.owner_id = ' . $uid . ' 
+                        OR FIND_IN_SET(' . $uid . ', ct.collaborator_ids)
+                    )
+                )) 
+                OR (a.related_type = \'deal\' AND EXISTS (
+                    SELECT 1 FROM deals d LEFT JOIN contacts ct ON d.contact_id = ct.id WHERE d.id = a.related_id AND (
+                        d.owner_id = ' . $uid . ' 
+                        OR ct.owner_id = ' . $uid . ' 
+                        OR FIND_IN_SET(' . $uid . ', ct.collaborator_ids)
+                    )
+                ))
+            )';
+        }
+
+        // Exclude hidden tasks for this user
+        $where[] = "NOT EXISTS (SELECT 1 FROM task_hidden_users thu WHERE thu.task_id = a.id AND thu.user_id = $uid)";
+
+        $wStr = implode(' AND ', $where);
+
+        $sql = "
+            SELECT 
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.user_id = $uid THEN 1 END) as assigned_to_me,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND DATE(a.due_date) < CURDATE() THEN 1 END) as overdue,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.due_date IS NOT NULL AND a.due_date != '0000-00-00 00:00:00' AND DATE(a.due_date) = CURDATE() THEN 1 END) as due_today,
+                COUNT(CASE WHEN a.require_approval = 1 AND a.approval_status = 'pending' AND a.approver_id = $uid THEN 1 END) as pending_approval,
+                COUNT(CASE WHEN a.status NOT IN ('done', 'completed') AND (a.progress < 100 OR a.progress IS NULL) AND a.participant_ids IS NOT NULL AND FIND_IN_SET($uid, a.participant_ids) THEN 1 END) as collaborator
+            FROM activities a
+            WHERE $wStr
+        ";
+
+        $stmt = $this->db->query($sql);
+        $stats = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        respond(200, [
+            'assignedToMe' => (int)($stats['assigned_to_me'] ?? 0),
+            'overdue' => (int)($stats['overdue'] ?? 0),
+            'dueToday' => (int)($stats['due_today'] ?? 0),
+            'pendingApproval' => (int)($stats['pending_approval'] ?? 0),
+            'collaborator' => (int)($stats['collaborator'] ?? 0),
+        ]);
     }
 
     public function store(array $auth): void {
