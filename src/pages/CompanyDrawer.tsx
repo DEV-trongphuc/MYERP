@@ -279,7 +279,26 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
     }
   }, [formData, tags, entity, onSave, addToast, isSaving]);
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsClosing(false);
+    } else {
+      setIsClosing(false);
+    }
+  }, [isOpen]);
+
   const handleClose = useCallback(() => {
+    if (isClosing) return;
+    const performClose = () => {
+      setIsClosing(true);
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 280);
+    };
+
     if (hasChanges) {
       showConfirm({
         title: 'Bỏ qua thay đổi?',
@@ -289,16 +308,16 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
         cancelText: 'Hủy',
         onConfirm: async () => {
           await handleSave();
-          onClose();
+          performClose();
         },
         onExtra: () => {
-          onClose();
+          performClose();
         }
       });
     } else {
-      onClose();
+      performClose();
     }
-  }, [hasChanges, onClose, showConfirm, handleSave]);
+  }, [hasChanges, onClose, showConfirm, handleSave, isClosing]);
   const [helpModal, setHelpModal] = useState<{title: string, content: string} | null>(null);
   
   // B2B Sub-contacts State — loaded from API
@@ -545,7 +564,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
   return createPortal(
     <>
       <AnimatePresence>
-      {isOpen && (
+      {isOpen && !isClosing && (
         <>
           <motion.div
             className="drawer-backdrop"
@@ -553,7 +572,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
             style={{
               zIndex: 2147483600,
               background: 'rgba(0,0,0,0.45)',
@@ -567,8 +586,8 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
             className={styles.drawer}
             initial={isMobileOrTablet ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
-            exit={isMobileOrTablet ? { y: '100%' } : { opacity: 0, x: '250px' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
+            exit={isMobileOrTablet ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
             style={{ zIndex: 2147483605 }}
           >
             {/* Header / Sticky Top Bar */}

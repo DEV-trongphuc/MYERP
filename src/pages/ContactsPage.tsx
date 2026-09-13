@@ -1259,7 +1259,15 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ defaultSegment = 'ti
     return () => window.removeEventListener('keydown', handleEscape);
   }, [showCreateModal, creating]);
 
-  const paged = contacts;
+  const paged = useMemo(() => {
+    if (segment === 'tiem_nang' && !debouncedSearch && quickPipelineStage === 'all' && !activeFilters.status) {
+      return contacts.filter(c => {
+        const isEnrolled = c.stage_id === 44 || c.pipeline_status === 'enrolled' || c.status === 'customer' || c.stage_name === '14 – Enrolled' || c.stage_name === 'Học viên';
+        return !isEnrolled;
+      });
+    }
+    return contacts;
+  }, [contacts, segment, debouncedSearch, quickPipelineStage, activeFilters.status]);
 
   const toggleSelect = (id: number) => setSelected(p => { 
     const n = new Set(p); 

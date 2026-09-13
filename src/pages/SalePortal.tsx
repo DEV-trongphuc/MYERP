@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { withRouterFreezer } from '../components/RouterFreezer';
@@ -17,6 +17,7 @@ import { triggerFullConfetti } from '../utils/confettiHelper';
 import {
   DndContext,
   closestCenter,
+  pointerWithin,
   MouseSensor,
   TouchSensor,
   useSensor,
@@ -79,10 +80,12 @@ const AttendancePage = lazy(() => import('./AttendancePage'));
 import api from '../api/axios';
 const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(module => ({ default: module.CustomerProfileDrawer })));
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
-import { WorkspaceCustomizerModal } from '../components/ui/WorkspaceCustomizerModal';
+import { WorkspaceCustomizerModal, preloadWorkspaceWallpapers } from '../components/ui/WorkspaceCustomizerModal';
 import { WorkspaceTaskStatsModal } from '../components/ui/WorkspaceTaskStatsModal';
 import { WORKSPACE_INSPIRATIONAL_QUOTES } from '../data/inspirationalQuotes';
+import { parseTaskBody, extractCleanCardDescription, isTaskEffectivelyDone, getTaskEffectiveProgress, isTaskPersonalForUser } from '../utils/taskBodyParser';
 import styles from './EntityDrawer.module.css';
+import { TaskGroupSection, TaskGroupBadge, type TaskGroup, type TaskGroupsSummary } from '../components/TaskGroups/TaskGroupSection';
 
 
 const LeadRecallTimer: React.FC<{
@@ -218,9 +221,13 @@ interface WorkspaceCardInnerProps {
   setParticipantsModalOpen: (open: boolean) => void;
   isDragging?: boolean;
   isOverlay?: boolean;
+  taskGroups?: TaskGroup[];
+  onAssignGroup?: (taskId: number, groupId: number | null) => Promise<void>;
+  onOpenCreateGroupModal?: () => void;
+  onOpenCreateModal?: () => void;
 }
 
-const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
+const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
   task,
   isMobile,
   wsBg,
@@ -237,10 +244,15 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
   setSelectedTaskParticipants,
   setParticipantsModalOpen,
   isDragging,
-  isOverlay
+  isOverlay,
+  taskGroups,
+  onAssignGroup,
+  onOpenCreateGroupModal,
+  onOpenCreateModal
 }) => {
-  const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
-  const isToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
+  const isCompleted = isTaskEffectivelyDone(task);
+  const isOverdue = !isCompleted && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
+  const isToday = !isCompleted && task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
 
   let dateBadgeColor = 'var(--color-text-muted)';
   let dateBadgeBg = 'var(--color-bg)';
@@ -252,32 +264,17 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
     dateBadgeBg = 'rgba(245, 158, 11, 0.08)';
   }
 
-  const link = task.body && !task.body.startsWith('{"erp_task":') 
-    ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '') 
-    : '';
+  const parsedBody = parseTaskBody(task.body);
+  const link = (parsedBody.links?.[0]?.url) || (task.body && !task.body.trim().startsWith('{')
+    ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '')
+    : '');
 
-  let description = '';
-  if (task.body) {
-    if (task.body.startsWith('{"erp_task":')) {
-      try {
-        const parsed = JSON.parse(task.body);
-        description = parsed.erp_task?.description || '';
-      } catch (e) {
-        description = task.body;
-      }
-    } else {
-      description = task.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
-    }
-  }
+  const description = parsedBody.description;
+  const cleanDesc = extractCleanCardDescription(task.body);
 
-  const cleanDesc = description
-    ? stripHtml(description)
-        .replace(/\[MISA_IMPORT\]/g, '')
-        .replace(/Project:\s*ALL IN ONE\s*-\s*VẬN HÀNH/gi, '')
-        .trim()
-    : '';
-
-  const progressVal = task.progress || 0;
+  const checklistTotal = parsedBody.checklist?.length || 0;
+  const checklistDone = parsedBody.checklist?.filter((c: any) => c.done || c.checked).length || 0;
+  const progressVal = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : (task.progress || 0);
 
   let cardBorder = wsBg
     ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(255, 255, 255, 0.85)')
@@ -326,7 +323,10 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
         flex: isOverlay ? 'none' : '1 1 auto',
         boxSizing: 'border-box',
         overflow: 'hidden',
-        transform: isOverlay ? 'scale(1.02)' : 'none',
+        transform: isOverlay ? 'scale(1.02)' : 'translateZ(0)',
+        WebkitTransform: isOverlay ? 'scale(1.02)' : 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
         opacity: isDragging ? 0.35 : 1,
         userSelect: 'none'
       }}
@@ -334,14 +334,18 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
       onClick={() => {
         if (isDragging) return;
         const parsed = parseDescriptionAndChecklist(description);
+        const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
+          ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
+          : parsed.checklist;
         const parsedTask = {
           id: task.id,
           title: task.subject,
           done: task.status === 'done',
           priority: task.priority,
-          due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+          due_date: task.due_date || '',
+          created_at: task.created_at,
           link,
-          description: parsed.pureDescription,
+          description: parsedBody.pureDescription || parsed.pureDescription,
           user_id: task.user_id,
           user_name: task.user_name || 'Hệ thống',
           tags: task.tags || '',
@@ -358,15 +362,27 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
           body: task.body,
           created_by: task.created_by,
           created_by_name: task.created_by_name,
-          created_by_avatar: task.created_by_avatar
+          created_by_avatar: task.created_by_avatar,
+          due_sla_notified: parsedBody.due_sla_notified,
+          subtask_sla_notified: parsedBody.subtask_sla_notified
         };
-        setChecklist(parsed.checklist);
+        setChecklist(checklistItems);
         setSelectedTaskForDetails(parsedTask);
       }}
     >
       {/* Top Tags & Priority */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1, alignItems: 'center' }}>
+          {/* Task Group Badge */}
+          {onAssignGroup && (
+            <TaskGroupBadge
+              task={task}
+              groups={taskGroups || []}
+              onAssignGroup={onAssignGroup}
+              onOpenCreateModal={onOpenCreateModal || onOpenCreateGroupModal}
+              isLightText={!!wsBg}
+            />
+          )}
           {task.tags && task.tags.split(',').filter(Boolean).map((tag: string) => {
             const trimmedTag = tag.trim();
             if (trimmedTag === 'internal_task') return null;
@@ -639,9 +655,10 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = ({
       </div>
     </div>
   );
-};
+});
+WorkspaceCardInner.displayName = 'WorkspaceCardInner';
 
-const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = (props) => {
+const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = React.memo((props) => {
   const {
     attributes,
     listeners,
@@ -666,7 +683,8 @@ const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = (props) => {
       <WorkspaceCardInner {...props} isDragging={isDragging} />
     </div>
   );
-};
+});
+SortableWorkspaceCard.displayName = 'SortableWorkspaceCard';
 
 const DebouncedSearchInput: React.FC<{
   initialValue: string;
@@ -1096,7 +1114,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   };
   const [wsBg, setWsBg] = useState<string>(() => {
     const uid = currentUser?.id || user?.id;
-    return uid ? (localStorage.getItem(`ws_custom_bg_${uid}`) || '/imgs/myerp_dark_brand_wallpaper.jpg') : '/imgs/myerp_dark_brand_wallpaper.jpg';
+    const bg = uid ? (localStorage.getItem(`ws_custom_bg_${uid}`) || '/imgs/myerp_dark_brand_wallpaper.jpg') : '/imgs/myerp_dark_brand_wallpaper.jpg';
+    if (typeof window !== 'undefined' && bg && (bg.startsWith('http') || bg.startsWith('/'))) {
+      const img = new Image();
+      try { (img as any).fetchPriority = 'high'; } catch (_) {}
+      img.src = bg;
+    }
+    return bg;
   });
   const [wsCols, setWsCols] = useState<number>(() => {
     const uid = currentUser?.id || user?.id;
@@ -1172,9 +1196,21 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         localStorage.setItem(`ws_brand_migrated_v271_${uid}`, '1');
       }
 
-      setWsBg(savedBg || '/imgs/myerp_dark_brand_wallpaper.jpg');
+      const preloadSingleBg = (url: string) => {
+        if (!url || url.startsWith('linear-gradient') || url.startsWith('radial-gradient')) return;
+        try {
+          const img = new Image();
+          (img as any).fetchPriority = 'high';
+          img.src = url;
+        } catch (_) {}
+      };
+
+      const initialBg = savedBg || '/imgs/myerp_dark_brand_wallpaper.jpg';
+      setWsBg(initialBg);
+      preloadSingleBg(initialBg);
       setWsCols(savedCols ? Number(savedCols) : 4);
       if (savedOverlay) setWsOverlay(Number(savedOverlay));
+      preloadWorkspaceWallpapers();
 
       // Synchronize with backend database for cross-device consistency
       fetchAPI('get_workspace_settings').then(res => {
@@ -1184,6 +1220,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           const finalCols = (cols !== undefined && cols >= 2 && cols <= 6) ? cols : 4;
 
           setWsBg(finalBg);
+          preloadSingleBg(finalBg);
           localStorage.setItem(`ws_custom_bg_${uid}`, finalBg);
 
           setWsCols(finalCols);
@@ -1274,6 +1311,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [portalTasks, setPortalTasks] = useState<any[]>([]);
   const [wsTasksPage, setWsTasksPage] = useState(1);
   const [wsTasksPageSize, setWsTasksPageSize] = useState(20);
+
+  // Task Groups State
+  const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
+  const [taskGroupsSummary, setTaskGroupsSummary] = useState<TaskGroupsSummary | null>(null);
+  const [activeTaskGroupId, setActiveTaskGroupId] = useState<string | number>('all');
+  const [loadingTaskGroups, setLoadingTaskGroups] = useState(false);
+  const [showCardCreateGroupModal, setShowCardCreateGroupModal] = useState(false);
 
 
 
@@ -1617,32 +1661,24 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       setChecklist([]);
       return;
     }
-    const link = task.body && !task.body.startsWith('{"erp_task":') 
-      ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '') 
-      : '';
-    
-    let description = '';
-    if (task.body) {
-      if (task.body.startsWith('{"erp_task":')) {
-        try {
-          const parsed = JSON.parse(task.body);
-          description = parsed.erp_task?.description || '';
-        } catch (e) {
-          description = task.body;
-        }
-      } else {
-        description = task.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
-      }
-    }
+    const parsedBody = parseTaskBody(task.body);
+    const link = (parsedBody.links?.[0]?.url) || (task.body && !task.body.trim().startsWith('{')
+      ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '')
+      : '');
+    const description = parsedBody.description;
     const parsed = parseDescriptionAndChecklist(description);
+    const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
+      ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
+      : parsed.checklist;
     const parsedTask = {
       id: task.id,
       title: task.subject,
       done: task.status === 'done',
       priority: task.priority,
-      due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+      due_date: task.due_date || '',
+      created_at: task.created_at,
       link,
-      description: parsed.pureDescription,
+      description: parsedBody.pureDescription || parsed.pureDescription,
       user_id: task.user_id,
       user_name: task.user_name || 'Hệ thống',
       tags: task.tags || '',
@@ -1659,9 +1695,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       body: task.body,
       created_by: task.created_by,
       created_by_name: task.created_by_name,
-      created_by_avatar: task.created_by_avatar
+      created_by_avatar: task.created_by_avatar,
+      due_sla_notified: parsedBody.due_sla_notified,
+      subtask_sla_notified: parsedBody.subtask_sla_notified
     };
-    setChecklist(parsed.checklist);
+    setChecklist(checklistItems);
     setSelectedTaskForDetails(parsedTask);
   };
 
@@ -1852,7 +1890,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       } else {
         if (task.is_hidden && Number(task.is_hidden) === 1) return false;
         // Filter by Status: hide completed tasks unless showDoneTasks or explicitly filtered by wsStatus === 'done'
-        if (!showDoneTasks && wsStatus !== 'done' && (task.status === 'done' || task.status === 'completed' || Number(task.progress) >= 100)) return false;
+        if (!showDoneTasks && wsStatus !== 'done' && isTaskEffectivelyDone(task)) return false;
         if (wsStatus && wsStatus !== 'all' && wsStatus !== 'planned' && !showDoneTasks && task.status !== wsStatus) return false;
       }
 
@@ -1862,7 +1900,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       // 3. Filter by Date Preset
       if (datePreset) {
         if (wsDatePreset === 'overdue') {
-          if (task.status === 'done' || !task.due_date || task.due_date.slice(0, 10) > datePreset.end) {
+          if (isTaskEffectivelyDone(task) || !task.due_date || task.due_date.slice(0, 10) > datePreset.end) {
             return false;
           }
         } else {
@@ -1874,14 +1912,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
 
       // 4. Filter by main subtabs
+      const isTaskPersonal = isTaskPersonalForUser(task, currentUser?.id);
+
       if (wsSubTab === 'customer') {
         if (!task.related_type || !['contact', 'deal', 'company'].includes(task.related_type)) return false;
       } else if (wsSubTab === 'personal') {
-        if (!task.tags || !task.tags.includes('personal_task')) return false;
+        if (!isTaskPersonal) return false;
       } else if (wsSubTab === 'team') {
         const isClientRelated = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
-        const isPersonal = task.tags && task.tags.includes('personal_task');
-        if (isClientRelated || isPersonal) return false;
+        if (isClientRelated || isTaskPersonal) return false;
 
         // Filter by team sub-filters
         if (wsTeamSubFilter !== 'all') {
@@ -1926,15 +1965,30 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         );
       }
 
+      // 7. Task Group filtering
+      if (activeTaskGroupId === 'personal') {
+        if (!isTaskPersonal) return false;
+      } else if (activeTaskGroupId === 'unassigned') {
+        if (task.task_group_id) return false;
+      } else if (activeTaskGroupId !== 'all') {
+        if (Number(task.task_group_id) !== Number(activeTaskGroupId)) return false;
+      }
+
       return true;
     });
 
-    // Sắp xếp đưa pinned tasks lên đầu danh sách đã lọc, và theo wsTaskOrder nếu có
+    // Sắp xếp đưa pinned tasks lên đầu danh sách đã lọc, tiếp theo là task Khẩn cấp, và theo wsTaskOrder nếu có
     return [...filtered].sort((a, b) => {
       const aPinned = pinnedTaskIds.includes(Number(a.id));
       const bPinned = pinnedTaskIds.includes(Number(b.id));
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
+
+      // Ưu tiên 2: Khẩn cấp (urgent / high / cao)
+      const aUrgent = (a.priority === 'urgent' || a.priority === 'high' || a.priority === 'cao');
+      const bUrgent = (b.priority === 'urgent' || b.priority === 'high' || b.priority === 'cao');
+      if (aUrgent && !bUrgent) return -1;
+      if (!aUrgent && bUrgent) return 1;
 
       if (wsTaskOrder.length > 0) {
         const aIdx = wsTaskOrder.indexOf(Number(a.id));
@@ -1946,7 +2000,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
       return 0;
     });
-  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, wsTaskOrder]);
+  }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, wsTaskOrder, activeTaskGroupId]);
 
   const workspaceStats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -1985,14 +2039,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       }
 
       // Filter tasks based on current wsSubTab
+      const isTaskPersonal = (() => {
+        const tagsStr = String(task.tags || '');
+        if (tagsStr.includes('personal_task') || tagsStr.includes('ca_nhan') || tagsStr.includes('personal')) return true;
+        const taskUid = Number(task.user_id || 0);
+        const taskCreatedBy = Number(task.created_by || 0);
+        if (taskUid > 0 && taskUid === taskCreatedBy) {
+          const pStr = String(task.participant_ids || '').trim();
+          const otherParticipants = pStr ? pStr.split(',').map(s => Number(s.trim())).filter(id => id > 0 && id !== taskUid) : [];
+          const approverId = Number(task.approver_id || 0);
+          const hasOtherApprover = Number(task.require_approval) === 1 && approverId > 0 && approverId !== taskUid;
+          return otherParticipants.length === 0 && !hasOtherApprover;
+        }
+        return false;
+      })();
+
       if (wsSubTab === 'customer') {
         if (!task.related_type || !['contact', 'deal', 'company'].includes(task.related_type)) return;
       } else if (wsSubTab === 'personal') {
-        if (!task.tags || !task.tags.includes('personal_task')) return;
+        if (!isTaskPersonal) return;
       } else if (wsSubTab === 'team') {
         const isClientRelated = task.related_type && ['contact', 'deal', 'company'].includes(task.related_type);
-        const isPersonal = task.tags && task.tags.includes('personal_task');
-        if (isClientRelated || isPersonal) return;
+        if (isClientRelated || isTaskPersonal) return;
       }
 
       // Pending approval
@@ -2040,37 +2108,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     return filteredWsTasks.slice(startIndex, startIndex + wsTasksPageSize);
   }, [filteredWsTasks, wsTasksPage, wsTasksPageSize]);
 
-  const handleGridDragStart = (event: DragStartEvent) => {
-    const found = paginatedWsTasks.find(t => String(t.id) === String(event.active.id));
-    setActiveDragTask(found || null);
-  };
-
-  const handleGridDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveDragTask(null);
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = paginatedWsTasks.findIndex(t => String(t.id) === String(active.id));
-    const newIndex = paginatedWsTasks.findIndex(t => String(t.id) === String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    let baseOrder = wsTaskOrder.length > 0 
-      ? [...wsTaskOrder] 
-      : filteredWsTasks.map(t => Number(t.id));
-
-    const activeIdNum = Number(active.id);
-    const overIdNum = Number(over.id);
-
-    if (!baseOrder.includes(activeIdNum)) baseOrder.push(activeIdNum);
-    if (!baseOrder.includes(overIdNum)) baseOrder.push(overIdNum);
-
-    const fromIdx = baseOrder.indexOf(activeIdNum);
-    const toIdx = baseOrder.indexOf(overIdNum);
-    if (fromIdx !== -1 && toIdx !== -1) {
-      const updatedOrder = arrayMove(baseOrder, fromIdx, toIdx);
-      handlePersistTaskOrder(updatedOrder);
-    }
-  };
 
   const [loadingWsTasks, setLoadingWsTasks] = useState(false);
   const [wsContacts, setWsContacts] = useState<any[]>([]);
@@ -2278,6 +2315,31 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
   // Scheduler activities & note states
   const [calendarActivities, setCalendarActivities] = useState<any[]>([]);
+
+  // O(1) Pre-processed map of activities grouped by date for lightning-fast calendar rendering
+  const calendarActivitiesMap = useMemo(() => {
+    const map = new Map<string, { notes: any[]; tasks: any[]; importantTasks: any[] }>();
+    (calendarActivities || []).forEach(a => {
+      const rawDate = a.due_date || a.date || a.created_at || '';
+      if (!rawDate) return;
+      const dStr = rawDate.substring(0, 10);
+      if (!map.has(dStr)) {
+        map.set(dStr, { notes: [], tasks: [], importantTasks: [] });
+      }
+      const entry = map.get(dStr)!;
+      if (a.type === 'note') {
+        entry.notes.push(a);
+      } else {
+        entry.tasks.push(a);
+        const isHigh = a.priority === 'high' || a.priority === 'urgent' || a.priority === 'cao';
+        if (isHigh) {
+          entry.importantTasks.push(a);
+        }
+      }
+    });
+    return map;
+  }, [calendarActivities]);
+
   const [calendarUserId, setCalendarUserId] = useState<string | number>(() => currentUser?.id ? String(currentUser.id) : '');
   const [schedulerModalOpen, setSchedulerModalOpen] = useState(false);
   const [selectedSchedulerDate, setSelectedSchedulerDate] = useState<string | null>(null);
@@ -3153,10 +3215,358 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (callsRes?.data?.data) {
         setCompletedCallsCount(callsRes.data.data.total || 0);
       }
+      fetchTaskGroups();
     } catch (e) {
       console.error(e);
     } finally {
       setLoadingWsTasks(false);
+    }
+  };
+
+  const fetchTaskGroups = useCallback(async () => {
+    try {
+      setLoadingTaskGroups(true);
+      const res = await api.get('/task-groups');
+      if (res.data?.success) {
+        const payload = res.data.data ?? res.data;
+        let list: any[] = [];
+        if (Array.isArray(payload)) {
+          list = payload;
+        } else if (Array.isArray(payload?.groups)) {
+          list = payload.groups;
+        } else if (Array.isArray(payload?.items)) {
+          list = payload.items;
+        } else if (Array.isArray(res.data?.groups)) {
+          list = res.data.groups;
+        } else if (Array.isArray(res.data?.items)) {
+          list = res.data.items;
+        }
+        setTaskGroups(Array.isArray(list) ? list : []);
+        setTaskGroupsSummary(payload?.summary || res.data?.summary || null);
+      } else {
+        setTaskGroups([]);
+      }
+    } catch (err) {
+      console.error('Lỗi khi tải danh sách nhóm công việc:', err);
+      setTaskGroups([]);
+    } finally {
+      setLoadingTaskGroups(false);
+    }
+  }, []);
+
+  const enrichedTaskGroups = useMemo(() => {
+    const list = Array.isArray(taskGroups) ? taskGroups : [];
+    return list.map(g => {
+      const gTasks = wsTasks.filter(t => Number(t.task_group_id) === Number(g.id));
+      const gTotal = gTasks.length;
+      const gDone = gTasks.filter(t => isTaskEffectivelyDone(t)).length;
+      return {
+        ...g,
+        total_tasks: gTotal,
+        completed_tasks: gDone,
+        pending_tasks: Math.max(0, gTotal - gDone),
+        progress_percent: gTotal > 0 ? Math.round((gDone / gTotal) * 100) : 0
+      };
+    });
+  }, [taskGroups, wsTasks]);
+
+  const computedGroupSummary = useMemo<TaskGroupsSummary>(() => {
+    const totalAll = wsTasks.length;
+    const doneAll = wsTasks.filter(t => isTaskEffectivelyDone(t)).length;
+    const unassignedTasks = wsTasks.filter(t => !t.task_group_id);
+    const totalUnassigned = unassignedTasks.length;
+    const doneUnassigned = unassignedTasks.filter(t => isTaskEffectivelyDone(t)).length;
+
+    const curUid = Number(currentUser?.id || 0);
+    const personalTasks = wsTasks.filter(t => isTaskPersonalForUser(t, curUid));
+    const totalPersonal = personalTasks.length;
+    const donePersonal = personalTasks.filter(t => isTaskEffectivelyDone(t)).length;
+
+    return {
+      all: {
+        total_tasks: totalAll,
+        completed_tasks: doneAll,
+        pending_tasks: Math.max(0, totalAll - doneAll),
+        progress_percent: totalAll > 0 ? Math.round((doneAll / totalAll) * 100) : 0
+      },
+      unassigned: {
+        total_tasks: totalUnassigned,
+        completed_tasks: doneUnassigned,
+        pending_tasks: Math.max(0, totalUnassigned - doneUnassigned),
+        progress_percent: totalUnassigned > 0 ? Math.round((doneUnassigned / totalUnassigned) * 100) : 0
+      },
+      personal: {
+        total_tasks: totalPersonal,
+        completed_tasks: donePersonal,
+        pending_tasks: Math.max(0, totalPersonal - donePersonal),
+        progress_percent: totalPersonal > 0 ? Math.round((donePersonal / totalPersonal) * 100) : 0
+      }
+    };
+  }, [wsTasks, currentUser]);
+
+  const handleCreateTaskGroup = async (data: { name: string; color: string; icon: string }) => {
+    setShowCardCreateGroupModal(false);
+    const tempId = -Date.now();
+    const optimisticGroup: TaskGroup = {
+      id: tempId,
+      user_id: Number(currentUser?.id || 0),
+      name: data.name,
+      color: data.color || '#3b82f6',
+      icon: data.icon || 'Folder',
+      order_index: 999,
+      is_pinned: 0,
+      total_tasks: 0,
+      completed_tasks: 0,
+      pending_tasks: 0,
+      progress_percent: 0,
+      created_at: new Date().toISOString()
+    };
+    setTaskGroups(prev => {
+      const list = Array.isArray(prev) ? prev : [];
+      return [...list, optimisticGroup];
+    });
+
+    try {
+      const res = await api.post('/task-groups', data);
+      if (res.data?.success) {
+        toast.success(t('Đã tạo nhóm công việc mới thành công!'));
+        const newGroup = res.data.data;
+        if (newGroup && newGroup.id) {
+          setTaskGroups(prev => {
+            const list = Array.isArray(prev) ? prev : [];
+            const filtered = list.filter(g => g.id !== tempId && g.id !== newGroup.id);
+            return [...filtered, newGroup];
+          });
+          setActiveTaskGroupId(newGroup.id);
+        }
+        // Non-blocking background sync
+        fetchTaskGroups();
+        return res.data;
+      } else {
+        setTaskGroups(prev => (Array.isArray(prev) ? prev : []).filter(g => g.id !== tempId));
+        throw new Error(res.data?.message || t('Lỗi khi tạo nhóm công việc'));
+      }
+    } catch (err: any) {
+      setTaskGroups(prev => (Array.isArray(prev) ? prev : []).filter(g => g.id !== tempId));
+      toast.error(err.response?.data?.message || err.message || t('Lỗi khi tạo nhóm công việc'));
+      throw err;
+    }
+  };
+
+  const handleUpdateTaskGroup = async (id: number, data: { name: string; color: string; icon: string }) => {
+    try {
+      // Optimistic local update
+      setTaskGroups(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        return list.map(g => g.id === id ? { ...g, ...data } : g);
+      });
+      const res = await api.put(`/task-groups/${id}`, data);
+      if (res.data?.success) {
+        toast.success(t('Đã cập nhật nhóm công việc!'));
+        fetchTaskGroups();
+        fetchWorkspaceTasks();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi cập nhật nhóm'));
+      fetchTaskGroups();
+    }
+  };
+
+  const handleDeleteTaskGroup = async (id: number) => {
+    try {
+      const res = await api.delete(`/task-groups/${id}`);
+      if (res.data?.success) {
+        toast.success(t('Đã xóa nhóm công việc!'));
+        if (activeTaskGroupId === id) {
+          setActiveTaskGroupId('all');
+        }
+        await fetchTaskGroups();
+        await fetchWorkspaceTasks();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi xóa nhóm'));
+    }
+  };
+
+  const handleTogglePinTaskGroup = async (id: number) => {
+    try {
+      setTaskGroups(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        const updated = list.map(g => g.id === id ? { ...g, is_pinned: g.is_pinned === 1 ? 0 : 1 } : g);
+        return [...updated].sort((a, b) => {
+          if ((b.is_pinned || 0) !== (a.is_pinned || 0)) {
+            return (b.is_pinned || 0) - (a.is_pinned || 0);
+          }
+          return (a.order_index || 0) - (b.order_index || 0);
+        });
+      });
+      const res = await api.post(`/task-groups/${id}/toggle-pin`);
+      if (res.data?.success) {
+        toast.success(res.data.message || t('Đã cập nhật trạng thái ghim nhóm!'));
+        await fetchTaskGroups();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi ghim nhóm'));
+      await fetchTaskGroups();
+    }
+  };
+
+  const handleReorderTaskGroups = async (orderIds: number[]) => {
+    try {
+      setTaskGroups(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        const map = new Map(list.map(g => [g.id, g]));
+        const reordered: TaskGroup[] = [];
+        orderIds.forEach(id => {
+          const g = map.get(id);
+          if (g) reordered.push(g);
+        });
+        list.forEach(g => {
+          if (!orderIds.includes(g.id)) reordered.push(g);
+        });
+        return reordered;
+      });
+
+      const res = await api.post('/task-groups/reorder', { order_ids: orderIds });
+      if (res.data?.success) {
+        toast.success(t('Đã lưu thứ tự ưu tiên nhóm mới!'));
+        await fetchTaskGroups();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi sắp xếp thứ tự nhóm'));
+      await fetchTaskGroups();
+    }
+  };
+
+  const handleAssignTaskGroup = async (taskId: number, groupId: number | null, customMsg?: string | false) => {
+    try {
+      const res = await api.post(`/activities/${taskId}/move-group`, { task_group_id: groupId });
+      if (res.data?.success) {
+        if (customMsg !== false) {
+          toast.success(customMsg || t('Đã chuyển nhóm công việc thành công!'));
+        }
+        const chosen = (taskGroups || []).find(g => g.id === groupId);
+        setWsTasks(prev => prev.map(t => {
+          if (Number(t.id) === Number(taskId)) {
+            return {
+              ...t,
+              task_group_id: groupId,
+              task_group_name: chosen ? chosen.name : null,
+              task_group_color: chosen ? chosen.color : null,
+              task_group_icon: chosen ? chosen.icon : null
+            };
+          }
+          return t;
+        }));
+        await fetchTaskGroups();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi chuyển nhóm'));
+    }
+  };
+
+  useEffect(() => {
+    const handleTaskLocalUpdate = (e: any) => {
+      const updated = e.detail;
+      if (!updated?.id) return;
+      setWsTasks(prev => prev.map(t => Number(t.id) === Number(updated.id) ? { ...t, ...updated } : t));
+    };
+    window.addEventListener('task-local-updated', handleTaskLocalUpdate);
+    return () => window.removeEventListener('task-local-updated', handleTaskLocalUpdate);
+  }, []);
+
+  const handleDropTaskOnGroup = useCallback(async (taskId: number, targetGroupId: number | null) => {
+    const task = wsTasks.find(t => Number(t.id) === Number(taskId));
+    if (!task) return;
+
+    const currentGroupId = task.task_group_id ? Number(task.task_group_id) : null;
+    const targetGroup = targetGroupId ? (taskGroups || []).find(g => Number(g.id) === targetGroupId) : null;
+    const targetGroupName = targetGroupId ? (targetGroup?.name || t('nhóm')) : t('Chưa phân nhóm');
+
+    // Case 1: Trùng nhóm
+    if (currentGroupId === targetGroupId) {
+      toast(t('Công việc đã nằm trong nhóm "{name}" rồi!').replace('{name}', targetGroupName), {
+        icon: 'ℹ️',
+        duration: 3000
+      });
+      return;
+    }
+
+    // Case 2: Công việc chưa có nhóm -> Kéo vào nhóm thì chuyển luôn! (Chỉ 1 toast duy nhất)
+    if (!currentGroupId) {
+      await handleAssignTaskGroup(taskId, targetGroupId, t('Đã chuyển công việc vào nhóm "{name}"').replace('{name}', targetGroupName));
+      return;
+    }
+
+    // Case 3: Công việc đã có nhóm khác -> Hỏi có muốn di chuyển qua không?
+    const oldGroup = (taskGroups || []).find(g => Number(g.id) === currentGroupId);
+    const oldGroupName = task.task_group_name || oldGroup?.name || t('nhóm cũ');
+
+    showConfirm({
+      title: t('Chuyển nhóm công việc'),
+      message: t('Công việc này đang thuộc nhóm "{old}". Bạn có muốn chuyển sang nhóm "{new}" không?')
+        .replace('{old}', oldGroupName)
+        .replace('{new}', targetGroupName),
+      confirmText: t('Chuyển nhóm'),
+      cancelText: t('Hủy'),
+      isDanger: false,
+      onConfirm: async () => {
+        // Chỉ 1 toast duy nhất
+        await handleAssignTaskGroup(taskId, targetGroupId, t('Đã chuyển công việc sang nhóm "{name}" thành công!').replace('{name}', targetGroupName));
+      }
+    });
+  }, [wsTasks, taskGroups, handleAssignTaskGroup, showConfirm, t]);
+
+  const customCollisionDetection = useCallback((args: any) => {
+    const pointerCollisions = pointerWithin(args);
+    const groupCollision = pointerCollisions.find(c => String(c.id).startsWith('group-'));
+    if (groupCollision) {
+      return [groupCollision];
+    }
+    return closestCenter(args);
+  }, []);
+
+  const handleGridDragStart = (event: DragStartEvent) => {
+    const found = paginatedWsTasks.find(t => String(t.id) === String(event.active.id));
+    setActiveDragTask(found || null);
+    setDraggedTaskId(Number(event.active.id));
+  };
+
+  const handleGridDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragTask(null);
+    setDraggedTaskId(null);
+    if (!over) return;
+
+    // Dropped onto a Task Group Card!
+    if (String(over.id).startsWith('group-')) {
+      const targetGroupStr = String(over.id).replace('group-', '');
+      const targetGroupId = targetGroupStr === 'unassigned' ? null : Number(targetGroupStr);
+      handleDropTaskOnGroup(Number(active.id), targetGroupId);
+      return;
+    }
+
+    if (active.id === over.id) return;
+
+    const oldIndex = paginatedWsTasks.findIndex(t => String(t.id) === String(active.id));
+    const newIndex = paginatedWsTasks.findIndex(t => String(t.id) === String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    let baseOrder = wsTaskOrder.length > 0 
+      ? [...wsTaskOrder] 
+      : filteredWsTasks.map(t => Number(t.id));
+
+    const activeIdNum = Number(active.id);
+    const overIdNum = Number(over.id);
+
+    if (!baseOrder.includes(activeIdNum)) baseOrder.push(activeIdNum);
+    if (!baseOrder.includes(overIdNum)) baseOrder.push(overIdNum);
+
+    const fromIdx = baseOrder.indexOf(activeIdNum);
+    const toIdx = baseOrder.indexOf(overIdNum);
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const updatedOrder = arrayMove(baseOrder, fromIdx, toIdx);
+      handlePersistTaskOrder(updatedOrder);
     }
   };
 
@@ -3202,6 +3612,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   useEffect(() => {
     if (activeTab === 'workspace') {
       fetchWorkspaceTasks();
+      fetchTaskGroups();
     }
   }, [activeTab, wsPriority, wsStatus, showDoneTasks, wsDatePreset, wsStartDate, wsEndDate, wsTeamId, wsUserId, wsActivityType, wsRelatedType, wsSubTab]);
 
@@ -5051,32 +5462,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             const task = res.data.data;
             if (task) {
               let link = '';
-              let description = '';
-              if (task.body) {
+              const parsedBody = parseTaskBody(task.body);
+              if (parsedBody.links?.[0]?.url) {
+                link = parsedBody.links[0].url;
+              } else if (task.body) {
                 const matchLink = task.body.match(/Tài liệu\/Link đính kèm:\s*(https?:\/\/[^\s]+)/);
                 if (matchLink) {
                   link = matchLink[1];
                 }
-                if (task.type === 'task') {
-                  try {
-                    const parsed = JSON.parse(task.body);
-                    description = parsed.erp_task?.description || '';
-                  } catch (e) {
-                    description = task.body;
-                  }
-                } else {
-                  description = task.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
-                }
               }
+              const description = parsedBody.description;
               const parsed = parseDescriptionAndChecklist(description);
+              const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
+                ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
+                : parsed.checklist;
               const parsedTask = {
                 id: task.id,
                 title: task.subject,
                 done: task.status === 'done',
                 priority: task.priority,
-                due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+                due_date: task.due_date || '',
+                created_at: task.created_at,
                 link,
-                description: parsed.pureDescription,
+                description: parsedBody.pureDescription || parsed.pureDescription,
                 user_id: task.user_id,
                 user_name: task.user_name || 'Hệ thống',
                 tags: task.tags || '',
@@ -5093,9 +5501,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 body: task.body,
                 created_by: task.created_by,
                 created_by_name: task.created_by_name,
-                created_by_avatar: task.created_by_avatar
+                created_by_avatar: task.created_by_avatar,
+                due_sla_notified: parsedBody.due_sla_notified,
+                subtask_sla_notified: parsedBody.subtask_sla_notified
               };
-              setChecklist(parsed.checklist);
+              setChecklist(checklistItems);
               setSelectedTaskForDetails(parsedTask);
               
               // Set active subtab to correspond with the task type so it shows in the list
@@ -5146,7 +5556,20 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [currentUser]);
 
-  // Calendar stats fetch
+  // Lazy-load contacts for dropdown only when task creation form is opened
+  const loadContactsDropdown = useCallback(async () => {
+    if (contactsList.length > 0) return;
+    try {
+      const conRes = await api.get('/contacts?limit=1000');
+      const conData = conRes.data?.data;
+      const conItems = Array.isArray(conData?.items) ? conData.items : (Array.isArray(conData) ? conData : []);
+      setContactsList(conItems);
+    } catch (e: any) {
+      console.error('Lỗi tải danh sách khách hàng cho dropdown:', e.message);
+    }
+  }, [contactsList.length]);
+
+  // Calendar stats fetch (Ultra-fast parallel fetching)
   const fetchCalendarStats = async () => {
     if (!token) return;
     setCalendarLoading(true);
@@ -5168,37 +5591,34 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         }
       }
 
-      const json = await fetchAPI(`get_calendar_stats&year=${year}&month=${month}&consultant=${encodeURIComponent(consultantParam)}&user_id=${encodeURIComponent(String(activeUserId && activeUserId !== 'all' ? activeUserId : ''))}`);
-      if (json.success) {
-        setCalendarData(json.data || {});
-      }
-
-      // Concurrently fetch the monthly activities (tasks, meetings, calls, notes)
+      // Concurrently fetch the monthly activities (tasks, meetings, calls, notes) with minimal=1
       const startDateStr = `${year}-${String(month).padStart(2, '0')}-01 00:00:00`;
       const endDateStr = `${year}-${String(month).padStart(2, '0')}-${new Date(year, month, 0).getDate()} 23:59:59`;
       
-      const params: any = {
+      const actParams: any = {
         start_date: startDateStr,
         end_date: endDateStr,
-        limit: 300
+        limit: 500,
+        minimal: 1
       };
 
       if (activeUserId && activeUserId !== 'all') {
-        params.user_id = activeUserId;
+        actParams.user_id = activeUserId;
       }
 
-      const actRes = await api.get('/activities', { params });
+      // Parallel execution: fetch calendar summary stats & activities concurrently
+      const [statsJson, actRes] = await Promise.all([
+        fetchAPI(`get_calendar_stats&year=${year}&month=${month}&consultant=${encodeURIComponent(consultantParam)}&user_id=${encodeURIComponent(String(activeUserId && activeUserId !== 'all' ? activeUserId : ''))}`),
+        api.get('/activities', { params: actParams })
+      ]);
+
+      if (statsJson?.success) {
+        setCalendarData(statsJson.data || {});
+      }
+
       const actData = actRes.data?.data;
       const actItems = Array.isArray(actData?.items) ? actData.items : (Array.isArray(actData) ? actData : []);
       setCalendarActivities(actItems);
-
-      // Fetch contacts list for dropdown once if not loaded
-      if (contactsList.length === 0) {
-        const conRes = await api.get('/contacts?limit=1000');
-        const conData = conRes.data?.data;
-        const conItems = Array.isArray(conData?.items) ? conData.items : (Array.isArray(conData) ? conData : []);
-        setContactsList(conItems);
-      }
     } catch (e: any) {
       console.error('Lỗi tải thống kê lịch biểu: ', e.message);
     } finally {
@@ -5244,6 +5664,23 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       const json = await fetchAPI(`get_calendar_day_details&${queryParams.toString()}`);
       if (json.success) {
         setDayDetails(json.data);
+
+        // Auto-switch to populated tab if currently in leads tab but leads count is 0
+        const sData = json.data;
+        const leadsCount = sData?.sales?.length || 0;
+        const ticketsCount = sData?.tickets?.length || 0;
+        const dateActivities = calendarActivitiesMap.get(dateStr) || { notes: [], tasks: [], importantTasks: [] };
+        const tasksCount = dateActivities.tasks.length;
+        const notesCount = dateActivities.notes.length;
+
+        setSchedulerModalTab(curr => {
+          if (curr === 'leads' && leadsCount === 0) {
+            if (tasksCount > 0) return 'tasks';
+            if (notesCount > 0) return 'diary';
+            if (ticketsCount > 0) return 'tickets';
+          }
+          return curr;
+        });
       } else {
         toast.error(json.message || t('Lỗi tải chi tiết ngày'));
       }
@@ -5252,6 +5689,39 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     } finally {
       setDayDetailsLoading(false);
     }
+  };
+
+  // Open calendar date modal with intelligent auto-tab selection
+  const openCalendarModalForDate = (dateStr: string, forceTab?: 'leads' | 'diary' | 'tasks' | 'tickets') => {
+    setSelectedSchedulerDate(dateStr);
+    setDiaryPage(1);
+    setTasksPage(1);
+
+    const dData = calendarData[dateStr] || { distributed: 0, ticket_total: 0 };
+    const dStats = calendarActivitiesMap.get(dateStr) || { notes: [], tasks: [], importantTasks: [] };
+    const hasLeads = (dData.distributed || 0) > 0;
+    const hasTasks = dStats.tasks.length > 0;
+    const hasNotes = dStats.notes.length > 0;
+    const hasTickets = (dData.ticket_total || 0) > 0;
+
+    if (forceTab) {
+      setSchedulerModalTab(forceTab);
+    } else {
+      if (hasLeads) {
+        setSchedulerModalTab('leads');
+      } else if (hasTasks) {
+        setSchedulerModalTab('tasks');
+      } else if (hasNotes) {
+        setSchedulerModalTab('diary');
+      } else if (hasTickets) {
+        setSchedulerModalTab('tickets');
+      } else {
+        setSchedulerModalTab('tasks');
+      }
+    }
+
+    fetchDayDetails(dateStr);
+    setSchedulerModalOpen(true);
   };
 
   const handleDateClick = fetchDayDetails;
@@ -6359,7 +6829,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           flexDirection: 'column',
           gap: '8px',
           marginBottom: '1rem',
-          overflow: 'hidden'
+          overflow: 'visible',
+          position: 'relative',
+          zIndex: 12
         }}>
           {/* Main Toolbar Row (Pills + Controls side-by-side) */}
           <div style={{
@@ -6377,9 +6849,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             gap: '0.4rem',
             overflowX: 'auto',
             whiteSpace: 'nowrap',
-            flex: isMobile ? 'none' : '1 1 auto',
+            flex: isMobile ? 'none' : '0 1 auto',
             paddingBottom: isMobile ? '2px' : '0',
-            maxWidth: isMobile ? '100%' : '55%'
+            maxWidth: isMobile ? '100%' : 'calc(100% - 280px)'
           }} className="custom-scrollbar-hidden">
             {/* Tất cả Pill */}
             <div 
@@ -6948,7 +7420,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                style={{ overflow: showAdvancedFilters ? 'visible' : 'hidden' }}
+                style={{ overflow: 'visible' }}
               >
                 <div style={{
                   display: 'grid',
@@ -7333,7 +7805,35 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             </div>
           </div>
         ) : (
-          <>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={customCollisionDetection}
+            onDragStart={handleGridDragStart}
+            onDragEnd={handleGridDragEnd}
+          >
+            {/* Task Groups Section Carousel */}
+            {wsViewMode !== 'focus' && (
+              <TaskGroupSection
+                showProgress={showDoneTasks}
+                groups={enrichedTaskGroups}
+                summary={computedGroupSummary}
+                activeGroupId={activeTaskGroupId}
+                onSelectGroup={(groupId) => setActiveTaskGroupId(groupId)}
+                onCreateGroup={handleCreateTaskGroup}
+                onUpdateGroup={handleUpdateTaskGroup}
+                onDeleteGroup={handleDeleteTaskGroup}
+                onTogglePinGroup={handleTogglePinTaskGroup}
+                onReorderGroups={handleReorderTaskGroups}
+                onDropTaskOnGroup={handleDropTaskOnGroup}
+                draggedTaskId={draggedTaskId}
+                isLightText={!!wsBg}
+                theme={theme}
+                isMobile={isMobile}
+                showCreateModal={showCardCreateGroupModal}
+                setShowCreateModal={setShowCardCreateGroupModal}
+              />
+            )}
+
             {wsViewMode !== 'focus' && loadingWsTasks ? (
               wsViewMode === 'kanban' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }}>
@@ -7587,17 +8087,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           </div>
         ) : wsViewMode === 'grid' ? (
           <>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleGridDragStart}
-              onDragEnd={handleGridDragEnd}
-            >
-              <SortableContext
+            <SortableContext
                 items={paginatedWsTasks.map(t => t.id)}
                 strategy={rectSortingStrategy}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : `repeat(${wsCols || 4}, minmax(0, 1fr))`, gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '100px' : '40px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '100%' : `repeat(${wsCols || 4}, minmax(0, 1fr))`, gap: isMobile ? '0.75rem' : '1.25rem', paddingBottom: isMobile ? '20px' : '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
                   {paginatedWsTasks.map(task => {
                     const isPinned = pinnedTaskIds.includes(Number(task.id));
                     return (
@@ -7618,41 +8112,29 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         handleOpenContactProfile={handleOpenContactProfile}
                         setSelectedTaskParticipants={setSelectedTaskParticipants}
                         setParticipantsModalOpen={setParticipantsModalOpen}
+                        taskGroups={taskGroups}
+                        onAssignGroup={handleAssignTaskGroup}
+                        onOpenCreateGroupModal={() => setShowCardCreateGroupModal(true)}
                       />
                     );
                   })}
                 </div>
               </SortableContext>
-              <DragOverlay adjustScale={false}>
-                {activeDragTask ? (
-                  <WorkspaceCardInner
-                    task={activeDragTask}
-                    isMobile={isMobile}
-                    wsBg={wsBg}
-                    theme={theme}
-                    isPinned={pinnedTaskIds.includes(Number(activeDragTask.id))}
-                    togglePinTask={togglePinTask}
-                    users={users}
-                    t={t}
-                    getDueDateLabel={getDueDateLabel}
-                    parseDescriptionAndChecklist={parseDescriptionAndChecklist}
-                    setChecklist={setChecklist}
-                    setSelectedTaskForDetails={setSelectedTaskForDetails}
-                    handleOpenContactProfile={handleOpenContactProfile}
-                    setSelectedTaskParticipants={setSelectedTaskParticipants}
-                    setParticipantsModalOpen={setParticipantsModalOpen}
-                    isOverlay={true}
-                  />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+
             {filteredWsTasks.length > wsTasksPageSize && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                marginTop: '1.25rem',
+                marginBottom: isMobile ? '4rem' : '2rem',
+                background: 'transparent'
+              }}>
                 <Pagination
                   total={filteredWsTasks.length}
                   page={wsTasksPage}
                   pageSize={wsTasksPageSize}
                   onChange={setWsTasksPage}
+                  isLightText={!!wsBg}
                 />
               </div>
             )}
@@ -7661,9 +8143,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           /* Kanban View */
           <>
             {(() => {
-              const todoTasks = filteredWsTasks.filter(t => t.status !== 'done' && (!t.progress || t.progress === 0));
-              const inProgressTasks = filteredWsTasks.filter(t => t.status !== 'done' && t.progress > 0 && t.progress < 100);
-              const doneTasks = filteredWsTasks.filter(t => t.status === 'done' || t.progress === 100);
+              const todoTasks = filteredWsTasks.filter(t => !isTaskEffectivelyDone(t) && getTaskEffectiveProgress(t) === 0);
+              const inProgressTasks = filteredWsTasks.filter(t => !isTaskEffectivelyDone(t) && getTaskEffectiveProgress(t) > 0);
+              const doneTasks = filteredWsTasks.filter(t => isTaskEffectivelyDone(t));
 
               const renderKanbanColumn = (
                 colId: 'todo' | 'in_progress' | 'done',
@@ -7722,8 +8204,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     {/* Tasks List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1, overflowY: 'auto', maxHeight: '600px' }}>
                       {columnTasks.slice(0, 20).map(task => {
-                        const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
-                        const isToday = task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
+                        const isCompleted = isTaskEffectivelyDone(task);
+                        const isOverdue = !isCompleted && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
+                        const isToday = !isCompleted && task.due_date && new Date(task.due_date).toDateString() === new Date().toDateString();
                         
                         let dateBadgeColor = 'var(--color-text-muted)';
                         let dateBadgeBg = 'var(--color-bg)';
@@ -7735,24 +8218,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           dateBadgeBg = 'rgba(245, 158, 11, 0.08)';
                         }
 
-                        const link = task.body && !task.body.startsWith('{"erp_task":') 
-                          ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '') 
-                          : '';
-                        
-                        let description = '';
-                        if (task.body) {
-                          if (task.body.startsWith('{"erp_task":')) {
-                            try {
-                              const parsed = JSON.parse(task.body);
-                              description = parsed.erp_task?.description || '';
-                            } catch (e) {
-                              description = task.body;
-                            }
-                          } else {
-                            description = task.body.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim();
-                          }
-                        }
-                        
+                        const parsedBody = parseTaskBody(task.body);
+                        const link = (parsedBody.links?.[0]?.url) || (task.body && !task.body.trim().startsWith('{')
+                          ? (task.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '')
+                          : '');
+                        const description = parsedBody.description;
+                        const cleanDesc = extractCleanCardDescription(task.body);
                         const progressVal = task.progress || 0;
                         const isPinned = pinnedTaskIds.includes(Number(task.id));
 
@@ -7764,14 +8235,18 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             onDragEnd={() => setDraggedTaskId(null)}
                             onClick={() => {
                               const parsed = parseDescriptionAndChecklist(description);
+                              const checklistItems = (parsedBody.checklist && parsedBody.checklist.length > 0)
+                                ? parsedBody.checklist.map(c => ({ text: String(c.text || ''), checked: Boolean(c.checked) }))
+                                : parsed.checklist;
                               const parsedTask = {
                                 id: task.id,
                                 title: task.subject,
                                 done: task.status === 'done',
                                 priority: task.priority,
-                                due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+                                due_date: task.due_date || '',
+                                created_at: task.created_at,
                                 link,
-                                description: parsed.pureDescription,
+                                description: parsedBody.pureDescription || parsed.pureDescription,
                                 user_id: task.user_id,
                                 user_name: task.user_name || 'Hệ thống',
                                 tags: task.tags || '',
@@ -7788,9 +8263,11 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                 body: task.body,
                                 created_by: task.created_by,
                                 created_by_name: task.created_by_name,
-                                created_by_avatar: task.created_by_avatar
+                                created_by_avatar: task.created_by_avatar,
+                                due_sla_notified: parsedBody.due_sla_notified,
+                                subtask_sla_notified: parsedBody.subtask_sla_notified
                               };
-                              setChecklist(parsed.checklist);
+                              setChecklist(checklistItems);
                               setSelectedTaskForDetails(parsedTask);
                             }}
                             style={{
@@ -7832,9 +8309,17 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                           >
                             {/* Drag handle & header info */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '4px' }}>
-                              <span className={`badge ${task.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.625rem', padding: '1px 5px' }}>
-                                {task.priority === 'high' ? 'Cao' : 'Trung bình'}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span className={`badge ${task.priority === 'high' ? 'danger' : 'warning'}`} style={{ fontSize: '0.625rem', padding: '1px 5px' }}>
+                                  {task.priority === 'high' ? 'Cao' : 'Trung bình'}
+                                </span>
+                                <TaskGroupBadge
+                                  task={task}
+                                  groups={taskGroups}
+                                  onAssignGroup={handleAssignTaskGroup}
+                                  onOpenCreateModal={() => setShowCardCreateGroupModal(true)}
+                                />
+                              </div>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -7898,7 +8383,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                             </p>
 
                             {/* Task Description */}
-                            {description && (
+                            {cleanDesc && (
                               <p style={{ 
                                 fontSize: '0.75rem', 
                                 color: 'var(--color-text-muted)', 
@@ -7909,7 +8394,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                 overflow: 'hidden',
                                 lineHeight: '1.3'
                               }}>
-                                {stripHtml(description)}
+                                {cleanDesc}
                               </p>
                             )}
 
@@ -8441,6 +8926,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       isOpen={true}
                       onClose={() => setSelectedTaskForDetails(null)}
                       task={selectedTaskForDetails}
+                      taskGroups={taskGroups}
                       onUpdate={() => {
                         fetchPortalTasks();
                         fetchWorkspaceTasks();
@@ -8472,8 +8958,33 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             </div>
           </div>
         )}
-        </>
-        )}
+        <DragOverlay adjustScale={false}>
+          {activeDragTask ? (
+            <WorkspaceCardInner
+              task={activeDragTask}
+              isMobile={isMobile}
+              wsBg={wsBg}
+              theme={theme}
+              isPinned={pinnedTaskIds.includes(Number(activeDragTask.id))}
+              togglePinTask={togglePinTask}
+              users={users}
+              t={t}
+              getDueDateLabel={getDueDateLabel}
+              parseDescriptionAndChecklist={parseDescriptionAndChecklist}
+              setChecklist={setChecklist}
+              setSelectedTaskForDetails={setSelectedTaskForDetails}
+              handleOpenContactProfile={handleOpenContactProfile}
+              setSelectedTaskParticipants={setSelectedTaskParticipants}
+              setParticipantsModalOpen={setParticipantsModalOpen}
+              isOverlay={true}
+              taskGroups={taskGroups}
+              onAssignGroup={handleAssignTaskGroup}
+              onOpenCreateGroupModal={() => setShowCardCreateGroupModal(true)}
+            />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+      )}
 
         {/* Task Details Modal moved to root level */}
         </div>
@@ -11062,8 +11573,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     for (let d = 1; d <= totalDays; d++) {
       const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayData = calendarData[dateStr] || { distributed: 0, blacklist: 0, reminder: 0, error: 0, ticket_total: 0 };
-      const dayNotesCount = calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(dateStr) && a.type === 'note').length;
-      const dayTasksCount = calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(dateStr) && a.type === 'task').length;
+      const dayStats = calendarActivitiesMap.get(dateStr) || { notes: [], tasks: [], importantTasks: [] };
+      const dayNotesCount = dayStats.notes.length;
+      const dayTasksCount = dayStats.tasks.length;
+      const dayImportantTasks = dayStats.importantTasks;
       const isToday = new Date().toDateString() === new Date(y, m, d).toDateString();
       const dayOfWeek = (startOffset + d - 1) % 7;
       const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
@@ -11072,13 +11585,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         <div
           key={d}
           onClick={() => {
-            setSelectedSchedulerDate(dateStr);
-            const hasLeads = (dayData.distributed || 0) > 0;
-            setSchedulerModalTab(hasLeads ? 'leads' : 'diary');
-            setDiaryPage(1);
-            setTasksPage(1);
-            fetchDayDetails(dateStr);
-            setSchedulerModalOpen(true);
+            openCalendarModalForDate(dateStr);
           }}
           style={{
             borderRight: '1px solid var(--color-border)',
@@ -11116,13 +11623,9 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedSchedulerDate(dateStr);
-                setSchedulerModalTab('tasks');
+                loadContactsDropdown();
+                openCalendarModalForDate(dateStr, 'tasks');
                 setShowTaskForm(true);
-                setDiaryPage(1);
-                setTasksPage(1);
-                fetchDayDetails(dateStr);
-                setSchedulerModalOpen(true);
               }}
               className="quick-add-btn btn primary sm icon-only"
               style={{
@@ -11148,11 +11651,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
 
           {/* Render High Priority / Important Tasks Only */}
           {(() => {
-            const dayImportantTasks = calendarActivities.filter(a => {
-              const dStr = (a.due_date || a.date || a.created_at || '').substring(0, 10);
-              const isHigh = a.priority === 'high' || a.priority === 'urgent' || a.priority === 'cao';
-              return dStr === dateStr && a.type === 'task' && isHigh;
-            });
             if (dayImportantTasks.length === 0) return null;
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', width: '100%', marginBottom: '4px' }}>
@@ -11168,13 +11666,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       key={a.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (a.contact_id) {
-                          setProfileContact({ id: a.contact_id });
-                        } else {
-                          setSelectedSchedulerDate(dateStr);
-                          setSchedulerModalTab('tasks');
-                          setSchedulerModalOpen(true);
-                        }
+                        handleSelectTask(a);
                       }}
                       style={{
                         display: 'flex',
@@ -11237,12 +11729,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedSchedulerDate(dateStr);
-                  setSchedulerModalTab('leads');
-                  setDiaryPage(1);
-                  setTasksPage(1);
-                  fetchDayDetails(dateStr);
-                  setSchedulerModalOpen(true);
+                  openCalendarModalForDate(dateStr, 'leads');
                 }}
                 style={{
                   display: 'flex',
@@ -11267,12 +11754,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedSchedulerDate(dateStr);
-                  setSchedulerModalTab('tickets');
-                  setDiaryPage(1);
-                  setTasksPage(1);
-                  fetchDayDetails(dateStr);
-                  setSchedulerModalOpen(true);
+                  openCalendarModalForDate(dateStr, 'tickets');
                 }}
                 style={{
                   display: 'flex',
@@ -11298,12 +11780,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedSchedulerDate(dateStr);
-                  setSchedulerModalTab('diary');
-                  setDiaryPage(1);
-                  setTasksPage(1);
-                  fetchDayDetails(dateStr);
-                  setSchedulerModalOpen(true);
+                  openCalendarModalForDate(dateStr, 'diary');
                 }}
                 style={{
                   display: 'flex',
@@ -11329,12 +11806,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedSchedulerDate(dateStr);
-                  setSchedulerModalTab('tasks');
-                  setDiaryPage(1);
-                  setTasksPage(1);
-                  fetchDayDetails(dateStr);
-                  setSchedulerModalOpen(true);
+                  openCalendarModalForDate(dateStr, 'tasks');
                 }}
                 style={{
                   display: 'flex',
@@ -11360,12 +11832,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedSchedulerDate(dateStr);
-                  setSchedulerModalTab('diary');
-                  setDiaryPage(1);
-                  setTasksPage(1);
-                  fetchDayDetails(dateStr);
-                  setSchedulerModalOpen(true);
+                  openCalendarModalForDate(dateStr, 'diary');
                 }}
                 style={{
                   display: 'flex',
@@ -16635,6 +17102,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
         )}
 
         {/* Workspace Fixed Background Layer (Full-bleed, stays completely static when scrolling) */}
+        {/* Workspace Fixed Background Layer (Full-bleed, stays completely static when scrolling with smooth cross-fade transition) */}
         {activeTab === 'workspace' && wsBg && (
           <div 
             className="workspace-fixed-bg-layer"
@@ -16643,13 +17111,31 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               inset: 0,
               zIndex: 0,
               pointerEvents: 'none',
-              backgroundImage: wsBg.startsWith('linear-gradient') || wsBg.startsWith('radial-gradient') ? wsBg : `url("${wsBg}")`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-              transition: 'background-image 0.4s ease'
+              overflow: 'hidden'
             }}
           >
+            <AnimatePresence mode="sync">
+              <motion.div
+                key={wsBg}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.45, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage: wsBg.startsWith('linear-gradient') || wsBg.startsWith('radial-gradient') ? wsBg : `url("${wsBg}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                  transform: 'translateZ(0)',
+                  WebkitTransform: 'translateZ(0)',
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                  willChange: 'opacity'
+                }}
+              />
+            </AnimatePresence>
             <div 
               style={{
                 position: 'absolute',
@@ -16660,11 +17146,15 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                       : `rgba(255, 255, 255, ${((wsOverlay ?? 0) / 100) * 0.45})`)
                   : 'transparent',
                 backdropFilter: (wsOverlay ?? 0) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 0) / 5)}px)` : 'none',
-                WebkitBackdropFilter: (wsOverlay ?? 0) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 0) / 5)}px)` : 'none'
+                WebkitBackdropFilter: (wsOverlay ?? 0) > 0 ? `blur(${Math.min(10, (wsOverlay ?? 0) / 5)}px)` : 'none',
+                transform: 'translateZ(0)',
+                WebkitTransform: 'translateZ(0)',
+                transition: 'background-color 0.3s ease, backdrop-filter 0.3s ease'
               }}
             />
           </div>
         )}
+
 
         {/* Scrollable View Area */}
         <main 
@@ -18292,7 +18782,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   color: schedulerModalTab === 'diary' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   fontWeight: 600
                 }}>
-                  {calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(selectedSchedulerDate) && a.type === 'note').length}
+                  {calendarActivitiesMap.get(selectedSchedulerDate)?.notes.length || 0}
                 </span>
               </button>
 
@@ -18324,7 +18814,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                   color: schedulerModalTab === 'tasks' ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   fontWeight: 600
                 }}>
-                  {calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(selectedSchedulerDate) && a.type !== 'note').length}
+                  {calendarActivitiesMap.get(selectedSchedulerDate)?.tasks.length || 0}
                 </span>
               </button>
 
@@ -18710,7 +19200,10 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     <button
                       type="button"
                       className="btn sm primary"
-                      onClick={() => setShowTaskForm(true)}
+                      onClick={() => {
+                        setShowTaskForm(true);
+                        loadContactsDropdown();
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -18870,7 +19363,28 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     </h5>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', maxHeight: '400px', paddingRight: '4px' }}>
                       {(() => {
-                        const dayTasks = calendarActivities.filter(a => a.due_date && a.due_date.startsWith(selectedSchedulerDate) && a.type !== 'note');
+                        const rawTasks = (selectedSchedulerDate && calendarActivitiesMap.get(selectedSchedulerDate)?.tasks) || 
+                          calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(selectedSchedulerDate || '') && a.type !== 'note');
+
+                        const dayTasks = [...rawTasks].sort((a: any, b: any) => {
+                          const aPinned = pinnedTaskIds.includes(Number(a.id));
+                          const bPinned = pinnedTaskIds.includes(Number(b.id));
+                          if (aPinned && !bPinned) return -1;
+                          if (!aPinned && bPinned) return 1;
+
+                          const aUrgent = (a.priority === 'urgent' || a.priority === 'high' || a.priority === 'cao');
+                          const bUrgent = (b.priority === 'urgent' || b.priority === 'high' || b.priority === 'cao');
+                          if (aUrgent && !bUrgent) return -1;
+                          if (!aUrgent && bUrgent) return 1;
+
+                          const aDone = a.status === 'done' || a.status === 'completed';
+                          const bDone = b.status === 'done' || b.status === 'completed';
+                          if (!aDone && bDone) return -1;
+                          if (aDone && !bDone) return 1;
+
+                          return (a.due_date || '').localeCompare(b.due_date || '');
+                        });
+
                         if (dayTasks.length === 0) {
                           return (
                             <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--color-bg-light)', border: '1px dashed var(--color-border)', borderRadius: '10px', color: 'var(--color-text-light)', fontSize: '0.78rem' }}>
@@ -18881,92 +19395,79 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         const pageSize = 5;
                         const paginatedTasks = dayTasks.slice((tasksPage - 1) * pageSize, tasksPage * pageSize);
                         return paginatedTasks.map((a: any) => {
-                           const isDone = a.status === 'done';
+                           const isDone = a.status === 'done' || a.status === 'completed';
                            const isMeeting = a.type === 'meeting';
                            const isCall = a.type === 'call';
+                           const isPinned = pinnedTaskIds.includes(Number(a.id));
+                           const isUrgent = a.priority === 'urgent' || a.priority === 'high' || a.priority === 'cao';
+
                            let typeLabel = t('Nhiệm vụ');
                            let colorClass = 'info';
                            if (isMeeting) { typeLabel = t('Gặp gỡ'); colorClass = 'primary'; }
                            else if (isCall) { typeLabel = t('Cuộc gọi'); colorClass = 'warning'; }
 
-                           const toggleActivityStatus = async () => {
-                             if (isDone) return; // Prevent unticking already met/done task
-                             try {
-                               const nextStatus = isDone ? 'planned' : 'done';
-
-                               if (nextStatus === 'done' && a.type === 'meeting') {
-                                 try {
-                                   const res = await api.get(`/activities/${a.id}/comments`);
-                                   const commentsList = res.data.data || [];
-                                   const hasImage = commentsList.some((c: any) => {
-                                     const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
-                                     return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
-                                   });
-
-                                   if (!hasImage) {
-                                     setMeetingToComplete(a);
-                                     setProofCommentText(t('Ảnh minh chứng hoàn thành gặp gỡ'));
-                                     setProofImageFile(null);
-                                     setProofImagePreview(null);
-                                     return;
-                                   }
-                                 } catch (e) {
-                                   toast.error(t('Lỗi khi kiểm tra minh chứng'));
-                                   return;
-                                 }
-                               }
-
-                               const res = await api.put(`/activities/${a.id}`, { status: nextStatus });
-                               if (res.data.success || res.data.id) {
-                                 toast.success(t('Đã cập nhật trạng thái!'));
-                                 fetchCalendarStats();
-                               }
-                             } catch {
-                               toast.error(t('Không thể cập nhật trạng thái'));
-                             }
-                           };
-
                            return (
-                             <div key={a.id} style={{
-                               padding: '12px',
-                               background: 'var(--color-surface)',
-                               border: '1px solid var(--color-border-light)',
-                               borderRadius: '10px',
-                               display: 'flex',
-                               flexDirection: 'column',
-                               gap: '6px',
-                               position: 'relative'
-                             }}>
-                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                   <div 
-                                     onClick={!isDone ? toggleActivityStatus : undefined}
-                                     style={{
-                                       width: '22px',
-                                       height: '22px',
-                                       borderRadius: '50%',
-                                       border: isDone ? 'none' : '2px solid var(--color-border)',
-                                       background: isDone ? '#10b981' : 'transparent',
-                                       display: 'flex',
-                                       alignItems: 'center',
-                                       justifyContent: 'center',
-                                       cursor: isDone ? 'default' : 'pointer',
-                                       transition: 'all 0.2s ease',
-                                       flexShrink: 0
-                                     }}
-                                   >
-                                     {isDone && (
-                                       <Check size={13} color="white" strokeWidth={3} />
-                                     )}
-                                   </div>
+                             <div
+                               key={a.id}
+                               onClick={() => handleSelectTask(a)}
+                               className="hover-scale-subtle"
+                               style={{
+                                 padding: '12px 14px',
+                                 background: isUrgent 
+                                   ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.08)' : '#fff8f8') 
+                                   : 'var(--color-surface)',
+                                 border: isPinned 
+                                   ? '1.5px solid var(--color-danger)' 
+                                   : (isUrgent ? '1.5px solid rgba(239, 68, 68, 0.35)' : '1px solid var(--color-border-light)'),
+                                 borderRadius: '10px',
+                                 display: 'flex',
+                                 flexDirection: 'column',
+                                 gap: '6px',
+                                 position: 'relative',
+                                 cursor: 'pointer',
+                                 boxShadow: isUrgent ? '0 2px 8px rgba(239, 68, 68, 0.08)' : 'var(--shadow-sm)',
+                                 transition: 'all 0.2s ease'
+                               }}
+                               onMouseEnter={e => {
+                                 e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                               }}
+                               onMouseLeave={e => {
+                                 e.currentTarget.style.borderColor = isPinned 
+                                   ? 'var(--color-danger)' 
+                                   : (isUrgent ? 'rgba(239, 68, 68, 0.35)' : 'var(--color-border-light)');
+                                 e.currentTarget.style.boxShadow = isUrgent ? '0 2px 8px rgba(239, 68, 68, 0.08)' : 'var(--shadow-sm)';
+                               }}
+                             >
+                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                   {isPinned && (
+                                     <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.12)', color: 'var(--color-danger)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                       <Pin size={10} />
+                                       {t('Ghim')}
+                                     </span>
+                                   )}
+                                   {isUrgent && (
+                                     <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                       🔥 {t('Khẩn cấp')}
+                                     </span>
+                                   )}
                                    <span className={`badge ${colorClass}`} style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
                                      {typeLabel}
                                    </span>
+                                   {isDone && (
+                                     <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                       <Check size={11} strokeWidth={3} />
+                                       {t('Đã xong')}
+                                     </span>
+                                   )}
                                  </div>
+
                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                    {a.contact_id && (
                                      <div 
-                                       onClick={() => {
+                                       onClick={(e) => {
+                                         e.stopPropagation();
                                          setSchedulerModalOpen(false);
                                          setProfileContact({ id: a.contact_id });
                                        }}
@@ -18975,8 +19476,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                          alignItems: 'center', 
                                          gap: '4px', 
                                          cursor: 'pointer',
-                                         marginRight: '6px'
+                                         marginRight: '4px',
+                                         padding: '2px 6px',
+                                         borderRadius: '6px',
+                                         background: 'var(--color-bg-light)'
                                        }}
+                                       title={t('Xem thông tin liên hệ')}
                                      >
                                        <Avatar src={resolveAttachmentUrl(a.contact_avatar)} name={a.contact_name} size={16} />
                                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-primary)' }}>{a.contact_name}</span>
@@ -18985,21 +19490,34 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
                                      {a.due_date ? new Date(a.due_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
                                    </span>
-                                   
+                                   <ChevronRight size={15} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
                                  </div>
                                </div>
-                               <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>
+
+                               <div style={{ 
+                                 fontSize: '0.85rem', 
+                                 fontWeight: 700, 
+                                 color: isDone ? 'var(--color-text-muted)' : 'var(--color-text)', 
+                                 textDecoration: isDone ? 'line-through' : 'none', 
+                                 opacity: isDone ? 0.65 : 1,
+                                 marginTop: '2px'
+                               }}>
                                  {a.subject}
                                </div>
-                               {a.body && <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: '2px 0 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{formatActivityBody(a.body)}</p>}
+                               {a.body && (
+                                 <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: '2px 0 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                   {formatActivityBody(a.body)}
+                                 </p>
+                               )}
                              </div>
                            );
                          });
                       })()}
                     </div>
                     {(() => {
-                      const dayTasks = calendarActivities.filter(a => a.due_date && a.due_date.startsWith(selectedSchedulerDate) && a.type !== 'note');
-                      return renderPagination(tasksPage, dayTasks.length, 5, setTasksPage);
+                      const count = (selectedSchedulerDate && calendarActivitiesMap.get(selectedSchedulerDate)?.tasks.length) || 
+                        calendarActivities.filter(a => (a.due_date || a.date || a.created_at || '').startsWith(selectedSchedulerDate || '') && a.type !== 'note').length;
+                      return renderPagination(tasksPage, count, 5, setTasksPage);
                     })()}
                   </div>
                 </div>
@@ -19300,7 +19818,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               title: task.subject,
               done: task.status === 'done',
               priority: task.priority,
-              due_date: task.due_date ? task.due_date.slice(0, 10) : '',
+              due_date: task.due_date || '',
+              created_at: task.created_at,
               link: task.link || '',
               description: parsed.pureDescription,
               user_id: task.user_id,
@@ -19821,6 +20340,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               }
             }}
             task={selectedTaskForDetails}
+            taskGroups={taskGroups}
             onUpdate={() => {
               fetchPortalTasks();
               fetchWorkspaceTasks();

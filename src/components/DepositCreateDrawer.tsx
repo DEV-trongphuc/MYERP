@@ -131,20 +131,39 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
     addToast('Đã lưu bản nháp phiếu thanh toán thành công!', 'success');
   };
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsClosing(false);
+    } else {
+      setIsClosing(false);
+    }
+  }, [isOpen]);
+
+  const handleCloseAnimated = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  };
+
   const handleDiscardAndExit = () => {
     try {
       localStorage.removeItem(DEPOSIT_DRAFT_KEY);
     } catch {}
     setExistingDraft(null);
     setShowExitConfirm(false);
-    onClose();
+    handleCloseAnimated();
   };
 
   const handleRequestClose = () => {
     if (isFormDirty()) {
       setShowExitConfirm(true);
     } else {
-      onClose();
+      handleCloseAnimated();
     }
   };
 
@@ -645,7 +664,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
 
   const content = (
     <AnimatePresence>
-      {isOpen && (
+      {isOpen && !isClosing && (
         <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex, display: 'flex', justifyContent: 'flex-end' }}>
           {/* Backdrop */}
           <motion.div
@@ -653,6 +672,7 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
             onClick={handleRequestClose}
             style={{
               position: 'fixed',
@@ -668,8 +688,8 @@ export const DepositCreateDrawer: React.FC<DepositCreateDrawerProps> = ({
           <motion.div
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
-            exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
+            exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
             style={{
               position: 'fixed',
               top: 0,

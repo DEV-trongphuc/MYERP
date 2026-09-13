@@ -5,8 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { fetchAPI } from '../../utils/api';
-import api from '../../api/axios';
-import { hasModuleApprovalAccess, isItemAtMyStepToApprove, isMyRequestPendingApproval } from '../../utils/approvalPermissions';
+import { hasModuleApprovalAccess } from '../../utils/approvalPermissions';
 import { isMarketing } from '../../utils/roleUtils';
 
 export interface SidebarItem {
@@ -37,6 +36,12 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     ]
   },
   {
+    title: 'QUY TRÌNH & PHÊ DUYỆT',
+    items: [
+      { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
+    ]
+  },
+  {
     title: 'CHƯƠNG TRÌNH',
     items: [
       { name: 'Chương trình', href: '/projects', icon: Building2, hideForRoles: ['hr'] },
@@ -58,12 +63,6 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
       { name: 'AI Pre-screener', href: '/gatekeeper', icon: Filter, badgeKey: 'gatekeeper', hideForRoles: ['manager', 'assistant', 'sale', 'sales', 'hr', 'accountant', 'sale_admin', 'saleadmin', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
       { name: 'Ticket data lỗi', href: '/tickets', icon: Ticket, badgeKey: 'tickets', hideForRoles: ['hr', 'accountant', 'academic', 'hoc_vu', 'tro_giang', 'teacher', 'giang_vien', 'viewer'] },
       { name: 'Helpdesk', href: '/support-tickets', icon: LifeBuoy, badgeKey: 'supportTickets' }
-    ]
-  },
-  {
-    title: 'QUY TRÌNH & PHÊ DUYỆT',
-    items: [
-      { name: 'Quy trình', href: '/approvals', icon: Clipboard, badgeKey: 'pendingApprovals' }
     ]
   },
   {
@@ -271,7 +270,11 @@ const GROUP_ORDER_BY_ROLE: Record<string, string[]> = {
   teacher: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   giang_vien: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
   assistant: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
-  viewer: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ']
+  viewer: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'CHƯƠNG TRÌNH', 'KHÁCH HÀNG', 'TÀI CHÍNH', 'NHÂN SỰ'],
+  manager: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'TÀI CHÍNH', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'NHÂN SỰ', 'CÀI ĐẶT HỆ THỐNG'],
+  leader: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
+  staff: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ'],
+  employee: ['TỔNG QUAN', 'QUY TRÌNH & PHÊ DUYỆT', 'KHÁCH HÀNG', 'CHƯƠNG TRÌNH', 'TÀI CHÍNH', 'NHÂN SỰ']
 };
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileClose }: { isCollapsed: boolean; onToggleCollapse: () => void; isMobileOpen?: boolean; onMobileClose?: () => void }) => {
@@ -297,178 +300,51 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
   const [isHovered, setIsHovered] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
 
-  // Poll pending counts every 60s
+  // Poll unified pending counts every 60s
   useEffect(() => {
     if (!user) return;
+
+    let isSubscribed = true;
+
     const fetchPending = async () => {
       try {
-        const role = user.role as string;
-        const isAdminOrManager = role === 'admin' || role === 'superadmin' || role === 'super_admin' || role === 'manager' || role === 'director';
-
-        // Fetch undone tasks for all roles
-        const resTasks = await fetchAPI('activities?status=planned&limit=500&type=task,meeting');
-        if (resTasks && resTasks.success) {
-          const rawTasks = resTasks.data?.items || resTasks.data || [];
-          if (Array.isArray(rawTasks)) {
-            const uid = Number(user.id);
-            const uidStr = String(uid);
-            const count = rawTasks.filter((task: any) => {
-              if (task.type !== 'task' && task.type !== 'meeting') return false;
-              if (task.is_hidden && Number(task.is_hidden) === 1) return false;
-              if (task.status === 'done' || task.status === 'completed' || task.status === 'cancelled') return false;
-
-              const isAssignee = Number(task.user_id) === uid;
-              const isCreator = Number(task.created_by) === uid;
-              const isApprover = Number(task.approver_id) === uid;
-              const isParticipant = task.participant_ids ? String(task.participant_ids).split(',').map((s: string) => s.trim()).includes(uidStr) : false;
-              const isTeamMember = role === 'manager' && user.team_id && Number(task.team_id) === Number(user.team_id);
-
-              return isAssignee || isCreator || isApprover || isParticipant || isTeamMember;
-            }).length;
-            setUndoneTasksCount(count);
-          }
-        }
-
-        // Fetch deposits count for all roles
-        try {
-          const resDep = await fetchAPI('deposits');
-          if (resDep && resDep.success && Array.isArray(resDep.data)) {
-            const deposits = resDep.data;
-            if (isAdminOrManager) {
-              const countPaid = deposits.filter((d: any) => 
-                d.status !== 'cancelled' && 
-                d.milestones?.some((m: any) => m.status === 'paid')
-              ).length;
-              setPendingDepositsCount(countPaid);
-            } else {
-              const countAction = deposits.filter((d: any) => 
-                d.status === 'pending' && 
-                d.milestones?.some((m: any) => m.status === 'pending' || m.status === 'failed')
-              ).length;
-              setPendingDepositsCount(countAction);
-            }
-          }
-        } catch {
-          setPendingDepositsCount(0);
-        }
-
-        // Fetch pending approvals for ALL roles (strictly matching "Chờ tôi duyệt" + "Yêu cầu của tôi đang chờ duyệt")
-        try {
-          const resApps = await fetchAPI('hrm/approvals/overview');
-          if (resApps && resApps.success && resApps.data) {
-            const allItems = Array.isArray(resApps.data.all) ? resApps.data.all : [];
-            const pItems = Array.isArray(resApps.data.pending) ? resApps.data.pending : [];
-            const myItems = Array.isArray(resApps.data.my_requests) ? resApps.data.my_requests : [];
-
-            const candidateMap = new Map<string, any>();
-            [...allItems, ...pItems].forEach((it: any) => {
-              const key = `${it.type}-${it.id}`;
-              if (!candidateMap.has(key)) candidateMap.set(key, it);
-            });
-            const allCandidates = Array.from(candidateMap.values());
-            const toApproveItems = allCandidates.filter(it => isItemAtMyStepToApprove(it, user));
-
-            const badgeKeys = new Set<string>();
-            toApproveItems.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
-            // Items from my_requests endpoint (assumeMine = true)
-            myItems.filter(it => isMyRequestPendingApproval(it, user, true)).forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
-            // Also check all candidates in case user has items not in my_requests
-            allCandidates.filter(it => isMyRequestPendingApproval(it, user, false)).forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
-            const totalPendingCount = badgeKeys.size;
-
-            setPendingApprovalsCount(totalPendingCount);
+        const res = await fetchAPI('badges');
+        if (!isSubscribed) return;
+        if (res && res.success && res.data) {
+          const d = res.data;
+          if (typeof d.workspaceTasks === 'number') setUndoneTasksCount(d.workspaceTasks);
+          if (typeof d.pendingApprovals === 'number') {
+            setPendingApprovalsCount(d.pendingApprovals);
             if (typeof window !== 'undefined') {
-              sessionStorage.setItem('pending_approvals_count', String(totalPendingCount));
-              localStorage.setItem('pending_approvals_count', String(totalPendingCount));
-            }
-          } else {
-            const fallbackApps = await fetchAPI('hrm/approvals/all');
-            const items = Array.isArray(fallbackApps?.data) ? fallbackApps.data : [];
-            const toApproveItems = items.filter((it: any) => isItemAtMyStepToApprove(it, user));
-            const myPendingItems = items.filter((it: any) => isMyRequestPendingApproval(it, user, false));
-
-            const badgeKeys = new Set<string>();
-            toApproveItems.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
-            myPendingItems.forEach(it => badgeKeys.add(`${it.type}-${it.id}`));
-            const totalPendingCount = badgeKeys.size;
-
-            setPendingApprovalsCount(totalPendingCount);
-            if (typeof window !== 'undefined') {
-              sessionStorage.setItem('pending_approvals_count', String(totalPendingCount));
-              localStorage.setItem('pending_approvals_count', String(totalPendingCount));
+              sessionStorage.setItem('pending_approvals_count', String(d.pendingApprovals));
+              localStorage.setItem('pending_approvals_count', String(d.pendingApprovals));
             }
           }
-        } catch {
-          // Keep cached count
+          if (typeof d.pendingExpenses === 'number') setPendingExpensesCount(d.pendingExpenses);
+          if (typeof d.pendingDeposits === 'number') setPendingDepositsCount(d.pendingDeposits);
+          if (typeof d.heldLeads === 'number') setHeldLeadsCount(d.heldLeads);
+          if (typeof d.tickets === 'number') setPendingTickets(d.tickets);
+          if (typeof d.supportTickets === 'number') setSupportTicketsCount(d.supportTickets);
+          if (typeof d.coopSlips === 'number') setPendingCoopCount(d.coopSlips);
+          if (typeof d.nopHoSo === 'number') setNopHoSoCount(d.nopHoSo);
+          if (typeof d.lePhi === 'number') setLePhiCount(d.lePhi);
         }
-
-        if (isAdminOrManager) {
-          const [resReports, resHeld, resCoop, resSupport, resExpenses] = await Promise.all([
-            fetchAPI('get_reports&status=pending'),
-            fetchAPI('get_held_leads&pageSize=1&date=all'),
-            fetchAPI('cooperation-slips'),
-            fetchAPI('get_support_tickets_count').catch(() => null),
-            fetchAPI('expenses?status=pending&limit=1').catch(() => null)
-          ]);
-
-          let countReports = 0;
-          let countHeld = 0;
-          let countCoop = 0;
-          let countSupport = 0;
-          let countExpenses = 0;
-
-          if (resReports && resReports.success) {
-            countReports = resReports.stats?.pending ?? (resReports.data ? resReports.data.filter((r: any) => r.status === 'pending').length : 0);
-          }
-
-          if (resHeld && resHeld.success) {
-            countHeld = resHeld.counts?.queue ?? resHeld.total_count ?? resHeld.totalCount ?? resHeld.total ?? 0;
-          }
-
-          if (resCoop && resCoop.success) {
-            countCoop = (resCoop.data || []).filter((s: any) => s.status === 'pending_manager_approval').length;
-          }
-
-          if (resSupport && resSupport.success) {
-            countSupport = resSupport.count || 0;
-          }
-
-          if (resExpenses && resExpenses.success) {
-            countExpenses = resExpenses.data?.total ?? 0;
-          }
-
-          setPendingTickets(countReports);
-          setHeldLeadsCount(countHeld);
-          setPendingCoopCount(countCoop);
-          setSupportTicketsCount(countSupport);
-          setPendingExpensesCount(countExpenses);
-        } else if (role === 'sale' || role === 'sales') {
-          const resCoop = await fetchAPI('cooperation-slips');
-          let countUnsigned = 0;
-          if (resCoop.success) {
-            const slips = resCoop.data || [];
-            countUnsigned = slips.filter((s: any) => {
-              const sh = s.shareholders?.find((x: any) => String(x.user_id) === String(user.id));
-              return s.status !== 'rejected' && sh && !sh.signed;
-            }).length;
-          }
-          setPendingCoopCount(countUnsigned);
-
-
-        }
-
-        // Fetch student counts for Nộp hồ sơ & Lệ phí hồ sơ badges
-        try {
-          const resStudent = await api.get('/contacts/student-counts');
-          if (resStudent.data && resStudent.data.data) {
-            setNopHoSoCount(Number(resStudent.data.data.nop_ho_so || 0));
-            setLePhiCount(Number(resStudent.data.data.le_phi || 0));
-          }
-        } catch { /* silent */ }
-      } catch { /* silent */ }
+      } catch {
+        // Keep cached counts
+      }
     };
+
     fetchPending();
     const interval = setInterval(fetchPending, 60000);
+
+    let debounceTimer: any = null;
+    const debouncedFetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchPending();
+      }, 350);
+    };
+
     const handleApprovalBadgeUpdated = (e: any) => {
       if (typeof e.detail?.count === 'number') {
         setPendingApprovalsCount(e.detail.count);
@@ -479,44 +355,46 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       }
     };
 
-    window.addEventListener('ticket-resolved', fetchPending);
-    window.addEventListener('task-updated', fetchPending);
-    window.addEventListener('lead-accepted', fetchPending);
-    window.addEventListener('uncontacted-count-changed', fetchPending);
-    window.addEventListener('realtime-update-received', fetchPending);
-    window.addEventListener('held-lead-updated', fetchPending);
-    window.addEventListener('gatekeeper-updated', fetchPending);
-    window.addEventListener('approval-updated', fetchPending);
-    window.addEventListener('approval-created', fetchPending);
-    window.addEventListener('refresh-approvals', fetchPending);
-    window.addEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
-
     const handleStudentBadgeUpdated = (e: any) => {
       if (e.detail) {
         if (typeof e.detail.nop_ho_so === 'number') setNopHoSoCount(e.detail.nop_ho_so);
         if (typeof e.detail.le_phi === 'number') setLePhiCount(e.detail.le_phi);
       }
     };
+
+    window.addEventListener('ticket-resolved', debouncedFetch);
+    window.addEventListener('task-updated', debouncedFetch);
+    window.addEventListener('lead-accepted', debouncedFetch);
+    window.addEventListener('uncontacted-count-changed', debouncedFetch);
+    window.addEventListener('realtime-update-received', debouncedFetch);
+    window.addEventListener('held-lead-updated', debouncedFetch);
+    window.addEventListener('gatekeeper-updated', debouncedFetch);
+    window.addEventListener('approval-updated', debouncedFetch);
+    window.addEventListener('approval-created', debouncedFetch);
+    window.addEventListener('refresh-approvals', debouncedFetch);
+    window.addEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
     window.addEventListener('student-badge-updated', handleStudentBadgeUpdated);
-    window.addEventListener('lead-added', fetchPending);
-    window.addEventListener('contact-updated', fetchPending);
+    window.addEventListener('lead-added', debouncedFetch);
+    window.addEventListener('contact-updated', debouncedFetch);
 
     return () => {
+      isSubscribed = false;
       clearInterval(interval);
-      window.removeEventListener('ticket-resolved', fetchPending);
-      window.removeEventListener('task-updated', fetchPending);
-      window.removeEventListener('lead-accepted', fetchPending);
-      window.removeEventListener('uncontacted-count-changed', fetchPending);
-      window.removeEventListener('realtime-update-received', fetchPending);
-      window.removeEventListener('held-lead-updated', fetchPending);
-      window.removeEventListener('gatekeeper-updated', fetchPending);
-      window.removeEventListener('approval-updated', fetchPending);
-      window.removeEventListener('approval-created', fetchPending);
-      window.removeEventListener('refresh-approvals', fetchPending);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      window.removeEventListener('ticket-resolved', debouncedFetch);
+      window.removeEventListener('task-updated', debouncedFetch);
+      window.removeEventListener('lead-accepted', debouncedFetch);
+      window.removeEventListener('uncontacted-count-changed', debouncedFetch);
+      window.removeEventListener('realtime-update-received', debouncedFetch);
+      window.removeEventListener('held-lead-updated', debouncedFetch);
+      window.removeEventListener('gatekeeper-updated', debouncedFetch);
+      window.removeEventListener('approval-updated', debouncedFetch);
+      window.removeEventListener('approval-created', debouncedFetch);
+      window.removeEventListener('refresh-approvals', debouncedFetch);
       window.removeEventListener('approval-badge-updated', handleApprovalBadgeUpdated);
       window.removeEventListener('student-badge-updated', handleStudentBadgeUpdated);
-      window.removeEventListener('lead-added', fetchPending);
-      window.removeEventListener('contact-updated', fetchPending);
+      window.removeEventListener('lead-added', debouncedFetch);
+      window.removeEventListener('contact-updated', debouncedFetch);
     };
   }, [user]);
 
@@ -680,6 +558,15 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onMobileC
       const idxB = groupOrder.indexOf(b.title);
       return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
     });
+  }
+
+  // Ensure 'QUY TRÌNH & PHÊ DUYỆT' is strictly right after 'TỔNG QUAN' for all roles
+  const tongQuanIdx = visibleGroups.findIndex(g => g.title === 'TỔNG QUAN');
+  const quyTrinhIdx = visibleGroups.findIndex(g => g.title === 'QUY TRÌNH & PHÊ DUYỆT');
+  if (tongQuanIdx !== -1 && quyTrinhIdx !== -1 && quyTrinhIdx !== tongQuanIdx + 1) {
+    const [quyTrinhGroup] = visibleGroups.splice(quyTrinhIdx, 1);
+    const newTongQuanIdx = visibleGroups.findIndex(g => g.title === 'TỔNG QUAN');
+    visibleGroups.splice(newTongQuanIdx + 1, 0, quyTrinhGroup);
   }
 
   return (

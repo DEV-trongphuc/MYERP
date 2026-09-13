@@ -11,6 +11,7 @@ export interface SelectOption {
   label: string;
   icon?: React.ReactNode;
   avatar?: string;
+  avatarBorder?: string;
   sublabel?: string;
   disabled?: boolean;
   disabledReason?: string;
@@ -50,6 +51,43 @@ export const removeVietnameseTones = (str: string): string => {
     .replace(/Đ/g, 'D')
     .toLowerCase()
     .trim();
+};
+
+export const getAvatarRingStyle = (border?: string): React.CSSProperties | undefined => {
+  if (!border) return undefined;
+  const b = border.toLowerCase();
+  let ringColor = 'rgba(245, 158, 11, 0.28)';
+  let borderColor = border;
+  const isPending = b.includes('f59e0b') || b.includes('d97706') || b.includes('amber') || b.includes('orange') || b === 'pending';
+
+  if (b.includes('10b981') || b.includes('green') || b.includes('emerald') || b === 'approved') {
+    borderColor = '#10b981';
+    ringColor = 'rgba(16, 185, 129, 0.28)';
+  } else if (b.includes('ef4444') || b.includes('red') || b === 'rejected') {
+    borderColor = '#ef4444';
+    ringColor = 'rgba(239, 68, 68, 0.28)';
+  } else if (b.includes('cbd5e1') || b.includes('gray') || b.includes('slate') || b === 'not_reached' || b === 'waiting') {
+    borderColor = '#cbd5e1';
+    ringColor = 'rgba(203, 213, 225, 0.4)';
+  } else if (isPending) {
+    borderColor = '#f59e0b';
+    ringColor = 'rgba(245, 158, 11, 0.28)';
+  } else {
+    ringColor = `${border}25`;
+  }
+  return {
+    borderRadius: '50%',
+    padding: '1.5px',
+    margin: '2px 4px 2px 2px',
+    border: `2px solid ${borderColor}`,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    boxShadow: `0 0 0 2px ${ringColor}`,
+    transition: 'all 0.2s ease-in-out',
+    animation: isPending ? 'avatar-pending-glow 2.2s ease-in-out infinite' : undefined
+  };
 };
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
@@ -327,11 +365,15 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       }
     }
     return selectedOption ? (
-      <span className={styles.triggerContent} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'space-between', minWidth: 0, overflow: 'hidden' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', flex: 1 }}>
+      <span className={styles.triggerContent} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'space-between', minWidth: 0, overflow: 'visible' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'visible', flex: 1 }}>
           {showAvatars && (
             selectedOption.value === '' ? (
               <div style={{ width: size === 'xs' ? 18 : 24, height: size === 'xs' ? 18 : 24, borderRadius: '50%', background: 'var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size === 'xs' ? '0.625rem' : '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', flexShrink: 0 }}>?</div>
+            ) : selectedOption.avatarBorder ? (
+              <div style={getAvatarRingStyle(selectedOption.avatarBorder)}>
+                <Avatar src={selectedOption.avatar} name={t(selectedOption.label)} size={size === 'xs' ? 16 : "sm"} />
+              </div>
             ) : (
               <Avatar src={selectedOption.avatar} name={t(selectedOption.label)} size={size === 'xs' ? 18 : "sm"} />
             )
@@ -376,7 +418,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           boxShadow: disabled ? 'none' : undefined,
           padding: disabled ? '0' : undefined,
           maxWidth: '100%',
-          overflow: 'hidden',
+          overflow: 'visible',
           boxSizing: 'border-box',
           ...(size === 'xs' ? {
             minHeight: disabled ? 'auto' : '34px',
@@ -400,7 +442,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       >
         <span 
           className={(multiple && Array.isArray(value) && value.length > 0) || selectedOption ? styles.selectedValue : styles.placeholder}
-          style={multiple ? { whiteSpace: 'normal', overflow: 'visible', display: 'block', width: '100%' } : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          style={multiple ? { whiteSpace: 'normal', overflow: 'visible', display: 'block', width: '100%' } : { overflow: 'visible', minWidth: 0, display: 'flex', alignItems: 'center', flex: 1 }}
         >
           {renderTriggerContent()}
         </span>
@@ -451,6 +493,10 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                         <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--color-border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', flexShrink: 0 }}>?</div>
                       ) : option.icon ? (
                         <span style={{ display: 'flex', flexShrink: 0 }}>{option.icon}</span>
+                      ) : option.avatarBorder ? (
+                        <div style={getAvatarRingStyle(option.avatarBorder)}>
+                          <Avatar src={option.avatar} name={t(option.label)} size="sm" />
+                        </div>
                       ) : (
                         <Avatar src={option.avatar} name={t(option.label)} size="sm" />
                       )

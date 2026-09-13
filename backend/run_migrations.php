@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 272;
+$targetVersion = 277;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3221,8 +3221,72 @@ try {
         $logMsg("Nâng cấp lên phiên bản 272 hoàn tất.", "success");
     }
 
+    // --- PHIÊN BẢN 273: XÓA CÁC ĐƠN / QUY TRÌNH TEST #21, #8, #7, #6 ---
+    if ($currentVersion < 273) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 273: Dọn sạch các yêu cầu test #21, #8, #7, #6...", "info");
+        try {
+            $conn->query("DELETE FROM `hrm_leave_requests` WHERE `id` IN (6, 7, 8, 21)");
+            try { $conn->query("DELETE FROM `workflow_requests` WHERE `id` IN (6, 7, 8, 21)"); } catch (Throwable $e) {}
+            try { $conn->query("DELETE FROM `workflow_approvals` WHERE `request_id` IN (6, 7, 8, 21)"); } catch (Throwable $e) {}
+            try { $conn->query("DELETE FROM `workflow_step_logs` WHERE `request_id` IN (6, 7, 8, 21)"); } catch (Throwable $e) {}
+            try { $conn->query("DELETE FROM `audit_logs` WHERE `resource` IN ('hrm_leave_requests', 'leave', 'leave_request', 'workflow_requests', 'workflow') AND `resource_id` IN (6, 7, 8, 21)"); } catch (Throwable $e) {}
+            try { $conn->query("DELETE FROM `notifications` WHERE (`link` LIKE '%leave%' OR `link` LIKE '%approval%') AND (`link` LIKE '%/21' OR `link` LIKE '%/8' OR `link` LIKE '%/7' OR `link` LIKE '%/6')"); } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi dọn dẹp bản ghi test: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 273 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 274: CHUẨN HÓA ACTIVITIES.BODY (MÔ TẢ CÔNG VIỆC SẠCH & BẢO TOÀN CỜ SLA) ---
+    if ($currentVersion < 274) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 274: Chuẩn hóa nội dung mô tả công việc, phục hồi ngắt dòng MISA và bảo toàn cờ SLA...", "info");
+        try {
+            require_once __DIR__ . '/migrations/normalize_activities_body.php';
+            $logMsg("Chuẩn hóa activities.body phiên bản 274 hoàn tất thành công.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi chuẩn hóa activities.body: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 274 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 275: THÊM COMPOSITE COVERING INDEXES TỐI ƯU HIỆU NĂNG ---
+    if ($currentVersion < 275) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 275: Thêm composite covering indexes tối ưu hóa cực mạnh...", "info");
+        try {
+            require_once __DIR__ . '/migrations/add_performance_composite_indexes.php';
+            $logMsg("Thêm composite indexes phiên bản 275 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi thêm composite indexes: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 275 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 276: TẠO BẢNG TASK_GROUPS VÀ LIÊN KẾT TASK_GROUP_ID ---
+    if ($currentVersion < 276) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 276: Tạo bảng task_groups và liên kết task_group_id cho công việc...", "info");
+        try {
+            require_once __DIR__ . '/migrations/add_task_groups_table.php';
+            $logMsg("Cấu trúc bảng task_groups và task_group_id phiên bản 276 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi tạo bảng task_groups: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 276 hoàn tất.", "success");
+    }
+
+    // --- PHIÊN BẢN 277: THÊM CỘT IS_PINNED VÀ CHỈ MỤC SẮP XẾP CHO TASK_GROUPS ---
+    if ($currentVersion < 277) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 277: Thêm cột is_pinned và chỉ mục sắp xếp cho task_groups...", "info");
+        try {
+            require_once __DIR__ . '/migrations/add_task_groups_pin_and_order.php';
+            $logMsg("Cấu trúc is_pinned cho task_groups phiên bản 277 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi nâng cấp task_groups v277: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 277 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '272') ON DUPLICATE KEY UPDATE setting_value = '272'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '277') ON DUPLICATE KEY UPDATE setting_value = '277'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

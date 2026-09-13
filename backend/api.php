@@ -106,6 +106,8 @@ if (in_array($baseAction, [
     'dashboard',
     'notifications',
     'workflow-task-templates',
+    'task-groups',
+    'badges',
     'search',
     'export',
     'import',
@@ -654,8 +656,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 $action = $_GET['action'] ?? '';
 
-// Require authentication for all endpoints except login & test_email
-$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'debug_companies_db', 'public_student_schedule', 'test_email'];
+$publicActions = ['login', 'login_google', 'login_google_sale', 'submit_report', 'get_report_context', 'debug_companies_db', 'public_student_schedule', 'test_email', 'download-file'];
 
 if (!in_array($action, $publicActions)) {
     $token = getBearerToken();
@@ -19925,6 +19926,10 @@ switch ($action) {
             $conn->rollback();
             echo json_encode(['success' => false, 'message' => 'Lỗi: ' . $ex->getMessage()]);
         }
+    case 'download-file':
+        require_once __DIR__ . '/controllers/UploadController.php';
+        $ctrl = new UploadController(null);
+        $ctrl->downloadFile();
         break;
 
     default:

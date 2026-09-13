@@ -47,31 +47,54 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
     if (entity) setFormData(entity);
   }, [entity]);
 
+  const [isClosing, setIsClosing] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      setIsClosing(false);
     } else {
       document.body.style.overflow = '';
+      setIsClosing(false);
     }
     return () => {
       document.body.style.overflow = '';
     };
   }, [isOpen]);
 
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, isClosing]);
+
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <>
       <AnimatePresence>
-      {isOpen && (
+      {isOpen && !isClosing && (
         <>
           <motion.div
             className="drawer-backdrop"
-            onClick={onClose}
+            onClick={handleClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
             style={{
               zIndex: 1000,
               background: 'rgba(0,0,0,0.45)',
@@ -85,8 +108,8 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
             className={styles.drawer}
             initial={window.innerWidth <= 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
-            exit={window.innerWidth <= 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
+            exit={window.innerWidth <= 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
           >
               {/* Header */}
               <div className={styles.header}>
@@ -113,7 +136,7 @@ export const EntityDrawer: React.FC<EntityDrawerProps> = ({ isOpen, onClose, ent
                   <span className={`badge ${formData?.status === 'customer' ? 'success' : 'warning'}`}>
                     {formData?.status === 'customer' ? 'Khách hàng' : 'Tiềm năng'}
                   </span>
-                  <button className={styles.closeBtn} onClick={onClose}><X size={20} /></button>
+                  <button className={styles.closeBtn} onClick={handleClose}><X size={20} /></button>
                 </div>
               </div>
 

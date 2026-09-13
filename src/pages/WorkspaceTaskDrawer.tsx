@@ -5,7 +5,7 @@ import {
   Bold, Italic, List, ListOrdered, Image as ImageIcon, 
   Users, RefreshCw, Layers, CheckSquare2, Info, Receipt, Scale, ArrowUpRight, Search, Save, Bell, BellOff,
   Eye, EyeOff, ExternalLink, UserPlus, UserCheck, Edit3, Play, Sparkles, ArrowRight, Building2, Megaphone, Loader2, RotateCcw,
-  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download
+  CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder
 } from 'lucide-react';
 import { downloadFileWithName } from '../utils/fileDownloader';
 import api from '../api/axios';
@@ -27,6 +27,7 @@ import { PasteDropzoneArea } from '../components/ui/PasteDropzoneArea';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
+import { parseTaskBody, convertTextToHtmlParagraphs, formatVietnameseDescription } from '../utils/taskBodyParser';
 
 interface WorkspaceTaskDrawerProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ interface WorkspaceTaskDrawerProps {
   zIndex?: number;
   isFromCustomerDrawer?: boolean;
   onOpenFocusMode?: () => void;
+  taskGroups?: any[];
 }
 
 const getRoleDisplayName = (user: any) => {
@@ -155,7 +157,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   onNextFocusTask,
   zIndex,
   isFromCustomerDrawer = false,
-  onOpenFocusMode
+  onOpenFocusMode,
+  taskGroups
 }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -164,6 +167,34 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const { user: currentUser } = useAuth();
   const { showConfirm, closeConfirm } = useUIStore();
   const [isMobileOrTablet, setIsMobileOrTablet] = useState(window.innerWidth <= 1024);
+
+  const [internalTaskGroups, setInternalTaskGroups] = useState<any[]>([]);
+  useEffect(() => {
+    if (isOpen && (!taskGroups || taskGroups.length === 0)) {
+      api.get('/task-groups').then(res => {
+        if (res.data?.success) {
+          const payload = res.data.data ?? res.data;
+          let list: any[] = [];
+          if (Array.isArray(payload)) {
+            list = payload;
+          } else if (Array.isArray(payload?.groups)) {
+            list = payload.groups;
+          } else if (Array.isArray(payload?.items)) {
+            list = payload.items;
+          } else if (Array.isArray(res.data?.groups)) {
+            list = res.data.groups;
+          } else if (Array.isArray(res.data?.items)) {
+            list = res.data.items;
+          }
+          setInternalTaskGroups(Array.isArray(list) ? list : []);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, taskGroups]);
+
+  const availableTaskGroups = Array.isArray(taskGroups) && taskGroups.length > 0 
+    ? taskGroups 
+    : (Array.isArray(internalTaskGroups) ? internalTaskGroups : []);
 
   useEffect(() => {
     let lastIsMobile = typeof window !== 'undefined' ? window.innerWidth <= 1024 : false;
@@ -210,15 +241,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     const isPersonalTag = tagsStr.includes('ca_nhan') || tagsStr.includes('personal');
     if (isPersonalTag) return true;
 
+    // If checklist has subtasks assigned to other people, it is not a personal task
+    const hasSubtaskForOthers = (erpMeta?.checklist || []).some((item: any) => {
+      if (!item.assignee_id) return false;
+      const ids = String(item.assignee_id).split(',').map(s => Number(s.trim())).filter(id => id > 0);
+      return ids.some(id => id !== taskUid && id !== taskCreatedBy);
+    });
+    if (hasSubtaskForOthers) return false;
+
     if (taskUid > 0 && taskUid === taskCreatedBy) {
       const pIds = getParticipantIds(formData.participant_ids).filter(id => Number(id) !== taskUid);
       const hasOtherParticipants = pIds.length > 0;
       const hasApprover = Number(formData.approver_id || 0) > 0 && Number(formData.approver_id) !== taskUid;
-      const hasRelEntity = (Number(formData.related_id || 0) > 0 && formData.related_type !== 'personal') || Number(formData.contact_id || 0) > 0;
-      return !hasOtherParticipants && !hasApprover && !hasRelEntity;
+      return !hasOtherParticipants && !hasApprover;
     }
     return false;
-  }, [formData.tags, formData.user_id, formData.created_by, task?.created_by, formData.participant_ids, formData.approver_id, formData.related_id, formData.related_type, formData.contact_id, taskUid, taskCreatedBy]);
+  }, [formData.tags, formData.user_id, formData.created_by, task?.created_by, formData.participant_ids, formData.approver_id, taskUid, taskCreatedBy, erpMeta?.checklist]);
 
   const personalUser = useMemo(() => {
     const pId = taskUid || taskCreatedBy || currentUid;
@@ -247,6 +285,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [replyTo, setReplyTo] = useState<{ id: number; userName: string; avatar?: string } | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   // Subtask comments state
   const [selectedSubtask, setSelectedSubtask] = useState<any | null>(null);
@@ -1108,45 +1147,36 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         created_by_avatar: task.id === 'new' ? (currentUser?.avatar || (currentUser as any)?.avatar_url || '') : task.created_by_avatar,
         contact_id: task.contact_id || (task.related_type === 'contact' ? task.related_id : null)
       };
+      // Parse erp metadata from task body cleanly using parseTaskBody
+      const parsedBody = parseTaskBody(normalizedTask.body);
+      const checklistTotal = parsedBody.checklist ? parsedBody.checklist.length : 0;
+      const checklistDone = parsedBody.checklist ? parsedBody.checklist.filter((x: any) => x.done || x.checked).length : 0;
+      if (checklistTotal > 0) {
+        const autoProgress = Math.round((checklistDone / checklistTotal) * 100);
+        normalizedTask.progress = autoProgress;
+        if (checklistDone === checklistTotal && normalizedTask.status !== 'done') {
+          normalizedTask.status = 'done';
+        }
+      }
+
       setFormData(normalizedTask);
       setIsPinned(normalizedTask.tags?.includes('pinned') || false);
 
-      // Parse erp metadata from task body
-      let parsedMeta: any = {
-        description: normalizedTask.body || '',
-        internal_type: 'task',
-        scope: 'team',
-        recurrence: { pattern: 'none', weekly_days: [], monthly_day: 1, days_interval: 3, last_generated: '' },
-        checklist: [],
-        links: [],
-        project_id: normalizedTask.related_type === 'project' ? normalizedTask.related_id : null,
-        campaign_id: normalizedTask.related_type === 'campaign' ? normalizedTask.related_id : null,
-        team_id: normalizedTask.related_type === 'team' ? normalizedTask.related_id : null
-      };
+      const cleanDescHtml = linkifyHtml(convertTextToHtmlParagraphs(parsedBody.description));
 
-      if (normalizedTask.body) {
-        let currentBody = normalizedTask.body.trim();
-        let wasParsed = false;
-        while (currentBody.startsWith('{"erp_task"') || currentBody.startsWith('{"erp_task":')) {
-          try {
-            const parsed = JSON.parse(currentBody);
-            parsedMeta = { ...parsedMeta, ...parsed.erp_task };
-            wasParsed = true;
-            if (typeof parsed.erp_task?.description === 'string') {
-              currentBody = parsed.erp_task.description.trim();
-            } else {
-              break;
-            }
-          } catch (e) {
-            break;
-          }
-        }
-        if (!wasParsed) {
-          parsedMeta.description = linkifyHtml(normalizedTask.body);
-        } else {
-          parsedMeta.description = linkifyHtml(currentBody);
-        }
-      }
+      let parsedMeta: any = {
+        description: cleanDescHtml,
+        internal_type: parsedBody.internal_type || 'task',
+        scope: parsedBody.scope || 'team',
+        recurrence: parsedBody.recurrence || { pattern: 'none', weekly_days: [], monthly_day: 1, days_interval: 3, last_generated: '' },
+        checklist: parsedBody.checklist || [],
+        links: parsedBody.links || [],
+        project_id: normalizedTask.related_type === 'project' ? normalizedTask.related_id : (parsedBody.project_id || null),
+        campaign_id: normalizedTask.related_type === 'campaign' ? normalizedTask.related_id : (parsedBody.campaign_id || null),
+        team_id: normalizedTask.related_type === 'team' ? normalizedTask.related_id : (parsedBody.team_id || null),
+        due_sla_notified: parsedBody.due_sla_notified || Boolean(task.due_sla_notified),
+        subtask_sla_notified: parsedBody.subtask_sla_notified || Boolean(task.subtask_sla_notified)
+      };
 
       if (normalizedTask.related_type === 'project' && normalizedTask.related_id) {
         parsedMeta.project_id = normalizedTask.related_id;
@@ -1321,7 +1351,14 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       return;
     }
     try {
-      const bodyPayload = JSON.stringify({ erp_task: updatedMeta });
+      const payloadObj: any = { erp_task: updatedMeta };
+      if (updatedMeta.due_sla_notified || task.due_sla_notified) {
+        payloadObj.due_sla_notified = true;
+      }
+      if (updatedMeta.subtask_sla_notified || task.subtask_sla_notified) {
+        payloadObj.subtask_sla_notified = true;
+      }
+      const bodyPayload = JSON.stringify(payloadObj);
       let finalTags = task.tags || '';
 
       // Manage pinned tag
@@ -1428,13 +1465,24 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         : null;
 
       // Sync description
-      const finalDesc = linkifyHtml(erpMeta.description || (editorRef.current ? (editorRef.current as any).innerHTML : ''));
+      let rawDescToSave = erpMeta.description || (editorRef.current ? (editorRef.current as any).innerHTML : '');
+      if (typeof rawDescToSave === 'string' && (rawDescToSave.startsWith('{') || /"(?:erp_task|due_sla_notified|subtask_sla_notified|checklist|links|misa_stt)"/i.test(rawDescToSave))) {
+        rawDescToSave = formatVietnameseDescription(rawDescToSave);
+      }
+      const finalDesc = linkifyHtml(rawDescToSave);
       const updatedErpMeta = {
         ...erpMeta,
         description: finalDesc
       };
 
-      const bodyPayload = JSON.stringify({ erp_task: updatedErpMeta });
+      const payloadObj: any = { erp_task: updatedErpMeta };
+      if (updatedErpMeta.due_sla_notified || task.due_sla_notified) {
+        payloadObj.due_sla_notified = true;
+      }
+      if (updatedErpMeta.subtask_sla_notified || task.subtask_sla_notified) {
+        payloadObj.subtask_sla_notified = true;
+      }
+      const bodyPayload = JSON.stringify(payloadObj);
       let finalTags = formData.tags || '';
 
       // Manage pinned tag
@@ -1495,49 +1543,69 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         participant_ids: formData.participant_ids ? String(formData.participant_ids) : null,
         related_id: relId ? Number(relId) : null,
         related_type: relType,
-        contact_id: finalContactId ? Number(finalContactId) : null
+        contact_id: finalContactId ? Number(finalContactId) : null,
+        task_group_id: formData.task_group_id ? Number(formData.task_group_id) : null
       };
 
-      let res;
       if (task.id === 'new') {
-        res = await api.post('/activities', {
+        const res = await api.post('/activities', {
           ...payload,
           type: 'task'
         });
-      } else {
-        res = await api.put(`/activities/${task.id}`, payload);
-      }
-
-      const isSuccess = Boolean(
-        res && (
-          res.data?.success === true ||
-          res.data?.id ||
-          res.data?.data?.id ||
-          res.data?.subject ||
-          (res.status >= 200 && res.status < 300 && res.data?.success !== false)
-        )
-      );
-
-      if (isSuccess) {
-        const taskName = formData.subject || t('Không có tiêu đề');
-        toast.success(task.id === 'new' 
-          ? t('Đã tạo công việc "{subject}" thành công!').replace('{subject}', taskName) 
-          : t('Đã lưu các thay đổi của công việc "{subject}" thành công!').replace('{subject}', taskName)
+        const isSuccess = Boolean(
+          res && (
+            res.data?.success === true ||
+            res.data?.id ||
+            res.data?.data?.id ||
+            res.data?.subject ||
+            (res.status >= 200 && res.status < 300 && res.data?.success !== false)
+          )
         );
-        setOriginalHash(currentHash);
-        onUpdate();
-        
-        if (isJustSubmittedForApproval && approverName) {
-          toast.success(t('Đã gửi thông báo email phê duyệt tới {name}!').replace('{name}', approverName));
-          setShowApprovalSuccessModal(approverName);
-        }
-
-        if (task.id === 'new') {
+        if (isSuccess) {
+          const taskName = formData.subject || t('Không có tiêu đề');
+          toast.success(t('Đã tạo công việc "{subject}" thành công!').replace('{subject}', taskName));
+          setOriginalHash(currentHash);
+          setIsSaving(false);
           onClose();
+          setTimeout(() => onUpdate(), 50);
+        } else {
+          setIsSaving(false);
+          toast.error(res?.data?.message || t('Không thể tạo công việc'));
         }
       } else {
-        const errMsg = res?.data?.message || t('Không thể lưu công việc');
-        toast.error(errMsg);
+        // Optimistic UI for existing task: Update board cards instantly (0ms)
+        const taskName = formData.subject || t('Không có tiêu đề');
+        setOriginalHash(currentHash);
+        window.dispatchEvent(new CustomEvent('task-local-updated', {
+          detail: { id: task.id, ...payload }
+        }));
+
+        const res = await api.put(`/activities/${task.id}`, payload);
+        const isSuccess = Boolean(
+          res && (
+            res.data?.success === true ||
+            res.data?.id ||
+            res.data?.data?.id ||
+            res.data?.subject ||
+            (res.status >= 200 && res.status < 300 && res.data?.success !== false)
+          )
+        );
+
+        if (isSuccess) {
+          toast.success(t('Đã lưu các thay đổi của công việc "{subject}" thành công!').replace('{subject}', taskName));
+          setIsSaving(false);
+
+          if (isJustSubmittedForApproval && approverName) {
+            toast.success(t('Đã gửi thông báo email phê duyệt tới {name}!').replace('{name}', approverName));
+            setShowApprovalSuccessModal(approverName);
+          }
+
+          // Background non-blocking sync
+          setTimeout(() => onUpdate(), 50);
+        } else {
+          setIsSaving(false);
+          toast.error(res?.data?.message || t('Không thể lưu công việc'));
+        }
       }
     } catch (e: any) {
       const taskName = formData.subject || t('Không có tiêu đề');
@@ -1566,7 +1634,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setShowValidationModal(true);
       return;
     }
-    onClose();
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
   };
 
   const handleDeleteTask = async () => {
@@ -1796,13 +1868,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   // Resources Actions
   const handleAddLink = () => {
-    if (!newLinkLabel.trim() || !newLinkUrl.trim()) {
-      toast.error(t('Nhãn và URL không được để trống'));
+    if (!newLinkUrl.trim()) {
+      toast.error(t('URL không được để trống'));
       return;
     }
+    const cleanUrl = newLinkUrl.trim().startsWith('http') ? newLinkUrl.trim() : 'https://' + newLinkUrl.trim();
+    let autoLabel = newLinkLabel.trim();
+    if (!autoLabel) {
+      if (/youtube\.com|youtu\.be/i.test(cleanUrl)) autoLabel = 'YouTube Video';
+      else if (/docs\.google\.com\/spreadsheets/i.test(cleanUrl)) autoLabel = 'Google Sheets';
+      else if (/docs\.google\.com\/document/i.test(cleanUrl)) autoLabel = 'Google Docs';
+      else if (/drive\.google\.com/i.test(cleanUrl)) autoLabel = 'Google Drive';
+      else autoLabel = 'Liên kết đính kèm';
+    }
     const newLink = {
-      label: newLinkLabel.trim(),
-      url: newLinkUrl.trim().startsWith('http') ? newLinkUrl.trim() : 'https://' + newLinkUrl.trim()
+      label: autoLabel,
+      url: cleanUrl
     };
     const newLinks = [...(erpMeta.links || []), newLink];
     const updatedMeta = { ...erpMeta, links: newLinks };
@@ -1810,6 +1891,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
     setNewLinkLabel('');
     setNewLinkUrl('');
+    setShowAddLink(false);
     toast.success(t('Đã thêm liên kết'));
   };
 
@@ -2153,8 +2235,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   useEffect(() => {
     if (isOpen && task && !embedMode) {
       document.body.style.overflow = 'hidden';
+      setIsClosing(false);
     } else {
       document.body.style.overflow = '';
+      setIsClosing(false);
     }
     return () => {
       document.body.style.overflow = '';
@@ -2164,8 +2248,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const drawerMotionProps = embedMode ? {} : {
     initial: isMobileOrTablet ? { opacity: 0, y: '100%' } : { opacity: 0, x: '80px' },
     animate: { y: 0, x: 0, opacity: 1 },
-    exit: isMobileOrTablet ? { opacity: 0, y: '100%' } : { opacity: 0, x: '80px' },
-    transition: { type: 'spring' as const, damping: 28, stiffness: 380, mass: 0.5 },
+    exit: isMobileOrTablet ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 },
+    transition: { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any },
     drag: false
   };
 
@@ -3959,7 +4043,16 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       className="form-input"
                       placeholder="https://..."
                       value={newLinkUrl}
-                      onChange={(e) => setNewLinkUrl(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewLinkUrl(val);
+                        if (!newLinkLabel.trim()) {
+                          if (/youtube\.com|youtu\.be/i.test(val)) setNewLinkLabel('YouTube Video');
+                          else if (/docs\.google\.com\/spreadsheets/i.test(val)) setNewLinkLabel('Google Sheets');
+                          else if (/docs\.google\.com\/document/i.test(val)) setNewLinkLabel('Google Docs');
+                          else if (/drive\.google\.com/i.test(val)) setNewLinkLabel('Google Drive');
+                        }
+                      }}
                       style={{ fontSize: '0.75rem', padding: '6px 10px' }}
                     />
                   </div>
@@ -4007,6 +4100,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     ? rawUrl
                     : `${window.location.origin}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
 
+                  // Extract YouTube ID if applicable
+                  const youtubeMatch = rawUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+                  const youtubeVideoId = youtubeMatch ? youtubeMatch[1] : null;
+                  const isYouTube = Boolean(youtubeVideoId) || /youtube\.com|youtu\.be/i.test(rawUrl);
+
                   // Determine file extension and format info
                   const urlWithoutQuery = rawUrl.split('?')[0].split('#')[0];
                   const labelWithoutQuery = (link.label || '').split('?')[0].split('#')[0];
@@ -4016,16 +4114,24 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
                   const combinedStr = `${rawUrl} ${link.label || ''}`.toLowerCase();
 
-                  const isImage = Boolean(
+                  // Specific cloud types
+                  const isGoogleSheets = !isYouTube && (/docs\.google\.com\/spreadsheets/i.test(rawUrl) || /google sheet/i.test(combinedStr));
+                  const isGoogleDocs = !isYouTube && !isGoogleSheets && (/docs\.google\.com\/document/i.test(rawUrl) || /google doc/i.test(combinedStr));
+                  const isGoogleDrive = !isYouTube && !isGoogleSheets && !isGoogleDocs && (/drive\.google\.com/i.test(rawUrl) || /google drive/i.test(combinedStr));
+
+                  const isWebLink = !link.is_file && !isYouTube && !isGoogleSheets && !isGoogleDocs && !isGoogleDrive && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) && !rawUrl.includes('/uploads/');
+                  const isCloudOrWeb = isYouTube || isGoogleSheets || isGoogleDocs || isGoogleDrive || isWebLink;
+
+                  const isImage = !isCloudOrWeb && Boolean(
                     link.is_image ||
                     ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ||
                     (combinedStr.includes('image/') && !combinedStr.includes('pdf'))
                   );
 
-                  const isWord = ['doc', 'docx'].includes(ext) || (!isImage && (combinedStr.includes('.docx') || combinedStr.includes('.doc') || combinedStr.includes('hop_dong') || combinedStr.includes('hopdong')));
-                  const isExcel = ['xls', 'xlsx', 'csv'].includes(ext) || (!isImage && (combinedStr.includes('.xlsx') || combinedStr.includes('.xls') || combinedStr.includes('.csv') || combinedStr.includes('lich_thanh_toan')));
-                  const isPdf = ext === 'pdf' || (!isImage && combinedStr.includes('.pdf'));
-                  const isZip = ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext);
+                  const isWord = !isCloudOrWeb && (['doc', 'docx'].includes(ext) || (!isImage && (combinedStr.includes('.docx') || combinedStr.includes('.doc') || combinedStr.includes('hop_dong') || combinedStr.includes('hopdong'))));
+                  const isExcel = !isCloudOrWeb && (['xls', 'xlsx', 'csv'].includes(ext) || (!isImage && (combinedStr.includes('.xlsx') || combinedStr.includes('.xls') || combinedStr.includes('.csv') || combinedStr.includes('lich_thanh_toan'))));
+                  const isPdf = !isCloudOrWeb && (ext === 'pdf' || (!isImage && combinedStr.includes('.pdf')));
+                  const isZip = !isCloudOrWeb && ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext);
 
                   // Formatting details
                   let formatBadge = ext ? ext.toUpperCase() : 'FILE';
@@ -4034,7 +4140,31 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                   let formatBorder = 'rgba(71, 85, 105, 0.2)';
                   let subLabel = t('Tệp đính kèm • Nhấn để tải về / mở');
 
-                  if (isImage) {
+                  if (isYouTube) {
+                    formatBadge = 'YOUTUBE';
+                    formatColor = '#dc2626';
+                    formatBg = 'rgba(220, 38, 38, 0.08)';
+                    formatBorder = 'rgba(220, 38, 38, 0.25)';
+                    subLabel = t('YouTube Video • Nhấn để xem / mở');
+                  } else if (isGoogleDocs) {
+                    formatBadge = 'DOCS';
+                    formatColor = '#2563eb';
+                    formatBg = 'rgba(37, 99, 235, 0.08)';
+                    formatBorder = 'rgba(37, 99, 235, 0.25)';
+                    subLabel = t('Google Docs • Nhấn để mở tài liệu');
+                  } else if (isGoogleSheets) {
+                    formatBadge = 'SHEETS';
+                    formatColor = '#16a34a';
+                    formatBg = 'rgba(22, 163, 74, 0.08)';
+                    formatBorder = 'rgba(22, 163, 74, 0.25)';
+                    subLabel = t('Google Sheets • Nhấn để mở bảng tính');
+                  } else if (isGoogleDrive) {
+                    formatBadge = 'DRIVE';
+                    formatColor = '#0F9D58';
+                    formatBg = 'rgba(15, 157, 88, 0.08)';
+                    formatBorder = 'rgba(15, 157, 88, 0.25)';
+                    subLabel = t('Google Drive • Nhấn để mở thư mục / tệp');
+                  } else if (isImage) {
                     formatBadge = (ext || 'IMG').toUpperCase();
                     formatColor = '#0284c7';
                     formatBg = 'rgba(2, 132, 199, 0.08)';
@@ -4064,7 +4194,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                     formatBg = 'rgba(217, 119, 6, 0.08)';
                     formatBorder = 'rgba(217, 119, 6, 0.25)';
                     subLabel = t('Tệp nén • Nhấn để tải về');
-                  } else if (!link.is_file && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) && !rawUrl.includes('/uploads/')) {
+                  } else if (isWebLink) {
                     formatBadge = 'LINK';
                     formatColor = '#7c3aed';
                     formatBg = 'rgba(124, 58, 237, 0.08)';
@@ -4077,15 +4207,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       key={idx}
                       style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
+                        flexDirection: 'column',
                         background: 'var(--color-surface)',
                         border: '1px solid var(--color-border-light)',
                         padding: '10px 14px',
                         borderRadius: '12px',
-                        minHeight: '54px',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-                        gap: '12px',
+                        gap: '10px',
                         transition: 'all 0.2s ease',
                         cursor: 'pointer'
                       }}
@@ -4093,7 +4221,13 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                       data-file-url={fullUrl}
                       data-file-name={link.label || link.url}
                       onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('.btn-delete-link') || (e.target as HTMLElement).closest('.btn-external-link') || (e.target as HTMLElement).closest('.btn-download-link')) return;
+                        if (
+                          (e.target as HTMLElement).closest('.btn-delete-link') ||
+                          (e.target as HTMLElement).closest('.btn-external-link') ||
+                          (e.target as HTMLElement).closest('.btn-download-link') ||
+                          (e.target as HTMLElement).closest('iframe')
+                        ) return;
+
                         if (isImage || isPdf) {
                           e.preventDefault();
                           const targetIdx = allMediaItems.findIndex(x => x.url === fullUrl);
@@ -4102,201 +4236,285 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                             items: allMediaItems.length > 0 ? allMediaItems : [{ url: fullUrl, name: link.label || 'Tệp đính kèm', type: isImage ? 'image' : 'pdf' }],
                             initialIndex: Math.max(0, targetIdx)
                           });
+                        } else if (isCloudOrWeb) {
+                          e.preventDefault();
+                          window.open(fullUrl, '_blank', 'noopener,noreferrer');
                         } else {
                           e.preventDefault();
                           downloadFileWithName(fullUrl, link.label || link.url);
                         }
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
-                        {/* Left Thumbnail Preview or Icon */}
-                        {isImage ? (
-                          <div style={{
-                            width: '46px',
-                            height: '46px',
-                            borderRadius: '10px',
-                            overflow: 'hidden',
-                            flexShrink: 0,
-                            border: `1.5px solid ${formatBorder}`,
-                            background: 'var(--color-bg-alt)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative'
-                          }}>
-                            <img
-                              src={fullUrl}
-                              alt={link.label || 'Preview'}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={(e) => {
-                                (e.currentTarget as HTMLElement).style.display = 'none';
-                                const fb = e.currentTarget.parentElement?.querySelector('.img-fallback') as HTMLElement;
-                                if (fb) fb.style.display = 'flex';
-                              }}
-                            />
-                            <div className="img-fallback" style={{ display: 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', background: formatBg, color: formatColor }}>
-                              <ImageIcon size={22} />
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                          {/* Left Thumbnail Preview or Icon */}
+                          {isImage ? (
+                            <div style={{
+                              width: '46px',
+                              height: '46px',
+                              borderRadius: '10px',
+                              overflow: 'hidden',
+                              flexShrink: 0,
+                              border: `1.5px solid ${formatBorder}`,
+                              background: 'var(--color-bg-alt)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              position: 'relative'
+                            }}>
+                              <img
+                                src={fullUrl}
+                                alt={link.label || 'Preview'}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                  const fb = e.currentTarget.parentElement?.querySelector('.img-fallback') as HTMLElement;
+                                  if (fb) fb.style.display = 'flex';
+                                }}
+                              />
+                              <div className="img-fallback" style={{ display: 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', background: formatBg, color: formatColor }}>
+                                <ImageIcon size={22} />
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div style={{
-                            width: '46px',
-                            height: '46px',
-                            borderRadius: '10px',
-                            background: formatBg,
-                            border: `1.5px solid ${formatBorder}`,
-                            color: formatColor,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            gap: '2px',
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-                          }}>
-                            {isExcel ? (
-                              <FileSpreadsheet size={20} />
-                            ) : isWord ? (
-                              <FileText size={20} />
-                            ) : isPdf ? (
-                              <FileText size={20} />
-                            ) : isZip ? (
-                              <Layers size={20} />
-                            ) : link.is_file ? (
-                              <FileText size={20} />
-                            ) : (
-                              <Link2 size={20} />
-                            )}
-                            <span style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1 }}>
-                              {formatBadge}
+                          ) : (
+                            <div style={{
+                              width: '46px',
+                              height: '46px',
+                              borderRadius: '10px',
+                              background: formatBg,
+                              border: `1.5px solid ${formatBorder}`,
+                              color: formatColor,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              gap: '2px',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
+                            }}>
+                              {isGoogleDrive ? (
+                                <img
+                                  src="/imgs/google_drive_2026.png"
+                                  alt="Google Drive"
+                                  style={{ width: 22, height: 22, objectFit: 'contain' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src = 'https://www.gstatic.com/images/branding/productlogos/drive_2026/v1/web-48dp/logo_drive_2026_color_2x_web_48dp.png';
+                                  }}
+                                />
+                              ) : isGoogleDocs ? (
+                                <img
+                                  src="/imgs/google_docs_flaticon.png"
+                                  alt="Google Docs"
+                                  style={{ width: 22, height: 22, objectFit: 'contain' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src = 'https://cdn-icons-png.flaticon.com/512/5968/5968517.png';
+                                  }}
+                                />
+                              ) : isGoogleSheets ? (
+                                <img
+                                  src="/imgs/google_sheets_flaticon.png"
+                                  alt="Google Sheets"
+                                  style={{ width: 22, height: 22, objectFit: 'contain' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src = 'https://cdn-icons-png.flaticon.com/512/5968/5968557.png';
+                                  }}
+                                />
+                              ) : isYouTube ? (
+                                <img
+                                  src="/imgs/YouTube_full-color_icon_(2017).svg.webp"
+                                  alt="YouTube"
+                                  style={{ width: 24, height: 18, objectFit: 'contain' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : isExcel ? (
+                                <FileSpreadsheet size={20} />
+                              ) : isWord ? (
+                                <FileText size={20} />
+                              ) : isPdf ? (
+                                <FileText size={20} />
+                              ) : isZip ? (
+                                <Layers size={20} />
+                              ) : link.is_file ? (
+                                <FileText size={20} />
+                              ) : (
+                                <Link2 size={20} />
+                              )}
+                              <span style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1 }}>
+                                {formatBadge}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Name & Subtext */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                              <span
+                                onClick={(e) => {
+                                  if (isImage || isPdf) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const targetIdx = allMediaItems.findIndex(x => x.url === fullUrl);
+                                    setLightboxState({
+                                      isOpen: true,
+                                      items: allMediaItems.length > 0 ? allMediaItems : [{ url: fullUrl, name: link.label || 'Tệp đính kèm', type: isImage ? 'image' : 'pdf' }],
+                                      initialIndex: Math.max(0, targetIdx)
+                                    });
+                                  } else if (isCloudOrWeb) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    window.open(fullUrl, '_blank', 'noopener,noreferrer');
+                                  }
+                                }}
+                                style={{
+                                  fontSize: '0.85rem',
+                                  fontWeight: 700,
+                                  color: 'var(--color-text)',
+                                  textDecoration: 'none',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-block',
+                                  cursor: 'pointer'
+                                }}
+                                className="hover-color-primary"
+                              >
+                                {link.label || link.url}
+                              </span>
+                              <span style={{
+                                fontSize: '0.625rem',
+                                fontWeight: 800,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                background: formatBg,
+                                color: formatColor,
+                                border: `1px solid ${formatBorder}`,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.02em',
+                                flexShrink: 0
+                              }}>
+                                {formatBadge}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Eye size={12} /> {subLabel}
                             </span>
                           </div>
-                        )}
+                        </div>
 
-                        {/* Name & Subtext */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                            <span
+                        {/* Right Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {!isCloudOrWeb && (
+                            <button
+                              type="button"
+                              className="btn-download-link hover-bg-primary-light hover-color-primary"
                               onClick={(e) => {
-                                if (isImage || isPdf) {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  const targetIdx = allMediaItems.findIndex(x => x.url === fullUrl);
-                                  setLightboxState({
-                                    isOpen: true,
-                                    items: allMediaItems.length > 0 ? allMediaItems : [{ url: fullUrl, name: link.label || 'Tệp đính kèm', type: isImage ? 'image' : 'pdf' }],
-                                    initialIndex: Math.max(0, targetIdx)
-                                  });
-                                }
+                                e.stopPropagation();
+                                downloadFileWithName(fullUrl, link.label || link.url);
                               }}
                               style={{
-                                fontSize: '0.85rem',
-                                fontWeight: 700,
-                                color: 'var(--color-text)',
-                                textDecoration: 'none',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                display: 'inline-block',
-                                cursor: 'pointer'
+                                border: 'none',
+                                background: 'var(--color-bg-alt)',
+                                color: 'var(--color-text-muted)',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
                               }}
-                              className="hover-color-primary"
+                              title={t('Tải xuống')}
                             >
-                              {link.label || link.url}
-                            </span>
-                            <span style={{
-                              fontSize: '0.625rem',
-                              fontWeight: 800,
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              background: formatBg,
-                              color: formatColor,
-                              border: `1px solid ${formatBorder}`,
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.02em',
-                              flexShrink: 0
-                            }}>
-                              {formatBadge}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Eye size={12} /> {subLabel}
-                          </span>
+                              <Download size={15} />
+                            </button>
+                          )}
+                          <a
+                            href={fullUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              color: 'var(--color-text-muted)',
+                              background: 'var(--color-bg-alt)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            className="hover-bg-primary-light hover-color-primary btn-external-link"
+                            title={
+                              isYouTube ? t('Mở trên YouTube') :
+                              isGoogleDrive ? t('Mở trong Google Drive') :
+                              isGoogleDocs ? t('Mở trong Google Docs') :
+                              isGoogleSheets ? t('Mở trong Google Sheets') :
+                              t('Mở trong tab mới')
+                            }
+                          >
+                            <ExternalLink size={15} />
+                          </a>
+                          <button
+                            type="button"
+                            className="btn-delete-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteLink(idx);
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.08)',
+                              color: 'var(--color-danger)',
+                              cursor: 'pointer',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={t('Xóa tệp')}
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Right Actions */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <button
-                          type="button"
-                          className="btn-download-link hover-bg-primary-light hover-color-primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            downloadFileWithName(fullUrl, link.label || link.url);
-                          }}
+                      {/* If YouTube video, embed player */}
+                      {youtubeVideoId && (
+                        <div
                           style={{
-                            border: 'none',
-                            background: 'var(--color-bg-alt)',
-                            color: 'var(--color-text-muted)',
-                            cursor: 'pointer',
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.15s ease'
+                            width: '100%',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            border: '1px solid var(--color-border-light)',
+                            background: '#090d16',
+                            marginTop: '2px',
+                            boxShadow: '0 4px 14px rgba(0,0,0,0.08)'
                           }}
-                          title={t('Tải xuống')}
-                        >
-                          <Download size={15} />
-                        </button>
-                        <a
-                          href={fullUrl}
-                          target="_blank"
-                          rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '8px',
-                            color: 'var(--color-text-muted)',
-                            background: 'var(--color-bg-alt)',
-                            transition: 'all 0.15s ease'
-                          }}
-                          className="hover-bg-primary-light hover-color-primary btn-external-link"
-                          title={t('Mở trong tab mới')}
                         >
-                          <ExternalLink size={15} />
-                        </a>
-                        <button
-                          type="button"
-                          className="btn-delete-link"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteLink(idx);
-                          }}
-                          style={{
-                            border: 'none',
-                            background: 'rgba(239, 68, 68, 0.08)',
-                            color: 'var(--color-danger)',
-                            cursor: 'pointer',
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.15s ease'
-                          }}
-                          title={t('Xóa tệp')}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
+                          <iframe
+                            src={`https://www.youtube-nocookie.com/embed/${youtubeVideoId}?rel=0`}
+                            title={link.label || 'YouTube video player'}
+                            style={{
+                              width: '100%',
+                              aspectRatio: '16/9',
+                              minHeight: '220px',
+                              maxHeight: '340px',
+                              border: 'none',
+                              display: 'block'
+                            }}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 });
@@ -5985,6 +6203,65 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               />
             </div>
 
+            {/* Nhóm công việc */}
+            <div className="card" style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ ...cardLabelStyle, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Folder size={13} style={{ color: 'var(--color-primary)' }} />
+                  {t('Nhóm công việc')}
+                </label>
+                {formData.task_group_id && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setFormData((prev: any) => ({ ...prev, task_group_id: null, task_group_name: null }));
+                      await handleUpdateField('task_group_id', null);
+                      onUpdate();
+                      toast.success(t('Đã chuyển thành chưa phân nhóm'));
+                    }}
+                    style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.72rem', padding: '0 4px' }}
+                  >
+                    {t('Bỏ nhóm')}
+                  </button>
+                )}
+              </div>
+              <CustomSelect
+                options={[
+                  { value: '', label: t('-- Chưa phân nhóm --') },
+                  ...availableTaskGroups.map((g: any) => ({
+                    value: String(g.id),
+                    label: g.name,
+                    icon: (
+                      <span 
+                        style={{ 
+                          width: 10, 
+                          height: 10, 
+                          borderRadius: '50%', 
+                          backgroundColor: g.color || '#BD1D2D', 
+                          display: 'inline-block',
+                          flexShrink: 0
+                        }} 
+                      />
+                    )
+                  }))
+                ]}
+                value={formData.task_group_id ? String(formData.task_group_id) : ''}
+                onChange={async (val) => {
+                  const newGId = val ? Number(val) : null;
+                  const chosenGroup = availableTaskGroups.find((g: any) => Number(g.id) === newGId);
+                  setFormData((prev: any) => ({ 
+                    ...prev, 
+                    task_group_id: newGId,
+                    task_group_name: chosenGroup ? chosenGroup.name : null,
+                    task_group_color: chosenGroup ? chosenGroup.color : null
+                  }));
+                  await handleUpdateField('task_group_id', newGId);
+                  onUpdate();
+                  toast.success(t('Đã chuyển nhóm công việc'));
+                }}
+              />
+            </div>
+
             {/* Độ ưu tiên & Hạn hoàn thành */}
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '10px' }}>
               <div className="card" style={{ ...cardStyle, padding: embedMode ? '10px 8px' : '14px 10px' }}>
@@ -6723,7 +7000,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   return createPortal(
     <>
       <AnimatePresence>
-        {isOpen && task && (
+        {isOpen && task && !isClosing && (
           <>
             <motion.div 
               className="drawer-backdrop" 
@@ -6731,7 +7008,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
               style={{
                 position: 'fixed',
                 inset: 0,

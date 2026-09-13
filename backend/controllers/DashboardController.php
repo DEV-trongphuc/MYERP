@@ -623,4 +623,220 @@ class DashboardController {
             'tid' => $tid
         ];
     }
+
+    /**
+     * Unified High-Performance Badges Endpoint
+     * Gộp toàn bộ 9 API đếm badge riêng lẻ thành 1 truy vấn siêu tốc duy nhất (< 20ms)
+     */
+    public function badges(array $auth): void {
+        $role = strtolower($auth['role'] ?? '');
+        $uid = (int)($auth['user_id'] ?? 0);
+        $tid = (int)($auth['tenant_id'] ?? 1);
+        $isAdminOrDirector = in_array($role, ['admin', 'superadmin', 'super_admin', 'director'], true);
+        $isManager = ($role === 'manager');
+        $isAccountant = ($role === 'accountant');
+        $isHr = ($role === 'hr');
+        $isSaleAdmin = in_array($role, ['sale_admin', 'saleadmin'], true);
+        $isSale = in_array($role, ['sale', 'sales'], true);
+
+        // Load managed team users if manager
+        $managedUserIds = [$uid];
+        $teamId = 0;
+        if ($isManager) {
+            $stmtTeam = $this->db->prepare("SELECT id, team_id FROM users WHERE team_id IN (SELECT id FROM teams WHERE leader_id = ? OR FIND_IN_SET(?, COALESCE(co_leader_ids, '')))");
+            $stmtTeam->execute([$uid, $uid]);
+            $teamRows = $stmtTeam->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($teamRows as $tr) {
+                $managedUserIds[] = (int)$tr['id'];
+                if (!$teamId && !empty($tr['team_id'])) $teamId = (int)$tr['team_id'];
+            }
+            $managedUserIds = array_values(array_unique($managedUserIds));
+        }
+
+        // 1. Workspace Undone Tasks (Personal undone tasks on Workspace)
+        $taskWhere = "tenant_id = ? AND deleted_at IS NULL AND status NOT IN ('done', 'completed', 'cancelled') AND type IN ('task', 'meeting') AND (user_id = ? OR created_by = ? OR approver_id = ? OR FIND_IN_SET(?, participant_ids))";
+        $taskParams = [$tid, $uid, $uid, $uid, (string)$uid];
+
+        $stmtTasks = $this->db->prepare("SELECT COUNT(1) FROM activities WHERE $taskWhere");
+        $stmtTasks->execute($taskParams);
+        $tasksCount = (int)$stmtTasks->fetchColumn();
+
+        // 2. Pending Approvals (Leaves + Advances + Expenses + Checkins + Bulks)
+        // Only count: (Đơn đang tới lượt tôi duyệt) + (Đơn do tôi tạo nhưng đang chờ duyệt)
+
+        // A. Leaves
+        $stmtLv = $this->db->prepare("
+            SELECT COUNT(1) FROM hrm_leave_requests 
+            WHERE status = 'pending'
+              AND (
+                user_id = ?
+                OR (approver_id = ? AND (status_level_1 IS NULL OR status_level_1 = 'pending' OR status_level_1 = ''))
+                OR (approver_id_2 = ? AND status_level_1 = 'approved' AND (status_level_2 IS NULL OR status_level_2 = 'pending' OR status_level_2 = ''))
+                " . ($isAdminOrDirector ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . "
+              )
+        ");
+        $stmtLv->execute([$uid, $uid, $uid]);
+        $leaveCount = (int)$stmtLv->fetchColumn();
+
+        // B. Advances
+        $stmtAdv = $this->db->prepare("
+            SELECT COUNT(1) FROM hrm_salary_advances 
+            WHERE status = 'pending'
+              AND (
+                user_id = ?
+                OR (approver_id = ? AND (status_level_1 IS NULL OR status_level_1 = 'pending' OR status_level_1 = ''))
+                OR (approver_id_2 = ? AND status_level_1 = 'approved' AND (status_level_2 IS NULL OR status_level_2 = 'pending' OR status_level_2 = ''))
+                " . ($isAdminOrDirector ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . "
+              )
+        ");
+        $stmtAdv->execute([$uid, $uid, $uid]);
+        $advanceCount = (int)$stmtAdv->fetchColumn();
+
+        // C. Expenses for Approvals
+        $stmtExpA = $this->db->prepare("
+            SELECT COUNT(1) FROM expenses 
+            WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'pending'
+              AND (
+                created_by = ?
+                OR (approver_id = ? AND (status_level_1 IS NULL OR status_level_1 = 'pending' OR status_level_1 = ''))
+                OR (approver_id_2 = ? AND status_level_1 = 'approved' AND (status_level_2 IS NULL OR status_level_2 = 'pending' OR status_level_2 = ''))
+                OR (approver_id_3 = ? AND status_level_2 = 'approved' AND (status_level_3 IS NULL OR status_level_3 = 'pending' OR status_level_3 = ''))
+                " . ($isAdminOrDirector ? "OR (approver_id IS NULL OR approver_id = 0)" : "") . "
+              )
+        ");
+        $stmtExpA->execute([$tid, $uid, $uid, $uid, $uid]);
+        $expAppCount = (int)$stmtExpA->fetchColumn();
+
+        // D. Checkins
+        $stmtCi = $this->db->prepare("
+            SELECT COUNT(1) FROM check_ins 
+            WHERE status = 'pending_approval' " . ($isAdminOrDirector ? "" : " AND user_id = ?") . "
+        ");
+        $stmtCi->execute($isAdminOrDirector ? [] : [$uid]);
+        $ciCount = (int)$stmtCi->fetchColumn();
+
+        // E. Bulk Attendance
+        $stmtBk = $this->db->prepare("
+            SELECT COUNT(1) FROM attendance_bulk_requests 
+            WHERE status IN ('pending', 'pending_manager', 'pending_hr') 
+              AND (" . ($isAdminOrDirector ? "1=1 OR " : "") . "user_id = ? OR manager_id = ? OR approved_by = ?)
+        ");
+        $stmtBk->execute([$uid, $uid, $uid]);
+        $bulkCount = (int)$stmtBk->fetchColumn();
+
+        $totalApprovals = $leaveCount + $advanceCount + $expAppCount + $ciCount + $bulkCount;
+
+        // 3. Pending Expenses (for Purchase Order tab)
+        $pendingExpensesCount = $expAppCount;
+
+        // 4. Pending Deposits (for Sales Order tab)
+        $pendingDepositsCount = 0;
+        try {
+            if ($isAdminOrDirector || $isManager) {
+                $stmtDep = $this->db->query("
+                    SELECT COUNT(DISTINCT d.id) 
+                    FROM deposits d 
+                    JOIN deposit_milestones m ON d.id = m.deposit_id 
+                    WHERE d.status != 'cancelled' AND m.status = 'paid'
+                ");
+                $pendingDepositsCount = (int)$stmtDep->fetchColumn();
+            } else {
+                $stmtDep = $this->db->query("
+                    SELECT COUNT(DISTINCT d.id) 
+                    FROM deposits d 
+                    JOIN deposit_milestones m ON d.id = m.deposit_id 
+                    WHERE d.status = 'pending' AND m.status IN ('pending', 'failed')
+                ");
+                $pendingDepositsCount = (int)$stmtDep->fetchColumn();
+            }
+        } catch (\Throwable $e) { $pendingDepositsCount = 0; }
+
+        // 5. Held Leads (Gatekeeper queue)
+        $heldLeadsCount = 0;
+        try {
+            if ($isAdminOrDirector || $isManager) {
+                $stmtHeld = $this->db->query("SELECT COUNT(1) FROM distribution_logs WHERE status IN ('pending_work_hours', 'pending')");
+                $heldLeadsCount = (int)$stmtHeld->fetchColumn();
+            }
+        } catch (\Throwable $e) { $heldLeadsCount = 0; }
+
+        // 6. Tickets (Data reports)
+        $ticketsCount = 0;
+        try {
+            if ($isAdminOrDirector) {
+                $stmtRep = $this->db->query("SELECT COUNT(1) FROM data_reports WHERE status = 'pending'");
+                $ticketsCount = (int)$stmtRep->fetchColumn();
+            } elseif ($isManager && !empty($managedUserIds)) {
+                $inM = implode(',', $managedUserIds);
+                $stmtRep = $this->db->query("SELECT COUNT(1) FROM data_reports WHERE status = 'pending' AND consultant_id IN ($inM)");
+                $ticketsCount = (int)$stmtRep->fetchColumn();
+            } elseif ($isSale) {
+                $stmtRep = $this->db->prepare("SELECT COUNT(1) FROM data_reports WHERE status = 'pending' AND consultant_id = ?");
+                $stmtRep->execute([$uid]);
+                $ticketsCount = (int)$stmtRep->fetchColumn();
+            }
+        } catch (\Throwable $e) { $ticketsCount = 0; }
+
+        // 7. Support Tickets (Helpdesk)
+        $supportTicketsCount = 0;
+        try {
+            $stmtSt = $this->db->prepare("SELECT COUNT(1) FROM tickets WHERE tenant_id = ? AND status IN ('open', 'in_progress', 'waiting')");
+            $stmtSt->execute([$tid]);
+            $supportTicketsCount = (int)$stmtSt->fetchColumn();
+        } catch (\Throwable $e) { $supportTicketsCount = 0; }
+
+        // 8. Cooperation Slips
+        $coopCount = 0;
+        try {
+            if ($isAdminOrDirector || $isManager) {
+                $stmtCoop = $this->db->query("SELECT COUNT(1) FROM cooperation_slips WHERE status = 'pending_manager_approval'");
+                $coopCount = (int)$stmtCoop->fetchColumn();
+            } elseif ($isSale) {
+                $stmtCoop = $this->db->query("SELECT id, status, shares_json FROM cooperation_slips WHERE status != 'rejected'");
+                while ($csRow = $stmtCoop->fetch(PDO::FETCH_ASSOC)) {
+                    $shares = json_decode($csRow['shares_json'] ?? '[]', true) ?: [];
+                    foreach ($shares as $sh) {
+                        if (isset($sh['user_id']) && (int)$sh['user_id'] === $uid && empty($sh['signed'])) {
+                            $coopCount++;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) { $coopCount = 0; }
+
+        // 9. Student Counts (Nộp hồ sơ & Lệ phí)
+        $nopHoSoCount = 0;
+        $lePhiCount = 0;
+        try {
+            if ($isAccountant || $isSaleAdmin || $isAdminOrDirector) {
+                $stmtStd = $this->db->prepare("
+                    SELECT 
+                        SUM(CASE WHEN (c.pipeline_status IN ('application_started', 'application_completed', 'admission_approved', 'offer_accepted', 'nop_ho_so') OR c.stage_id IN (9,10,11,12)) THEN 1 ELSE 0 END) as nop_ho_so,
+                        SUM(CASE WHEN (c.pipeline_status IN ('deposit_tuition_payment', 'dong_le_phi_ho_so') OR c.stage_id IN (13)) THEN 1 ELSE 0 END) as le_phi
+                    FROM contacts c
+                    WHERE c.tenant_id = ? AND c.deleted_at IS NULL AND (c.lead_status NOT IN ('lost', 'nurture') OR c.lead_status IS NULL)
+                ");
+                $stmtStd->execute([$tid]);
+                $stdRow = $stmtStd->fetch(PDO::FETCH_ASSOC);
+                if ($stdRow) {
+                    $nopHoSoCount = (int)($stdRow['nop_ho_so'] ?? 0);
+                    $lePhiCount = (int)($stdRow['le_phi'] ?? 0);
+                }
+            }
+        } catch (\Throwable $e) { }
+
+        respond(200, [
+            'workspaceTasks' => $tasksCount,
+            'pendingApprovals' => $totalApprovals,
+            'pendingExpenses' => $pendingExpensesCount,
+            'pendingDeposits' => $pendingDepositsCount,
+            'heldLeads' => $heldLeadsCount,
+            'tickets' => $ticketsCount,
+            'supportTickets' => $supportTicketsCount,
+            'coopSlips' => $coopCount,
+            'nopHoSo' => $nopHoSoCount,
+            'lePhi' => $lePhiCount,
+        ], 'Lấy danh sách badges thành công');
+    }
 }

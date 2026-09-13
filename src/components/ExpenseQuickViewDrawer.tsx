@@ -13,9 +13,18 @@ import { NoteDetailModal, NoteCell, renderLinkifiedText } from './ui/NoteDetailM
 import { QrImageModal } from './ui/QrImageModal';
 import { getVietQrUrl } from '../utils/vietnamBanks';
 import { AttachmentLightboxModal, type AttachmentItem } from './ui/AttachmentLightboxModal';
+import { CustomSelect } from './ui/CustomSelect';
+import { formatWaitDuration } from '../pages/Approvals';
 
 const FMT = (n: number, currency: string = 'VND') => {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(n);
+  const norm = currency === 'EURO' ? 'EUR' : (currency || 'VND');
+  if (norm === 'VND') {
+    return Math.round(n || 0).toLocaleString('vi-VN') + ' đ';
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: norm
+  }).format(n || 0);
 };
 
 const formatTimestamp = (raw: any) => {
@@ -23,6 +32,41 @@ const formatTimestamp = (raw: any) => {
   const str = String(raw).trim();
   const d = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str);
   return !isNaN(d.getTime()) ? d.toLocaleString('vi-VN') : '—';
+};
+
+const getAvatarStatusRingStyle = (border?: string): React.CSSProperties => {
+  const b = (border || '#f59e0b').toLowerCase();
+  let ringColor = 'rgba(245, 158, 11, 0.28)';
+  let borderColor = border || '#f59e0b';
+  const isPending = b.includes('f59e0b') || b.includes('d97706') || b === 'pending';
+
+  if (b.includes('10b981') || b.includes('green') || b === 'approved') {
+    borderColor = '#10b981';
+    ringColor = 'rgba(16, 185, 129, 0.28)';
+  } else if (b.includes('ef4444') || b.includes('red') || b === 'rejected') {
+    borderColor = '#ef4444';
+    ringColor = 'rgba(239, 68, 68, 0.28)';
+  } else if (b.includes('cbd5e1') || b.includes('gray') || b.includes('slate') || b === 'not_reached') {
+    borderColor = '#cbd5e1';
+    ringColor = 'rgba(203, 213, 225, 0.4)';
+  } else if (isPending) {
+    borderColor = '#f59e0b';
+    ringColor = 'rgba(245, 158, 11, 0.28)';
+  }
+
+  return {
+    borderRadius: '50%',
+    padding: '1.5px',
+    margin: '2px 4px 2px 2px',
+    border: `2px solid ${borderColor}`,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    boxShadow: `0 0 0 2px ${ringColor}`,
+    transition: 'all 0.2s ease-in-out',
+    animation: isPending ? 'avatar-pending-glow 2.2s ease-in-out infinite' : undefined
+  };
 };
 
 interface ExpenseQuickViewDrawerProps {
@@ -241,152 +285,297 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
   const renderTimeline = () => {
     if (!viewItem) return null;
 
-    // Helper to get step status and details
-    const getStepStatus = (stepKey: 'creator' | 'level1' | 'level2' | 'level3' | 'payment', stepNum: number) => {
+    const formatApprovalTime = (raw: any) => {
+      if (!raw) return '';
+      const str = String(raw).trim();
+      const d = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str);
+      return !isNaN(d.getTime()) ? d.toLocaleString('vi-VN') : '';
+    };
+
+    const rawNotes = viewItem.notes || viewItem.description || '';
+    const approvalStepsMatch = rawNotes.match(/\[APPROVAL_STEPS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+    let misaSteps: any[] | null = null;
+    if (viewItem.approval_steps && Array.isArray(viewItem.approval_steps)) {
+      misaSteps = viewItem.approval_steps;
+    } else if (approvalStepsMatch) {
+      try {
+        misaSteps = JSON.parse(approvalStepsMatch[1]);
+      } catch (e) {}
+    }
+
+    const steps: Array<{
+      stepNumber: number;
+      title: string;
+      roleTitle: string;
+      user: any;
+      status: 'approved' | 'rejected' | 'pending' | 'not_reached';
+      approvedAt?: string;
+      waitingSince?: any;
+      showBell?: boolean;
+      notes?: string;
+      customNotReachedText?: string;
+      isPayment?: boolean;
+    }> = [];
+
+    if (misaSteps && Array.isArray(misaSteps) && misaSteps.length > 0) {
+      misaSteps.forEach((st: any, idx: number) => {
+        const uName = st.user_name || st.actor || '';
+        const uCode = st.user_code || '';
+        const matchedUser = users.find((u: any) => 
+          (st.user_id && Number(u.id) === Number(st.user_id)) ||
+          (uCode && String((u as any).code || '').toLowerCase() === uCode.toLowerCase()) ||
+          (uName && u.full_name && (u.full_name.toLowerCase().includes(uName.toLowerCase()) || uName.toLowerCase().includes(u.full_name.toLowerCase())))
+        );
+
+        const stepUser = matchedUser || {
+          id: st.user_id || `misa-${idx}`,
+          full_name: uName || 'Nhân sự thực hiện',
+          avatar: null,
+          avatar_url: null
+        };
+
+        const rawStatus = (st.status || '').toLowerCase();
+        let stepStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+        if (['approved', 'done', 'completed', 'đã duyệt', 'đã thực hiện'].includes(rawStatus)) {
+          stepStatus = 'approved';
+        } else if (['rejected', 'từ chối'].includes(rawStatus)) {
+          stepStatus = 'rejected';
+        } else if (['not_reached', 'chưa đến'].includes(rawStatus)) {
+          stepStatus = 'not_reached';
+        } else {
+          stepStatus = 'pending';
+        }
+
+        const stepRole = st.role || (matchedUser as any)?.role_title || (matchedUser as any)?.department || (matchedUser as any)?.role || (idx === 0 ? 'Người lập đề xuất' : 'Người phê duyệt');
+        const stepTitle = st.title || st.step_name || (idx === 0 ? 'Lập đề xuất & gửi' : `Phê duyệt (Cấp ${idx})`);
+        const prevStepTime = idx > 0 ? (misaSteps[idx - 1]?.time || misaSteps[idx - 1]?.action_time || viewItem?.created_at) : viewItem?.created_at;
+
+        steps.push({
+          stepNumber: idx + 1,
+          title: `Bước ${idx + 1}: ${stepTitle}`,
+          roleTitle: stepRole,
+          user: stepUser,
+          status: stepStatus,
+          approvedAt: (stepStatus === 'approved' || stepStatus === 'rejected') && (st.time || st.action_time) ? formatApprovalTime(st.time || st.action_time) : '',
+          waitingSince: stepStatus === 'pending' ? prevStepTime : null,
+          showBell: stepStatus === 'pending',
+          notes: st.notes || st.comment || ''
+        });
+      });
+    } else {
       const overall = (viewItem.status || 'pending').toLowerCase();
       const s1 = (viewItem.status_level_1 || 'pending').toLowerCase();
       const s2 = (viewItem.status_level_2 || 'pending').toLowerCase();
       const s3 = (viewItem.status_level_3 || 'pending').toLowerCase();
       const isRefunded = !!viewItem.is_refunded;
+      const hasL2 = !!viewItem.approver_id_2;
+      const hasL3 = !!viewItem.approver_id_3;
 
-      let status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      // Step 1: Creator / Proposer
+      const creatorUser = users.find((u: any) => 
+        (viewItem.created_by && Number(u.id) === Number(viewItem.created_by)) ||
+        (viewItem.user_id && Number(u.id) === Number(viewItem.user_id)) ||
+        (viewItem.creator_name && (u.full_name === viewItem.creator_name || u.name === viewItem.creator_name))
+      ) || {
+        id: viewItem.created_by || viewItem.user_id || 'creator',
+        full_name: viewItem.creator_name || 'Người lập',
+        avatar: viewItem.creator_avatar,
+        avatar_url: viewItem.creator_avatar
+      };
 
-      if (stepKey === 'creator') {
-        status = 'approved';
-      } else if (stepKey === 'level1') {
-        if (overall === 'approved' || overall === 'refunded' || isRefunded || s1 === 'approved') status = 'approved';
-        else if (overall === 'rejected' || s1 === 'rejected') status = 'rejected';
-        else status = 'pending';
-      } else if (stepKey === 'level2') {
-        if (s2 === 'approved' || isRefunded) status = 'approved';
-        else if (s2 === 'rejected') status = 'rejected';
-        else if (overall === 'rejected' || s1 === 'rejected') status = 'not_reached';
-        else if (s1 === 'approved') status = 'pending';
-        else status = 'not_reached';
-      } else if (stepKey === 'level3') {
-        if (s3 === 'approved' || isRefunded) status = 'approved';
-        else if (s3 === 'rejected') status = 'rejected';
-        else if (overall === 'rejected' || s1 === 'rejected' || s2 === 'rejected') status = 'not_reached';
-        else if (s2 === 'approved') status = 'pending';
-        else status = 'not_reached';
-      } else if (stepKey === 'payment') {
-        if (isRefunded) status = 'approved';
-        else if (overall === 'approved') {
-          // If multi-level, must wait for the last active level to be approved
-          const hasL2 = !!viewItem.approver_id_2;
-          const hasL3 = !!viewItem.approver_id_3;
-          if (hasL3) {
-            status = s3 === 'approved' ? 'pending' : 'not_reached';
-          } else if (hasL2) {
-            status = s2 === 'approved' ? 'pending' : 'not_reached';
-          } else {
-            status = 'pending';
-          }
-        } else {
-          status = 'not_reached';
-        }
+      const step1CreatedTime = viewItem.created_at || viewItem.expense_date;
+
+      steps.push({
+        stepNumber: 1,
+        title: 'Bước 1: Lập đề xuất & gửi',
+        roleTitle: 'Người lập đề xuất',
+        user: creatorUser,
+        status: 'approved',
+        approvedAt: formatApprovalTime(step1CreatedTime)
+      });
+
+      // Step 2: Level 1 Approver
+      let s1Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      if (overall === 'approved' || overall === 'refunded' || isRefunded || s1 === 'approved') {
+        s1Status = 'approved';
+      } else if (overall === 'rejected' || s1 === 'rejected') {
+        s1Status = 'rejected';
+      } else {
+        s1Status = 'pending';
       }
 
-      // Styles based on status
-      let bg = 'var(--color-primary)';
-      let textCol = '#ffffff';
-      let iconContent: React.ReactNode = String(stepNum);
-      let showBell = false;
+      const s1ApprovedTime = s1Status === 'approved' || s1Status === 'rejected' ? (viewItem.approved_at || viewItem.updated_at) : null;
 
-      if (status === 'approved') {
-        bg = '#10b981'; // Green
-        iconContent = '✓';
-      } else if (status === 'rejected') {
-        bg = '#ef4444'; // Red
-        iconContent = '✗';
-      } else if (status === 'not_reached') {
-        bg = 'var(--color-border-light)';
-        textCol = 'var(--color-text-muted)';
-        iconContent = String(stepNum);
-      } else if (status === 'pending') {
-        bg = 'var(--color-primary)';
-        iconContent = String(stepNum);
-        showBell = true;
+      const approverUser1 = users.find((u: any) => 
+        (viewItem.approver_id && Number(u.id) === Number(viewItem.approver_id)) ||
+        (viewItem.approver_name && (u.full_name === viewItem.approver_name || u.name === viewItem.approver_name))
+      ) || {
+        id: viewItem.approver_id || 'approver1',
+        full_name: viewItem.approver_name || 'Người duyệt Cấp 1',
+        avatar: viewItem.approver_avatar,
+        avatar_url: viewItem.approver_avatar,
+        role: 'Người duyệt Cấp 1'
+      };
+
+      steps.push({
+        stepNumber: 2,
+        title: 'Bước 2: Phê duyệt (Cấp 1)',
+        roleTitle: approverUser1.role || 'Người duyệt Cấp 1',
+        user: approverUser1,
+        status: s1Status,
+        approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
+        waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
+        showBell: s1Status === 'pending'
+      });
+
+      // Step 3: Level 2 Approver (Optional)
+      let s2ApprovedTime: any = null;
+      let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+      if (hasL2) {
+        if (s2 === 'approved' || isRefunded) s2Status = 'approved';
+        else if (s2 === 'rejected') s2Status = 'rejected';
+        else if (overall === 'rejected' || s1 === 'rejected') s2Status = 'not_reached';
+        else if (s1Status === 'approved') s2Status = 'pending';
+        else s2Status = 'not_reached';
+
+        s2ApprovedTime = s2Status === 'approved' || s2Status === 'rejected' ? (viewItem.approved_at_2 || (s2 === 'approved' ? viewItem.updated_at : null)) : null;
+
+        const approverUser2 = users.find((u: any) => 
+          (viewItem.approver_id_2 && Number(u.id) === Number(viewItem.approver_id_2)) ||
+          (viewItem.approver_name_2 && (u.full_name === viewItem.approver_name_2 || u.name === viewItem.approver_name_2))
+        ) || {
+          id: viewItem.approver_id_2 || 'approver2',
+          full_name: viewItem.approver_name_2 || 'Người duyệt Cấp 2',
+          avatar: viewItem.approver_avatar_2,
+          avatar_url: viewItem.approver_avatar_2,
+          role: 'Người duyệt Cấp 2'
+        };
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: `Bước ${steps.length + 1}: Phê duyệt (Cấp 2)`,
+          roleTitle: approverUser2.role || 'Người duyệt Cấp 2',
+          user: approverUser2,
+          status: s2Status,
+          approvedAt: s2Status === 'approved' || s2Status === 'rejected' ? formatApprovalTime(s2ApprovedTime) : '',
+          waitingSince: s2Status === 'pending' ? (s1ApprovedTime || step1CreatedTime) : null,
+          showBell: s2Status === 'pending',
+          customNotReachedText: 'Sẽ thực hiện sau khi Cấp 1 duyệt'
+        });
       }
 
-      return { bg, textCol, iconContent, showBell };
-    };
+      // Step 4: Level 3 Approver (Optional)
+      let s3ApprovedTime: any = null;
+      let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+      if (hasL3) {
+        if (s3 === 'approved' || isRefunded) s3Status = 'approved';
+        else if (s3 === 'rejected') s3Status = 'rejected';
+        else if (overall === 'rejected' || s1 === 'rejected' || s2 === 'rejected') s3Status = 'not_reached';
+        else if (hasL2 ? s2Status === 'approved' : s1Status === 'approved') s3Status = 'pending';
+        else s3Status = 'not_reached';
 
-    let stepCount = 1;
-    const stepCreatorNum = stepCount++;
-    const stepL1Num = stepCount++;
-    const stepL2Num = viewItem.approver_id_2 ? stepCount++ : null;
-    const stepL3Num = viewItem.approver_id_3 ? stepCount++ : null;
-    const stepPaymentNum = stepCount++;
+        s3ApprovedTime = s3Status === 'approved' || s3Status === 'rejected' ? (viewItem.approved_at_3 || (s3 === 'approved' ? viewItem.updated_at : null)) : null;
+
+        const approverUser3 = users.find((u: any) => 
+          (viewItem.approver_id_3 && Number(u.id) === Number(viewItem.approver_id_3)) ||
+          (viewItem.approver_name_3 && (u.full_name === viewItem.approver_name_3 || u.name === viewItem.approver_name_3))
+        ) || {
+          id: viewItem.approver_id_3 || 'approver3',
+          full_name: viewItem.approver_name_3 || 'Người duyệt Cấp 3',
+          avatar: viewItem.approver_avatar_3,
+          avatar_url: viewItem.approver_avatar_3,
+          role: 'Người duyệt Cấp 3'
+        };
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: `Bước ${steps.length + 1}: Phê duyệt (Cấp 3)`,
+          roleTitle: approverUser3.role || 'Người duyệt Cấp 3',
+          user: approverUser3,
+          status: s3Status,
+          approvedAt: s3Status === 'approved' || s3Status === 'rejected' ? formatApprovalTime(s3ApprovedTime) : '',
+          waitingSince: s3Status === 'pending' ? (s2ApprovedTime || s1ApprovedTime || step1CreatedTime) : null,
+          showBell: s3Status === 'pending',
+          customNotReachedText: 'Sẽ thực hiện sau khi Cấp 2 duyệt'
+        });
+      }
+
+      // Step Payment: Hạch toán thanh toán thực tế
+      const lastApprovalTime = (hasL3 ? s3ApprovedTime : hasL2 ? s2ApprovedTime : s1ApprovedTime) || viewItem.approved_at || viewItem.updated_at;
+      let isPreApproved = false;
+      if (hasL3) {
+        isPreApproved = s3Status === 'approved' || overall === 'approved' || isRefunded;
+      } else if (hasL2) {
+        isPreApproved = s2Status === 'approved' || overall === 'approved' || isRefunded;
+      } else {
+        isPreApproved = s1Status === 'approved' || overall === 'approved' || isRefunded;
+      }
+
+      let paymentStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+      if (isRefunded) {
+        paymentStatus = 'approved';
+      } else if (isPreApproved) {
+        paymentStatus = 'pending';
+      } else {
+        paymentStatus = 'not_reached';
+      }
+
+      const defaultAccountant = users.find((u: any) => String(u.role).toLowerCase() === 'accountant') || users.find((u: any) => ['admin', 'superadmin'].includes(String(u.role).toLowerCase())) || {
+        id: 1001,
+        full_name: 'Kế toán / Thủ quỹ',
+        avatar: undefined,
+        avatar_url: undefined,
+        role: 'Thủ quỹ'
+      };
+
+      const refunderUser = isRefunded ? (users.find((u: any) => Number(u.id) === Number(viewItem.refunder_id)) || {
+        id: viewItem.refunder_id,
+        full_name: viewItem.refunder_name || 'Kế toán / Thủ quỹ',
+        avatar: viewItem.refunder_avatar,
+        avatar_url: viewItem.refunder_avatar,
+        role: 'Kế toán chi'
+      }) : defaultAccountant;
+
+      steps.push({
+        stepNumber: steps.length + 1,
+        title: `Bước ${steps.length + 1}: Hạch toán thanh toán thực tế`,
+        roleTitle: refunderUser.role || (isRefunded ? 'Kế toán chi' : 'Thủ quỹ'),
+        user: refunderUser,
+        status: paymentStatus,
+        approvedAt: isRefunded && viewItem.refunded_at ? formatApprovalTime(viewItem.refunded_at) : '',
+        waitingSince: paymentStatus === 'pending' ? (lastApprovalTime || step1CreatedTime) : null,
+        showBell: paymentStatus === 'pending',
+        customNotReachedText: 'Sẽ thực hiện sau khi đề xuất được duyệt',
+        isPayment: true
+      });
+    }
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '12px', position: 'relative', paddingLeft: '30px', textAlign: 'left' }}>
         <div style={{ position: 'absolute', left: '10px', top: '10px', bottom: '10px', width: '2px', background: 'var(--color-border-light)' }} />
 
-        {/* Step 1: Proposer */}
-        {(() => {
-          const sDetails = getStepStatus('creator', stepCreatorNum);
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Lập đề xuất & gửi</strong>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={viewItem.creator_avatar} 
-                    name={viewItem.creator_name || 'Người lập'} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {viewItem.creator_name || 'Người lập'} (Người lập)
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                  Đã gửi lúc {viewItem.created_at ? new Date(viewItem.created_at).toLocaleString('vi-VN') : '—'}
-                </span>
-              </div>
-            </div>
-          );
-        })()}
+        {steps.map((st) => {
+          let bg = 'var(--color-primary)';
+          let textCol = '#ffffff';
+          let iconContent: React.ReactNode = String(st.stepNumber);
+          let avatarBorderColor = '#f59e0b'; // Cam chờ duyệt
 
-        {/* Step 2: Level 1 Approver */}
-        {(() => {
-          const sDetails = getStepStatus('level1', stepL1Num);
-          const approverUser = users.find(u => Number(u.id) === Number(viewItem.approver_id)) || {
-            id: viewItem.approver_id,
-            full_name: viewItem.approver_name || 'Người duyệt Cấp 1',
-            avatar_url: viewItem.approver_avatar,
-            role: 'Người duyệt Cấp 1'
-          };
+          if (st.status === 'approved') {
+            bg = '#10b981';
+            iconContent = '✓';
+            avatarBorderColor = '#10b981'; // Xanh lá đã duyệt
+          } else if (st.status === 'rejected') {
+            bg = '#ef4444';
+            iconContent = '✗';
+            avatarBorderColor = '#ef4444'; // Đỏ từ chối
+          } else if (st.status === 'not_reached') {
+            bg = 'var(--color-border-light)';
+            textCol = 'var(--color-text-muted)';
+            avatarBorderColor = '#cbd5e1'; // Xám chưa tới lượt
+          }
+
           return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+            <div key={st.stepNumber} style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
               <div style={{
                 position: 'absolute',
                 left: '-30px',
@@ -394,8 +583,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 width: '22px',
                 height: '22px',
                 borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
+                background: bg,
+                color: textCol,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -403,14 +592,14 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 fontWeight: 800,
                 zIndex: 2
               }}>
-                {sDetails.iconContent}
+                {iconContent}
               </div>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Phê duyệt Cấp 1</strong>
-                  {sDetails.showBell && approverUser.id && (
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>{st.title}</strong>
+                  {st.showBell && st.user && (
                     <button 
-                      onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
+                      onClick={() => { setReminderTargetUser(st.user); setReminderMessage(''); }}
                       style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
                       title="Gửi nhắc nhở"
                     >
@@ -418,298 +607,86 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                     </button>
                   )}
                 </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={approverUser.avatar_url} 
-                    name={approverUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {approverUser.full_name} ({approverUser.role || 'Người duyệt'})
-                  </span>
+                <CustomSelect
+                  options={[
+                    ...(st.user && !users.some(u => String(u.id) === String(st.user.id)) ? [{
+                      value: String(st.user.id),
+                      label: st.user.full_name || st.user.name,
+                      avatar: st.user.avatar || st.user.avatar_url,
+                      avatarBorder: avatarBorderColor
+                    }] : []),
+                    ...users.map((u: any) => ({
+                      value: String(u.id),
+                      label: u.full_name || u.name,
+                      avatar: u.avatar || u.avatar_url,
+                      avatarBorder: String(u.id) === String(st.user?.id) ? avatarBorderColor : undefined
+                    }))
+                  ]}
+                  value={st.user ? String(st.user.id) : ''}
+                  onChange={() => {}}
+                  disabled
+                  showAvatars
+                  width="100%"
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                  <span style={{ fontWeight: 600 }}>{st.roleTitle}</span>
+                  {st.approvedAt && <span>{st.approvedAt}</span>}
                 </div>
-                {sDetails.bg === '#10b981' && (
+                {st.status === 'approved' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
+                    {st.stepNumber === 1 ? `Đã gửi lúc ${st.approvedAt || new Date().toLocaleString('vi-VN')}` : st.isPayment ? `✓ Đã chi ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}` : `✓ Đã duyệt ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}`}
                   </span>
                 )}
-                {sDetails.bg === '#ef4444' && (
+                {st.status === 'rejected' && (
                   <span style={{ fontSize: '0.725rem', color: '#ef4444', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✗ Bị từ chối lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
+                    ✗ Bị từ chối {st.approvedAt ? `lúc ${st.approvedAt}` : ''}
                   </span>
                 )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Đang chờ duyệt bởi Admin / Quản lý
+                {st.status === 'pending' && (
+                  <span style={{ 
+                    fontSize: '0.72rem', 
+                    color: '#d97706', 
+                    marginTop: '4px', 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 700,
+                    padding: '3px 9px',
+                    borderRadius: '12px',
+                    background: 'rgba(217, 119, 6, 0.1)',
+                    border: '1px solid rgba(217, 119, 6, 0.25)',
+                    boxShadow: '0 1px 3px rgba(217, 119, 6, 0.08)'
+                  }}>
+                    <Clock size={12} strokeWidth={2.5} />
+                    <span>{st.stepNumber === 1 ? 'Đang thực hiện' : (st.isPayment ? 'Chờ thanh toán' : 'Chờ phê duyệt')}</span>
+                    {st.waitingSince && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        color: '#b45309',
+                        marginLeft: '3px',
+                        paddingLeft: '6px',
+                        borderLeft: '1px solid rgba(217, 119, 6, 0.3)'
+                      }}>
+                        Đã chờ {formatWaitDuration(st.waitingSince)}
+                      </span>
+                    )}
                   </span>
                 )}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Step 3: Level 2 Approver (Optional) */}
-        {stepL2Num && (() => {
-          const sDetails = getStepStatus('level2', stepL2Num);
-          const approverUser = users.find(u => Number(u.id) === Number(viewItem.approver_id_2)) || {
-            id: viewItem.approver_id_2,
-            full_name: 'Người duyệt Cấp 2',
-            avatar_url: undefined,
-            role: 'Người duyệt Cấp 2'
-          };
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Phê duyệt Cấp 2</strong>
-                  {sDetails.showBell && approverUser.id && (
-                    <button 
-                      onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                      title="Gửi nhắc nhở"
-                    >
-                      <Bell size={18} fill="#ef4444" />
-                    </button>
-                  )}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={approverUser.avatar_url} 
-                    name={approverUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {approverUser.full_name} ({approverUser.role || 'Người duyệt'})
-                  </span>
-                </div>
-                {sDetails.bg === '#10b981' && (
-                  <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Đang chờ duyệt Cấp 2
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-border-light)' && (
+                {st.status === 'not_reached' && (
                   <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Sẽ thực hiện sau khi Cấp 1 duyệt
+                    {st.customNotReachedText || 'Sẽ thực hiện sau khi đề xuất được duyệt'}
                   </span>
+                )}
+                {st.notes && (
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'var(--color-bg-secondary)', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--color-text)', borderLeft: '3px solid var(--color-primary)', fontStyle: 'italic' }}>
+                    "{st.notes}"
+                  </div>
                 )}
               </div>
             </div>
           );
-        })()}
-
-        {/* Step 4: Level 3 Approver (Optional) */}
-        {stepL3Num && (() => {
-          const sDetails = getStepStatus('level3', stepL3Num);
-          const approverUser = users.find(u => Number(u.id) === Number(viewItem.approver_id_3)) || {
-            id: viewItem.approver_id_3,
-            full_name: 'Người duyệt Cấp 3',
-            avatar_url: undefined,
-            role: 'Người duyệt Cấp 3'
-          };
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Phê duyệt Cấp 3</strong>
-                  {sDetails.showBell && approverUser.id && (
-                    <button 
-                      onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                      title="Gửi nhắc nhở"
-                    >
-                      <Bell size={18} fill="#ef4444" />
-                    </button>
-                  )}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={approverUser.avatar_url} 
-                    name={approverUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {approverUser.full_name} ({approverUser.role || 'Người duyệt'})
-                  </span>
-                </div>
-                {sDetails.bg === '#10b981' && (
-                  <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Đang chờ duyệt Cấp 3
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-border-light)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Sẽ thực hiện sau khi Cấp 2 duyệt
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Step 5: Accountant Payment */}
-        {(() => {
-          const sDetails = getStepStatus('payment', stepPaymentNum);
-          const defaultAccountant = users.find(u => String(u.role).toLowerCase() === 'accountant') || users.find(u => ['admin', 'superadmin'].includes(String(u.role).toLowerCase())) || {
-            id: 1001,
-            full_name: 'Kế toán / Thủ quỹ',
-            avatar_url: undefined,
-            role: 'Thủ quỹ'
-          };
-          const refunderUser = viewItem.is_refunded ? {
-            id: viewItem.refunder_id,
-            full_name: viewItem.refunder_name || 'Kế toán / Thủ quỹ',
-            avatar_url: viewItem.refunder_avatar,
-            role: 'Kế toán chi'
-          } : defaultAccountant;
-
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Hạch toán thanh toán thực tế</strong>
-                  {sDetails.showBell && refunderUser.id && (
-                    <button 
-                      onClick={() => { setReminderTargetUser(refunderUser); setReminderMessage(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                      title="Gửi nhắc nhở"
-                    >
-                      <Bell size={18} fill="#ef4444" />
-                    </button>
-                  )}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={refunderUser.avatar_url || refunderUser.avatar} 
-                    name={refunderUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {refunderUser.full_name} ({refunderUser.role || 'Kế toán'})
-                  </span>
-                </div>
-                {sDetails.bg === '#10b981' && (
-                  <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã chi lúc {viewItem.refunded_at ? new Date(viewItem.refunded_at).toLocaleString('vi-VN') : '—'}
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Chờ kế toán xác nhận thanh toán thực tế (Tải ảnh UNC)
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-border-light)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Sẽ thực hiện sau khi đề xuất được duyệt
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+        })}
       </div>
     );
   };
@@ -740,63 +717,92 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
     }
   };
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (expenseId) {
+      setIsClosing(false);
+    }
+  }, [expenseId]);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && expenseId) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [expenseId, isClosing]);
+
   if (!expenseId || !viewItem) return null;
 
   return createPortal(
     <AnimatePresence>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
-        <motion.div
-          className="drawer-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 2000000005,
-            background: 'rgba(0, 0, 0, 0.45)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)'
-          }}
-        />
+      {!isClosing && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
+          <motion.div
+            className="drawer-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            onClick={handleClose}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2000000005,
+              background: 'rgba(0, 0, 0, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)'
+            }}
+          />
 
-        {/* Drawer Sheet Panel */}
-        <motion.div
-          initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-          animate={{ y: 0, x: 0, opacity: 1 }}
-          exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-          transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
-          onClick={e => e.stopPropagation()}
-          style={{
-            position: 'fixed',
-            top: 0,
-            bottom: 0,
-            left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
-            right: 0,
-            width: isMobile ? '100vw' : 'auto',
-            height: isMobile ? '100dvh' : '100vh',
-            backgroundColor: 'var(--color-surface)',
-            boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 2000000010,
-            overflow: 'hidden'
-          }}
-        >
-          {/* Header */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '1.25rem 1.5rem',
-            borderBottom: '1px solid var(--color-border)',
-            background: 'var(--color-surface)',
-            flexShrink: 0
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={onClose}
+          {/* Drawer Sheet Panel */}
+          <motion.div
+            initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
+            animate={{ y: 0, x: 0, opacity: 1 }}
+            exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: 0,
+              bottom: 0,
+              left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+              right: 0,
+              width: isMobile ? '100vw' : 'auto',
+              height: isMobile ? '100dvh' : '100vh',
+              backgroundColor: 'var(--color-surface)',
+              boxShadow: isMobile ? 'none' : '-10px 0 30px rgba(0, 0, 0, 0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 2000000010,
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              flexShrink: 0
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={handleClose}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -1164,6 +1170,115 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 );
               })()}
 
+              {/* Bảng kê chi tiết chi phí (nếu có các dòng chi phí con) */}
+              {(() => {
+                const parseExpenseLineItems = (text: string, directItems?: any) => {
+                  if (Array.isArray(directItems) && directItems.length > 0) return directItems;
+                  if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
+                    try {
+                      const parsed = JSON.parse(directItems);
+                      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    } catch (e) {}
+                  }
+                  if (!text) return null;
+                  const jsonMatch = text.match(/\[JSON_ITEMS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+                  if (jsonMatch) {
+                    try {
+                      const parsed = JSON.parse(jsonMatch[1]);
+                      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    } catch (e) {}
+                  }
+                  const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
+                  if (blockMatch) {
+                    const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
+                    const parsedItems: any[] = [];
+                    for (const line of lines) {
+                      if (/^Tổng cộng/i.test(line)) continue;
+                      const m = line.match(/^(\d+)[\.\)]\s*(.*?)(?:\s*\(SL:\s*([\d\.,]+)\s*x\s*([\d\.,]+)\s*đ\s*=\s*([\d\.,]+)\s*đ\))?$/i);
+                      if (m) {
+                        const stt = parseInt(m[1]);
+                        const name = m[2].trim();
+                        const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
+                        const price = m[4] ? parseFloat(m[4].replace(/\./g, '').replace(',', '.')) : 0;
+                        const amt = m[5] ? parseFloat(m[5].replace(/\./g, '').replace(',', '.')) : 0;
+                        parsedItems.push({ stt, name, quantity: qty, unit_price: price, amount: amt, total: amt });
+                      }
+                    }
+                    if (parsedItems.length > 0) return parsedItems;
+                  }
+                  return null;
+                };
+
+                const expenseItems = parseExpenseLineItems(viewItem.notes || viewItem.description || '', viewItem.items);
+                if (!expenseItems || expenseItems.length === 0) return null;
+
+                return (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    padding: '1.25rem',
+                    background: '#ffffff',
+                    borderRadius: '16px',
+                    border: '1px solid var(--color-border-light)',
+                    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Receipt size={16} style={{ color: 'var(--color-primary)' }} />
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Bảng kê chi tiết chi phí ({expenseItems.length} dòng)
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 800 }}>
+                        Tổng: {FMT(expenseItems.reduce((sum: number, it: any) => sum + (Number(it.amount) || Number(it.total) || (Number(it.quantity || 1) * Number(it.unit_price || 0))), 0), viewItem.currency)}
+                      </span>
+                    </div>
+                    <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                            <th style={{ padding: '8px 10px', width: '35px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>#</th>
+                            <th style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Nội dung chi phí</th>
+                            <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>SL</th>
+                            <th style={{ padding: '8px 10px', width: '100px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Đơn giá</th>
+                            <th style={{ padding: '8px 10px', width: '110px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>Thành tiền</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {expenseItems.map((it: any, idx: number) => {
+                            const qty = Number(it.quantity || it.qty || 1);
+                            const unitPrice = Number(it.unit_price || it.price || 0);
+                            const lineTotal = Number(it.amount) || Number(it.total) || (qty * unitPrice);
+                            return (
+                              <tr key={idx} style={{ borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-light)' }}>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
+                                  {it.stt || (idx + 1)}
+                                </td>
+                                <td style={{ padding: '8px 10px', fontWeight: 650, color: 'var(--color-text)' }}>
+                                  {it.name || it.description || 'Chi phí'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  <span style={{ padding: '2px 6px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 700, fontSize: '0.72rem' }}>
+                                    {qty}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                  {FMT(unitPrice, viewItem.currency)}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                                  {FMT(lineTotal, viewItem.currency)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Action Buttons 50/50 below money banner */}
               {isMyTurnToApprove(viewItem) && (
                 <div style={{ display: 'flex', gap: '12px', width: '100%', flexShrink: 0 }}>
@@ -1227,7 +1342,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Người tạo</span>
                     <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Avatar src={viewItem.creator_avatar} name={viewItem.creator_name} size={18} />
+                      <div style={getAvatarStatusRingStyle('approved')}>
+                        <Avatar src={viewItem.creator_avatar} name={viewItem.creator_name} size={18} />
+                      </div>
                       {viewItem.creator_name}
                     </span>
                   </div>
@@ -1246,7 +1363,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                              <div style={getAvatarStatusRingStyle('approved')}>
+                                <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                              </div>
                               {viewItem.approver_name}
                               {hasL2 && <span style={{ fontSize: '0.7rem', color: 'var(--color-success)', fontWeight: 600 }}>(Đã duyệt)</span>}
                             </span>
@@ -1263,7 +1382,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                              <div style={getAvatarStatusRingStyle('rejected')}>
+                                <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                              </div>
                               {viewItem.approver_name}
                               <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>(Từ chối)</span>
                             </span>
@@ -1278,7 +1399,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <Avatar src={approver2?.avatar_url} name={approver2?.full_name || 'Người duyệt Cấp 2'} size={18} />
+                              <div style={getAvatarStatusRingStyle('pending')}>
+                                <Avatar src={approver2?.avatar_url} name={approver2?.full_name || 'Người duyệt Cấp 2'} size={18} />
+                              </div>
                               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                 {approver2?.full_name || 'Người duyệt Cấp 2'}
                               </span>
@@ -1298,7 +1421,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <Avatar src={approver3?.avatar_url} name={approver3?.full_name || 'Người duyệt Cấp 3'} size={18} />
+                              <div style={getAvatarStatusRingStyle('pending')}>
+                                <Avatar src={approver3?.avatar_url} name={approver3?.full_name || 'Người duyệt Cấp 3'} size={18} />
+                              </div>
                               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                 {approver3?.full_name || 'Người duyệt Cấp 3'}
                               </span>
@@ -1314,7 +1439,9 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                       if (viewItem.approver_name) {
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                            <div style={getAvatarStatusRingStyle('pending')}>
+                              <Avatar src={viewItem.approver_avatar} name={viewItem.approver_name} size={18} />
+                            </div>
                             <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
                               {viewItem.approver_name}
                             </span>
@@ -1359,6 +1486,11 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                         .replace(/Thụ hưởng[^:]*:[^\n]*/gi, '')
                         .replace(/Hình thức:[^\n]*/gi, '')
                         .replace(/DANH SÁCH VĂN PHÒNG PHẨM[\s\S]*?(?=\n\n|$)/gi, '')
+                        .replace(/\[Bảng chi tiết thanh toán\]:[\s\S]*?(?=\n\n\[|\n\[|$)/gi, '')
+                        .replace(/\[JSON_ITEMS\]:[^\n]*/gi, '')
+                        .replace(/\[APPROVAL_STEPS\]:[^\n]*/gi, '')
+                        .replace(/\[Từ MISA AMIS #[^\]]*\]:[^\n]*/gi, '')
+                        .replace(/Quy trình:\s*[^\n]+/gi, '')
                         .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*?(?=\n\n|$)/gi, '')
                         .replace(/^Số tiền:\s*0\s*đ\.\s*Ghi chú:\s*"?/i, '')
                         .replace(/"$/, '')
@@ -1418,6 +1550,150 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Refund confirmation for Accountant/Admin if approved but not yet refunded - Placed right above Bank Card */}
+              {viewItem.status === 'approved' && !viewItem.is_refunded && (
+                <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Wallet size={16} style={{ color: 'var(--color-warning)' }} /> Hạch toán thanh toán khoản chi
+                  </h4>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Khoản chi đã được duyệt. Tải lên ảnh UNC hoặc Biên lai thanh toán để hoàn tất hạch toán thực chi.</p>
+                  
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                    <div 
+                      onClick={() => document.getElementById('refund-image-upload-drawer')?.click()}
+                      style={{
+                        width: '120px',
+                        height: '120px',
+                        border: '2px dashed var(--color-border)',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'var(--color-surface)',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        flexShrink: 0
+                      }}
+                    >
+                      {uploadingRefund ? (
+                        <Loader2 size={24} className="spin text-primary" />
+                      ) : refundImgUrl ? (
+                        <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(refundImgUrl) ? (
+                            <img 
+                              src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
+                              alt="Refund proof" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '4px' }}>
+                              <FileText size={22} style={{ color: 'var(--color-primary)' }} />
+                              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text)', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {refundImgUrl.split('/').pop()}
+                              </span>
+                            </div>
+                          )}
+                          <button 
+                            style={{
+                              position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRefundImgUrl('');
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
+                          <Upload size={22} style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
+                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải tệp / UNC</span>
+                        </div>
+                      )}
+                      <input 
+                        type="file" 
+                        id="refund-image-upload-drawer" 
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*" 
+                        style={{ display: 'none' }} 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploadingRefund(true);
+                          try {
+                            let fileToUpload: File = file;
+                            if (file.type.startsWith('image/')) {
+                              try {
+                                const webpBlob = await compressToWebP(file);
+                                fileToUpload = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
+                              } catch (cErr) {
+                                fileToUpload = file;
+                              }
+                            }
+                            const fd = new FormData();
+                            fd.append('file', fileToUpload);
+                            const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                            if (res.data && res.data.data?.url) {
+                              setRefundImgUrl(res.data.data.url);
+                            } else {
+                              addToast('Lỗi tải tệp', 'error');
+                            }
+                          } catch (err: any) {
+                            addToast('Lỗi tải tệp: ' + err.message, 'error');
+                          } finally {
+                            setUploadingRefund(false);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                        {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng chọn chứng từ chuyển khoản để xác thực.'}
+                      </span>
+                      <button 
+                        className="btn success" 
+                        disabled={submittingRefund || !refundImgUrl}
+                        onClick={async () => {
+                          setSubmittingRefund(true);
+                          try {
+                            await api.put(`/expenses/${viewItem.id}`, { 
+                              is_refunded: 1, 
+                              refund_image_url: refundImgUrl 
+                            });
+                            addToast('Đã xác nhận thanh toán', 'success');
+                            fetchExpenseDetails(viewItem.id);
+                            if (onStatusChange) onStatusChange();
+                          } catch (e: any) {
+                            addToast('Lỗi khi cập nhật thanh toán: ' + (e.response?.data?.message || e.message), 'error');
+                          } finally {
+                            setSubmittingRefund(false);
+                          }
+                        }}
+                        style={{ 
+                          background: refundImgUrl ? 'var(--color-success)' : 'var(--color-text-muted)', 
+                          opacity: refundImgUrl ? 1 : 0.6, 
+                          color: 'white', 
+                          border: 'none', 
+                          height: '36px', 
+                          fontWeight: 700, 
+                          padding: '0 16px', 
+                          borderRadius: '8px', 
+                          cursor: refundImgUrl ? 'pointer' : 'not-allowed',
+                          width: 'fit-content',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {submittingRefund ? 'Đang cập nhật...' : 'Xác nhận đã thanh toán'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Bank Transfer Info parsed from notes or description */}
               {(() => {
@@ -2126,12 +2402,8 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   const candFile = getCleanFileName(candidate);
                   const candNorm = normalizeImgPath(candidate);
                   return extractedImgs.some(existing => {
-                    if (existing === candidate) return true;
-                    const exFile = getCleanFileName(existing);
                     const exNorm = normalizeImgPath(existing);
-                    if (candFile && exFile && candFile === exFile) return true;
-                    if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
-                    return false;
+                    return candNorm === exNorm;
                   });
                 };
 
@@ -2139,7 +2411,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                   extractedImgs.push(viewItem.image_url);
                 }
                 if (viewItem.notes) {
-                  const matches = viewItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+                  const matches = viewItem.notes.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\r\n)]+|\/backend\/[^\r\n)]+|uploads\/[^\r\n)]+)\)/gi);
                   for (const m of matches) {
                     const url = m[2].trim();
                     if (url && !isImgDuplicate(url)) {
@@ -2355,149 +2627,6 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
                 );
               })()}
 
-              {/* Refund confirmation for Accountant/Admin if approved but not yet refunded */}
-              {viewItem.status === 'approved' && !viewItem.is_refunded && (
-                <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Wallet size={16} style={{ color: 'var(--color-warning)' }} /> Hạch toán thanh toán khoản chi
-                  </h4>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Khoản chi đã được duyệt. Tải lên ảnh UNC hoặc Biên lai thanh toán để hoàn tất hạch toán thực chi.</p>
-                  
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
-                    <div 
-                      onClick={() => document.getElementById('refund-image-upload-drawer')?.click()}
-                      style={{
-                        width: '120px',
-                        height: '120px',
-                        border: '2px dashed var(--color-border)',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'var(--color-surface)',
-                        overflow: 'hidden',
-                        position: 'relative',
-                        flexShrink: 0
-                      }}
-                    >
-                      {uploadingRefund ? (
-                        <Loader2 size={24} className="spin text-primary" />
-                      ) : refundImgUrl ? (
-                        <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(refundImgUrl) ? (
-                            <img 
-                              src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
-                              alt="Refund proof" 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                            />
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '4px' }}>
-                              <FileText size={22} style={{ color: 'var(--color-primary)' }} />
-                              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text)', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {refundImgUrl.split('/').pop()}
-                              </span>
-                            </div>
-                          )}
-                          <button 
-                            style={{
-                              position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRefundImgUrl('');
-                            }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
-                          <Upload size={22} style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
-                          <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải tệp / UNC</span>
-                        </div>
-                      )}
-                      <input 
-                        type="file" 
-                        id="refund-image-upload-drawer" 
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*" 
-                        style={{ display: 'none' }} 
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setUploadingRefund(true);
-                          try {
-                            let fileToUpload: File = file;
-                            if (file.type.startsWith('image/')) {
-                              try {
-                                const webpBlob = await compressToWebP(file);
-                                fileToUpload = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
-                              } catch (cErr) {
-                                fileToUpload = file;
-                              }
-                            }
-                            const fd = new FormData();
-                            fd.append('file', fileToUpload);
-                            const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-                            if (res.data && res.data.data?.url) {
-                              setRefundImgUrl(res.data.data.url);
-                            } else {
-                              addToast('Lỗi tải tệp', 'error');
-                            }
-                          } catch (err: any) {
-                            addToast('Lỗi tải tệp: ' + err.message, 'error');
-                          } finally {
-                            setUploadingRefund(false);
-                          }
-                        }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                        {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng chọn chứng từ chuyển khoản để xác thực.'}
-                      </span>
-                      <button 
-                        className="btn success" 
-                        disabled={submittingRefund || !refundImgUrl}
-                        onClick={async () => {
-                          setSubmittingRefund(true);
-                          try {
-                            await api.put(`/expenses/${viewItem.id}`, { 
-                              is_refunded: 1, 
-                              refund_image_url: refundImgUrl 
-                            });
-                            addToast('Đã xác nhận thanh toán', 'success');
-                            fetchExpenseDetails(viewItem.id);
-                            if (onStatusChange) onStatusChange();
-                          } catch (e: any) {
-                            addToast('Lỗi khi cập nhật thanh toán: ' + (e.response?.data?.message || e.message), 'error');
-                          } finally {
-                            setSubmittingRefund(false);
-                          }
-                        }}
-                        style={{ 
-                          background: refundImgUrl ? 'var(--color-success)' : 'var(--color-text-muted)', 
-                          opacity: refundImgUrl ? 1 : 0.6, 
-                          color: 'white', 
-                          border: 'none', 
-                          height: '36px', 
-                          fontWeight: 700, 
-                          padding: '0 16px', 
-                          borderRadius: '8px', 
-                          cursor: refundImgUrl ? 'pointer' : 'not-allowed',
-                          width: 'fit-content',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        {submittingRefund ? 'Đang cập nhật...' : 'Xác nhận đã thanh toán'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
             )}
 
@@ -2680,6 +2809,7 @@ export const ExpenseQuickViewDrawer: React.FC<ExpenseQuickViewDrawerProps> = ({
           </div>
         </motion.div>
       </div>
+      )}
       {reminderTargetUser && (
         <div style={{
           position: 'fixed',

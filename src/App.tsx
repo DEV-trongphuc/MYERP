@@ -572,6 +572,7 @@ const KeyboardShortcutsController = () => {
 };
 
 import { UploadProgressProvider } from './contexts/UploadProgressContext';
+import { preloadWorkspaceWallpapers } from './components/ui/WorkspaceCustomizerModal';
 
 export default function App() {
   useEffect(() => {
@@ -582,6 +583,8 @@ export default function App() {
       document.documentElement.setAttribute('data-theme', 'light');
     }
     localStorage.setItem('Ideas_global_date', getDefaultDateFilter());
+    // Ưu tiên nạp ngầm toàn bộ hình nền workspace ngay khi vào app
+    preloadWorkspaceWallpapers();
   }, []);
 
   return (

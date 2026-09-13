@@ -685,6 +685,12 @@ class FinanceController
             $params[] = $status;
         }
 
+        $creatorId = $_GET['created_by'] ?? $_GET['creator_id'] ?? '';
+        if ($creatorId !== '') {
+            $where[] = 'e.created_by = ?';
+            $params[] = (int)$creatorId;
+        }
+
         $includeZeroAdmin = ($_GET['include_zero_admin'] ?? '') === '1';
         if (!$includeZeroAdmin) {
             $where[] = '(e.amount > 0 OR (e.notes NOT LIKE "%DANH SÁCH VĂN PHÒNG PHẨM%" AND e.title NOT LIKE "%văn phòng phẩm%" AND e.notes NOT LIKE "%Quy trình: In, đóng dấu%"))';
@@ -742,10 +748,6 @@ class FinanceController
             return;
         }
 
-        $cnt = $this->db->prepare("SELECT COUNT(*) FROM expenses e WHERE $w");
-        $cnt->execute($params);
-        $total = (int) $cnt->fetchColumn();
-
         $stmt = $this->db->prepare("
             SELECT e.*, u.full_name as creator_name, u.avatar_url as creator_avatar, 
                    u2.full_name as approver_name, u2.avatar_url as approver_avatar,
@@ -785,9 +787,10 @@ class FinanceController
         // Summary totals respecting filters
         $sTotal = $this->db->prepare("SELECT COALESCE(SUM(e.amount),0) as total, COALESCE(SUM(CASE WHEN e.status='approved' THEN e.amount END),0) as approved, COALESCE(SUM(CASE WHEN e.status='pending' THEN e.amount END),0) as pending, COUNT(*) as total_count, COALESCE(SUM(CASE WHEN e.status='approved' THEN 1 ELSE 0 END),0) as approved_count, COALESCE(SUM(CASE WHEN e.status='pending' THEN 1 ELSE 0 END),0) as pending_count FROM expenses e WHERE $w");
         $sTotal->execute($params);
-        $currentSummary = $sTotal->fetch();
+        $currentSummary = $sTotal->fetch() ?: [];
+        $total = (int)($currentSummary['total_count'] ?? 0);
 
-        $sMax = $this->db->prepare("SELECT amount, title FROM expenses e WHERE $w ORDER BY e.amount DESC LIMIT 1");
+        $sMax = $this->db->prepare("SELECT id, amount, title FROM expenses e WHERE $w ORDER BY e.amount DESC LIMIT 1");
         $sMax->execute($params);
         $maxItem = $sMax->fetch() ?: null;
 
@@ -857,6 +860,7 @@ class FinanceController
             'total_count' => (int)$currentSummary['total_count'],
             'approved_count' => (int)$currentSummary['approved_count'],
             'pending_count' => (int)$currentSummary['pending_count'],
+            'max_id' => $maxItem ? (int)$maxItem['id'] : null,
             'max_amount' => $maxItem ? (float)$maxItem['amount'] : 0.0,
             'max_title' => $maxItem ? $maxItem['title'] : '',
             'prev_total' => $prevTotal,
@@ -923,6 +927,9 @@ class FinanceController
             $ee['name'] = trim($ee['full_name'] ?? '');
         }
         $row['entities'] = $entities;
+        if (!empty($row['approval_steps']) && is_string($row['approval_steps'])) {
+            $row['approval_steps'] = json_decode($row['approval_steps'], true);
+        }
 
         respond(200, $row);
     }
@@ -998,16 +1005,24 @@ class FinanceController
             $approval_status = 'approved';
         }
 
+        $currency = !empty($data['currency']) ? trim($data['currency']) : null;
+        if (class_exists('HRMController')) {
+            $currency = HRMController::detectExpenseCurrency($data['title'], $data['notes'] ?? '', $data['items'] ?? null, $currency);
+        } else {
+            $currency = $currency ?: 'VND';
+        }
+        $itemsJson = !empty($data['items']) ? (is_string($data['items']) ? $data['items'] : json_encode($data['items'], JSON_UNESCAPED_UNICODE)) : null;
+
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO expenses (
-                    tenant_id, created_by, title, category, amount, vat_amount, date, status, notes,
-                    vendor_name, has_vat_invoice, is_vat_inclusive, image_url,
+                    tenant_id, created_by, title, category, amount, currency, vat_amount, date, status, notes,
+                    items, vendor_name, has_vat_invoice, is_vat_inclusive, image_url,
                     approver_id, approver_id_2, approver_id_3,
                     status_level_1, status_level_2, status_level_3, approval_status, related_user_ids
                 )
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ");
             $stmt->execute([
                 $auth['tenant_id'],
@@ -1015,10 +1030,12 @@ class FinanceController
                 $data['title'],
                 $data['category'] ?? 'Khác',
                 $totalAmount,
+                $currency,
                 $data['vat_amount'] ?? 0,
                 $data['date'] ?? date('Y-m-d'),
                 $statusVal,
                 $data['notes'] ?? null,
+                $itemsJson,
                 $data['vendor_name'] ?? null,
                 $data['has_vat_invoice'] ?? 0,
                 $data['is_vat_inclusive'] ?? 0,
@@ -1136,10 +1153,12 @@ class FinanceController
             'title',
             'category',
             'amount',
+            'currency',
             'vat_amount',
             'date',
             'status',
             'notes',
+            'items',
             'vendor_name',
             'has_vat_invoice',
             'is_vat_inclusive',
@@ -1153,6 +1172,9 @@ class FinanceController
             'approval_status',
             'related_user_ids'
         ];
+        if (array_key_exists('items', $data) && is_array($data['items'])) {
+            $data['items'] = json_encode($data['items'], JSON_UNESCAPED_UNICODE);
+        }
         if (array_key_exists('related_user_ids', $data)) {
             if (is_array($data['related_user_ids'])) {
                 $data['related_user_ids'] = json_encode($data['related_user_ids']);
@@ -1204,7 +1226,7 @@ class FinanceController
                 respond(404, null, 'Không tìm thấy hoặc không có quyền', false);
 
             $isCreator = (int)($row['created_by'] ?? 0) === (int)$auth['user_id'];
-            $updatingGeneralFields = !empty(array_intersect(array_keys($data), ['title', 'category', 'amount', 'vat_amount', 'date', 'notes', 'vendor_name', 'entities']));
+            $updatingGeneralFields = !empty(array_intersect(array_keys($data), ['title', 'category', 'amount', 'currency', 'items', 'vat_amount', 'date', 'notes', 'vendor_name', 'entities']));
             if (!$isCreator && $updatingGeneralFields) {
                 respond(403, null, 'Chỉ người tạo phiếu mới có quyền chỉnh sửa chi phí', false);
             }
@@ -1480,6 +1502,7 @@ class FinanceController
 
             // Update status of current level
             $levelStatusField = "status_level_" . $currentLevel;
+            $levelTimeField = ($currentLevel === 1) ? 'approved_at' : (($currentLevel === 2) ? 'approved_at_2' : 'approved_at_3');
             $nextApprovalStatus = $expenseRow['approval_status'];
             $nextStatus = $expenseRow['status'];
 
@@ -1487,8 +1510,8 @@ class FinanceController
                 $nextApprovalStatus = 'rejected';
                 $nextStatus = 'rejected';
                 
-                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField=?, approver_id=?, approved_at=NOW(), reject_reason=? WHERE id=?")
-                    ->execute(['rejected', 'rejected', 'rejected', $userId, $data['reject_reason'] ?? null, $id]);
+                $this->db->prepare("UPDATE expenses SET status='rejected', approval_status='rejected', $levelStatusField='rejected', $levelTimeField=NOW(), reject_reason=? WHERE id=?")
+                    ->execute([$data['reject_reason'] ?? null, $id]);
             } else {
                 $hasLevel2 = !empty($expenseRow['approver_id_2']) && $expenseRow['status_level_2'] !== 'none';
                 $hasLevel3 = !empty($expenseRow['approver_id_3']) && $expenseRow['status_level_3'] !== 'none';
@@ -1514,9 +1537,8 @@ class FinanceController
                     $nextStatus = 'approved';
                 }
 
-                $approvedAtVal = ($nextStatus === 'approved') ? 'NOW()' : 'NULL';
-                $approvedByVal = ($nextStatus === 'approved') ? (int)$userId : 'NULL';
-                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', approved_at=" . $approvedAtVal . ", approved_by=" . $approvedByVal . " WHERE id=?")
+                $setApprovedBy = ($nextStatus === 'approved') ? ", approved_by = " . (int)$userId : "";
+                $this->db->prepare("UPDATE expenses SET status=?, approval_status=?, $levelStatusField='approved', $levelTimeField=NOW() $setApprovedBy WHERE id=?")
                     ->execute([$nextStatus, $nextApprovalStatus, $id]);
             }
 

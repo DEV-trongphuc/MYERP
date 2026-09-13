@@ -2019,6 +2019,38 @@ class HRMController {
         return count($this->fetchPendingApprovals($auth));
     }
 
+    public static function detectExpenseCurrency(?string $title, ?string $notes = null, $items = null, ?string $currentCurrency = null): string {
+        if (!empty($currentCurrency) && strtoupper(trim($currentCurrency)) === 'USD') {
+            return 'USD';
+        }
+        if (!empty($currentCurrency) && !in_array(strtoupper(trim($currentCurrency)), ['VND', 'VIETNAMDONG', ''], true)) {
+            return strtoupper(trim($currentCurrency));
+        }
+        $text = mb_strtolower(($title ?? '') . ' ' . ($notes ?? ''));
+        if (!empty($items)) {
+            $text .= ' ' . mb_strtolower(is_string($items) ? $items : json_encode($items, JSON_UNESCAPED_UNICODE));
+        }
+        $isForeignLecturer = (
+            str_contains($text, 'giảng viên nước ngoài') ||
+            str_contains($text, 'giang vien nuoc ngoai') ||
+            str_contains($text, 'giảng viên nn') ||
+            str_contains($text, 'giang vien nn') ||
+            str_contains($text, 'thù lao giảng viên nn') ||
+            str_contains($text, 'thù lao gv nn') ||
+            str_contains($text, 'thù lao gvnn') ||
+            str_contains($text, 'oleh_tymchuk') ||
+            str_contains($text, 'dr. alvin chan') ||
+            str_contains($text, 'dr. walid ghodbane') ||
+            str_contains($text, 'dr. serge nyawa') ||
+            str_contains($text, 'dr. bruce hearn') ||
+            str_contains($text, 'prof. julien sicard')
+        );
+        if ($isForeignLecturer) {
+            return 'USD';
+        }
+        return !empty($currentCurrency) ? $currentCurrency : 'VND';
+    }
+
     public function getApprovalsOverview(array $auth): void {
         respond(200, [
             'pending' => $this->fetchPendingApprovals($auth),
@@ -2233,9 +2265,9 @@ class HRMController {
 
         // 3. Pending Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.created_by, u.full_name as employee_name, e.title, e.amount, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
+            SELECT e.id, e.created_by, u.full_name as employee_name, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3, e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.approved_by, e.approved_at, e.related_user_ids, e.image_url,
+                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps, e.related_user_ids, e.image_url, e.items,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -2306,9 +2338,7 @@ class HRMController {
                 }
                 $displayTitle .= $levelText;
                 
-                $displayDesc = $isZeroAmt 
-                    ? ($e['notes'] ?: $e['description'] ?: '')
-                    : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+                $displayDesc = $e['notes'] ?: $e['description'] ?: '';
 
                 $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
                 if (!is_array($relArr)) {
@@ -2330,15 +2360,19 @@ class HRMController {
                     'approved_by' => (int)($e['approved_by'] ?? 0),
                     'approved_by_name' => $e['approved_by_name'] ?? null,
                     'approved_at' => $e['approved_at'] ?? null,
+                    'approved_at_2' => $e['approved_at_2'] ?? null,
+                    'approved_at_3' => $e['approved_at_3'] ?? null,
+                    'approval_steps' => !empty($e['approval_steps']) ? (is_string($e['approval_steps']) ? json_decode($e['approval_steps'], true) : $e['approval_steps']) : null,
                     'status_level_1' => $e['status_level_1'] ?? 'pending',
                     'status_level_2' => $e['status_level_2'] ?? 'none',
                     'status_level_3' => $e['status_level_3'] ?? 'none',
                     'related_user_ids' => $relArr,
                     'image_url' => $e['image_url'] ?? null,
+                    'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
                     'title' => $displayTitle,
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
-                    'currency' => 'VND',
+                    'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
@@ -2584,12 +2618,12 @@ class HRMController {
 
         // 3. My Expenses
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
+            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3,
                    e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.related_user_ids, e.image_url,
+                   e.related_user_ids, e.image_url, e.items,
                    e.created_by as user_id, u.full_name as employee_name,
-                   e.approved_by, e.approved_at,
+                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -2613,9 +2647,7 @@ class HRMController {
                 $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
             }
             
-            $displayDesc = $isZeroAmt 
-                ? ($e['notes'] ?: $e['description'] ?: '')
-                : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+            $displayDesc = $e['notes'] ?: $e['description'] ?: '';
 
             $relArr = !empty($e['related_user_ids']) ? (is_array($e['related_user_ids']) ? $e['related_user_ids'] : json_decode($e['related_user_ids'], true)) : [];
             if (!is_array($relArr)) {
@@ -2637,15 +2669,19 @@ class HRMController {
                 'approved_by' => (int)($e['approved_by'] ?? 0),
                 'approved_by_name' => $e['approved_by_name'] ?? null,
                 'approved_at' => $e['approved_at'] ?? null,
+                'approved_at_2' => $e['approved_at_2'] ?? null,
+                'approved_at_3' => $e['approved_at_3'] ?? null,
+                'approval_steps' => !empty($e['approval_steps']) ? (is_string($e['approval_steps']) ? json_decode($e['approval_steps'], true) : $e['approval_steps']) : null,
                 'status_level_1' => $e['status_level_1'] ?? 'pending',
                 'status_level_2' => $e['status_level_2'] ?? 'none',
                 'status_level_3' => $e['status_level_3'] ?? 'none',
                 'related_user_ids' => $relArr,
                 'image_url' => $e['image_url'] ?? null,
+                'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
                 'title' => $displayTitle,
                 'description' => $displayDesc,
                 'amount' => (float)$e['amount'],
-                'currency' => 'VND',
+                'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                 'category' => $e['category'] ?? 'Vận hành',
                 'date' => $e['date'] ?? null,
                 'notes' => $e['notes'] ?? '',
@@ -2880,11 +2916,11 @@ class HRMController {
 
         // 3. Expenses where user is in related_user_ids
         $stmtExpenses = $this->db->prepare("
-            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
+            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3,
                    e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.created_by as user_id, e.related_user_ids, e.image_url,
-                   e.approved_by, e.approved_at,
+                   e.created_by as user_id, e.related_user_ids, e.image_url, e.items,
+                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps,
                    u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
@@ -2917,9 +2953,7 @@ class HRMController {
                     $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
                 }
                 
-                $displayDesc = $isZeroAmt 
-                    ? ($e['notes'] ?: $e['description'] ?: '')
-                    : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+                $displayDesc = $e['notes'] ?: $e['description'] ?: '';
 
                 $pending[] = [
                     'id' => (int)$e['id'],
@@ -2935,15 +2969,19 @@ class HRMController {
                     'approved_by' => (int)($e['approved_by'] ?? 0),
                     'approved_by_name' => $e['approved_by_name'] ?? null,
                     'approved_at' => $e['approved_at'] ?? null,
+                    'approved_at_2' => $e['approved_at_2'] ?? null,
+                    'approved_at_3' => $e['approved_at_3'] ?? null,
+                    'approval_steps' => !empty($e['approval_steps']) ? (is_string($e['approval_steps']) ? json_decode($e['approval_steps'], true) : $e['approval_steps']) : null,
                     'status_level_1' => $e['status_level_1'] ?? 'pending',
                     'status_level_2' => $e['status_level_2'] ?? 'none',
                     'status_level_3' => $e['status_level_3'] ?? 'none',
                     'related_user_ids' => $relArr,
                     'image_url' => $e['image_url'] ?? null,
+                    'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
                     'title' => $displayTitle,
                     'description' => $displayDesc,
                     'amount' => (float)$e['amount'],
-                    'currency' => 'VND',
+                    'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                     'category' => $e['category'] ?? 'Vận hành',
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
@@ -3182,16 +3220,16 @@ class HRMController {
 
         // 3. All Expenses
         $expSelect = "
-            SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
+            SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3,
                    e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.created_by as user_id, e.related_user_ids, e.image_url,
+                   e.created_by as user_id, e.related_user_ids, e.image_url, e.items,
                    u.full_name as employee_name,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
                    u_real.full_name as approved_by_name,
-                   e.approved_by, e.approved_at
+                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps
             FROM expenses e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN users u_app1 ON e.approver_id = u_app1.id
@@ -3236,9 +3274,7 @@ class HRMController {
                 $displayTitle = 'Yêu cầu chi phí: ' . $e['title'];
             }
             
-            $displayDesc = $isZeroAmt 
-                ? ($e['notes'] ?: $e['description'] ?: '')
-                : ('Số tiền: ' . number_format($e['amount'], 0, ',', '.') . 'đ' . (!empty($e['notes']) ? '. Ghi chú: "' . $e['notes'] . '"' : ''));
+            $displayDesc = $e['notes'] ?: $e['description'] ?: '';
 
             $all[] = [
                 'id' => (int)$e['id'],
@@ -3254,15 +3290,19 @@ class HRMController {
                 'approved_by' => (int)($e['approved_by'] ?? 0),
                 'approved_by_name' => $e['approved_by_name'] ?? null,
                 'approved_at' => $e['approved_at'] ?? null,
+                'approved_at_2' => $e['approved_at_2'] ?? null,
+                'approved_at_3' => $e['approved_at_3'] ?? null,
+                'approval_steps' => !empty($e['approval_steps']) ? (is_string($e['approval_steps']) ? json_decode($e['approval_steps'], true) : $e['approval_steps']) : null,
                 'status_level_1' => $e['status_level_1'] ?? 'pending',
                 'status_level_2' => $e['status_level_2'] ?? 'none',
                 'status_level_3' => $e['status_level_3'] ?? 'none',
                 'related_user_ids' => $relArr,
                 'image_url' => $e['image_url'] ?? null,
+                'items' => !empty($e['items']) ? (is_string($e['items']) ? json_decode($e['items'], true) : $e['items']) : [],
                 'title' => $displayTitle,
                 'description' => $displayDesc,
                 'amount' => (float)$e['amount'],
-                'currency' => 'VND',
+                'currency' => self::detectExpenseCurrency($e['title'], $e['notes'] ?? '', $e['items'] ?? null, $e['currency'] ?? 'VND'),
                 'category' => $e['category'] ?? 'Vận hành',
                 'date' => $e['date'] ?? null,
                 'notes' => $e['notes'] ?? '',

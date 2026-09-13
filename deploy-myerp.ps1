@@ -62,7 +62,8 @@ cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${s
 # Deploy Backend
 if (-not $FrontendOnly) {
     Write-Host "  -> Extracting backend files..." -ForegroundColor Gray
-    cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""tar -xzf - -C ${RemoteDir}/backend/"" < ""$backendArchive"""
+    cmd /c "scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no ""$backendArchive"" ${sshUser}@${sshHost}:${RemoteDir}/${backendArchive}"
+    cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""tar -xzf ${RemoteDir}/${backendArchive} -C ${RemoteDir}/backend/ && rm -f ${RemoteDir}/${backendArchive}"""
     
     # Run migrations / database setup
     Write-Host "  -> Running database migrations on vhvxoigh_myerp..." -ForegroundColor Gray
@@ -76,7 +77,8 @@ if (-not $FrontendOnly) {
 # Deploy Frontend
 if ((-not $BackendOnly) -and (Test-Path "$distArchive")) {
     Write-Host "  -> Extracting frontend dist files to document root..." -ForegroundColor Gray
-    cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""tar -xzf - -C ${RemoteDir}/"" < ""$distArchive"""
+    cmd /c "scp -i $sshKey -P $sshPort -o StrictHostKeyChecking=no ""$distArchive"" ${sshUser}@${sshHost}:${RemoteDir}/${distArchive}"
+    cmd /c "ssh -i $sshKey -4 -p $sshPort -o StrictHostKeyChecking=no ${sshUser}@${sshHost} ""tar -xzf ${RemoteDir}/${distArchive} -C ${RemoteDir}/ && rm -f ${RemoteDir}/${distArchive}"""
 }
 
 # Ensure version.json is present in both root and backend

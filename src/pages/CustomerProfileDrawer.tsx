@@ -43,6 +43,7 @@ import { getModulePermissionScope } from '../store/authStore';
 import { decodeHtmlEntities, stripHtml } from '../utils/textUtils';
 import { VietnameseDateInput } from '../components/ui/VietnameseDateInput';
 import { AppIcon } from '../components/common/AppIcons';
+import { parseTaskBody } from '../utils/taskBodyParser';
 
 const EditHistoryIndicator = ({ history }: { history: any }) => {
   const [showPopup, setShowPopup] = useState(false);
@@ -1149,29 +1150,19 @@ const TimelineItem = React.memo<TimelineItemProps>(({
         {(ev.note || ev.expense_image_url) && (() => {
           const linkMatch = ev.note ? ev.note.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m) : null;
           const linkUrl = linkMatch ? linkMatch[1].trim() : (ev.expense_image_url || '');
-          let displayNoteText = linkMatch ? ev.note.replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '').trim() : (ev.note || '');
-          displayNoteText = displayNoteText
-            .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
-            .replace(/\s*\|\s*Lý do lost:.*$/si, '')
-            .replace(/\s*\|\s*Độ nóng:.*$/si, '')
-            .trim();
-          let currentBody = displayNoteText.trim();
-          let wasParsed = false;
-          while (currentBody.startsWith('{"erp_task"') || currentBody.startsWith('{"erp_task":')) {
-            try {
-              const parsed = JSON.parse(currentBody);
-              wasParsed = true;
-              if (typeof parsed.erp_task?.description === 'string') {
-                currentBody = parsed.erp_task.description.trim();
-              } else {
-                break;
-              }
-            } catch (e) {
-              break;
+          let displayNoteText = '';
+          if (ev.note) {
+            const parsedNote = parseTaskBody(ev.note);
+            displayNoteText = parsedNote.pureDescription || parsedNote.description;
+            if (!displayNoteText) {
+              displayNoteText = ev.note;
             }
-          }
-          if (wasParsed) {
-            displayNoteText = currentBody;
+            displayNoteText = displayNoteText
+              .replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '')
+              .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
+              .replace(/\s*\|\s*Lý do lost:.*$/si, '')
+              .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+              .trim();
           }
 
           const hasContent = displayNoteText.trim() !== '' || 
@@ -1476,11 +1467,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const [drawerOpenComplete, setDrawerOpenComplete] = useState(false);
   const [hasNavigated, setHasNavigated] = useState(false);
   const [showExtractIdModal, setShowExtractIdModal] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setDrawerOpenComplete(false);
       setHasNavigated(false);
+      setIsClosing(false);
+    } else {
+      setIsClosing(false);
     }
   }, [isOpen]);
 
@@ -1963,6 +1958,15 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   }, [formData, tags, isSubmitting, effectiveContactId, onUpdate, addToast]);
 
   const handleClose = useCallback(() => {
+    if (isClosing) return;
+    const performClose = () => {
+      setIsClosing(true);
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 280);
+    };
+
     if (hasChanges) {
       showConfirm({
         title: 'Bỏ qua thay đổi?',
@@ -1972,16 +1976,16 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         cancelText: 'Hủy',
         onConfirm: async () => {
           await handleSave();
-          onClose();
+          performClose();
         },
         onExtra: () => {
-          onClose();
+          performClose();
         }
       });
     } else {
-      onClose();
+      performClose();
     }
-  }, [hasChanges, onClose, showConfirm, handleSave]);
+  }, [hasChanges, onClose, showConfirm, handleSave, isClosing]);
 
   const canDeleteContact = useMemo(() => {
     if (!contact) return false;
@@ -4176,37 +4180,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
           }
           return false;
         }).map((a: any) => {
-          const link = a.body && !a.body.trim().startsWith('{"erp_task"') 
-            ? (a.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '') 
-            : '';
+          const parsedBody = parseTaskBody(a.body);
+          const link = (parsedBody.links?.[0]?.url) || (a.body && !a.body.trim().startsWith('{')
+            ? (a.body.match(/Tài liệu\/Link đính kèm:\s*(.*)$/m)?.[1]?.trim() || '')
+            : '');
           
-          let description = '';
-          if (a.body) {
-            let currentBody = a.body.trim();
-            let wasParsed = false;
-            while (currentBody.startsWith('{"erp_task"') || currentBody.startsWith('{"erp_task":')) {
-              try {
-                const parsed = JSON.parse(currentBody);
-                wasParsed = true;
-                if (typeof parsed.erp_task?.description === 'string') {
-                  currentBody = parsed.erp_task.description.trim();
-                } else {
-                  break;
-                }
-              } catch (e) {
-                break;
-              }
-            }
-            if (wasParsed) {
-              description = currentBody;
-            } else {
-              description = a.body
-                .replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '')
-                .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
-                .replace(/\s*\|\s*Lý do lost:.*$/si, '')
-                .replace(/\s*\|\s*Độ nóng:.*$/si, '')
-                .trim();
-            }
+          let description = parsedBody.pureDescription || parsedBody.description;
+          if (!description && a.body) {
+            description = a.body
+              .replace(/Tài liệu\/Link đính kèm:\s*.*$/m, '')
+              .replace(/\s*\n?\(?Giai đoạn:.*$/si, '')
+              .replace(/\s*\|\s*Lý do lost:.*$/si, '')
+              .replace(/\s*\|\s*Độ nóng:.*$/si, '')
+              .trim();
           }
           return {
             id: a.id,
@@ -4863,25 +4849,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                 }}>
                   {p.stage_name || p.pipeline_status || 'Giai đoạn 1'}
                 </span>
-                {isCurrent && (
-                  <span 
-                    title="Đang xem hồ sơ này"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: stageColor,
-                      background: `${stageColor}18`,
-                      padding: '2px',
-                      borderRadius: '50%',
-                      border: `1px solid ${stageColor}40`,
-                      marginLeft: '2px',
-                      flexShrink: 0
-                    }}
-                  >
-                    <Eye size={11} strokeWidth={2.5} />
-                  </span>
-                )}
               </button>
             );
           })}
@@ -6427,8 +6394,8 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const drawerMotionProps = {
     initial: isMobileOrTablet ? { y: '100%' } : { opacity: 0, x: '250px' },
     animate: { y: 0, x: 0, opacity: 1 },
-    exit: isMobileOrTablet ? { y: '100%' } : { opacity: 0, x: '250px' },
-    transition: { type: 'spring' as const, damping: 30, stiffness: 250, mass: 0.8 },
+    exit: isMobileOrTablet ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 },
+    transition: { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any },
     drag: isMobileOrTablet ? ('y' as const) : false,
     dragConstraints: { top: 0 },
     dragElastic: { top: 0.05, bottom: 0.7 },
@@ -6578,7 +6545,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   const isCurrentlyNurture = formData.lead_status === 'nurture';
   const isCurrentlyLost = formData.lead_status === 'lost';
 
-  // Tự động mở "Ghi chú học viên / ban đầu" nếu là pipeline đầu tiên, ngược lại tự động đóng
+  // Tự động mở "Ghi chú ban đầu" nếu là pipeline đầu tiên, ngược lại tự động đóng
   useEffect(() => {
     if (!isOpen) return;
     const currentStage = getStageFromVal(formData.pipeline_status || 'chua_xac_dinh');
@@ -6771,7 +6738,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
   return createPortal(
     <>
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && !isClosing && (
           <>
             <motion.div
               className="drawer-backdrop"
@@ -6779,7 +6746,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -6793,7 +6760,9 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
               className={styles.drawer}
               {...drawerMotionProps}
               onAnimationComplete={() => {
-                setDrawerOpenComplete(true);
+                if (!isClosing) {
+                  setDrawerOpenComplete(true);
+                }
               }}
               style={{
                 left: isMobileOrTablet ? 0 : 'var(--sidebar-width, 220px)',
@@ -8702,26 +8671,23 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                        ) : (
                                          <button
                                            className={styles.sidebarTabBtn}
-                                           onClick={async () => {
-                                             if (reportReasons.length === 0) {
-                                               try {
-                                                 const res = await api.get('/api.php?action=get_report_context');
-                                                 if (res.data && res.data.success && res.data.data.report_error_reasons) {
-                                                   setReportReasons(res.data.data.report_error_reasons);
-                                                   setReportReasonType(res.data.data.report_error_reasons[0]?.reason || 'Sai số điện thoại / Số ảo');
-                                                 } else {
-                                                   setReportReasonType('Sai số điện thoại / Số ảo');
-                                                 }
-                                               } catch (e) {
-                                                 console.error(e);
-                                                 setReportReasonType('Sai số điện thoại / Số ảo');
-                                               }
-                                             } else {
-                                               setReportReasonType(reportReasons[0]?.reason || 'Sai số điện thoại / Số ảo');
-                                             }
-                                             setReportDetails('');
-                                             setShowReportModal(true);
-                                           }}
+                                            onClick={() => {
+                                              setReportDetails('');
+                                              if (!reportReasonType) {
+                                                setReportReasonType(reportReasons[0]?.reason || 'Sai số điện thoại / Số ảo');
+                                              }
+                                              setShowReportModal(true);
+
+                                              if (reportReasons.length === 0) {
+                                                api.get('/api.php?action=get_settings')
+                                                  .then(res => {
+                                                    if (res.data?.data?.report_error_reasons && Array.isArray(res.data.data.report_error_reasons) && res.data.data.report_error_reasons.length > 0) {
+                                                      setReportReasons(res.data.data.report_error_reasons);
+                                                    }
+                                                  })
+                                                  .catch(() => {});
+                                              }
+                                            }}
                                            style={{
                                              padding: '11px 0.875rem',
                                              fontSize: '0.85rem',
@@ -9045,7 +9011,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}
                           >
                             <FileText size={18} style={{ color: '#eab308' }} />
-                            <h4 className="panel-title" style={{ margin: 0 }}>Ghi chú học viên / ban đầu</h4>
+                            <h4 className="panel-title" style={{ margin: 0 }}>Ghi chú ban đầu</h4>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
@@ -9129,7 +9095,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                   rows={6}
                                   value={formData.notes || ''}
                                   onChange={e => setFormData((prev: any) => ({ ...prev, notes: e.target.value }))}
-                                  placeholder="Nhập ghi chú học viên / ban đầu..."
+                                  placeholder="Nhập ghi chú ban đầu..."
                                   style={{
                                     width: '100%',
                                     background: '#fefce8',
@@ -9179,7 +9145,6 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 fetchContactDocs(effectiveContactId);
                                 setShowExtractIdModal(true);
                               }}
-                              className="hover-lift"
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -9192,8 +9157,19 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                                 color: '#6366f1',
                                 border: '1px solid rgba(99, 102, 241, 0.3)',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: '0 2px 6px rgba(99, 102, 241, 0.12)'
+                                transition: 'all 0.2s ease',
+                                boxShadow: '0 2px 6px rgba(99, 102, 241, 0.12)',
+                                transform: 'none'
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(168, 85, 247, 0.24) 100%)';
+                                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+                                e.currentTarget.style.boxShadow = '0 3px 8px rgba(99, 102, 241, 0.2)';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.16) 100%)';
+                                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                                e.currentTarget.style.boxShadow = '0 2px 6px rgba(99, 102, 241, 0.12)';
                               }}
                               title="Trích xuất Họ tên, CCCD, Passport, Ngày sinh, Địa chỉ từ tệp tài liệu trong hồ sơ bằng AI"
                             >

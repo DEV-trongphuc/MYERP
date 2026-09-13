@@ -858,26 +858,25 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           onMobileClose={() => setIsMobileSidebarOpen(false)}
         />
       )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative' }}>
-        <Header 
-          onActivityFeedClick={() => setIsActivityFeedOpen(true)}
-          onMenuClick={() => setIsMobileSidebarOpen(true)}
-          version={backendVersion}
-          pendingInboxCount={totalPendingInboxCount}
-          onUnifiedInboxClick={() => setIsUnifiedInboxOpen(true)}
-          requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
-          todayCheckIn={todayCheckIn}
-          isCheckInLoading={isCheckInLoading}
-          consultantProfile={consultantProfile}
-          sysSettings={sysSettings}
-        />
+      {(() => {
+        const isWorkspaceRoute = location.pathname === '/workspace' || location.pathname === '/portal';
+        return (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative' }}>
+            <Header 
+              onActivityFeedClick={() => setIsActivityFeedOpen(true)}
+              onMenuClick={() => setIsMobileSidebarOpen(true)}
+              version={backendVersion}
+              pendingInboxCount={totalPendingInboxCount}
+              onUnifiedInboxClick={() => setIsUnifiedInboxOpen(true)}
+              requireCheckout={sysSettings?.require_checkout === '1' || sysSettings?.require_checkout === 1}
+              todayCheckIn={todayCheckIn}
+              isCheckInLoading={isCheckInLoading}
+              consultantProfile={consultantProfile}
+              sysSettings={sysSettings}
+              isWorkspace={isWorkspaceRoute}
+            />
 
-
-
-        {/* Main Content Viewport */}
-        {(() => {
-          const isWorkspaceRoute = location.pathname === '/workspace' || location.pathname === '/portal';
-          return (
+            {/* Main Content Viewport */}
             <main 
               className={`responsive-main ${isWorkspaceRoute ? 'workspace-full-bleed' : ''}`} 
               style={{ 
@@ -893,9 +892,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 {children}
               </div>
             </main>
-          );
-        })()}
-      </div>
+          </div>
+        );
+      })()}
       <AlertToast />
       <QuickAddLeadModal />
 

@@ -928,6 +928,17 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     setShowBulkCreateModal(true);
   };
 
+  const checkLeaveForDate = (dateStr: string) => {
+    if (!dateStr || !calendarLeaves || calendarLeaves.length === 0) return null;
+    return calendarLeaves.find((l: any) => {
+      const s = l.start_date_only || (l.start_date ? String(l.start_date).split('T')[0] : '');
+      const e = l.end_date_only || (l.end_date ? String(l.end_date).split('T')[0] : '');
+      const isMatch = dateStr >= s && dateStr <= e;
+      const isApproved = l.status === 'approved' || l.status === 'pending' || !l.status;
+      return isMatch && isApproved;
+    });
+  };
+
   const handleAddManualDay = () => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -944,17 +955,24 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
         }
       }
     }
+
+    const defaultOut = (user as any)?.work_end_time ? String((user as any).work_end_time).substring(0, 5) : '17:00';
+    const defaultIn = (user as any)?.work_start_time ? String((user as any).work_start_time).substring(0, 5) : '08:00';
+    const matchingLeave = checkLeaveForDate(newDate);
+
     setSuggestedDays(prev => [
       ...prev,
       {
         date: newDate,
-        check_in: '08:00',
-        check_out: '17:30',
+        check_in: defaultIn,
+        check_out: defaultOut,
         reason: '',
         has_check_in: false,
         has_check_out: false,
-        is_on_leave: false,
-        disabled: false
+        is_on_leave: Boolean(matchingLeave),
+        leave_type: matchingLeave ? (matchingLeave.leave_type || matchingLeave.type || t('Đã có đơn nghỉ')) : '',
+        leave_reason: matchingLeave?.reason || '',
+        disabled: Boolean(matchingLeave)
       }
     ]);
   };
@@ -7826,6 +7844,26 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               </span>
             </div>
 
+            {suggestedDays.some(d => d.is_on_leave) && (
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: 'rgba(234, 88, 12, 0.08)',
+                border: '1px solid rgba(234, 88, 12, 0.25)',
+                color: '#c2410c',
+                fontSize: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                lineHeight: 1.4
+              }}>
+                <Info size={16} style={{ flexShrink: 0 }} />
+                <div>
+                  <strong>{t('Lưu ý về ngày nghỉ phép:')}</strong> {t('Các ngày đã có đơn nghỉ phép được duyệt sẽ tự động khóa để bảo vệ bảng lương không bị tính trùng công & phép. Nếu bạn thực tế có đi làm, vui lòng liên hệ hủy đơn nghỉ phép trước khi bổ sung công.')}
+                </div>
+              </div>
+            )}
+
             {suggestedDays.length > 0 ? (
               <div style={{ overflowX: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px', maxHeight: '240px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
@@ -7856,8 +7894,13 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                               <VietnameseDateInput
                                 value={day.date}
                                 onChange={(newDate) => {
+                                  const matchingLeave = checkLeaveForDate(newDate);
                                   const newDays = [...suggestedDays];
                                   newDays[idx].date = newDate;
+                                  newDays[idx].is_on_leave = Boolean(matchingLeave);
+                                  newDays[idx].leave_type = matchingLeave ? (matchingLeave.leave_type || matchingLeave.type || t('Đã có đơn nghỉ')) : '';
+                                  newDays[idx].leave_reason = matchingLeave?.reason || '';
+                                  newDays[idx].disabled = Boolean(matchingLeave);
                                   setSuggestedDays(newDays);
                                 }}
                                 size="sm"

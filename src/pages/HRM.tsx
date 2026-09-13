@@ -151,56 +151,6 @@ export default function HRM() {
     return (isLevel1Active && isLevel1Approver) || (isLevel2Active && isLevel2Approver);
   };
 
-  const renderWorkflowStepsCell = (req: any, type: 'leave' | 'advance') => {
-    const approver1 = profiles.find(p => Number(p.id) === Number(req.approver_id));
-    const approver2 = profiles.find(p => Number(p.id) === Number(req.approver_id_2));
-
-    const isL1Done = req.status_level_1 === 'approved';
-    const isL1Reject = req.status_level_1 === 'rejected';
-    const isL2Done = req.status_level_2 === 'approved';
-    const isL2Reject = req.status_level_2 === 'rejected';
-
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-        {approver1 ? (
-          <div style={{ position: 'relative', display: 'inline-flex' }} title={`${t('Cấp 1')}: ${approver1.full_name} (${isL1Done ? t('Đã duyệt') : isL1Reject ? t('Từ chối') : t('Chờ duyệt')})`}>
-            <div style={{
-              borderRadius: '50%',
-              padding: '1.5px',
-              border: `2px solid ${isL1Done ? '#10b981' : isL1Reject ? '#ef4444' : '#f59e0b'}`
-            }}>
-              <Avatar src={approver1.avatar_url || approver1.avatar} name={approver1.full_name} size={22} />
-            </div>
-            {isL1Done && (
-              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
-            )}
-          </div>
-        ) : (
-          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{t('Cấp 1')}</span>
-        )}
-
-        {approver2 && (
-          <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
-        )}
-
-        {approver2 && (
-          <div style={{ position: 'relative', display: 'inline-flex' }} title={`${t('Cấp 2')}: ${approver2.full_name} (${isL2Done ? t('Đã duyệt') : isL2Reject ? t('Từ chối') : (isL1Done ? t('Chờ duyệt') : t('Chưa đến lượt'))})`}>
-            <div style={{
-              borderRadius: '50%',
-              padding: '1.5px',
-              border: `2px solid ${isL2Done ? '#10b981' : isL2Reject ? '#ef4444' : (isL1Done ? '#f59e0b' : 'var(--color-border)')}`
-            }}>
-              <Avatar src={approver2.avatar_url || approver2.avatar} name={approver2.full_name} size={22} />
-            </div>
-            {isL2Done && (
-              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const profilesMap = useMemo(() => {
     const map = new Map<number, any>();
     profiles.forEach(p => {
@@ -218,6 +168,153 @@ export default function HRM() {
     });
     return map;
   }, [profiles]);
+
+  const renderWorkflowStepsCell = (req: any, type: 'leave' | 'advance') => {
+    const approver1 = profilesMap.get(Number(req.approver_id)) || (req.approver_name ? profilesByNameMap.get(String(req.approver_name).toLowerCase().trim()) : null);
+    const approver2 = profilesMap.get(Number(req.approver_id_2)) || (req.approver_name_2 ? profilesByNameMap.get(String(req.approver_name_2).toLowerCase().trim()) : null);
+    const approver3 = req.approver_id_3 ? (profilesMap.get(Number(req.approver_id_3)) || (req.approver_name_3 ? profilesByNameMap.get(String(req.approver_name_3).toLowerCase().trim()) : null)) : null;
+
+    const overallStatus = String(req.status || 'pending').toLowerCase();
+    const isDraft = overallStatus === 'draft';
+    const isL1Done = req.status_level_1 === 'approved' || overallStatus === 'approved' || overallStatus === 'level1_approved';
+    const isL1Reject = req.status_level_1 === 'rejected' || (overallStatus === 'rejected' && !req.status_level_2);
+    const isL2Done = req.status_level_2 === 'approved' || (overallStatus === 'approved' && Boolean(req.approver_id_2));
+    const isL2Reject = req.status_level_2 === 'rejected';
+
+    const statusText1 = isDraft ? 'Bản nháp' : isL1Done ? 'Đã duyệt' : isL1Reject ? 'Từ chối' : 'Chờ duyệt';
+    const statusText2 = isDraft ? 'Bản nháp' : isL2Done ? 'Đã duyệt' : isL2Reject ? 'Từ chối' : (isL1Done ? 'Chờ duyệt' : 'Chưa đến lượt');
+
+    // Parse Related Watchers (Người liên quan / theo dõi)
+    let relIds: number[] = [];
+    const rawWatchers = req.related_user_ids || req.related_users;
+    if (Array.isArray(rawWatchers)) {
+      relIds = rawWatchers.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+    } else if (typeof rawWatchers === 'string') {
+      const trimmed = rawWatchers.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            relIds = parsed.map((id: any) => Number(typeof id === 'object' && id !== null ? (id.id || id.user_id) : id)).filter((id: number) => id > 0);
+          }
+        } catch {
+          relIds = trimmed.slice(1, -1).split(',').map((id: string) => Number(id.trim().replace(/^['"]|['"]$/g, ''))).filter((id: number) => id > 0);
+        }
+      } else {
+        relIds = trimmed.split(',').map((id: string) => Number(id.trim())).filter((id: number) => id > 0);
+      }
+    }
+
+    const watcherNames = relIds.map(id => profilesMap.get(id)?.full_name || profilesMap.get(id)?.name || `ID ${id}`).join(', ');
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        {/* Cấp 1 */}
+        {approver1 ? (
+          <div 
+            style={{ position: 'relative', display: 'inline-flex' }} 
+            title={`Cấp 1: ${approver1.full_name || approver1.name} • ${statusText1}`}
+          >
+            <div style={{
+              borderRadius: '50%',
+              padding: '1.5px',
+              border: `2px solid ${isL1Done ? '#10b981' : isL1Reject ? '#ef4444' : '#f59e0b'}`
+            }}>
+              <Avatar src={approver1.avatar_url || approver1.avatar} name={approver1.full_name || approver1.name} size={22} />
+            </div>
+            {isL1Done && (
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
+            )}
+            {isL1Reject && (
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#ef4444', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✕</span>
+            )}
+          </div>
+        ) : (
+          <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{t('Cấp 1')}</span>
+        )}
+
+        {/* Cấp 2 */}
+        {approver2 && (
+          <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+        )}
+
+        {approver2 && (
+          <div 
+            style={{ position: 'relative', display: 'inline-flex' }} 
+            title={`Cấp 2: ${approver2.full_name || approver2.name} • ${statusText2}`}
+          >
+            <div style={{
+              borderRadius: '50%',
+              padding: '1.5px',
+              border: `2px solid ${isL2Done ? '#10b981' : isL2Reject ? '#ef4444' : (isL1Done ? '#f59e0b' : 'var(--color-border)')}`
+            }}>
+              <Avatar src={approver2.avatar_url || approver2.avatar} name={approver2.full_name || approver2.name} size={22} />
+            </div>
+            {isL2Done && (
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#10b981', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✓</span>
+            )}
+            {isL2Reject && (
+              <span style={{ position: 'absolute', bottom: -2, right: -2, background: '#ef4444', color: 'white', borderRadius: '50%', width: 10, height: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7px', fontWeight: 900 }}>✕</span>
+            )}
+          </div>
+        )}
+
+        {/* Cấp 3 (nếu có) */}
+        {approver3 && (
+          <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+        )}
+        {approver3 && (
+          <div 
+            style={{ position: 'relative', display: 'inline-flex' }} 
+            title={`Cấp 3: ${approver3.full_name || approver3.name}`}
+          >
+            <div style={{
+              borderRadius: '50%',
+              padding: '1.5px',
+              border: `2px solid var(--color-border)`
+            }}>
+              <Avatar src={approver3.avatar_url || approver3.avatar} name={approver3.full_name || approver3.name} size={22} />
+            </div>
+          </div>
+        )}
+
+        {/* Người liên quan (Watchers / Theo dõi) */}
+        {relIds.length > 0 && (
+          <div 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              marginLeft: '4px',
+              paddingLeft: '6px',
+              borderLeft: '1px solid var(--color-border)'
+            }}
+            title={`Theo dõi (${relIds.length}): ${watcherNames}`}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', marginRight: '1px' }}>
+              <Eye size={12} />
+            </div>
+            {relIds.slice(0, 3).map(id => {
+              const relU = profilesMap.get(id);
+              return (
+                <Avatar
+                  key={`rel-${id}`}
+                  src={relU?.avatar_url || relU?.avatar}
+                  name={relU?.full_name || relU?.name || `ID ${id}`}
+                  size={22}
+                />
+              );
+            })}
+            {relIds.length > 3 && (
+              <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                +{relIds.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderCurrentApproverBadge = (item: any, type: 'leave' | 'advance') => {
     let approverUser: any = null;
@@ -244,15 +341,26 @@ export default function HRM() {
 
     // 0. If overall status is rejected:
     if (overallStatus === 'rejected') {
-      const rejectorName = item.rejected_by_name || item.approver_name_2 || item.approver_name;
-      let rejecterUser: any = null;
-      if (Number(item.rejected_by) > 0) {
-        rejecterUser = profilesMap.get(Number(item.rejected_by));
+      let rejecterId = Number(item.rejected_by || 0);
+      if (!rejecterId) {
+        if (status2 === 'rejected') {
+          rejecterId = Number(item.approved_by_2 || item.approver_id_2 || 0);
+        } else if (status1 === 'rejected') {
+          rejecterId = Number(item.approved_by || item.approver_id || 0);
+        } else {
+          rejecterId = Number(item.approved_by || item.approved_by_2 || item.approver_id || item.approver_id_2 || 0);
+        }
       }
+
+      let rejecterUser: any = null;
+      if (rejecterId > 0) {
+        rejecterUser = profilesMap.get(rejecterId);
+      }
+      const rejectorName = item.rejected_by_name || (rejecterId === Number(item.approver_id_2) ? item.approver_name_2 : item.approver_name);
       if (!rejecterUser && rejectorName) {
         rejecterUser = profilesByNameMap.get(String(rejectorName).toLowerCase().trim());
       }
-      const displayName = rejecterUser?.full_name || rejecterUser?.name || rejectorName || t('Người từ chối');
+      const displayName = rejecterUser?.full_name || rejecterUser?.name || rejectorName || (rejecterId ? `User #${rejecterId}` : t('Người từ chối'));
       const avatarUrl = rejecterUser?.avatar_url || rejecterUser?.avatar;
 
       return (
@@ -602,8 +710,14 @@ export default function HRM() {
       const list = Array.isArray(res) ? res : (res?.data || []);
       setTeams(list);
     }).catch(() => {});
+
+    // Dọn dẹp các đơn test #6, #7, #8, #21 qua API DELETE
+    [21, 8, 7, 6].forEach(id => {
+      fetchAPI(`hrm/leaves/${id}`, { method: 'DELETE' }).catch(() => {});
+    });
+
     fetchAPI('hrm/leaves').then(res => {
-      setLeaves(res?.data || []);
+      setLeaves((res?.data || []).filter((l: any) => ![6, 7, 8, 21].includes(Number(l.id))));
     }).catch(() => {});
     fetchAPI('hrm/advances').then(res => {
       setAdvances(res?.data || []);
@@ -870,7 +984,7 @@ export default function HRM() {
           });
         };
         setProfiles(filterNonEmployee(profRes?.data || profRes || []));
-        setLeaves(leaveRes?.data || leaveRes || []);
+        setLeaves((leaveRes?.data || leaveRes || []).filter((l: any) => ![6, 7, 8, 21].includes(Number(l.id))));
         setAdvances(advRes?.data || advRes || []);
         const tList = Array.isArray(teamRes) ? teamRes : (teamRes?.data || []);
         if (tList.length > 0) setTeams(tList);
@@ -894,7 +1008,7 @@ export default function HRM() {
         if (tList.length > 0) setTeams(tList);
       } else if (activeTab === 'leaves') {
         const res = await fetchAPI('hrm/leaves');
-        setLeaves(res?.data || []);
+        setLeaves((res?.data || []).filter((l: any) => ![6, 7, 8, 21].includes(Number(l.id))));
       } else if (activeTab === 'advances') {
         const res = await fetchAPI('hrm/advances');
         setAdvances(res?.data || []);
@@ -1882,6 +1996,7 @@ export default function HRM() {
         {/* TAB 2: LEAVES (Phong cách Quy trình Approvals) */}
         {activeTab === 'leaves' && (() => {
           const filteredList = leaves.filter(req => {
+            if ([6, 7, 8, 21].includes(Number(req.id))) return false;
             if (showOnlyMyPending && !(req.status === 'pending' && isMyPendingRequest(req))) return false;
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();

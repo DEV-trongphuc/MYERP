@@ -8,6 +8,7 @@ interface PaginationProps {
   onChange: (page: number) => void;
   showSizeChanger?: boolean;
   onPageSizeChange?: (size: number) => void;
+  isLightText?: boolean;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({
@@ -17,6 +18,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   onChange,
   showSizeChanger,
   onPageSizeChange,
+  isLightText = false,
 }) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const start = (page - 1) * pageSize + 1;
@@ -52,14 +54,16 @@ export const Pagination: React.FC<PaginationProps> = ({
         className="pagination-info"
         style={{
           fontSize: '0.8125rem',
-          color: 'var(--color-text-muted)',
+          color: isLightText ? '#ffffff' : 'var(--color-text-muted)',
+          textShadow: isLightText ? '0 1px 3px rgba(0, 0, 0, 0.7)' : 'none',
           display: 'flex',
           alignItems: 'center',
           gap: '0.25rem',
-          flexWrap: 'wrap'
+          flexWrap: 'wrap',
+          fontWeight: isLightText ? 500 : 'normal'
         }}
       >
-        Hiển thị <strong>{start}</strong> - <strong>{end}</strong> trên <strong>{total}</strong>
+        Hiển thị <strong style={{ color: isLightText ? '#ffffff' : 'inherit' }}>{start}</strong> - <strong style={{ color: isLightText ? '#ffffff' : 'inherit' }}>{end}</strong> trên <strong style={{ color: isLightText ? '#ffffff' : 'inherit' }}>{total}</strong>
       </div>
 
       <div 
@@ -108,7 +112,12 @@ export const Pagination: React.FC<PaginationProps> = ({
         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
           {getPages().map((p, i) =>
             p === '...' ? (
-              <span key={`dots-${i}`} style={{ padding: '0 4px', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>…</span>
+              <span key={`dots-${i}`} style={{
+                padding: '0 4px',
+                color: isLightText ? '#ffffff' : 'var(--color-text-muted)',
+                textShadow: isLightText ? '0 1px 3px rgba(0, 0, 0, 0.7)' : 'none',
+                fontSize: '0.875rem'
+              }}>…</span>
             ) : (
               <button
                 key={p}

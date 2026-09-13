@@ -131,6 +131,16 @@ function resolveFetchableUrl(url: string): string {
 export async function downloadFileWithName(url: string, originalFileName: string): Promise<void> {
   if (!url) return;
 
+  // If url is a cloud service (Drive, Docs, Sheets, YouTube) or external web link, open in new tab instead of attempting to fetch/download as local blob
+  const isCloudOrExternal = 
+    /drive\.google\.com|docs\.google\.com|youtube\.com|youtu\.be/i.test(url) ||
+    (/^https?:\/\//i.test(url) && !url.includes('/uploads/') && !url.includes(window.location.host));
+
+  if (isCloudOrExternal) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
   // Clean filename: remove file size suffix in parentheses like "(2.4 MB)" if captured by DOM parser
   let cleanName = (originalFileName || '').trim();
   cleanName = cleanName.replace(/\s*\(\s*[\d.]+\s*(?:KB|MB|GB|Bytes|B|b)\s*\)$/i, '').trim();
@@ -175,8 +185,9 @@ export async function downloadFileWithName(url: string, originalFileName: string
   }
 
   // Approach 2: Server-side attachment endpoint with Content-Disposition header
+  const token = localStorage.getItem('token') || '';
   const backendBase = (import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '');
-  const downloadEndpoint = `${backendBase}/api.php?action=download-file&url=${encodeURIComponent(url)}&name=${encodeURIComponent(cleanName)}`;
+  const downloadEndpoint = `${backendBase}/api.php?action=download-file&url=${encodeURIComponent(url)}&name=${encodeURIComponent(cleanName)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 
   const a = document.createElement('a');
   a.style.display = 'none';

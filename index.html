@@ -32,7 +32,7 @@
         pointer-events: none !important;
       }
 
-      /* INSTANT DARK RED CYBER SPLASH SCREEN WITH ENHANCED SCI-FI ANIMATIONS */
+      /* INSTANT DARK RED CYBER SPLASH SCREEN WITH ULTRA-RICH FUTURISTIC SCI-FI ANIMATIONS */
       #ideas-splash-screen {
         position: fixed !important;
         top: 0 !important;
@@ -50,14 +50,14 @@
         flex-direction: column;
         justify-content: space-between;
         align-items: center;
-        background: radial-gradient(ellipse at 50% 35%, #4c0519 0%, #1c0309 48%, #090406 100%);
+        background: radial-gradient(ellipse at 50% 35%, #4c0519 0%, #1f030a 45%, #080305 100%);
         overflow: hidden;
         user-select: none;
         box-sizing: border-box;
         padding-top: env(safe-area-inset-top, 0px);
         padding-bottom: env(safe-area-inset-bottom, 0px);
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        transition: opacity 0.55s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.55s ease;
+        transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.6s ease;
       }
       #ideas-splash-screen.splash-fade-out {
         opacity: 0 !important;
@@ -65,7 +65,7 @@
         pointer-events: none !important;
       }
 
-      /* Glowing Crimson Nebula / Cloud Backdrop */
+      /* Glowing Crimson Nebula & Cosmic Backdrop */
       .splash-cloud-bg {
         position: absolute;
         top: 0;
@@ -78,82 +78,108 @@
       .splash-cloud {
         position: absolute;
         border-radius: 50%;
-        animation: floatCloud 14s ease-in-out infinite alternate;
+        animation: floatCloud 16s ease-in-out infinite alternate;
       }
       .splash-cloud-1 {
-        width: 480px;
-        height: 480px;
-        top: -120px;
-        left: -100px;
-        background: radial-gradient(circle, rgba(225, 29, 72, 0.25) 0%, rgba(136, 19, 55, 0.1) 60%, transparent 100%);
-        filter: blur(50px);
+        width: 520px;
+        height: 520px;
+        top: -140px;
+        left: -120px;
+        background: radial-gradient(circle, rgba(225, 29, 72, 0.28) 0%, rgba(136, 19, 55, 0.12) 60%, transparent 100%);
+        filter: blur(60px);
       }
       .splash-cloud-2 {
-        width: 550px;
-        height: 550px;
-        top: 40px;
-        right: -140px;
-        background: radial-gradient(circle, rgba(244, 63, 94, 0.22) 0%, rgba(190, 18, 60, 0.08) 60%, transparent 100%);
-        filter: blur(55px);
-        animation-duration: 18s;
+        width: 580px;
+        height: 580px;
+        top: 30px;
+        right: -150px;
+        background: radial-gradient(circle, rgba(244, 63, 94, 0.25) 0%, rgba(190, 18, 60, 0.08) 60%, transparent 100%);
+        filter: blur(65px);
+        animation-duration: 20s;
         animation-delay: -5s;
       }
       .splash-cloud-3 {
-        width: 600px;
-        height: 400px;
+        width: 650px;
+        height: 450px;
         top: 25%;
         left: 50%;
         transform: translateX(-50%);
-        background: radial-gradient(ellipse at center, rgba(244, 63, 94, 0.35) 0%, rgba(190, 18, 60, 0.14) 55%, transparent 100%);
-        filter: blur(60px);
+        background: radial-gradient(ellipse at center, rgba(244, 63, 94, 0.38) 0%, rgba(190, 18, 60, 0.16) 55%, transparent 100%);
+        filter: blur(70px);
+        animation: pulseCloud 8s ease-in-out infinite alternate;
       }
       .splash-cloud-4 {
-        width: 400px;
-        height: 350px;
-        bottom: -50px;
+        width: 420px;
+        height: 360px;
+        bottom: -60px;
         left: 50%;
         transform: translateX(-50%);
-        background: radial-gradient(circle, rgba(136, 19, 55, 0.22) 0%, transparent 70%);
-        filter: blur(40px);
+        background: radial-gradient(circle, rgba(136, 19, 55, 0.25) 0%, transparent 70%);
+        filter: blur(45px);
       }
 
-      /* Cyber Neon Ring & Orbiting Dashes */
-      .splash-cyber-ring {
+      /* Cosmic Dust / Embers Drifting Upward */
+      .splash-dust {
         position: absolute;
-        width: 290px;
-        height: 290px;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -62%);
         border-radius: 50%;
-        border: 1.5px solid rgba(244, 63, 94, 0.4);
-        box-shadow: 0 0 45px rgba(244, 63, 94, 0.35), inset 0 0 35px rgba(244, 63, 94, 0.2);
-        animation: pulseRing 4s ease-in-out infinite;
         pointer-events: none;
+        animation: cosmicDrift 9s linear infinite;
       }
-      .splash-cyber-orbit {
+      .dust-1 { width: 3px; height: 3px; left: 16%; bottom: 20%; background: #ff2d55; box-shadow: 0 0 12px #ff2d55; animation-duration: 8.5s; animation-delay: 0s; }
+      .dust-2 { width: 4px; height: 4px; right: 18%; bottom: 25%; background: #fbbf24; box-shadow: 0 0 14px #fbbf24; animation-duration: 10.5s; animation-delay: -2s; }
+      .dust-3 { width: 2.5px; height: 2.5px; left: 32%; bottom: 15%; background: #06b6d4; box-shadow: 0 0 10px #06b6d4; animation-duration: 7.5s; animation-delay: -4s; }
+      .dust-4 { width: 3.5px; height: 3.5px; right: 34%; bottom: 18%; background: #f43f5e; box-shadow: 0 0 12px #f43f5e; animation-duration: 9.5s; animation-delay: -1s; }
+      .dust-5 { width: 2px; height: 2px; left: 50%; bottom: 10%; background: #ffffff; box-shadow: 0 0 8px #ffffff; animation-duration: 6.5s; animation-delay: -3s; }
+      .dust-6 { width: 3px; height: 3px; right: 10%; bottom: 32%; background: #e11d48; box-shadow: 0 0 10px #e11d48; animation-duration: 11.5s; animation-delay: -5s; }
+
+      /* High-Precision Realistic Meteors / Shooting Stars */
+      .splash-meteor {
         position: absolute;
-        width: 320px;
-        height: 320px;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -62%);
-        border-radius: 50%;
-        border: 1.5px dashed rgba(251, 191, 36, 0.4);
-        box-shadow: 0 0 25px rgba(251, 191, 36, 0.2);
-        animation: rotateOrbit 16s linear infinite;
+        height: 2px;
+        background: linear-gradient(90deg, transparent 0%, rgba(255, 45, 85, 0.4) 30%, rgba(251, 191, 36, 0.85) 75%, #ffffff 100%);
+        border-radius: 2px;
         pointer-events: none;
+        opacity: 0;
+        filter: drop-shadow(0 0 6px rgba(255, 45, 85, 0.9));
+        transform-origin: left center;
+      }
+      .splash-meteor::after {
+        content: '';
+        position: absolute;
+        right: -2px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 0 8px #ffffff, 0 0 16px #fbbf24, 0 0 24px #ff2d55;
+      }
+      .splash-meteor-1 {
+        width: 150px;
+        top: 8%;
+        left: 2%;
+        animation: shootMeteor1 6.5s cubic-bezier(0.2, 0.7, 0.3, 1) infinite 0.8s;
+      }
+      .splash-meteor-2 {
+        width: 130px;
+        top: 18%;
+        left: 18%;
+        animation: shootMeteor2 8.5s cubic-bezier(0.2, 0.7, 0.3, 1) infinite 4.2s;
       }
 
-      /* Sparkles & Star Points */
+      /* Multi-colored Sparkles */
       .splash-sparkle {
         position: absolute;
-        animation: sparkleAnim 3s infinite ease-in-out;
+        animation: sparkleAnim 3.2s infinite ease-in-out;
+        pointer-events: none;
       }
-      .sparkle-1 { top: 14%; left: 22%; animation-delay: 0s; font-size: 26px; color: #ff2d55; text-shadow: 0 0 18px rgba(255, 45, 85, 0.95); }
-      .sparkle-2 { top: 11%; right: 24%; animation-delay: 1s; font-size: 30px; color: #fbbf24; text-shadow: 0 0 18px rgba(251, 191, 36, 0.95); }
-      .sparkle-3 { top: 32%; left: 14%; animation-delay: 1.8s; font-size: 20px; color: #ffffff; text-shadow: 0 0 14px #ffffff; }
-      .sparkle-4 { top: 36%; right: 16%; animation-delay: 0.6s; font-size: 24px; color: #f43f5e; text-shadow: 0 0 16px #f43f5e; }
+      .sparkle-1 { top: 13%; left: 21%; animation-delay: 0s; font-size: 26px; color: #ff2d55; text-shadow: 0 0 20px rgba(255, 45, 85, 1); }
+      .sparkle-2 { top: 10%; right: 23%; animation-delay: 1.1s; font-size: 30px; color: #fbbf24; text-shadow: 0 0 20px rgba(251, 191, 36, 1); }
+      .sparkle-3 { top: 31%; left: 13%; animation-delay: 1.9s; font-size: 20px; color: #ffffff; text-shadow: 0 0 16px #ffffff; }
+      .sparkle-4 { top: 35%; right: 15%; animation-delay: 0.7s; font-size: 24px; color: #f43f5e; text-shadow: 0 0 18px #f43f5e; }
+      .sparkle-5 { top: 22%; left: 8%; animation-delay: 2.3s; font-size: 18px; color: #06b6d4; text-shadow: 0 0 16px #06b6d4; }
+      .sparkle-6 { top: 24%; right: 8%; animation-delay: 1.5s; font-size: 22px; color: #fb7185; text-shadow: 0 0 16px #fb7185; }
 
       /* Main Content Container */
       .splash-content {
@@ -166,10 +192,10 @@
         margin: auto 0;
         padding: 20px;
         text-align: center;
-        animation: contentEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        animation: contentEnter 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
-      /* Mascot Robot Container */
+      /* Mascot Robot Container with Multi-Ring Hologram */
       .splash-mascot-box {
         position: relative;
         display: flex;
@@ -177,17 +203,151 @@
         align-items: center;
         margin-bottom: 24px;
       }
+
+      /* Expanding Holographic Energy Wave Ripple */
+      .splash-energy-wave {
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -62%);
+        border-radius: 50%;
+        border: 1.5px solid rgba(255, 45, 85, 0.6);
+        animation: energyRipple 3s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+        pointer-events: none;
+      }
+      .splash-energy-wave.wave-delay {
+        animation-delay: 1.5s;
+      }
+
+      /* Rotating High-Tech Radar Scanning Beam */
+      .splash-cyber-radar {
+        position: absolute;
+        width: 320px;
+        height: 320px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -62%);
+        border-radius: 50%;
+        background: conic-gradient(from 0deg, transparent 0deg, transparent 270deg, rgba(244, 63, 94, 0.04) 310deg, rgba(255, 45, 85, 0.26) 360deg);
+        animation: rotateRadar 5s linear infinite;
+        pointer-events: none;
+        mask-image: radial-gradient(circle, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 72%);
+        -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 72%);
+      }
+
+      /* Inner Counter-Rotating Segmented Tech Ring */
+      .splash-cyber-inner-ring {
+        position: absolute;
+        width: 255px;
+        height: 255px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -62%);
+        border-radius: 50%;
+        border: 1.5px dotted rgba(6, 182, 212, 0.45);
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+        animation: rotateReverse 12s linear infinite;
+        pointer-events: none;
+      }
+
+      /* Main Glowing Cyber Neon Ring */
+      .splash-cyber-ring {
+        position: absolute;
+        width: 295px;
+        height: 295px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -62%);
+        border-radius: 50%;
+        border: 1.5px solid rgba(244, 63, 94, 0.45);
+        box-shadow: 0 0 50px rgba(244, 63, 94, 0.38), inset 0 0 40px rgba(244, 63, 94, 0.22);
+        animation: pulseRing 3.8s ease-in-out infinite;
+        pointer-events: none;
+      }
+
+      /* Outer Dashed Orbit Ring with Orbiting Satellites / Energy Photons */
+      .splash-cyber-orbit {
+        position: absolute;
+        width: 335px;
+        height: 335px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -62%);
+        border-radius: 50%;
+        border: 1.5px dashed rgba(251, 191, 36, 0.48);
+        box-shadow: 0 0 30px rgba(251, 191, 36, 0.25);
+        animation: rotateOrbit 15s linear infinite;
+        pointer-events: none;
+      }
+      .splash-satellite {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+      .satellite-1 {
+        width: 9px;
+        height: 9px;
+        top: -5px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #fbbf24;
+        box-shadow: 0 0 12px #fbbf24, 0 0 22px #fbbf24, 0 0 32px rgba(251, 191, 36, 0.85);
+      }
+      .satellite-2 {
+        width: 9px;
+        height: 9px;
+        bottom: -5px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #06b6d4;
+        box-shadow: 0 0 12px #06b6d4, 0 0 22px #06b6d4, 0 0 32px rgba(6, 182, 212, 0.85);
+      }
+
+      /* Core Ambient Glow behind Mascot */
+      .splash-core-glow {
+        position: absolute;
+        width: 190px;
+        height: 190px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -62%);
+        background: radial-gradient(circle, rgba(255, 45, 85, 0.5) 0%, rgba(225, 29, 72, 0.2) 50%, transparent 75%);
+        border-radius: 50%;
+        filter: blur(28px);
+        animation: corePulse 3.6s ease-in-out infinite;
+        pointer-events: none;
+      }
+
+      /* 3D AI Robot Mascot Image with Dynamic 3D Floating */
       .splash-mascot-img {
         width: 195px;
         height: 195px;
         object-fit: contain;
         background: transparent !important;
-        filter: drop-shadow(0 0 45px rgba(244, 63, 94, 0.65)) drop-shadow(0 20px 30px rgba(0, 0, 0, 0.85));
         animation: floatMascot 3.6s ease-in-out infinite;
-        will-change: transform;
+        will-change: transform, filter;
+        position: relative;
+        z-index: 5;
       }
+
+      /* Jet Thruster Pulse under Mascot Feet */
+      .splash-thruster-glow {
+        width: 70px;
+        height: 10px;
+        background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.75) 0%, rgba(59, 130, 246, 0.4) 45%, transparent 80%);
+        border-radius: 50%;
+        filter: blur(4px);
+        margin-top: -10px;
+        animation: thrusterPulse 1.8s ease-in-out infinite;
+        position: relative;
+        z-index: 4;
+      }
+
+      /* Floor Contact Shadow */
       .splash-mascot-shadow {
-        width: 115px;
+        width: 120px;
         height: 14px;
         background: radial-gradient(ellipse at center, rgba(244, 63, 94, 0.55) 0%, rgba(0, 0, 0, 0) 70%);
         border-radius: 50%;
@@ -200,60 +360,90 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
       }
       .splash-brand-logo {
         display: flex;
         align-items: center;
         gap: 10px;
-        font-size: 2.25rem;
+        font-size: 2.35rem;
         font-weight: 900;
         letter-spacing: -0.5px;
         text-transform: uppercase;
       }
       .splash-brand-logo span.ideas-text {
-        color: #ffffff;
-        text-shadow: 0 0 30px rgba(244, 63, 94, 0.9), 0 2px 8px rgba(0, 0, 0, 0.9);
-        animation: glowPulse 3s ease-in-out infinite;
+        background: linear-gradient(110deg, #ffffff 15%, #ffe4e6 45%, #ff6b8b 50%, #ffffff 55%, #ffffff 85%);
+        background-size: 220% 100%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: ideasShimmer 3.8s ease-in-out infinite;
+        filter: drop-shadow(0 0 25px rgba(244, 63, 94, 0.85));
+        letter-spacing: 0.5px;
       }
       .splash-brand-logo span.erp-text {
         color: #ff2d55;
-        text-shadow: 0 0 30px rgba(255, 45, 85, 0.95), 0 2px 8px rgba(0, 0, 0, 0.9);
-        animation: glowPulse 3s ease-in-out infinite 0.5s;
+        text-shadow: 0 0 20px #ff2d55, 0 0 45px rgba(255, 45, 85, 0.95), 0 2px 10px rgba(0, 0, 0, 0.9);
+        animation: erpPulse 2.8s ease-in-out infinite;
+        letter-spacing: 0.5px;
       }
 
+      /* Futuristic Holographic Pill Badge with Pulsing Live Beacon */
       .splash-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         font-size: 0.71875rem;
         font-weight: 800;
         letter-spacing: 1.8px;
         text-transform: uppercase;
         color: #ffe4e6;
-        background: rgba(225, 29, 72, 0.22);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        padding: 5px 20px;
-        border-radius: 20px;
-        box-shadow: 0 0 25px rgba(244, 63, 94, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+        background: rgba(225, 29, 72, 0.2);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        padding: 6px 20px;
+        border-radius: 24px;
+        box-shadow: 0 0 30px rgba(244, 63, 94, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.35);
         border: 1px solid rgba(244, 63, 94, 0.55);
-        animation: badgeGlow 4s ease-in-out infinite;
+        animation: badgeGlow 3.5s ease-in-out infinite;
+      }
+      .splash-badge-beacon {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 10px #10b981;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .splash-badge-beacon::after {
+        content: '';
+        position: absolute;
+        top: -3px;
+        left: -3px;
+        right: -3px;
+        bottom: -3px;
+        border-radius: 50%;
+        border: 1.5px solid #10b981;
+        animation: beaconRipple 1.6s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
       }
 
-      /* Loading Progress */
+      /* Next-Gen Cyber Progress Loading Bar with Comet Flare */
       .splash-progress-wrapper {
-        margin-top: 28px;
+        margin-top: 26px;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 12px;
       }
       .splash-progress-bar {
-        width: 185px;
-        height: 5px;
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 10px;
+        width: 210px;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
         overflow: hidden;
         position: relative;
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.6);
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), inset 0 1px 2px rgba(0, 0, 0, 0.5);
+        border: 0.5px solid rgba(255, 255, 255, 0.15);
       }
       .splash-progress-inner {
         position: absolute;
@@ -261,19 +451,38 @@
         left: -100%;
         width: 100%;
         height: 100%;
-        background: linear-gradient(90deg, #ff2d55, #fbbf24, #ff2d55);
-        background-size: 200% 100%;
-        border-radius: 10px;
-        box-shadow: 0 0 18px rgba(255, 45, 85, 0.95);
-        animation: progressSlide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        background: linear-gradient(90deg, transparent 0%, #ff2d55 35%, #fbbf24 75%, #ffffff 100%);
+        border-radius: 12px;
+        box-shadow: 0 0 22px rgba(255, 45, 85, 0.95);
+        animation: progressSlide 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      .splash-progress-flare {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 0 14px #ffffff, 0 0 22px #fbbf24, 0 0 32px #ff2d55;
       }
       .splash-status-text {
         font-size: 0.8125rem;
         font-weight: 700;
         color: #fecdd3;
         letter-spacing: 0.5px;
-        text-shadow: 0 0 12px rgba(244, 63, 94, 0.6);
-        animation: textPulse 2s ease-in-out infinite;
+        text-shadow: 0 0 14px rgba(244, 63, 94, 0.7);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 22px;
+      }
+      .splash-status-text .status-icon {
+        animation: iconWiggle 1.4s ease-in-out infinite;
+      }
+      .splash-status-text .status-msg {
+        transition: opacity 0.22s ease, transform 0.22s ease;
       }
 
       /* Footer */
@@ -301,7 +510,7 @@
         height: 20px;
         border-radius: 5px;
         object-fit: cover;
-        box-shadow: 0 0 12px rgba(255, 45, 85, 0.6);
+        box-shadow: 0 0 14px rgba(255, 45, 85, 0.7);
       }
       .splash-copyright {
         font-size: 0.6875rem;
@@ -312,48 +521,126 @@
 
       /* Keyframes */
       @keyframes contentEnter {
-        0% { opacity: 0; transform: scale(0.94) translateY(10px); }
+        0% { opacity: 0; transform: scale(0.92) translateY(14px); }
         100% { opacity: 1; transform: scale(1) translateY(0); }
       }
       @keyframes floatMascot {
-        0%, 100% { transform: translateY(0px) rotate(0deg); }
-        50% { transform: translateY(-14px) rotate(1.5deg); }
+        0%, 100% {
+          transform: translateY(0px) rotate(0deg) scale(1);
+          filter: drop-shadow(0 0 45px rgba(244, 63, 94, 0.65)) drop-shadow(0 20px 30px rgba(0, 0, 0, 0.85));
+        }
+        50% {
+          transform: translateY(-16px) rotate(2deg) scale(1.03);
+          filter: drop-shadow(0 0 65px rgba(255, 45, 85, 0.9)) drop-shadow(0 28px 40px rgba(0, 0, 0, 0.95));
+        }
       }
       @keyframes shadowPulse {
         0%, 100% { transform: scale(1); opacity: 0.55; }
-        50% { transform: scale(0.8); opacity: 0.22; }
+        50% { transform: scale(0.75); opacity: 0.2; }
       }
       @keyframes pulseRing {
         0%, 100% { transform: translate(-50%, -62%) scale(1); opacity: 0.65; }
-        50% { transform: translate(-50%, -62%) scale(1.08); opacity: 0.95; }
+        50% { transform: translate(-50%, -62%) scale(1.08); opacity: 0.98; }
       }
       @keyframes rotateOrbit {
         0% { transform: translate(-50%, -62%) rotate(0deg); }
         100% { transform: translate(-50%, -62%) rotate(360deg); }
       }
+      @keyframes rotateReverse {
+        0% { transform: translate(-50%, -62%) rotate(360deg); }
+        100% { transform: translate(-50%, -62%) rotate(0deg); }
+      }
+      @keyframes rotateRadar {
+        0% { transform: translate(-50%, -62%) rotate(0deg); }
+        100% { transform: translate(-50%, -62%) rotate(360deg); }
+      }
+      @keyframes energyRipple {
+        0% { transform: translate(-50%, -62%) scale(0.7); opacity: 0.85; border-color: rgba(255, 45, 85, 0.8); }
+        100% { transform: translate(-50%, -62%) scale(1.68); opacity: 0; border-color: rgba(251, 191, 36, 0); }
+      }
+      @keyframes corePulse {
+        0%, 100% { transform: translate(-50%, -62%) scale(0.9); opacity: 0.5; }
+        50% { transform: translate(-50%, -62%) scale(1.18); opacity: 0.85; }
+      }
+      @keyframes thrusterPulse {
+        0%, 100% { transform: scale(0.85); opacity: 0.4; }
+        50% { transform: scale(1.25); opacity: 0.95; filter: blur(6px); }
+      }
       @keyframes floatCloud {
         0% { transform: translate(0, 0); }
         100% { transform: translate(25px, 15px); }
       }
+      @keyframes pulseCloud {
+        0% { transform: translateX(-50%) scale(0.95); opacity: 0.8; }
+        100% { transform: translateX(-50%) scale(1.1); opacity: 1; }
+      }
+      @keyframes cosmicDrift {
+        0% { transform: translateY(0) scale(0.8); opacity: 0; }
+        20% { opacity: 0.8; }
+        80% { opacity: 0.6; }
+        100% { transform: translateY(-380px) scale(1.3); opacity: 0; }
+      }
+      @keyframes shootMeteor1 {
+        0% {
+          transform: rotate(35deg) translateX(-220px);
+          opacity: 0;
+        }
+        4% {
+          opacity: 1;
+        }
+        20% {
+          transform: rotate(35deg) translateX(1100px);
+          opacity: 0;
+        }
+        100% {
+          transform: rotate(35deg) translateX(1100px);
+          opacity: 0;
+        }
+      }
+      @keyframes shootMeteor2 {
+        0% {
+          transform: rotate(32deg) translateX(-220px);
+          opacity: 0;
+        }
+        4% {
+          opacity: 1;
+        }
+        18% {
+          transform: rotate(32deg) translateX(980px);
+          opacity: 0;
+        }
+        100% {
+          transform: rotate(32deg) translateX(980px);
+          opacity: 0;
+        }
+      }
       @keyframes sparkleAnim {
-        0%, 100% { transform: scale(0.8); opacity: 0.4; }
-        50% { transform: scale(1.3); opacity: 1; }
+        0%, 100% { transform: scale(0.75); opacity: 0.35; }
+        50% { transform: scale(1.35); opacity: 1; }
       }
       @keyframes progressSlide {
         0% { left: -100%; }
         100% { left: 100%; }
       }
-      @keyframes textPulse {
-        0%, 100% { opacity: 0.8; }
-        50% { opacity: 1; }
+      @keyframes ideasShimmer {
+        0% { background-position: 100% 0; }
+        50%, 100% { background-position: -100% 0; }
       }
-      @keyframes glowPulse {
-        0%, 100% { filter: drop-shadow(0 0 10px rgba(244, 63, 94, 0.4)); }
-        50% { filter: drop-shadow(0 0 20px rgba(244, 63, 94, 0.8)); }
+      @keyframes erpPulse {
+        0%, 100% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(255, 45, 85, 0.7)); }
+        50% { transform: scale(1.04); filter: drop-shadow(0 0 30px rgba(255, 45, 85, 1)); }
       }
       @keyframes badgeGlow {
-        0%, 100% { border-color: rgba(244, 63, 94, 0.55); box-shadow: 0 0 20px rgba(244, 63, 94, 0.25); }
-        50% { border-color: rgba(251, 191, 36, 0.7); box-shadow: 0 0 30px rgba(244, 63, 94, 0.45); }
+        0%, 100% { border-color: rgba(244, 63, 94, 0.55); box-shadow: 0 0 22px rgba(244, 63, 94, 0.3); }
+        50% { border-color: rgba(251, 191, 36, 0.75); box-shadow: 0 0 35px rgba(244, 63, 94, 0.5); }
+      }
+      @keyframes beaconRipple {
+        0% { transform: scale(0.8); opacity: 1; }
+        100% { transform: scale(2.3); opacity: 0; }
+      }
+      @keyframes iconWiggle {
+        0%, 100% { transform: scale(1) rotate(0deg); }
+        50% { transform: scale(1.2) rotate(12deg); }
       }
 
       @media (max-width: 768px) {
@@ -373,15 +660,23 @@
           height: 155px !important;
         }
         .splash-cyber-ring {
-          width: 225px !important;
-          height: 225px !important;
+          width: 230px !important;
+          height: 230px !important;
         }
         .splash-cyber-orbit {
-          width: 255px !important;
-          height: 255px !important;
+          width: 260px !important;
+          height: 260px !important;
+        }
+        .splash-cyber-inner-ring {
+          width: 200px !important;
+          height: 200px !important;
+        }
+        .splash-cyber-radar {
+          width: 250px !important;
+          height: 250px !important;
         }
         .splash-brand-logo {
-          font-size: 1.8rem !important;
+          font-size: 1.85rem !important;
         }
         .splash-badge {
           font-size: 0.65rem !important;
@@ -395,24 +690,58 @@
     </style>
   </head>
   <body>
-    <!-- INSTANT DARK RED CYBER SPLASH SCREEN -->
+    <!-- INSTANT DARK RED CYBER SPLASH SCREEN WITH SCI-FI MULTI-RING HOLOGRAM -->
     <div id="ideas-splash-screen">
       <div class="splash-cloud-bg">
         <div class="splash-cloud splash-cloud-1"></div>
         <div class="splash-cloud splash-cloud-2"></div>
         <div class="splash-cloud splash-cloud-3"></div>
         <div class="splash-cloud splash-cloud-4"></div>
+        <!-- Shooting Star Meteors -->
+        <div class="splash-meteor splash-meteor-1"></div>
+        <div class="splash-meteor splash-meteor-2"></div>
+        <!-- Cosmic Dust & Floating Particles -->
+        <div class="splash-dust dust-1"></div>
+        <div class="splash-dust dust-2"></div>
+        <div class="splash-dust dust-3"></div>
+        <div class="splash-dust dust-4"></div>
+        <div class="splash-dust dust-5"></div>
+        <div class="splash-dust dust-6"></div>
+        <!-- Sparkling Multi-color Stars -->
         <span class="splash-sparkle sparkle-1">✦</span>
         <span class="splash-sparkle sparkle-2">✦</span>
         <span class="splash-sparkle sparkle-3">✦</span>
         <span class="splash-sparkle sparkle-4">✦</span>
+        <span class="splash-sparkle sparkle-5">✦</span>
+        <span class="splash-sparkle sparkle-6">✦</span>
       </div>
 
       <div class="splash-content">
-        <!-- 3D AI Robot Mascot with Dual Cyber Rings -->
+        <!-- 3D AI Robot Mascot with Dual Cyber Rings, Radar Scan & Orbiting Photons -->
         <div class="splash-mascot-box">
+          <!-- Expanding Energy Wave Ripples -->
+          <div class="splash-energy-wave"></div>
+          <div class="splash-energy-wave wave-delay"></div>
+
+          <!-- Rotating Radar Scanning Beam -->
+          <div class="splash-cyber-radar"></div>
+
+          <!-- Inner Counter-Rotating Tech Ring -->
+          <div class="splash-cyber-inner-ring"></div>
+
+          <!-- Main Glowing Cyber Ring -->
           <div class="splash-cyber-ring"></div>
-          <div class="splash-cyber-orbit"></div>
+
+          <!-- Golden Dashed Orbit Ring with Traveling Satellites -->
+          <div class="splash-cyber-orbit">
+            <div class="splash-satellite satellite-1"></div>
+            <div class="splash-satellite satellite-2"></div>
+          </div>
+
+          <!-- Core Ambient Glow behind Mascot -->
+          <div class="splash-core-glow"></div>
+
+          <!-- 3D AI Mascot Image -->
           <img 
             src="/ideas_bot_v2.png?v=20260826_clean" 
             alt="IDEAS AI Mascot" 
@@ -420,26 +749,35 @@
             loading="eager"
             onerror="this.style.display='none'"
           />
+
+          <!-- Jet Thruster Pulse Glow -->
+          <div class="splash-thruster-glow"></div>
+
+          <!-- Ground Contact Shadow -->
           <div class="splash-mascot-shadow"></div>
         </div>
 
-        <!-- High Contrast Brand Name (Chữ Trắng & Đỏ Neon Phát Sáng Cực Nét) -->
+        <!-- High Contrast Brand Name (Diamond White Shimmer & Neon Red Breathing) -->
         <div class="splash-brand">
           <div class="splash-brand-logo">
             <span class="ideas-text">IDEAS</span> <span class="erp-text">ERP</span>
           </div>
           <div class="splash-badge">
-            AI AUTOMATION & INTELLIGENT WORKFLOW
+            <span class="splash-badge-beacon"></span>
+            <span class="splash-badge-text">AI AUTOMATION & INTELLIGENT WORKFLOW</span>
           </div>
         </div>
 
-        <!-- Progress Loading Bar -->
+        <!-- Next-Gen Progress Bar with Comet Flare & Animated Status Message -->
         <div class="splash-progress-wrapper">
           <div class="splash-progress-bar">
-            <div class="splash-progress-inner"></div>
+            <div class="splash-progress-inner">
+              <div class="splash-progress-flare"></div>
+            </div>
           </div>
           <div class="splash-status-text">
-            Đang khởi động hệ thống...
+            <span class="status-icon">⚡</span>
+            <span class="status-msg">Đang khởi động hệ thống...</span>
           </div>
         </div>
       </div>
@@ -455,6 +793,37 @@
         </div>
       </div>
     </div>
+
+    <script>
+      // Smooth dynamic status message cycling on splash screen
+      (function() {
+        var messages = [
+          '⚡ Đang khởi động hệ thống...',
+          '🧠 Đồng bộ mạng nơ-ron AI Ideas...',
+          '🔐 Xác thực bảo mật đa tầng...',
+          '✨ Sẵn sàng không gian làm việc!'
+        ];
+        var index = 0;
+        var interval = setInterval(function() {
+          var splash = document.getElementById('ideas-splash-screen');
+          if (!splash || splash.classList.contains('splash-fade-out') || splash.style.display === 'none') {
+            clearInterval(interval);
+            return;
+          }
+          var msgEl = splash.querySelector('.status-msg');
+          if (msgEl) {
+            index = (index + 1) % messages.length;
+            msgEl.style.opacity = '0';
+            msgEl.style.transform = 'translateY(4px)';
+            setTimeout(function() {
+              msgEl.textContent = messages[index];
+              msgEl.style.opacity = '1';
+              msgEl.style.transform = 'translateY(0)';
+            }, 220);
+          }
+        }, 1200);
+      })();
+    </script>
 
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

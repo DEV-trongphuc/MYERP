@@ -2896,6 +2896,7 @@ function checkTaskDueSlaAlerts($conn) {
               AND status = 'planned' 
               AND deleted_at IS NULL 
               AND due_date IS NOT NULL 
+              AND (tags NOT LIKE '%misa%' OR tags IS NULL)
               AND (
                   (TIME(due_date) IN ('00:00:00', '23:59:59') AND DATE(due_date) < CURDATE())
                   OR (TIME(due_date) NOT IN ('00:00:00', '23:59:59') AND due_date <= NOW())
@@ -2934,9 +2935,12 @@ function checkTaskDueSlaAlerts($conn) {
                 }
             }
 
-            // Mark task as notified
-            $bodyData = !empty($row['body']) ? json_decode($row['body'], true) : [];
-            if (!is_array($bodyData)) $bodyData = [];
+            // Mark task as notified safely without losing existing description
+            $rawBody = (string)($row['body'] ?? '');
+            $bodyData = !empty($rawBody) ? json_decode($rawBody, true) : null;
+            if (!is_array($bodyData)) {
+                $bodyData = ['erp_task' => ['description' => $rawBody]];
+            }
             $bodyData['due_sla_notified'] = true;
             $newBodyJson = json_encode($bodyData, JSON_UNESCAPED_UNICODE);
 
@@ -2978,6 +2982,7 @@ function checkSubtaskDueAlerts($conn) {
             WHERE type = 'task' 
               AND status = 'planned' 
               AND deleted_at IS NULL 
+              AND (tags NOT LIKE '%misa%' OR tags IS NULL)
               AND body LIKE '%\"checklist\"%'
               AND (body LIKE '%\"done\":false%' OR body LIKE '%\"done\":0%')
               AND (body NOT LIKE '%\"subtask_sla_notified\":true%')
@@ -2997,11 +3002,16 @@ function checkSubtaskDueAlerts($conn) {
             $bodyText = $row['body'];
             
             $bodyData = json_decode($bodyText, true);
-            if (!is_array($bodyData) || empty($bodyData['erp_task']['checklist'])) {
+            if (!is_array($bodyData)) {
                 continue;
             }
             
-            $checklist = $bodyData['erp_task']['checklist'];
+            $isInsideErp = !empty($bodyData['erp_task']['checklist']) && is_array($bodyData['erp_task']['checklist']);
+            $isRoot = !empty($bodyData['checklist']) && is_array($bodyData['checklist']);
+            if (!$isInsideErp && !$isRoot) {
+                continue;
+            }
+            $checklist = $isInsideErp ? $bodyData['erp_task']['checklist'] : $bodyData['checklist'];
             $updated = false;
             
             foreach ($checklist as &$item) {
@@ -3043,7 +3053,11 @@ function checkSubtaskDueAlerts($conn) {
             }
             
             if ($updated) {
-                $bodyData['erp_task']['checklist'] = $checklist;
+                if ($isInsideErp) {
+                    $bodyData['erp_task']['checklist'] = $checklist;
+                } else {
+                    $bodyData['checklist'] = $checklist;
+                }
                 $allNotified = true;
                 foreach ($checklist as $item) {
                     if (empty($item['done']) && !empty($item['due_date']) && empty($item['notified_sla'])) {
@@ -4233,19 +4247,21 @@ if (!defined('DIAG_TOKEN')) {
         logSync("Error running checkCheckInSlaEscalation: " . $e->getMessage());
     }
 
-    // --- Chạy kiểm tra cảnh báo SLA thời hạn công việc quá hạn ---
+    // --- Chạy kiểm tra cảnh báo SLA thời hạn công việc quá hạn (TẠM ẨN THEO YÊU CẦU) ---
+    /*
     try {
         checkTaskDueSlaAlerts($conn);
     } catch (Exception $e) {
         logSync("Error running checkTaskDueSlaAlerts: " . $e->getMessage());
     }
 
-    // --- Chạy kiểm tra cảnh báo SLA công việc con quá hạn ---
+    // --- Chạy kiểm tra cảnh báo SLA công việc con quá hạn (TẠM ẨN THEO YÊU CẦU) ---
     try {
         checkSubtaskDueAlerts($conn);
     } catch (Exception $e) {
         logSync("Error running checkSubtaskDueAlerts: " . $e->getMessage());
     }
+    */
 
     // --- Chạy kiểm tra cảnh báo tắc nghẽn Meta CAPI ---
     try {

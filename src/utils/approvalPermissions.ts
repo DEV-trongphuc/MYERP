@@ -141,6 +141,13 @@ export function isItemAtMyStepToApprove(item: any, user: any, usersByNameMap?: M
   const lvl2 = (item.status_level_2 || 'none').toLowerCase();
   const lvl3 = (item.status_level_3 || 'none').toLowerCase();
 
+  // If all reached levels are approved, it is no longer pending approval
+  const hasLvl2 = Boolean(item.approver_id_2 || item.approver_name_2 || (lvl2 !== 'none' && lvl2 !== '' && lvl2 !== 'not_reached'));
+  const hasLvl3 = Boolean(item.approver_id_3 || item.approver_name_3 || (lvl3 !== 'none' && lvl3 !== '' && lvl3 !== 'not_reached'));
+  if (lvl1 === 'approved' && (!hasLvl2 || lvl2 === 'approved') && (!hasLvl3 || lvl3 === 'approved')) {
+    return false;
+  }
+
   // Helper: kiểm tra đích danh người duyệt cấp theo ID hoặc Tên
   const isUserMatch = (appId: any, appName: any) => {
     const numId = Number(appId || 0);

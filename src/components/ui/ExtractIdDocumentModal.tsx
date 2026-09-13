@@ -530,17 +530,21 @@ export const ExtractIdDocumentModal: React.FC<ExtractIdDocumentModalProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '6px' }}>
                   <style>{`
                     @keyframes shimmerWave {
-                      0% { background-position: -200% 0; }
-                      100% { background-position: 200% 0; }
+                      0% { background-position: 100% 0; }
+                      100% { background-position: -100% 0; }
                     }
                     .shimmer-wave-effect {
-                      background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 35%, #cbd5e1 50%, #e2e8f0 65%, #f1f5f9 100%) !important;
-                      background-size: 250% 100% !important;
-                      animation: shimmerWave 1.4s ease-in-out infinite !important;
+                      background: linear-gradient(90deg, rgba(241, 245, 249, 0.95) 0%, rgba(226, 232, 240, 0.45) 30%, rgba(255, 255, 255, 0.9) 50%, rgba(226, 232, 240, 0.45) 70%, rgba(241, 245, 249, 0.95) 100%) !important;
+                      background-size: 200% 100% !important;
+                      animation: shimmerWave 1.8s ease-in-out infinite !important;
+                    }
+                    [data-theme="dark"] .shimmer-wave-effect {
+                      background: linear-gradient(90deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.4) 30%, rgba(71, 85, 105, 0.7) 50%, rgba(51, 65, 85, 0.4) 70%, rgba(30, 41, 59, 0.9) 100%) !important;
+                      background-size: 200% 100% !important;
+                      animation: shimmerWave 1.8s ease-in-out infinite !important;
                     }
                   `}</style>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#6366f1', fontSize: '0.85rem', fontWeight: 600 }}>
-                    <Loader2 size={18} className="animate-spin" />
+                  <div style={{ display: 'flex', alignItems: 'center', color: '#6366f1', fontSize: '0.84rem', fontWeight: 600 }}>
                     <span>Đang tải danh sách tài liệu từ hồ sơ khách hàng...</span>
                   </div>
                   <div style={{

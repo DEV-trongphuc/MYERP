@@ -558,6 +558,7 @@ require_once __DIR__ . '/controllers/SalesOrderController.php';
 require_once __DIR__ . '/controllers/CloudFileController.php';
 require_once __DIR__ . '/controllers/CustomFieldController.php';
 require_once __DIR__ . '/controllers/ExportController.php';
+require_once __DIR__ . '/controllers/TaskGroupController.php';
 require_once __DIR__ . '/controllers/ProjectController.php';
 require_once __DIR__ . '/controllers/CampaignController.php';
 require_once __DIR__ . '/controllers/DepositController.php';
@@ -727,6 +728,32 @@ try {
             error_log("Restore EXP 19 Migration Error: " . $ex->getMessage());
         }
     }
+
+    // Migration: clear_test_approvals_6_7_8_21
+    if (!in_array('clear_test_approvals_6_7_8_21', $applied, true)) {
+        try {
+            // 1. Delete test requests from hrm_leave_requests (including #21, #8, #7, #6)
+            $db->exec("DELETE FROM hrm_leave_requests WHERE id IN (6, 7, 8, 21)");
+            try { $db->exec("DELETE FROM hrm_leave_comments WHERE leave_id IN (6, 7, 8, 21)"); } catch (\Throwable $e) {}
+
+            // 2. Delete test requests from workflow_requests if table exists
+            try {
+                $db->exec("DELETE FROM workflow_requests WHERE id IN (6, 7, 8, 21)");
+                $db->exec("DELETE FROM workflow_approvals WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
+                $db->exec("DELETE FROM workflow_step_logs WHERE request_id IN (6, 7, 8, 21) OR workflow_request_id IN (6, 7, 8, 21)");
+            } catch (\Throwable $e) {}
+
+            // 3. Clean audit_logs and notifications for these test requests
+            try {
+                $db->exec("DELETE FROM audit_logs WHERE resource IN ('hrm_leave_requests', 'leave', 'leave_request', 'workflow_requests', 'workflow') AND resource_id IN (6, 7, 8, 21)");
+                $db->exec("DELETE FROM notifications WHERE (link LIKE '%leave%' OR link LIKE '%approval%') AND (link LIKE '%/21' OR link LIKE '%/8' OR link LIKE '%/7' OR link LIKE '%/6')");
+            } catch (\Throwable $e) {}
+
+            $db->prepare("INSERT INTO schema_migrations (migration) VALUES ('clear_test_approvals_6_7_8_21')")->execute();
+        } catch (\Throwable $ex) {
+            error_log("Clear Test Approvals Migration Error: " . $ex->getMessage());
+        }
+    }
 } catch (Exception $e) {
     error_log("Auto Migration Error: " . $e->getMessage());
 }
@@ -829,7 +856,14 @@ switch ($resource) {
         elseif ($resourceId === 'lead-sources')       $ctrl->leadSources($auth);
         elseif ($resourceId === 'sales-leaderboard')  $ctrl->salesLeaderboard($auth);
         elseif ($resourceId === 'my-stats')           $ctrl->myStats($auth);
+        elseif ($resourceId === 'badges')             $ctrl->badges($auth);
         else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    case 'badges':
+        $auth = requireAuth();
+        $ctrl = new DashboardController($db);
+        $ctrl->badges($auth);
         break;
 
     // CONTACTS
@@ -963,12 +997,34 @@ switch ($resource) {
         elseif ($resourceId && $subResource === 'mute-status' && $method === 'GET') $ctrl->getMuteStatus($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'toggle-mute' && $method === 'POST') $ctrl->toggleMute($auth, (int)$resourceId);
         elseif ($resourceId && $subResource === 'hide-status' && $method === 'GET')  $ctrl->getHideStatus($auth, (int)$resourceId);
-        elseif ($resourceId && $subResource === 'toggle-hide' && $method === 'POST') $ctrl->toggleHide($auth, (int)$resourceId);
+        elseif ($resourceId === 'bulk-move-group' && $method === 'POST') {
+            $tgCtrl = new TaskGroupController($db);
+            $tgCtrl->bulkMove($auth);
+        }
+        elseif ($resourceId && $subResource === 'move-group' && $method === 'POST') {
+            $tgCtrl = new TaskGroupController($db);
+            $tgCtrl->moveTask($auth, (int)$resourceId);
+        }
         elseif (!$resourceId && $method === 'GET')    $ctrl->index($auth);
         elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
         elseif ($resourceId  && $method === 'GET')    $ctrl->show($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'PUT')    $ctrl->update($auth, (int)$resourceId);
         elseif ($resourceId  && $method === 'DELETE') $ctrl->destroy($auth, (int)$resourceId);
+        else respond(404, null, 'Route không tồn tại', false);
+        break;
+
+    // TASK GROUPS
+    case 'task-groups':
+        $auth = requireAuth();
+        $ctrl = new TaskGroupController($db);
+        if     (!$resourceId && $method === 'GET')    $ctrl->index($auth);
+        elseif (!$resourceId && $method === 'POST')   $ctrl->store($auth);
+        elseif ($resourceId === 'reorder' && $method === 'POST') $ctrl->reorder($auth);
+        elseif ($resourceId === 'bulk-move' && $method === 'POST') $ctrl->bulkMove($auth);
+        elseif ($resourceId && $subResource === 'toggle-pin' && $method === 'POST') $ctrl->togglePin($auth, (int)$resourceId);
+        elseif ($resourceId && $subResource === 'move' && $method === 'POST') $ctrl->moveTask($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'PUT')     $ctrl->update($auth, (int)$resourceId);
+        elseif ($resourceId && $method === 'DELETE')  $ctrl->destroy($auth, (int)$resourceId);
         else respond(404, null, 'Route không tồn tại', false);
         break;
 

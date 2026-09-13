@@ -347,9 +347,26 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
       return () => clearTimeout(timer);
     } else {
       setAnimateIn(false);
-      const timer = setTimeout(() => setIsVisible(false), 420);
+      const timer = setTimeout(() => setIsVisible(false), 300);
       return () => clearTimeout(timer);
     }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setAnimateIn(false);
+    setTimeout(() => {
+      onClose();
+    }, 280);
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
   if (!isVisible) return null;
@@ -359,20 +376,21 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
     <>
       <div
         className="drawer-backdrop"
-        onClick={onClose}
+        onClick={handleClose}
         style={{
           zIndex: 1000,
           opacity: animateIn ? 1 : 0,
-          transition: 'opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'opacity 0.28s cubic-bezier(0.25, 0.1, 0.25, 1)',
           pointerEvents: animateIn ? 'auto' : 'none'
         }}
       />
       <div
         className={styles.drawer}
         style={{
-          transform: animateIn ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1)',
-          willChange: 'transform'
+          transform: animateIn ? 'translateX(0)' : 'translateX(60%)',
+          opacity: animateIn ? 1 : 0,
+          transition: 'transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.28s cubic-bezier(0.25, 0.1, 0.25, 1)',
+          willChange: 'transform, opacity'
         }}
       >
             {/* Header */}
@@ -393,7 +411,7 @@ export const DealDrawer: React.FC<DealDrawerProps> = ({ isOpen, onClose, deal, o
                 </div>
               </div>
               <div className={styles.headerActions}>
-                <button className={styles.closeBtn} onClick={onClose}><X size={20} /></button>
+                <button className={styles.closeBtn} onClick={handleClose}><X size={20} /></button>
               </div>
             </div>
 

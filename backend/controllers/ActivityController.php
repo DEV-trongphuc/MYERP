@@ -357,6 +357,16 @@ class ActivityController {
         if ($start) { $where[] = 'a.due_date >= ?'; $params[] = $start; }
         if ($end)   { $where[] = 'a.due_date <= ?'; $params[] = $end; }
 
+        if (isset($_GET['task_group_id'])) {
+            $tgFilter = trim((string)$_GET['task_group_id']);
+            if ($tgFilter === 'unassigned' || $tgFilter === 'null' || $tgFilter === '0') {
+                $where[] = 'a.task_group_id IS NULL';
+            } elseif (is_numeric($tgFilter) && (int)$tgFilter > 0) {
+                $where[] = 'a.task_group_id = ?';
+                $params[] = (int)$tgFilter;
+            }
+        }
+
         // Validating sort fields
         $allowedSort = ['created_at', 'due_date', 'priority', 'status'];
         if (!in_array($sortBy, $allowedSort)) $sortBy = 'due_date';
@@ -523,9 +533,46 @@ class ActivityController {
         $cnt=$this->db->prepare("SELECT COUNT(*) FROM activities a WHERE $w");
         $cnt->execute($params); $total=(int)$cnt->fetchColumn();
 
+        $isMinimal = !empty($_GET['minimal']);
+
+        if ($isMinimal) {
+            // High performance minimal select for calendar / quick overview
+            $stmt = $this->db->prepare("
+                SELECT a.id, a.tenant_id, a.type, a.subject, a.body, a.status, a.priority, 
+                       a.due_date, a.created_at, a.updated_at, a.user_id, a.created_by,
+                       a.related_type, a.related_id, a.contact_id, a.task_group_id,
+                       u.full_name as user_name, u.avatar_url,
+                       COALESCE(NULLIF(TRIM(ct.full_name), ''), NULLIF(TRIM(ct2.full_name), '')) as contact_name,
+                       COALESCE(ct.avatar_url, ct2.avatar_url) as contact_avatar
+                FROM activities a 
+                LEFT JOIN users u ON a.user_id=u.id
+                LEFT JOIN contacts ct ON a.related_type='contact' AND a.related_id=ct.id AND ct.deleted_at IS NULL
+                LEFT JOIN contacts ct2 ON a.contact_id=ct2.id AND ct2.deleted_at IS NULL
+                WHERE $w ORDER BY a.$sortBy $order
+                LIMIT $limit OFFSET $offset
+            ");
+            $stmt->execute($params);
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($items as &$item) {
+                $item['first_image_url'] = null;
+                if (!empty($item['subject'])) {
+                    $item['subject'] = html_entity_decode($item['subject'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    $item['subject'] = str_replace(["\xc2\xa0", "&nbsp;"], ' ', $item['subject']);
+                    $item['subject'] = trim(preg_replace('/\s+/', ' ', $item['subject']));
+                }
+                if (!empty($item['body']) && is_string($item['body'])) {
+                    $item['body'] = str_replace('&nbsp;', ' ', $item['body']);
+                }
+            }
+            respond(200, ['items' => $items, 'total' => $total, 'page' => $page, 'limit' => $limit]);
+            return;
+        }
+
         $stmt=$this->db->prepare("
             SELECT a.*, u.full_name as user_name, u.avatar_url,
                    creator.full_name as created_by_name, creator.avatar_url as created_by_avatar,
+                   tg.name as task_group_name, tg.color as task_group_color, tg.icon as task_group_icon,
                    COALESCE(NULLIF(TRIM(ct.full_name), ''), NULLIF(TRIM(ct2.full_name), ''), NULLIF(TRIM(deal_ct.full_name), '')) as contact_name,
                    COALESCE(a.contact_id, ct.id, ct2.id, deal_ct.id) as contact_id,
                    COALESCE(ct.avatar_url, ct2.avatar_url, deal_ct.avatar_url) as contact_avatar,
@@ -544,6 +591,7 @@ class ActivityController {
             FROM activities a 
             LEFT JOIN users u ON a.user_id=u.id
             LEFT JOIN users creator ON a.created_by=creator.id
+            LEFT JOIN task_groups tg ON a.task_group_id = tg.id
             LEFT JOIN contacts ct ON a.related_type='contact' AND a.related_id=ct.id AND ct.deleted_at IS NULL
             LEFT JOIN contacts ct2 ON a.contact_id=ct2.id AND ct2.deleted_at IS NULL
             LEFT JOIN deals d ON a.related_type='deal' AND a.related_id=d.id AND d.deleted_at IS NULL
@@ -558,22 +606,24 @@ class ActivityController {
         $stmt->execute($params);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Pre-fetch activity comments to resolve the N+1 queries bottleneck
-        // OPTIMIZATION: Only fetch comments if items count is reasonable (<= 150) AND only for comments with images/attachments
+        // Pre-fetch activity comments in chunks to permanently eliminate N+1 queries regardless of item count
         $activityIds = array_column($items, 'id');
         $preFetchedComments = [];
-        if (!empty($activityIds) && count($activityIds) <= 150) {
-            $placeholders = implode(',', array_fill(0, count($activityIds), '?'));
-            $cStmt = $this->db->prepare("
-                SELECT activity_id, content, attachments 
-                FROM activity_comments 
-                WHERE activity_id IN ($placeholders) 
-                  AND (content LIKE '%<img%' OR content LIKE '%![]%' OR (attachments IS NOT NULL AND attachments != '' AND attachments != '[]'))
-                ORDER BY id ASC
-            ");
-            $cStmt->execute($activityIds);
-            while ($cRow = $cStmt->fetch(PDO::FETCH_ASSOC)) {
-                $preFetchedComments[$cRow['activity_id']][] = $cRow;
+        if (!empty($activityIds)) {
+            $chunks = array_chunk($activityIds, 200);
+            foreach ($chunks as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                $cStmt = $this->db->prepare("
+                    SELECT activity_id, content, attachments 
+                    FROM activity_comments 
+                    WHERE activity_id IN ($placeholders) 
+                      AND (content LIKE '%<img%' OR content LIKE '%![]%' OR (attachments IS NOT NULL AND attachments != '' AND attachments != '[]'))
+                    ORDER BY id ASC
+                ");
+                $cStmt->execute($chunk);
+                while ($cRow = $cStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $preFetchedComments[$cRow['activity_id']][] = $cRow;
+                }
             }
         }
 
@@ -733,13 +783,14 @@ class ActivityController {
         if ($status === 'done') {
             $done_at = empty($b['done_at']) ? date('Y-m-d H:i:s') : $b['done_at'];
         }
+        $taskGroupId = !empty($b['task_group_id']) ? (int)$b['task_group_id'] : null;
         $contactId = empty($b['contact_id']) ? null : (int)$b['contact_id'];
 
         $this->db->prepare("
-            INSERT INTO activities (tenant_id,user_id,created_by,type,subject,body,status,priority,start_date,due_date,done_at,related_type,related_id,contact_id,tags,participant_ids,progress,require_approval,approver_id,approval_status,link)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO activities (tenant_id,user_id,task_group_id,created_by,type,subject,body,status,priority,start_date,due_date,done_at,related_type,related_id,contact_id,tags,participant_ids,progress,require_approval,approver_id,approval_status,link)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ")->execute([
-            $auth['tenant_id'], $targetUserId, $auth['user_id'], $b['type'],
+            $auth['tenant_id'], $targetUserId, $taskGroupId, $auth['user_id'], $b['type'],
             $b['subject'], $b['body']??null, $status, $b['priority']??'medium',
             $start_date, $due_date, $done_at, $b['related_type']??null, $b['related_id']??null,
             $contactId,
@@ -893,6 +944,7 @@ class ActivityController {
         $stmt=$this->db->prepare("
             SELECT a.*, u.full_name as user_name,
                    creator.full_name as created_by_name, creator.avatar_url as created_by_avatar,
+                   tg.name as task_group_name, tg.color as task_group_color, tg.icon as task_group_icon,
                    COALESCE(NULLIF(TRIM(ct.full_name), ''), NULLIF(TRIM(ct2.full_name), ''), NULLIF(TRIM(deal_ct.full_name), '')) as contact_name,
                    COALESCE(a.contact_id, ct.id, ct2.id, deal_ct.id) as contact_id,
                    COALESCE(ct.avatar_url, ct2.avatar_url, deal_ct.avatar_url) as contact_avatar,
@@ -904,6 +956,7 @@ class ActivityController {
             FROM activities a 
             LEFT JOIN users u ON a.user_id=u.id
             LEFT JOIN users creator ON a.created_by=creator.id
+            LEFT JOIN task_groups tg ON a.task_group_id = tg.id
             LEFT JOIN contacts ct ON a.related_type='contact' AND a.related_id=ct.id AND ct.deleted_at IS NULL
             LEFT JOIN contacts ct2 ON a.contact_id=ct2.id AND ct2.deleted_at IS NULL
             LEFT JOIN deals d ON a.related_type='deal' AND a.related_id=d.id AND d.deleted_at IS NULL
@@ -1105,7 +1158,7 @@ class ActivityController {
             }
         }
 
-        $fields=['user_id','type','subject','body','status','priority','start_date','due_date','done_at','related_type','related_id','contact_id','tags','participant_ids','progress','require_approval','approver_id','approval_status','link'];
+        $fields=['user_id','task_group_id','type','subject','body','status','priority','start_date','due_date','done_at','related_type','related_id','contact_id','tags','participant_ids','progress','require_approval','approver_id','approval_status','link'];
         $sets=[];$params=[];
         foreach($fields as $f){
             if(array_key_exists($f,$b)){
@@ -1114,6 +1167,8 @@ class ActivityController {
                     $params[] = $this->normalizeDueDate($b[$f]);
                 } elseif (in_array($f, ['done_at']) && $b[$f] === '') {
                     $params[] = null;
+                } elseif ($f === 'task_group_id') {
+                    $params[] = (!empty($b[$f]) && (int)$b[$f] > 0) ? (int)$b[$f] : null;
                 } else {
                     $params[]=$b[$f];
                 }

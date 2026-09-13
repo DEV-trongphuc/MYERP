@@ -53,7 +53,7 @@ export const hideSplashScreen = (force: boolean = false) => {
   }
 
   const elapsed = Date.now() - splashStartTime;
-  const MIN_SPLASH_DURATION = 2500; // Minimum 2.5 seconds as requested
+  const MIN_SPLASH_DURATION = 3000; // Minimum 3.0 seconds as requested
   const remaining = Math.max(0, MIN_SPLASH_DURATION - elapsed);
 
   if (hideTimer) clearTimeout(hideTimer);

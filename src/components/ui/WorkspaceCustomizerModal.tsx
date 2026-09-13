@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, UploadCloud, RotateCcw, Image as ImageIcon, LayoutGrid, Sparkles, Layers, Sliders } from 'lucide-react';
@@ -17,7 +17,7 @@ export interface WorkspaceCustomizerModalProps {
 }
 
 // Curated high quality wallpaper samples (optimized for dashboard backgrounds)
-const PRESET_WALLPAPERS = [
+export const PRESET_WALLPAPERS = [
   {
     id: 'myerp_brand',
     name: 'MYERP Brand (Độc quyền - Mặc định)',
@@ -188,6 +188,56 @@ const PRESET_WALLPAPERS = [
   }
 ];
 
+// Preload cache tracker so we don't refetch multiple times per session
+let hasPreloadedWorkspaceWallpapers = false;
+
+export const preloadWorkspaceWallpapers = () => {
+  if (typeof window === 'undefined' || hasPreloadedWorkspaceWallpapers) return;
+  hasPreloadedWorkspaceWallpapers = true;
+
+  const urls: string[] = [];
+  PRESET_WALLPAPERS.forEach(item => {
+    if (item.url && (item.url.startsWith('http') || item.url.startsWith('/'))) {
+      urls.push(item.url);
+    }
+    if (item.preview && (item.preview.startsWith('http') || item.preview.startsWith('/'))) {
+      urls.push(item.preview);
+    }
+  });
+
+  const uniqueUrls = Array.from(new Set(urls));
+  const preloadQueue = [...uniqueUrls];
+  const CONCURRENCY = 4;
+
+  const startWorker = () => {
+    if (preloadQueue.length === 0) return;
+    const url = preloadQueue.shift();
+    if (!url) return;
+
+    const img = new Image();
+    try {
+      (img as any).fetchPriority = 'high';
+    } catch (_) {}
+    img.onload = () => startWorker();
+    img.onerror = () => startWorker();
+    img.src = url;
+  };
+
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(() => {
+      for (let i = 0; i < CONCURRENCY; i++) {
+        startWorker();
+      }
+    }, { timeout: 1000 });
+  } else {
+    setTimeout(() => {
+      for (let i = 0; i < CONCURRENCY; i++) {
+        startWorker();
+      }
+    }, 200);
+  }
+};
+
 const PRESET_PATTERNS = [
   {
     id: 'gradient_indigo',
@@ -244,6 +294,10 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedPreview, setUploadedPreview] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    preloadWorkspaceWallpapers();
+  }, []);
 
   if (!isOpen) return null;
 
@@ -602,7 +656,21 @@ export const WorkspaceCustomizerModal: React.FC<WorkspaceCustomizerModalProps> =
                     return (
                       <div
                         key={wp.id}
-                        onClick={() => setSelectedBg(wp.url)}
+                        onMouseEnter={() => {
+                          if (wp.url && (wp.url.startsWith('http') || wp.url.startsWith('/'))) {
+                            const img = new Image();
+                            try { (img as any).fetchPriority = 'high'; } catch (_) {}
+                            img.src = wp.url;
+                          }
+                        }}
+                        onClick={() => {
+                          setSelectedBg(wp.url);
+                          if (wp.url && (wp.url.startsWith('http') || wp.url.startsWith('/'))) {
+                            const img = new Image();
+                            try { (img as any).fetchPriority = 'high'; } catch (_) {}
+                            img.src = wp.url;
+                          }
+                        }}
                         style={{
                           position: 'relative',
                           height: '90px',

@@ -582,12 +582,41 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
     ? Math.round((tempExpectedCommission || selectedDepForManage.expected_commission || 0) * (totalApprovedMilestones / selectedDepForManage.price))
     : 0;
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsClosing(false);
+    } else {
+      setIsClosing(false);
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, isClosing]);
+
   const baseZIndex = zIndex || 2000000;
 
   return createPortal(
     <>
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && !isClosing && (
           <div style={{ position: 'fixed', inset: 0, zIndex: baseZIndex, display: 'flex', justifyContent: 'flex-end' }}>
             {/* Overlay */}
             <motion.div
@@ -595,7 +624,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={onClose}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              onClick={handleClose}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -609,8 +639,8 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
             <motion.div
               initial={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
               animate={{ y: 0, x: 0, opacity: 1 }}
-              exit={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, x: '250px' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
+              exit={window.innerWidth < 768 ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
               style={{
                 position: 'fixed',
                 top: 0,
@@ -635,7 +665,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
-                    onClick={onClose}
+                    onClick={handleClose}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -721,7 +751,7 @@ export const DepositDetailDrawer: React.FC<DepositDetailDrawerProps> = ({
 
                   {/* Close button X */}
                   <button
-                    onClick={onClose}
+                    onClick={handleClose}
                     style={{
                       border: 'none',
                       background: 'none',

@@ -84,10 +84,11 @@ class ContactController {
         if (!in_array(strtoupper($order), ['ASC', 'DESC'])) $order = 'DESC';
 
         if ($sortBy === 'created_at') {
-            $safeDlSql = "IF(dl.received_at IS NOT NULL AND dl.received_at <= DATE_ADD(NOW(), INTERVAL 1 DAY), dl.received_at, '1970-01-01')";
-            $orderByClause = "GREATEST(IFNULL(c.created_at, '1970-01-01'), IFNULL(c.last_contact, '1970-01-01'), IFNULL(c.updated_at, '1970-01-01'), $safeDlSql) $order, c.id $order";
+            $orderByClause = "c.created_at $order, c.id $order";
         } elseif ($sortBy === 'last_contact') {
-            $orderByClause = "COALESCE(c.last_contact, c.updated_at, c.created_at, '1970-01-01') $order, c.id $order";
+            $orderByClause = "c.last_contact $order, c.id $order";
+        } elseif ($sortBy === 'updated_at') {
+            $orderByClause = "c.updated_at $order, c.id $order";
         } else {
             $orderByClause = "c.$sortBy $order, c.id $order";
         }
@@ -259,7 +260,11 @@ class ContactController {
         if (!$isGlobalPipelineSearch) {
             switch ($segment) {
                 case 'tiem_nang':
-                    // Keep all pipeline leads (including stage 14 enrolled) so total count and stage counts match exactly
+                    // By default, exclude pipeline 14 (enrolled / customer) from Tiềm năng list.
+                    // If searching ($isGlobalPipelineSearch) or filtering explicitly by stage 14, it remains accessible.
+                    if (empty($stage) && empty($stageSlug) && empty($_GET['stage_id'])) {
+                        $where[] = "(c.stage_id != 44 AND (c.pipeline_status IS NULL OR c.pipeline_status NOT IN ('enrolled', 'hoc_vien')) AND c.status != 'customer')";
+                    }
                     break;
                 case 'hot':        $where[] = 'c.lead_score >= 80'; break;
                 case 'customer':
@@ -312,7 +317,7 @@ class ContactController {
                 });
                 $stageCountsWhereStr = !empty($stageCountsWhere) ? implode(' AND ', $stageCountsWhere) : '1=1';
 
-                // Single unified aggregate query for active stage counts, nurture count, and lost count
+                // Fast aggregate query directly on indexed contacts table without unindexed OR join
                 $aggStmt = $this->db->prepare("
                     SELECT 
                         CASE 
@@ -320,16 +325,23 @@ class ContactController {
                             WHEN c.lead_status = 'nurture' THEN 'nurture'
                             ELSE 'active'
                         END as status_group,
-                        COALESCE(c.stage_id, ps.id) as resolved_stage_id,
-                        ps.system_slug as stage_slug,
+                        c.stage_id,
+                        c.pipeline_status,
                         COUNT(*) as cnt
                     FROM contacts c
-                    LEFT JOIN pipeline_stages ps ON (c.stage_id = ps.id OR (c.stage_id IS NULL AND (c.pipeline_status = ps.system_slug OR c.pipeline_status = ps.id)))
                     WHERE $stageCountsWhereStr
-                    GROUP BY status_group, resolved_stage_id, stage_slug
+                    GROUP BY status_group, c.stage_id, c.pipeline_status
                 ");
                 $aggStmt->execute($baseParams);
                 $aggRows = $aggStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+                $stagesList = $this->db->query("SELECT id, system_slug FROM pipeline_stages WHERE tenant_id = " . (int)$tid)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                $psMap = [];
+                $slugMap = [];
+                foreach ($stagesList as $stg) {
+                    $psMap[(int)$stg['id']] = $stg['system_slug'];
+                    $slugMap[$stg['system_slug']] = (int)$stg['id'];
+                }
 
                 $activeTotal = 0;
                 $nurtureTotal = 0;
@@ -337,8 +349,8 @@ class ContactController {
 
                 foreach ($aggRows as $row) {
                     $grp = $row['status_group'];
-                    $sId = $row['resolved_stage_id'];
-                    $slug = $row['stage_slug'];
+                    $sId = !empty($row['stage_id']) ? (int)$row['stage_id'] : null;
+                    $slug = $row['pipeline_status'];
                     $cnt = (int)$row['cnt'];
 
                     if ($grp === 'nurture') {
@@ -347,13 +359,19 @@ class ContactController {
                         $lostTotal += $cnt;
                     } else {
                         // Active pipeline leads
-                        if (!empty($sId)) {
-                            $stageCounts[(string)$sId] = ($stageCounts[(string)$sId] ?? 0) + $cnt;
+                        $resolvedId = $sId ?: ($slugMap[$slug] ?? null);
+                        $resolvedSlug = $sId && isset($psMap[$sId]) ? $psMap[$sId] : $slug;
+
+                        if (!empty($resolvedId)) {
+                            $stageCounts[(string)$resolvedId] = ($stageCounts[(string)$resolvedId] ?? 0) + $cnt;
                         }
-                        if (!empty($slug)) {
-                            $stageCounts[(string)$slug] = ($stageCounts[(string)$slug] ?? 0) + $cnt;
+                        if (!empty($resolvedSlug)) {
+                            $stageCounts[(string)$resolvedSlug] = ($stageCounts[(string)$resolvedSlug] ?? 0) + $cnt;
                         }
-                        $activeTotal += $cnt;
+                        $isEnrolledStage = ($resolvedId == 44) || in_array($resolvedSlug, ['enrolled', 'hoc_vien'], true);
+                        if ($segment !== 'tiem_nang' || !$isEnrolledStage) {
+                            $activeTotal += $cnt;
+                        }
                     }
                 }
 
@@ -396,35 +414,39 @@ class ContactController {
                     $stageCounts['uncontacted'] = 0;
                 }
 
-                // Compute multi_program count (contacts with >= 2 distinct academic programs or cloned profiles)
-                try {
-                    $mpWhere = $baseWhere;
-                    $mpWhere[] = "(
-                        c.duplicate_with_id > 0
-                        OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
-                        OR (c.person_id > 0 AND c.person_id IN (
-                            SELECT person_id FROM contacts 
-                            WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
-                            GROUP BY person_id 
-                            HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                                OR COUNT(DISTINCT stage_id) >= 2 
-                                OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                        ))
-                        OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
-                            SELECT phone FROM contacts 
-                            WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
-                            GROUP BY phone 
-                            HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
-                                OR COUNT(DISTINCT stage_id) >= 2 
-                                OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
-                        ))
-                    )";
-                    $mpWhereStr = implode(' AND ', $mpWhere);
-                    $mpParams = array_merge($baseParams, [$tid, $tid, $tid, $tid]);
-                    $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
-                    $mpStmt->execute($mpParams);
-                    $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
-                } catch (\Throwable $e) {
+                // Compute multi_program count on demand
+                if (!empty($_GET['include_multi_program_count']) || !empty($_GET['multi_program'])) {
+                    try {
+                        $mpWhere = $baseWhere;
+                        $mpWhere[] = "(
+                            c.duplicate_with_id > 0
+                            OR c.id IN (SELECT duplicate_with_id FROM contacts WHERE tenant_id = ? AND deleted_at IS NULL AND duplicate_with_id > 0)
+                            OR (c.person_id > 0 AND c.person_id IN (
+                                SELECT person_id FROM contacts 
+                                WHERE tenant_id = ? AND deleted_at IS NULL AND person_id > 0 
+                                GROUP BY person_id 
+                                HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                                    OR COUNT(DISTINCT stage_id) >= 2 
+                                    OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                            ))
+                            OR (c.phone != '' AND c.phone IS NOT NULL AND c.phone IN (
+                                SELECT phone FROM contacts 
+                                WHERE tenant_id = ? AND deleted_at IS NULL AND phone != '' AND phone IS NOT NULL 
+                                GROUP BY phone 
+                                HAVING COUNT(DISTINCT COALESCE(NULLIF(TRIM(program), ''), '__empty__')) >= 2 
+                                    OR COUNT(DISTINCT stage_id) >= 2 
+                                    OR SUM(CASE WHEN duplicate_with_id > 0 THEN 1 ELSE 0 END) > 0
+                            ))
+                        )";
+                        $mpWhereStr = implode(' AND ', $mpWhere);
+                        $mpParams = array_merge($baseParams, [$tid, $tid, $tid, $tid]);
+                        $mpStmt = $this->db->prepare("SELECT COUNT(*) FROM contacts c WHERE $mpWhereStr");
+                        $mpStmt->execute($mpParams);
+                        $stageCounts['multi_program'] = (int)$mpStmt->fetchColumn();
+                    } catch (\Throwable $e) {
+                        $stageCounts['multi_program'] = 0;
+                    }
+                } else {
                     $stageCounts['multi_program'] = 0;
                 }
             } catch (\Exception $e) {
@@ -626,6 +648,7 @@ class ContactController {
                    CASE 
                        WHEN c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.status = 'customer' THEN
                            COALESCE(
+                               c.admission_date,
                                (
                                    SELECT MIN(created_at)
                                    FROM audit_logs
@@ -640,6 +663,7 @@ class ContactController {
                                    JOIN deposits dep ON dm.deposit_id = dep.id
                                    WHERE dep.contact_id = c.id
                                ),
+                               dl.received_at,
                                c.created_at
                            )
                        ELSE c.created_at
@@ -1082,6 +1106,31 @@ class ContactController {
                         ELSE comp.name 
                     END as company_name, 
                     u.full_name as owner_name, u.avatar_url as owner_avatar, ps.name as stage_name, ps.color as stage_color,
+                    CASE 
+                        WHEN c.pipeline_status IN ('enrolled', 'hoc_vien') OR c.status = 'customer' THEN
+                            COALESCE(
+                                c.admission_date,
+                                (
+                                    SELECT MIN(created_at)
+                                    FROM audit_logs
+                                    WHERE resource = 'contact'
+                                      AND resource_id = c.id
+                                      AND action = 'MOVE_STAGE'
+                                      AND (new_data LIKE '%enrolled%' OR new_data LIKE '%hoc_vien%')
+                                ),
+                                (
+                                    SELECT MIN(dm.created_at)
+                                    FROM deposit_milestones dm
+                                    JOIN deposits dep ON dm.deposit_id = dep.id
+                                    WHERE dep.contact_id = c.id
+                                ),
+                                dl.received_at,
+                                c.created_at
+                            )
+                        ELSE c.created_at
+                    END as closed_date,
+                    (SELECT COUNT(*) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.deleted_at IS NULL AND ((a.related_type IN ('contact', 'lead') AND a.related_id = c.id) OR a.contact_id = c.id)) as activity_count,
+                    (SELECT COUNT(*) FROM activities a WHERE a.tenant_id = c.tenant_id AND a.deleted_at IS NULL AND a.type IN ('task', 'meeting') AND (a.status NOT IN ('done', 'cancelled', 'completed') AND (a.progress < 100 OR a.progress IS NULL)) AND ((a.related_type IN ('contact', 'lead') AND a.related_id = c.id) OR a.contact_id = c.id)) as pending_task_count,
                     (SELECT COALESCE(SUM(total),0) FROM invoices WHERE contact_id=c.id AND status='paid' AND deleted_at IS NULL) as actual_revenue,
                     (SELECT COUNT(*) FROM invoices WHERE contact_id=c.id AND status='paid' AND deleted_at IS NULL) as paid_invoice_count,
                     (SELECT COALESCE(SUM(ee.amount),0) FROM expense_entities ee JOIN expenses e ON ee.expense_id = e.id WHERE ee.entity_type = 'contact' AND ee.entity_id = c.id AND e.status = 'approved' AND e.deleted_at IS NULL) as total_spent,

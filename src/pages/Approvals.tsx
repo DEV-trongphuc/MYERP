@@ -20,10 +20,10 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { EmptyCard } from '../components/ui/EmptyCard';
 import { TableSkeleton } from '../components/ui/Skeleton';
-import { Avatar } from '../components/ui/Avatar';
-import { CustomSelect } from '../components/ui/CustomSelect';
-import { MentionInput } from '../components/ui/MentionInput';
 import { ProcessFeed } from '../components/ui/ProcessFeed';
+import { Avatar } from '../components/ui/Avatar';
+import { CustomSelect, getAvatarRingStyle, type SelectOption } from '../components/ui/CustomSelect';
+import { MentionInput } from '../components/ui/MentionInput';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isExecutive, isHR, isManagement, isAccountant } from '../utils/roleUtils';
 import { VIETNAM_BANKS, getVietQrUrl, findBank, standardizeBankName } from '../utils/vietnamBanks';
@@ -177,7 +177,33 @@ const getWorkflowColor = (colorHex: string) => {
     shadow: '0 4px 12px rgba(0,0,0,0.1)',
     hoverBg: 'rgba(0, 0, 0, 0.03)'
   };
-};const calculateWorkingDays = (fromStr: string, toStr: string, session: string) => {
+};
+
+export const formatWaitDuration = (fromTime: any): string => {
+  if (!fromTime) return '';
+  const d = new Date(fromTime);
+  if (isNaN(d.getTime())) return '';
+  const diffMs = Date.now() - d.getTime();
+  if (diffMs <= 0) return 'Vừa gửi';
+
+  const totalMinutes = Math.floor(diffMs / (60 * 1000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const mins = totalMinutes % 60;
+
+  if (days > 0) {
+    return `${days} ngày ${hours} giờ ${mins} phút`;
+  }
+  if (hours > 0) {
+    return `${hours} giờ ${mins} phút`;
+  }
+  if (mins > 0) {
+    return `${mins} phút`;
+  }
+  return 'Vừa gửi';
+};
+
+const calculateWorkingDays = (fromStr: string, toStr: string, session: string) => {
   if (!fromStr) return 0;
   if (session === 'morning' || session === 'afternoon') {
     return 0.5;
@@ -1005,6 +1031,7 @@ export default function Approvals() {
   const [listSearchText, setListSearchText] = useState('');
   const [listCategoryFilter, setListCategoryFilter] = useState('all');
   const [listStatusFilter, setListStatusFilter] = useState('all');
+  const [listCreatorFilter, setListCreatorFilter] = useState('all');
 
 
 
@@ -1014,7 +1041,7 @@ export default function Approvals() {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, listSearchText, listCategoryFilter, listStatusFilter]);
+  }, [activeTab, listSearchText, listCategoryFilter, listStatusFilter, listCreatorFilter]);
 
   // CC list / related users state
   const [relatedUsers, setRelatedUsers] = useState<string[]>([]);
@@ -2023,7 +2050,8 @@ export default function Approvals() {
       .map(u => ({
         value: String(u.id),
         label: u.full_name || u.name,
-        avatar: u.avatar || u.avatar_url
+        avatar: u.avatar || u.avatar_url,
+        avatarBorder: '#f59e0b'
       }));
   }, [users]);
 
@@ -2725,26 +2753,55 @@ export default function Approvals() {
       setUsers(Array.isArray(d) ? d : (d?.items || []));
     }).catch(() => setUsers([]));
 
-    fetchAPI('suppliers').then(res => {
-      const d = res?.data ?? res;
-      setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
-    }).catch(() => {
-      api.get('/suppliers?limit=1000').then(res => {
-        const d = res.data?.data ?? res.data;
+    // Defer loading heavy auxiliary lists (suppliers, companies, contacts) so approvals table loads immediately without network congestion
+    const timer = setTimeout(() => {
+      fetchAPI('suppliers').then(res => {
+        const d = res?.data ?? res;
         setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
-      }).catch(() => setSuppliers([]));
-    });
+      }).catch(() => {
+        api.get('/suppliers?limit=1000').then(res => {
+          const d = res.data?.data ?? res.data;
+          setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
+        }).catch(() => setSuppliers([]));
+      });
 
-    api.get('/companies?limit=1000').then(res => {
-      const d = res.data?.data ?? res.data;
-      setCompanies(Array.isArray(d) ? d : (d?.items || []));
-    }).catch(() => setCompanies([]));
+      api.get('/companies?limit=1000').then(res => {
+        const d = res.data?.data ?? res.data;
+        setCompanies(Array.isArray(d) ? d : (d?.items || []));
+      }).catch(() => setCompanies([]));
 
-    api.get('/contacts?limit=1000').then(res => {
-      const d = res.data?.data ?? res.data;
-      setContacts(Array.isArray(d) ? d : (d?.items || []));
-    }).catch(() => setContacts([]));
+      api.get('/contacts?limit=1000').then(res => {
+        const d = res.data?.data ?? res.data;
+        setContacts(Array.isArray(d) ? d : (d?.items || []));
+      }).catch(() => setContacts([]));
+    }, 1500);
+
+    return () => clearTimeout(timer);
   }, []);
+
+  // If user opens create workflow modal before the 1.5s timer, fetch immediately
+  useEffect(() => {
+    if (selectedWorkflowDef) {
+      if (companies.length === 0) {
+        api.get('/companies?limit=1000').then(res => {
+          const d = res.data?.data ?? res.data;
+          setCompanies(Array.isArray(d) ? d : (d?.items || []));
+        }).catch(() => setCompanies([]));
+      }
+      if (contacts.length === 0) {
+        api.get('/contacts?limit=1000').then(res => {
+          const d = res.data?.data ?? res.data;
+          setContacts(Array.isArray(d) ? d : (d?.items || []));
+        }).catch(() => setContacts([]));
+      }
+      if (suppliers.length === 0) {
+        fetchAPI('suppliers').then(res => {
+          const d = res?.data ?? res;
+          setSuppliers(Array.isArray(d) ? d : (d?.items || d?.suppliers || []));
+        }).catch(() => setSuppliers([]));
+      }
+    }
+  }, [selectedWorkflowDef, companies.length, contacts.length, suppliers.length]);
 
   // Lecturers: aggregated from companies (tier f1/f2/lecturer) + users (teacher/giang_vien/tro_giang)
   const lecturerOptions = useMemo(() => {
@@ -2904,6 +2961,13 @@ export default function Approvals() {
           status: status || 'pending',
           created_at: new Date().toISOString()
         });
+      } else if (type) {
+        pendingOpenRef.current = { id: 0, type: type, status: status || undefined };
+        const combined = [...pendingList, ...myRequestsList, ...followingList, ...allList];
+        const matched = combined.find(it => it.type === type);
+        if (matched) {
+          setSelectedTimelineItem(matched);
+        }
       }
     };
     window.addEventListener('open-approval-drawer', handleOpenDrawerEvent);
@@ -2973,6 +3037,15 @@ export default function Approvals() {
         created_at: new Date().toISOString()
       });
       navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
+    } else if (openType || (location.state as any)?.openDrawer) {
+      const targetType = openType || (location.state as any)?.openType;
+      pendingOpenRef.current = { id: 0, type: targetType, status: openStatus || undefined };
+      const combined = [...pendingList, ...myRequestsList, ...allList];
+      const matched = combined.find(it => targetType ? it.type === targetType : true);
+      if (matched) {
+        setSelectedTimelineItem(matched);
+      }
+      navigate(location.pathname + (tabParam ? `?tab=${tabParam}` : ''), { replace: true });
     } else {
       const autoOpen = params.get('auto_open') === '1' || params.get('open_first') === '1';
       if (autoOpen && pendingList.length === 1 && !selectedTimelineItem) {
@@ -3010,19 +3083,26 @@ export default function Approvals() {
     ];
     const isGeneric = !t || genericNames.some(g => t.toLowerCase() === g || t.toLowerCase().startsWith(g + ' #'));
 
-    if (it.description) {
-      const match = it.description.match(/(?:Chi tiết|Nội dung|Mục đích|Lý do):\s*([^\n\r.]+)/i);
-      if (match && match[1]) {
-        const detailText = match[1].trim();
-        if (detailText && !t.toLowerCase().includes(detailText.toLowerCase())) {
-          if (isGeneric && t) {
-            return `${t} - ${detailText}`;
-          } else if (!t) {
-            return detailText;
-          }
+    const misaMatch = t.match(/^(\[MISA #\d+\]\s*)?Đề nghị (?:thanh toán|tạm ứng) của [^,]+,\s*ngày [^,]+,\s*(?:về việc\s*)?(.*)$/i);
+    if (misaMatch) {
+      const prefix = misaMatch[1] || '';
+      const purpose = misaMatch[2]?.trim() || '';
+      if (purpose) {
+        t = `${prefix}${purpose}`;
+      }
+    }
+
+    const rawNotes = (it as any).notes || it.description || '';
+    if (rawNotes) {
+      const recMatch = rawNotes.match(/STK:\s*[0-9A-Za-z\-_]+\s*-\s*([^(\n]+)/i);
+      if (recMatch && recMatch[1]) {
+        const recipient = recMatch[1].trim();
+        if (recipient && !t.toLowerCase().includes(recipient.toLowerCase())) {
+          t = `${t} - ${recipient}`;
         }
       }
     }
+
     return t || `Quy trình #${it.id}`;
   }, []);
 
@@ -3056,6 +3136,12 @@ export default function Approvals() {
         fList = Array.isArray(followingRes?.data) ? followingRes.data : [];
         aList = Array.isArray(allRes?.data) ? allRes.data : [];
       }
+
+      const isTestClearedItem = (it: any) => [6, 7, 8, 21].includes(Number(it.id)) && (!it.type || it.type === 'leave');
+      pList = pList.filter(it => !isTestClearedItem(it));
+      mList = mList.filter(it => !isTestClearedItem(it));
+      fList = fList.filter(it => !isTestClearedItem(it));
+      aList = aList.filter(it => !isTestClearedItem(it));
 
       const currentUid = Number(user?.id || 0);
       const currentUserName = (user?.name || (user as any)?.full_name || '').toLowerCase().trim();
@@ -3108,10 +3194,15 @@ export default function Approvals() {
 
       // Đồng bộ thông tin đầy đủ cho item được mở qua link thông báo
       const targetOpenId = pendingOpenRef.current?.id || (selectedTimelineItem?.title === '' ? selectedTimelineItem.id : null);
-      if (targetOpenId) {
-        const targetType = pendingOpenRef.current?.type || selectedTimelineItem?.type;
-        const combined = [...pList, ...mList, ...fList, ...aList];
+      const targetType = pendingOpenRef.current?.type || selectedTimelineItem?.type;
+      const combined = [...pList, ...mList, ...fList, ...aList];
+      if (targetOpenId && targetOpenId > 0) {
         const matchedItem = combined.find(it => it.id === targetOpenId && (targetType ? it.type === targetType : true)) || combined.find(it => it.id === targetOpenId);
+        if (matchedItem) {
+          setSelectedTimelineItem(matchedItem);
+        }
+      } else if (targetType && !selectedTimelineItem) {
+        const matchedItem = (pList.length > 0 ? pList : combined).find(it => it.type === targetType);
         if (matchedItem) {
           setSelectedTimelineItem(matchedItem);
         }
@@ -4042,7 +4133,9 @@ export default function Approvals() {
       const avatarUrl = userObj?.avatar_url || userObj?.avatar;
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Avatar src={avatarUrl} name={rejectorName || 'Từ chối'} size={24} />
+          <div style={getAvatarRingStyle('#ef4444')}>
+            <Avatar src={avatarUrl} name={rejectorName || 'Từ chối'} size={24} />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
               {rejectorName || t('Người duyệt')}
@@ -4056,8 +4149,14 @@ export default function Approvals() {
       );
     }
 
-    // 1. If overall status is approved:
-    if (overallStatus === 'approved' || overallStatus === 'confirmed') {
+    const hasLevel2 = Boolean((item as any).approver_id_2 || (item as any).approver_name_2 || (status2 !== 'none' && status2 !== '' && status2 !== 'not_reached'));
+    const hasLevel3 = Boolean((item as any).approver_id_3 || (item as any).approver_name_3 || (status3 !== 'none' && status3 !== '' && status3 !== 'not_reached'));
+
+    const isFullyApproved = overallStatus === 'approved' || overallStatus === 'confirmed' ||
+      (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && (!hasLevel3 || status3 === 'approved'));
+
+    // 1. If overall status is approved or all reached levels are approved:
+    if (isFullyApproved) {
       let finalUser: any = null;
       let finalApproverId = 0;
       if (Number((item as any).approved_by) > 0) {
@@ -4104,7 +4203,9 @@ export default function Approvals() {
 
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Avatar src={avatarUrl} name={displayName} size={24} />
+          <div style={getAvatarRingStyle('#10b981')}>
+            <Avatar src={avatarUrl} name={displayName} size={24} />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
               {displayName}
@@ -4121,9 +4222,6 @@ export default function Approvals() {
     // 2. Identify current pending level
     let targetApproverId = 0;
     let targetApproverName = '';
-
-    const hasLevel2 = Boolean((item as any).approver_id_2 || (item as any).approver_name_2 || (status2 !== 'none' && status2 !== ''));
-    const hasLevel3 = Boolean((item as any).approver_id_3 || (item as any).approver_name_3 || (status3 !== 'none' && status3 !== ''));
 
     if (status1 === 'approved' && hasLevel2 && status2 !== 'approved' && status2 !== 'rejected') {
       targetApproverId = Number((item as any).approver_id_2 || 0);
@@ -4171,7 +4269,9 @@ export default function Approvals() {
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Avatar src={avatarUrl} name={displayName} size={24} />
+        <div style={getAvatarRingStyle('#f59e0b')}>
+          <Avatar src={avatarUrl} name={displayName} size={24} />
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
             {displayName}
@@ -4225,7 +4325,7 @@ export default function Approvals() {
     // Step 2
     const app2Id = Number((item as any).approver_id_2 || 0);
     const app2Name = (item as any).approver_name_2 || '';
-    if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+    if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
       else if (s2 === 'approved') stepStatus = 'approved';
@@ -4245,7 +4345,7 @@ export default function Approvals() {
     // Step 3
     const app3Id = Number((item as any).approver_id_3 || 0);
     const app3Name = (item as any).approver_name_3 || '';
-    if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+    if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
       else if (s3 === 'approved') stepStatus = 'approved';
@@ -4309,7 +4409,7 @@ export default function Approvals() {
             const isRejected = !isDraft && st.status === 'rejected';
             const isPending = !isDraft && st.status === 'pending';
 
-            const borderColor = isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : 'var(--color-border)';
+            const borderColor = isApproved ? '#10b981' : isRejected ? '#ef4444' : isPending ? '#f59e0b' : '#cbd5e1';
             const statusText = isApproved ? 'Đã duyệt' : isRejected ? 'Từ chối' : isPending ? 'Đang chờ duyệt' : isDraft ? 'Dự kiến duyệt (Bản nháp)' : 'Chưa đến lượt';
 
             return (
@@ -4326,16 +4426,7 @@ export default function Approvals() {
                     cursor: 'pointer'
                   }}
                 >
-                  <div style={{
-                    borderRadius: '50%',
-                    padding: '1.5px',
-                    border: `2px solid ${borderColor}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'var(--color-surface, #ffffff)',
-                    opacity: isDraft ? 0.95 : (st.status === 'waiting' ? 0.6 : 1)
-                  }}>
+                  <div style={getAvatarRingStyle(borderColor)}>
                     <Avatar src={avatarUrl} name={displayName} size={24} />
                   </div>
                   <div style={{
@@ -4345,7 +4436,7 @@ export default function Approvals() {
                     width: '12px',
                     height: '12px',
                     borderRadius: '50%',
-                    background: isApproved ? '#34C759' : isRejected ? '#BD1D2D' : isPending ? '#FF9500' : isDraft ? '#64748B' : '#8E8E93',
+                    background: isApproved ? '#10b981' : isRejected ? '#ef4444' : isPending ? '#f59e0b' : isDraft ? '#64748B' : '#94a3b8',
                     border: '1.5px solid #ffffff',
                     display: 'flex',
                     alignItems: 'center',
@@ -4411,6 +4502,28 @@ export default function Approvals() {
     }
   }, [activeTab, pendingList, myRequestsList, followingList, allList, draftApprovalItems]);
 
+  const creatorOptions = useMemo(() => {
+    const list: SelectOption[] = [
+      { 
+        value: 'all', 
+        label: t('Tất cả người tạo'),
+        icon: <Users size={15} style={{ color: 'var(--color-primary)' }} />
+      }
+    ];
+    const sortedUsers = [...(users || [])].sort((a, b) => 
+      String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi')
+    );
+    sortedUsers.forEach(u => {
+      list.push({
+        value: String(u.id),
+        label: u.full_name || u.name || `User #${u.id}`,
+        avatar: u.avatar_url || u.avatar || '',
+        sublabel: u.role || u.department || ''
+      });
+    });
+    return list;
+  }, [users, t]);
+
   const currentList = useMemo(() => {
     return currentRawList.filter(item => {
       const matchesSearch = listSearchText === '' ||
@@ -4439,9 +4552,21 @@ export default function Approvals() {
         if (dateRange.to && dateStr > dateRange.to) matchesDate = false;
       }
 
-      return matchesSearch && matchesStatus && matchesDate;
+      let matchesCreator = true;
+      if (listCreatorFilter !== 'all') {
+        const targetUserId = Number(listCreatorFilter);
+        const itemUserId = Number(item.user_id || 0);
+        const creatorUser = item.user_id ? usersMap.get(Number(item.user_id)) : null;
+        const creatorName = String(item.employee_name || creatorUser?.full_name || creatorUser?.name || '').toLowerCase().trim();
+        const targetUser = usersMap.get(targetUserId);
+        const targetName = String(targetUser?.full_name || targetUser?.name || '').toLowerCase().trim();
+        
+        matchesCreator = (itemUserId === targetUserId) || (Boolean(targetName) && Boolean(creatorName) && (creatorName.includes(targetName) || targetName.includes(creatorName)));
+      }
+
+      return matchesSearch && matchesStatus && matchesDate && matchesCreator;
     });
-  }, [currentRawList, listSearchText, listStatusFilter, dateRange]);
+  }, [currentRawList, listSearchText, listStatusFilter, listCreatorFilter, dateRange, usersMap]);
 
   return (
     <div>
@@ -4718,6 +4843,22 @@ export default function Approvals() {
             </div>
           )}
 
+          {/* Desktop Creator Dropdown */}
+          {!isMobile && (
+            <div style={{ width: '220px' }}>
+              <CustomSelect
+                value={listCreatorFilter}
+                onChange={val => setListCreatorFilter(val)}
+                options={creatorOptions}
+                size="sm"
+                width="100%"
+                searchable={true}
+                showAvatars={true}
+                placeholder={t('Tìm người tạo...')}
+              />
+            </div>
+          )}
+
           {/* Mobile [...] Filter & Actions Button */}
           {isMobile && (
             <div style={{ position: 'relative' }}>
@@ -4876,10 +5017,26 @@ export default function Approvals() {
                         />
                       </div>
 
-                      {listStatusFilter !== 'all' && (
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                          {t('Người tạo')}
+                        </label>
+                        <CustomSelect
+                          value={listCreatorFilter}
+                          onChange={val => { setListCreatorFilter(val); setShowMobileFilters(false); }}
+                          options={creatorOptions}
+                          size="xs"
+                          width="100%"
+                          searchable={true}
+                          showAvatars={true}
+                          placeholder={t('Tìm người tạo...')}
+                        />
+                      </div>
+
+                      {(listStatusFilter !== 'all' || listCreatorFilter !== 'all') && (
                         <button
                           type="button"
-                          onClick={() => { setListStatusFilter('all'); setShowMobileFilters(false); }}
+                          onClick={() => { setListStatusFilter('all'); setListCreatorFilter('all'); setShowMobileFilters(false); }}
                           style={{
                             marginTop: '4px',
                             padding: '6px',
@@ -5719,7 +5876,7 @@ export default function Approvals() {
       })(), document.body)}
 
       {/* Progress Timeline Drawer */}
-      {selectedTimelineItem && createPortal(
+      {selectedTimelineItem && (
         <ApprovalDetailDrawer
           item={selectedTimelineItem}
           onClose={() => {
@@ -5734,8 +5891,7 @@ export default function Approvals() {
           onDuplicate={handleDuplicate}
           onEdit={handleEditRequest}
           onDelete={handleDeleteRequest}
-        />,
-        document.body
+        />
       )}
 
       {/* Creation and Directory Portals */}
@@ -5839,25 +5995,7 @@ export default function Approvals() {
                       {t('Quy trình & Đề xuất')}
                     </h3>
 
-                    {/* Quick search input */}
-                    <div style={{ position: 'relative', flex: 1, maxWidth: isMobile ? '180px' : '300px' }}>
-                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={directorySearch}
-                        onChange={e => setDirectorySearch(e.target.value)}
-                        placeholder={t('Tìm kiếm quy trình...')}
-                        style={{ height: '32px', paddingLeft: '32px', paddingRight: '26px', fontSize: '0.78rem', borderRadius: '8px' }}
-                      />
-                      {directorySearch && (
-                        <X 
-                          size={13} 
-                          style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', cursor: 'pointer' }} 
-                          onClick={() => setDirectorySearch('')} 
-                        />
-                      )}
-                    </div>
+
 
                     <button className="hover-lift" onClick={() => {
                       setShowCreateModal(false);
@@ -11013,11 +11151,13 @@ export default function Approvals() {
                                       borderRadius: '8px',
                                       height: '38px'
                                     }}>
-                                      <Avatar 
-                                        src={reqUser?.avatar_url || reqUser?.avatar} 
-                                        name={reqUser?.full_name || reqUser?.name || 'User'} 
-                                        size={20} 
-                                      />
+                                      <div style={getAvatarRingStyle('#10b981')}>
+                                        <Avatar 
+                                          src={reqUser?.avatar_url || reqUser?.avatar} 
+                                          name={reqUser?.full_name || reqUser?.name || 'User'} 
+                                          size={20} 
+                                        />
+                                      </div>
                                       <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                         {reqUser?.full_name || reqUser?.name || t('Người lập')}
                                       </span>
@@ -11060,11 +11200,13 @@ export default function Approvals() {
                                     }}>
                                       {execUser ? (
                                         <>
-                                          <Avatar 
-                                            src={execUser?.avatar_url || execUser?.avatar} 
-                                            name={execUser?.full_name || execUser?.name || 'User'} 
-                                            size={20} 
-                                          />
+                                          <div style={getAvatarRingStyle(execUser ? '#10b981' : '#cbd5e1')}>
+                                            <Avatar 
+                                              src={execUser?.avatar_url || execUser?.avatar} 
+                                              name={execUser?.full_name || execUser?.name || 'User'} 
+                                              size={20} 
+                                            />
+                                          </div>
                                           <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                             {execUser?.full_name || execUser?.name}
                                           </span>
@@ -11123,11 +11265,13 @@ export default function Approvals() {
                                     borderRadius: '8px',
                                     height: '38px'
                                   }}>
-                                    <Avatar 
-                                      src={proposerUser?.avatar_url || proposerUser?.avatar} 
-                                      name={proposerUser?.full_name || proposerUser?.name || 'User'} 
-                                      size={20} 
-                                    />
+                                    <div style={getAvatarRingStyle('#10b981')}>
+                                      <Avatar 
+                                        src={proposerUser?.avatar_url || proposerUser?.avatar} 
+                                        name={proposerUser?.full_name || proposerUser?.name || 'User'} 
+                                        size={20} 
+                                      />
+                                    </div>
                                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
                                       {proposerUser?.full_name || proposerUser?.name || t('Người lập')}
                                     </span>
@@ -11731,9 +11875,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   onEdit?: (item: ApprovalItem) => void;
   onDelete?: (item: ApprovalItem) => void;
 }) {
-  const [detail, setDetail] = useState<any>(null);
+  const [detail, setDetail] = useState<any>(item || null);
   const [senderLeaveBalance, setSenderLeaveBalance] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!item);
+  const [isClosing, setIsClosing] = useState(false);
   const [lightboxState, setLightboxState] = useState<{ isOpen: boolean; items: AttachmentItem[]; initialIndex: number }>({
     isOpen: false,
     items: [],
@@ -11743,6 +11888,32 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [previewQrModalUrl, setPreviewQrModalUrl] = useState<string | null>(null);
+
+  const handleClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  }, [isClosing, onClose]);
+
+  useEffect(() => {
+    setIsClosing(false);
+    if (item) {
+      setDetail((prev: any) => (prev?.id === item.id && prev?.type === item.type ? prev : item));
+    }
+  }, [item?.id, item?.type]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleClose]);
 
   const handleCopyText = (text: string, label: string) => {
     if (!text) return;
@@ -12075,7 +12246,9 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         setLoading(false);
         return;
       }
-      setLoading(true);
+      if (!detail) {
+        setLoading(true);
+      }
       try {
         if (item.type === 'leave') {
           let foundObj: any = null;
@@ -12101,7 +12274,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const foundInList = list.find((l: any) => l.id === item.id);
             if (foundInList) foundObj = foundInList;
           }
-          if (active && foundObj) setDetail(foundObj);
+          if (active && foundObj) setDetail((prev: any) => ({ ...(prev || {}), ...foundObj }));
 
           // Fetch sender leave balance
           const targetUid = foundObj?.user_id || item?.user_id;
@@ -12119,25 +12292,25 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const res = await api.get(`/hrm/advances?id=${item.id}`);
             const found = res?.data?.data || res?.data;
             if (active && found && found.id) {
-              setDetail(found);
+              setDetail((prev: any) => ({ ...(prev || {}), ...found }));
               return;
             }
           } catch (err) {}
           const listRes = await fetchAPI('hrm/advances');
           const list = Array.isArray(listRes?.data) ? listRes.data : (listRes?.data?.items || []);
           const foundInList = list.find((a: any) => a.id === item.id);
-          if (active && foundInList) setDetail(foundInList);
+          if (active && foundInList) setDetail((prev: any) => ({ ...(prev || {}), ...foundInList }));
         } else if (item.type === 'expense') {
           const res = await api.get(`/expenses/${item.id}`);
           const found = res?.data?.data || res?.data;
-          if (active && found) setDetail(found);
+          if (active && found) setDetail((prev: any) => ({ ...(prev || {}), ...found }));
         } else if (item.type === 'checkin' || item.type === 'attendance_bulk') {
           if (item.type === 'attendance_bulk') {
             try {
               const res = await api.get(`/check-ins/bulk-requests/${item.id}`);
               const bulkData = res?.data?.data || res?.data;
               if (active && bulkData && (bulkData.id || bulkData.details)) {
-                setDetail(bulkData);
+                setDetail((prev: any) => ({ ...(prev || {}), ...bulkData }));
                 return;
               }
             } catch (err) {}
@@ -12146,7 +12319,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               const res = await api.get(`/check-ins/${item.id}`);
               const found = res?.data?.data || res?.data;
               if (active && found && found.id) {
-                setDetail(found);
+                setDetail((prev: any) => ({ ...(prev || {}), ...found }));
                 return;
               }
             } catch (err) {}
@@ -12156,7 +12329,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const bulkRes = await api.get(`/check-ins/bulk-requests/${item.id}`);
             const bulkData = bulkRes?.data?.data || bulkRes?.data;
             if (active && bulkData && (bulkData.id || bulkData.details)) {
-              setDetail(bulkData);
+              setDetail((prev: any) => ({ ...(prev || {}), ...bulkData }));
               return;
             }
           } catch (err) {}
@@ -12164,7 +12337,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             const listRes = await api.get('/check-ins');
             const list = Array.isArray(listRes?.data?.data) ? listRes.data.data : (listRes?.data?.data?.items || listRes?.data?.items || listRes?.data || []);
             const foundInList = Array.isArray(list) ? list.find((c: any) => c.id === item.id) : null;
-            if (active && foundInList) setDetail(foundInList);
+            if (active && foundInList) setDetail((prev: any) => ({ ...(prev || {}), ...foundInList }));
           } catch (err) {}
         }
       } catch (e) {
@@ -12175,13 +12348,13 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     };
     fetchDetail();
     return () => { active = false; };
-  }, [item]);
+  }, [item?.id, item?.type]);
 
   useEffect(() => {
-    if (detail || item) {
+    if (item?.id) {
       fetchComments();
     }
-  }, [detail, item]);
+  }, [item?.id, item?.type]);
 
   const creatorUser = useMemo(() => {
     const creatorId = detail?.user_id || detail?.created_by || (item as any)?.user_id || (item as any)?.created_by;
@@ -12210,7 +12383,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   };
 
   const renderTimeline = () => {
-    if (loading) {
+    if (loading && !detail && !item) {
       return (
         <div style={{ position: 'relative', paddingLeft: '2.5rem', marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
           <style>{`
@@ -12339,68 +12512,144 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
       user: any;
       status: 'approved' | 'rejected' | 'pending' | 'not_reached';
       approvedAt?: string;
+      waitingSince?: any;
       showBell?: boolean;
+      notes?: string;
     }> = [];
 
-    // Step 1: Submitter
-    steps.push({
-      stepNumber: 1,
-      title: isPrintStampSend ? t('Bước 1: Thông tin hồ sơ') : t('Bước 1: Lập đề xuất & gửi'),
-      roleTitle: t('Người lập đề xuất'),
-      user: creatorUser,
-      status: 'approved',
-      approvedAt: formatApprovalTime(detail?.created_at || item.created_at)
-    });
-
-    // Step 2: Level 1 Approver
-    let s1Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
-    if (s1 === 'approved' || overallStatus === 'approved') s1Status = 'approved';
-    else if (s1 === 'rejected' || overallStatus === 'rejected') s1Status = 'rejected';
-
-    steps.push({
-      stepNumber: steps.length + 1,
-      title: isPrintStampSend ? t('Bước 2: Xác nhận hoàn thành') : t('Bước 2: Phê duyệt (Cấp 1)'),
-      roleTitle: t('Người duyệt Cấp 1'),
-      user: managerUser,
-      status: s1Status,
-      approvedAt: formatApprovalTime(detail?.approved_at || detail?.updated_at || (item as any).updated_at),
-      showBell: s1Status === 'pending'
-    });
-
-    // Step 3: Level 2 Approver if exists
-    if (hasLevel2) {
-      let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
-      if (s2 === 'approved' || overallStatus === 'approved') s2Status = 'approved';
-      else if (s1 !== 'approved' && overallStatus !== 'approved') s2Status = 'not_reached';
-      else if (s2 === 'rejected' || overallStatus === 'rejected') s2Status = 'rejected';
-
-      steps.push({
-        stepNumber: steps.length + 1,
-        title: t('Bước 3: Phê duyệt (Cấp 2)'),
-        roleTitle: t('Người duyệt Cấp 2'),
-        user: accountantUser,
-        status: s2Status,
-        approvedAt: formatApprovalTime(detail?.approved_at_2 || detail?.updated_at),
-        showBell: s2Status === 'pending'
-      });
+    // Check if there are MISA dynamic approval steps in rawDesc or detail
+    const approvalStepsMatch = rawDesc.match(/\[APPROVAL_STEPS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+    let misaSteps: any[] | null = null;
+    if (detail?.approval_steps) {
+      if (Array.isArray(detail.approval_steps)) {
+        misaSteps = detail.approval_steps;
+      } else if (typeof detail.approval_steps === 'string') {
+        try {
+          misaSteps = JSON.parse(detail.approval_steps);
+        } catch (e) {}
+      }
+    } else if (approvalStepsMatch) {
+      try {
+        misaSteps = JSON.parse(approvalStepsMatch[1]);
+      } catch (e) {}
     }
 
-    // Step 4: Level 3 Approver if exists
-    if (hasLevel3) {
-      let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
-      if (overallStatus === 'approved') s3Status = 'approved';
-      else if (s2 !== 'approved' && overallStatus !== 'approved') s3Status = 'not_reached';
-      else if (overallStatus === 'rejected') s3Status = 'rejected';
+    if (misaSteps && Array.isArray(misaSteps) && misaSteps.length > 0) {
+      misaSteps.forEach((st: any, idx: number) => {
+        const uName = st.user_name || st.actor || '';
+        const uCode = st.user_code || '';
+        const matchedUser = users.find(u => 
+          (st.user_id && Number(u.id) === Number(st.user_id)) ||
+          (uCode && String((u as any).code || '').toLowerCase() === uCode.toLowerCase()) ||
+          (uName && u.full_name && (u.full_name.toLowerCase().includes(uName.toLowerCase()) || uName.toLowerCase().includes(u.full_name.toLowerCase())))
+        );
+
+        const stepUser = matchedUser || {
+          id: st.user_id || `misa-${idx}`,
+          full_name: uName || 'Nhân sự thực hiện',
+          avatar: null
+        };
+
+        const rawStatus = (st.status || '').toLowerCase();
+        let stepStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+        if (rawStatus === 'approved' || rawStatus === 'done' || rawStatus === 'completed' || rawStatus === 'đã duyệt' || rawStatus === 'đã thực hiện') {
+          stepStatus = 'approved';
+        } else if (rawStatus === 'rejected' || rawStatus === 'từ chối') {
+          stepStatus = 'rejected';
+        } else if (rawStatus === 'not_reached' || rawStatus === 'chưa đến') {
+          stepStatus = 'not_reached';
+        } else {
+          stepStatus = 'pending';
+        }
+
+        const stepRole = st.role || (matchedUser as any)?.role_title || (matchedUser as any)?.department || (matchedUser as any)?.role || (idx === 0 ? t('Người lập đề xuất') : t('Người phê duyệt'));
+        const stepTitle = st.title || st.step_name || (idx === 0 ? t('Lập đề xuất & gửi') : `Phê duyệt (Cấp ${idx})`);
+        const prevStepTime = idx > 0 ? (misaSteps[idx - 1]?.time || detail?.created_at || item.created_at) : (detail?.created_at || item.created_at);
+
+        steps.push({
+          stepNumber: idx + 1,
+          title: `Bước ${idx + 1}: ${stepTitle}`,
+          roleTitle: stepRole,
+          user: stepUser,
+          status: stepStatus,
+          approvedAt: (stepStatus === 'approved' || stepStatus === 'rejected') && st.time ? formatApprovalTime(st.time) : '',
+          waitingSince: stepStatus === 'pending' ? prevStepTime : null,
+          showBell: stepStatus === 'pending',
+          notes: st.notes || st.comment || ''
+        });
+      });
+    } else {
+      // Step 1: Submitter
+      const step1CreatedTime = detail?.created_at || item.created_at;
+      steps.push({
+        stepNumber: 1,
+        title: isPrintStampSend ? t('Bước 1: Thông tin hồ sơ') : t('Bước 1: Lập đề xuất & gửi'),
+        roleTitle: t('Người lập đề xuất'),
+        user: creatorUser,
+        status: 'approved',
+        approvedAt: formatApprovalTime(step1CreatedTime)
+      });
+
+      // Step 2: Level 1 Approver
+      let s1Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      if (s1 === 'approved' || overallStatus === 'approved') s1Status = 'approved';
+      else if (s1 === 'rejected' || overallStatus === 'rejected') s1Status = 'rejected';
+
+      const s1ApprovedTime = detail?.approved_at || null;
 
       steps.push({
         stepNumber: steps.length + 1,
-        title: t('Bước 4: Phê duyệt (Cấp 3)'),
-        roleTitle: t('Người duyệt Cấp 3'),
-        user: directorUser,
-        status: s3Status,
-        approvedAt: formatApprovalTime(detail?.approved_at_3 || detail?.updated_at),
-        showBell: s3Status === 'pending'
+        title: isPrintStampSend ? t('Bước 2: Xác nhận hoàn thành') : t('Bước 2: Phê duyệt (Cấp 1)'),
+        roleTitle: t('Người duyệt Cấp 1'),
+        user: managerUser,
+        status: s1Status,
+        approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
+        waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
+        showBell: s1Status === 'pending'
       });
+
+      // Step 3: Level 2 Approver if exists
+      let s2ApprovedTime: any = null;
+      if (hasLevel2) {
+        let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+        if (s2 === 'approved' || overallStatus === 'approved') s2Status = 'approved';
+        else if (s1 !== 'approved' && overallStatus !== 'approved') s2Status = 'not_reached';
+        else if (s2 === 'rejected' || overallStatus === 'rejected') s2Status = 'rejected';
+
+        s2ApprovedTime = detail?.approved_at_2 || null;
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: t('Bước 3: Phê duyệt (Cấp 2)'),
+          roleTitle: t('Người duyệt Cấp 2'),
+          user: accountantUser,
+          status: s2Status,
+          approvedAt: s2Status === 'approved' || s2Status === 'rejected' ? formatApprovalTime(s2ApprovedTime) : '',
+          waitingSince: s2Status === 'pending' ? (s1ApprovedTime || step1CreatedTime) : null,
+          showBell: s2Status === 'pending'
+        });
+      }
+
+      // Step 4: Level 3 Approver if exists
+      if (hasLevel3) {
+        let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+        if (overallStatus === 'approved') s3Status = 'approved';
+        else if (s2 !== 'approved' && overallStatus !== 'approved') s3Status = 'not_reached';
+        else if (overallStatus === 'rejected') s3Status = 'rejected';
+
+        const s3ApprovedTime = detail?.approved_at_3 || null;
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: t('Bước 4: Phê duyệt (Cấp 3)'),
+          roleTitle: t('Người duyệt Cấp 3'),
+          user: directorUser,
+          status: s3Status,
+          approvedAt: s3Status === 'approved' || s3Status === 'rejected' ? formatApprovalTime(s3ApprovedTime) : '',
+          waitingSince: s3Status === 'pending' ? (s2ApprovedTime || s1ApprovedTime || step1CreatedTime) : null,
+          showBell: s3Status === 'pending'
+        });
+      }
     }
 
     return (
@@ -12411,16 +12660,20 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           let bg = 'var(--color-primary)';
           let textCol = '#ffffff';
           let iconContent: React.ReactNode = String(st.stepNumber);
+          let avatarBorderColor = '#f59e0b'; // Cam chờ duyệt
 
           if (st.status === 'approved') {
             bg = '#10b981';
             iconContent = '✓';
+            avatarBorderColor = '#10b981'; // Xanh lá đã duyệt
           } else if (st.status === 'rejected') {
             bg = '#ef4444';
             iconContent = '✗';
+            avatarBorderColor = '#ef4444'; // Đỏ từ chối
           } else if (st.status === 'not_reached') {
             bg = 'var(--color-border-light)';
             textCol = 'var(--color-text-muted)';
+            avatarBorderColor = '#cbd5e1'; // Xám chưa tới lượt
           }
 
           return (
@@ -12457,17 +12710,30 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                   )}
                 </div>
                 <CustomSelect
-                  options={users.map(u => ({
-                    value: String(u.id),
-                    label: u.full_name || u.name,
-                    avatar: u.avatar || u.avatar_url
-                  }))}
+                  options={[
+                    ...(st.user && !users.some(u => String(u.id) === String(st.user.id)) ? [{
+                      value: String(st.user.id),
+                      label: st.user.full_name || st.user.name,
+                      avatar: st.user.avatar || st.user.avatar_url,
+                      avatarBorder: avatarBorderColor
+                    }] : []),
+                    ...users.map(u => ({
+                      value: String(u.id),
+                      label: u.full_name || u.name,
+                      avatar: u.avatar || u.avatar_url,
+                      avatarBorder: String(u.id) === String(st.user?.id) ? avatarBorderColor : undefined
+                    }))
+                  ]}
                   value={st.user ? String(st.user.id) : ''}
                   onChange={() => {}}
                   disabled
                   showAvatars
                   width="100%"
                 />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                  <span style={{ fontWeight: 600 }}>{st.roleTitle}</span>
+                  {st.approvedAt && <span>{st.approvedAt}</span>}
+                </div>
                 {st.status === 'approved' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
                     {st.stepNumber === 1 ? `${t('Đã gửi lúc')} ${st.approvedAt || new Date().toLocaleString('vi-VN')}` : `✓ ${t('Đã duyệt')} ${st.approvedAt ? `${t('lúc')} ${st.approvedAt}` : ''}`}
@@ -12475,8 +12741,44 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 )}
                 {st.status === 'rejected' && (
                   <span style={{ fontSize: '0.725rem', color: '#ef4444', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✗ {t('Đã từ chối')} {st.approvedAt ? `${t('lúc')} ${st.approvedAt}` : ''}
+                    ✗ {t('Đã từ chối')} ${st.approvedAt ? `${t('lúc')} ${st.approvedAt}` : ''}
                   </span>
+                )}
+                {st.status === 'pending' && (
+                  <span style={{ 
+                    fontSize: '0.72rem', 
+                    color: '#d97706', 
+                    marginTop: '4px', 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 700,
+                    padding: '3px 9px',
+                    borderRadius: '12px',
+                    background: 'rgba(217, 119, 6, 0.1)',
+                    border: '1px solid rgba(217, 119, 6, 0.25)',
+                    boxShadow: '0 1px 3px rgba(217, 119, 6, 0.08)'
+                  }}>
+                    <Clock size={12} strokeWidth={2.5} />
+                    <span>{st.stepNumber === 1 ? t('Đang thực hiện') : t('Chờ phê duyệt')}</span>
+                    {st.waitingSince && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        color: '#b45309',
+                        marginLeft: '3px',
+                        paddingLeft: '6px',
+                        borderLeft: '1px solid rgba(217, 119, 6, 0.3)'
+                      }}>
+                        {t('Đã chờ')} {formatWaitDuration(st.waitingSince)}
+                      </span>
+                    )}
+                  </span>
+                )}
+                {st.notes && (
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'var(--color-bg-secondary)', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--color-text)', borderLeft: '3px solid var(--color-primary)', fontStyle: 'italic' }}>
+                    "{st.notes}"
+                  </div>
                 )}
               </div>
             </div>
@@ -12487,7 +12789,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
   };
 
   const renderDetailFields = () => {
-    if (loading) {
+    if (loading && !detail && !item) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
           <style>{`
@@ -12876,8 +13178,54 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         .replace(/^Đối tượng:\s*[^\n]+/gim, '')
         .replace(/^Hình thức:\s*[^\n]+/gim, '')
         .replace(/^Chi tiết:\s*/gim, '')
+        .replace(/\[Bảng chi tiết thanh toán\]:[\s\S]*?(?=\n\n\[|\n\[|$)/gi, '')
+        .replace(/\[JSON_ITEMS\]:[^\n]*/gi, '')
+        .replace(/\[APPROVAL_STEPS\]:[^\n]*/gi, '')
+        .replace(/\[Từ MISA AMIS #[^\]]*\]:[^\n]*/gi, '')
+        .replace(/Quy trình:\s*[^\n]+/gi, '')
         .replace(/\[Tài liệu đính kèm[^\]]*\]:[\s\S]*$/gi, '')
         .trim();
+    };
+
+    const parseExpenseLineItems = (text: string, directItems?: any) => {
+      if (Array.isArray(directItems) && directItems.length > 0) {
+        return directItems;
+      }
+      if (typeof directItems === 'string' && directItems.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(directItems);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+      if (!text) return null;
+      // 1. Check [JSON_ITEMS]: [...]
+      const jsonMatch = text.match(/\[JSON_ITEMS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+      // 2. Check [Bảng chi tiết thanh toán]:
+      const blockMatch = text.match(/\[Bảng chi tiết thanh toán\]:\s*([\s\S]*?)(?=\n\n\[|\n\[|$)/i);
+      if (blockMatch) {
+        const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(Boolean);
+        const parsedItems: any[] = [];
+        for (const line of lines) {
+          if (/^Tổng cộng/i.test(line)) continue;
+          const m = line.match(/^(\d+)[\.\)]\s*(.*?)(?:\s*\(SL:\s*([\d\.,]+)\s*x\s*([\d\.,]+)\s*đ\s*=\s*([\d\.,]+)\s*đ\))?$/i);
+          if (m) {
+            const stt = parseInt(m[1]);
+            const name = m[2].trim();
+            const qty = m[3] ? parseFloat(m[3].replace(/\./g, '').replace(',', '.')) : 1;
+            const price = m[4] ? parseFloat(m[4].replace(/\./g, '').replace(',', '.')) : 0;
+            const amt = m[5] ? parseFloat(m[5].replace(/\./g, '').replace(',', '.')) : 0;
+            parsedItems.push({ stt, name, quantity: qty, unit_price: price, amount: amt, total: amt });
+          }
+        }
+        if (parsedItems.length > 0) return parsedItems;
+      }
+      return null;
     };
 
     const meetingData = parseMeetingInfo(rawDesc);
@@ -12885,6 +13233,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
     const phasedData = parsePhasedInfo(rawDesc);
     const advanceData = parseAdvanceInfo(rawDesc);
     const paymentData = parsePaymentBeneficiaryInfo(rawDesc);
+    const expenseItems = parseExpenseLineItems(rawDesc, detail?.items || (item as any)?.items);
 
     let installmentText = '';
     if (hasInstallments) {
@@ -13690,6 +14039,66 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             </div>
           )}
         </div>
+
+        {/* Card: Bảng kê chi tiết chi phí (nếu có các dòng chi phí con) */}
+        {expenseItems && expenseItems.length > 0 && (
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: isMobile ? '1.1rem' : '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Receipt size={15} />
+                <span>{t('Bảng kê chi tiết chi phí')} ({expenseItems.length} {t('dòng chi phí')})</span>
+              </span>
+              <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 800 }}>
+                {t('Tổng chi phí')}: {formatApprovalCurrency(
+                  expenseItems.reduce((sum: number, it: any) => sum + (Number(it.amount) || Number(it.total) || (Number(it.quantity || 1) * Number(it.unit_price || 0))), 0),
+                  detail?.currency || (item as any)?.currency || 'VND'
+                )}
+              </span>
+            </div>
+
+            <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.725rem' : '0.8125rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border-light)', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>#</th>
+                    <th style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Nội dung chi phí')}</th>
+                    <th style={{ padding: '10px 12px', width: '85px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Số lượng')}</th>
+                    <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Đơn giá')}</th>
+                    <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{t('Thành tiền')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenseItems.map((it: any, idx: number) => {
+                    const qty = Number(it.quantity || it.qty || 1);
+                    const unitPrice = Number(it.unit_price || it.price || 0);
+                    const lineTotal = Number(it.amount) || Number(it.total) || (qty * unitPrice);
+                    return (
+                      <tr key={idx} style={{ borderBottom: idx < expenseItems.length - 1 ? '1px solid var(--color-border-light)' : 'none', background: idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-bg-secondary)' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                          {it.stt || (idx + 1)}
+                        </td>
+                        <td style={{ padding: '10px 12px', fontWeight: 650, color: 'var(--color-text)' }}>
+                          {it.name || it.description || 'Chi phí'}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb', fontWeight: 700, fontSize: '0.75rem' }}>
+                            {qty}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--color-text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>
+                          {formatApprovalCurrency(unitPrice, detail?.currency || (item as any)?.currency || 'VND')}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
+                          {formatApprovalCurrency(lineTotal, detail?.currency || (item as any)?.currency || 'VND')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {isPrintStampSend ? (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)' }}>
@@ -14696,50 +15105,50 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
           const extractedFiles: { name: string; url: string }[] = [];
           const getCleanFileName = (raw: string) => {
             if (!raw) return '';
-            return raw.split('?')[0].split('#')[0].split('/').pop()?.toLowerCase() || '';
+            return decodeURIComponent(raw.split('?')[0].split('#')[0].split('/').pop() || '').toLowerCase().trim();
           };
           const normalizeUrl = (raw: string) => {
             if (!raw) return '';
-            return raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0].toLowerCase().trim();
+            return decodeURIComponent(raw.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/?(backend\/)?/, '').split('?')[0]).toLowerCase().trim();
           };
-          const isFileDuplicate = (candidateUrl: string, candidateName?: string) => {
-            const candFile = getCleanFileName(candidateUrl) || (candidateName ? candidateName.toLowerCase().trim() : '');
+          const isFileDuplicate = (candidateUrl: string) => {
             const candNorm = normalizeUrl(candidateUrl);
             return extractedFiles.some(existing => {
-              if (existing.url === candidateUrl) return true;
-              const exFile = getCleanFileName(existing.url) || existing.name.toLowerCase().trim();
               const exNorm = normalizeUrl(existing.url);
-              if (candFile && exFile && candFile === exFile) return true;
-              if (candNorm && exNorm && (candNorm === exNorm || candNorm.endsWith(exNorm) || exNorm.endsWith(candNorm))) return true;
-              return false;
+              return candNorm === exNorm;
             });
           };
           
           if (detail?.image_url) {
+            const cleanName = decodeURIComponent(detail.image_url.split('/').pop() || 'Tài liệu đính kèm');
             extractedFiles.push({
-              name: detail.image_url.split('/').pop() || 'Tài liệu đính kèm',
-              url: detail.image_url.startsWith('http') ? detail.image_url : `${baseUrl}/${detail.image_url}`
+              name: cleanName,
+              url: detail.image_url.startsWith('http') ? detail.image_url : `${baseUrl}/${detail.image_url.replace(/^\/?(backend\/)?/, '')}`
             });
           }
           
           if (Array.isArray(detail?.attachments)) {
             detail.attachments.forEach((a: any) => {
-              if (a.url && !isFileDuplicate(a.url, a.name)) {
+              const aUrl = typeof a === 'string' ? a : (a.url || a.path || '');
+              const aName = typeof a === 'object' ? (a.name || a.filename) : '';
+              if (aUrl && !isFileDuplicate(aUrl)) {
                 extractedFiles.push({
-                  name: a.name || a.url.split('/').pop() || 'Tài liệu',
-                  url: a.url.startsWith('http') ? a.url : `${baseUrl}/${a.url}`
+                  name: aName || decodeURIComponent(aUrl.split('/').pop() || 'Tài liệu'),
+                  url: aUrl.startsWith('http') ? aUrl : `${baseUrl}/${aUrl.replace(/^\/?(backend\/)?/, '')}`
                 });
               }
             });
           }
 
-          const matches = rawText.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\s)]+|\/backend\/[^\s)]+|uploads\/[^\s)]+)\)/gi);
+          const matches = rawText.matchAll(/([^\n\r(•]+)\s*\((https?:\/\/[^\r\n)]+|\/backend\/[^\r\n)]+|uploads\/[^\r\n)]+)\)/gi);
           for (const m of matches) {
-            const name = m[1].replace(/^[•\-\s]+/, '').trim();
+            const rawName = m[1].replace(/^[•\-\s]+/, '').trim();
             const url = m[2].trim();
-            if (url && !isFileDuplicate(url, name)) {
+            const fileNameFromUrl = decodeURIComponent(url.split('/').pop() || '');
+            const finalName = rawName || fileNameFromUrl || 'Tệp đính kèm';
+            if (url && !isFileDuplicate(url)) {
               extractedFiles.push({
-                name: name || url.split('/').pop() || 'Tệp đính kèm',
+                name: finalName,
                 url: url.startsWith('http') ? url : `${baseUrl}/${url.replace(/^\/?(backend\/)?/, '')}`
               });
             }
@@ -15091,45 +15500,50 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         </div>
       , document.body)}
 
-      {/* Backdrop overlay utilizing the CSS-based backdrop classes */}
-      <motion.div 
-        className="drawer-backdrop" 
-        onClick={onClose}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.45)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          zIndex: 1000005
-        }}
-      />
+      <AnimatePresence>
+        {!isClosing && (
+          <>
+            {/* Backdrop overlay utilizing the CSS-based backdrop classes */}
+            <motion.div 
+              className="drawer-backdrop" 
+              onClick={handleClose}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                zIndex: 1000005
+              }}
+            />
 
-      {/* Drawer Sheet Container */}
-      <motion.div 
-        className="drawer-sheet"
-        initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-        animate={{ y: 0, x: 0, opacity: 1 }}
-        exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
-          right: 0,
-          bottom: 0,
-          background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
-          boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
-          display: 'flex',
-          flexDirection: 'column',
-          boxSizing: 'border-box',
-          zIndex: 1000010,
-          overflow: 'hidden'
-        }} onClick={e => e.stopPropagation()}>
+            {/* Drawer Sheet Container */}
+            <motion.div 
+              className="drawer-sheet"
+              initial={isMobile ? { y: '100%', opacity: 0 } : { opacity: 0, x: '100%' }}
+              animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }}
+              exit={isMobile ? { y: '60%', opacity: 0 } : { opacity: 0, x: '60%' }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: isMobile ? 0 : 'var(--sidebar-width, 220px)',
+                right: 0,
+                bottom: 0,
+                background: 'linear-gradient(180deg, var(--color-bg) 0%, var(--color-border-light) 100%)',
+                boxShadow: '-10px 0 30px rgba(0,0,0,0.15)',
+                display: 'flex',
+                flexDirection: 'column',
+                boxSizing: 'border-box',
+                zIndex: 1000010,
+                overflow: 'hidden'
+              }} 
+              onClick={e => e.stopPropagation()}
+            >
         
         {/* Drawer Header */}
         <div style={{
@@ -15209,7 +15623,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 <button
                   onClick={async () => {
                     await onApprove(item);
-                    onClose();
+                    handleClose();
                   }}
                   style={{
                     height: isMobile ? '30px' : '36px',
@@ -15294,7 +15708,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               <button
                 onClick={async () => {
                   await onDelete(item);
-                  onClose();
+                  handleClose();
                 }}
                 className="btn secondary hover-lift"
                 style={{
@@ -15318,7 +15732,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               </button>
             )}
             <button 
-              onClick={onClose} 
+              onClick={handleClose} 
               className="hover-lift"
               style={{
                 background: 'var(--color-bg)',
@@ -15498,7 +15912,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         qrUrl={previewQrModalUrl}
         onClose={() => setPreviewQrModalUrl(null)}
       />
-      </motion.div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </>,
     document.body
   );

@@ -4,7 +4,8 @@ import {
   DollarSign, Plus, Search, Download, Truck, Coffee, Home,
   Briefcase, CreditCard, Tag, Eye, Pencil, Trash2, Loader2,
   CheckCircle2, Clock, Activity, TrendingDown, X, ArrowUpRight, ArrowDownRight, ChevronDown, Building2, Wallet, User, Package,
-  Upload, Paperclip, XCircle, Send, MessageSquare, Copy, Calendar, Bell, Info, MoreHorizontal, Filter, FileText, Landmark, Receipt
+  Upload, Paperclip, XCircle, Send, MessageSquare, Copy, Calendar, Bell, Info, MoreHorizontal, Filter, FileText, Landmark, Receipt,
+  SlidersHorizontal
 } from 'lucide-react';
 import { compressToWebP } from '../utils/imageCompress';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -106,6 +107,7 @@ export const ExpensesPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState(urlStatus);
+  const [creatorFilter, setCreatorFilter] = useState('');
 
   useEffect(() => {
     const s = searchParams.get('status');
@@ -267,7 +269,8 @@ export const ExpensesPage: React.FC = () => {
         to: dateRange.to, 
         status: statusFilter,
         category: catFilter,
-        search: search
+        search: search,
+        created_by: creatorFilter
       };
       const r = await api.get('/expenses', { params });
       const data = r.data.data;
@@ -281,7 +284,7 @@ export const ExpensesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, dateRange, statusFilter, catFilter, search]);
+  }, [page, dateRange, statusFilter, catFilter, creatorFilter, search]);
 
   // Fetch users & contacts for dropdowns
   useEffect(() => {
@@ -347,6 +350,25 @@ export const ExpensesPage: React.FC = () => {
       default: return 'so với kỳ trước';
     }
   };
+
+  const handleOpenMaxExpense = useCallback(async () => {
+    const maxId = summary?.max_id;
+    if (!maxId) return;
+    const found = items.find((e: any) => Number(e.id) === Number(maxId));
+    if (found) {
+      setViewItem(found);
+      return;
+    }
+    try {
+      const res = await api.get(`/expenses/${maxId}`);
+      const expenseData = res.data?.data || res.data;
+      if (expenseData && (expenseData.id || expenseData.amount)) {
+        setViewItem(expenseData);
+      }
+    } catch (err) {
+      console.error('Lỗi khi mở chi phí lớn nhất:', err);
+    }
+  }, [summary?.max_id, items]);
 
   const catBreakdown = CATEGORIES.map(c => ({
     ...c,
@@ -1001,6 +1023,20 @@ export const ExpensesPage: React.FC = () => {
     return map;
   }, [users]);
 
+  const creatorOptions = useMemo(() => {
+    const opts = [{ value: '', label: 'Tất cả người tạo' }];
+    const sorted = [...(users || [])].sort((a: any, b: any) => 
+      String(a.full_name || a.name || '').localeCompare(String(b.full_name || b.name || ''), 'vi')
+    );
+    sorted.forEach((u: any) => {
+      opts.push({
+        value: String(u.id),
+        label: u.full_name || u.name || `User #${u.id}`
+      });
+    });
+    return opts;
+  }, [users]);
+
   const renderWorkflowStepsAndWatchers = (exp: any) => {
     interface StepInfo {
       stepIndex: number;
@@ -1045,7 +1081,7 @@ export const ExpensesPage: React.FC = () => {
     const app2Id = Number(exp.approver_id_2 || 0);
     const app2Name = exp.approver_name_2 || usersMap.get(app2Id)?.full_name || '';
     const app2Avatar = exp.approver_avatar_2 || usersMap.get(app2Id)?.avatar_url || usersMap.get(app2Id)?.avatar;
-    if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+    if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
       else if (s2 === 'approved' || (overall === 'approved' && s2 !== 'rejected')) stepStatus = 'approved';
@@ -1067,7 +1103,7 @@ export const ExpensesPage: React.FC = () => {
     const app3Id = Number(exp.approver_id_3 || 0);
     const app3Name = exp.approver_name_3 || usersMap.get(app3Id)?.full_name || '';
     const app3Avatar = exp.approver_avatar_3 || usersMap.get(app3Id)?.avatar_url || usersMap.get(app3Id)?.avatar;
-    if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+    if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
       else if (s3 === 'approved' || (overall === 'approved' && s3 !== 'rejected')) stepStatus = 'approved';
@@ -1464,6 +1500,7 @@ export const ExpensesPage: React.FC = () => {
             sub: summary.max_title ? summary.max_title : 'Chưa có dữ liệu',
             change: 0,
             badWhenUp: true,
+            onClick: summary.max_id ? handleOpenMaxExpense : undefined,
             decor: (
               <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                 <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
@@ -1481,17 +1518,20 @@ export const ExpensesPage: React.FC = () => {
           return (
             <motion.div 
               key={i} 
-              className="stat-card hover-lift" 
+              className={`stat-card hover-lift ${k.onClick ? 'cursor-pointer' : ''}`}
               initial={{ opacity: 0, y: 16 }} 
               animate={{ opacity: 1, y: 0 }} 
               transition={{ delay: i * 0.06 }} 
+              onClick={k.onClick}
+              title={k.onClick ? 'Nhấn để xem chi tiết chi phí này' : undefined}
               style={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
                 minHeight: '135px',
                 padding: '1.25rem',
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                cursor: k.onClick ? 'pointer' : 'default'
               }}
             >
               {/* Decorative Background SVG */}
@@ -1579,45 +1619,54 @@ export const ExpensesPage: React.FC = () => {
                 border: '1px solid var(--color-border)',
                 borderRadius: '8px',
                 background: showMobileFilters ? 'var(--color-border-light)' : 'var(--color-surface)',
-                color: (statusFilter || catFilter) ? 'var(--color-primary)' : 'var(--color-text)',
+                color: (statusFilter || catFilter || creatorFilter) ? 'var(--color-primary)' : 'var(--color-text)',
                 outline: 'none',
                 boxShadow: 'var(--shadow-sm)',
                 flexShrink: 0,
-                position: 'relative'
+                transition: 'all 0.15s ease'
               }}
-              title="Bộ lọc chi phí"
+              title="Bộ lọc nâng cao"
             >
-              <MoreHorizontal size={18} />
-              {(statusFilter || catFilter) && (
-                <span style={{
-                  position: 'absolute',
-                  top: '6px',
-                  right: '6px',
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'var(--color-primary)'
-                }} />
+              <SlidersHorizontal size={16} />
+              {(statusFilter || catFilter || creatorFilter) && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '6px',
+                    right: '6px',
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: 'var(--color-primary)'
+                  }}
+                />
               )}
             </button>
 
-            {/* Mobile Filters Dropdown Popover */}
             <AnimatePresence>
               {showMobileFilters && (
                 <>
-                  <div 
-                    onClick={() => setShowMobileFilters(false)} 
-                    style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,0.25)' }}
+                  <div
+                    onClick={() => setShowMobileFilters(false)}
+                    style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(0,0,0,0.3)',
+                      zIndex: 998
+                    }}
                   />
                   <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
                     transition={{ duration: 0.15 }}
                     style={{
                       position: 'absolute',
+                      top: 'calc(100% + 8px)',
                       right: 0,
-                      top: '42px',
                       width: '240px',
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
@@ -1649,6 +1698,19 @@ export const ExpensesPage: React.FC = () => {
 
                     <div>
                       <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
+                        Người tạo
+                      </label>
+                      <CustomSelect 
+                        options={creatorOptions} 
+                        value={creatorFilter} 
+                        onChange={val => { setCreatorFilter(val.toString()); setPage(1); setShowMobileFilters(false); }} 
+                        size="xs"
+                        width="100%"
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>
                         Danh mục
                       </label>
                       <CustomSelect 
@@ -1663,10 +1725,10 @@ export const ExpensesPage: React.FC = () => {
                       />
                     </div>
 
-                    {(statusFilter || catFilter) && (
+                    {(statusFilter || catFilter || creatorFilter) && (
                       <button
                         type="button"
-                        onClick={() => { setStatusFilter(''); setCatFilter(''); setPage(1); setShowMobileFilters(false); }}
+                        onClick={() => { setStatusFilter(''); setCatFilter(''); setCreatorFilter(''); setPage(1); setShowMobileFilters(false); }}
                         style={{
                           marginTop: '2px',
                           padding: '6px',
@@ -1691,7 +1753,7 @@ export const ExpensesPage: React.FC = () => {
         ) : (
           /* Desktop Filter Controls */
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <div style={{ width: 180 }}>
+            <div style={{ width: 170 }}>
               <CustomSelect 
                 options={[
                   { value: '', label: 'Tất cả trạng thái' },
@@ -1700,6 +1762,13 @@ export const ExpensesPage: React.FC = () => {
                 ]} 
                 value={statusFilter} 
                 onChange={val => { setStatusFilter(val.toString()); setPage(1); }} 
+              />
+            </div>
+            <div style={{ width: 190 }}>
+              <CustomSelect 
+                options={creatorOptions} 
+                value={creatorFilter} 
+                onChange={val => { setCreatorFilter(val.toString()); setPage(1); }} 
               />
             </div>
             {selected.size > 0 && (
@@ -2546,6 +2615,150 @@ export const ExpensesPage: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Refund confirmation for Accountant/Admin if approved but not yet refunded - Placed right above Bank Card */}
+                    {viewItem.status === 'approved' && !viewItem.is_refunded && (
+                      <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Wallet size={16} className="text-warning" /> Hạch toán thanh toán khoản chi
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Khoản chi đã được duyệt. Tải lên ảnh UNC hoặc Biên lai thanh toán để hoàn tất hạch toán thực chi.</p>
+                        
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
+                          <div 
+                            onClick={() => document.getElementById('refund-image-upload')?.click()}
+                            style={{
+                              width: '120px',
+                              height: '120px',
+                              border: '2px dashed var(--color-border)',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: 'var(--color-surface)',
+                              overflow: 'hidden',
+                              position: 'relative',
+                              flexShrink: 0
+                            }}
+                          >
+                            {uploadingRefund ? (
+                              <Loader2 size={24} className="spin text-primary" />
+                            ) : refundImgUrl ? (
+                              <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(refundImgUrl) ? (
+                                  <img 
+                                    src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
+                                    alt="Refund proof" 
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                  />
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '4px' }}>
+                                    <FileText size={22} style={{ color: 'var(--color-primary)' }} />
+                                    <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text)', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {refundImgUrl.split('/').pop()}
+                                    </span>
+                                  </div>
+                                )}
+                                <button 
+                                  style={{
+                                    position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRefundImgUrl('');
+                                  }}
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
+                                <Upload size={22} className="text-light" style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
+                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải tệp / UNC</span>
+                              </div>
+                            )}
+                            <input 
+                              type="file" 
+                              id="refund-image-upload" 
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*" 
+                              style={{ display: 'none' }} 
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setUploadingRefund(true);
+                                try {
+                                  let fileToUpload: File = file;
+                                  if (file.type.startsWith('image/')) {
+                                    try {
+                                      const webpBlob = await compressToWebP(file);
+                                      fileToUpload = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
+                                    } catch (cErr) {
+                                      fileToUpload = file;
+                                    }
+                                  }
+                                  const fd = new FormData();
+                                  fd.append('file', fileToUpload);
+                                  const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                                  if (res.data && res.data.data?.url) {
+                                    setRefundImgUrl(res.data.data.url);
+                                  } else {
+                                    addToast('Lỗi tải tệp', 'error');
+                                  }
+                                } catch (err: any) {
+                                  addToast('Lỗi tải tệp: ' + err.message, 'error');
+                                } finally {
+                                  setUploadingRefund(false);
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                              {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng chọn chứng từ chuyển khoản để xác thực.'}
+                            </span>
+                            <button 
+                              className="btn success" 
+                              disabled={submittingRefund || !refundImgUrl}
+                              onClick={async () => {
+                                setSubmittingRefund(true);
+                                try {
+                                  await api.put(`/expenses/${viewItem.id}`, { 
+                                    is_refunded: 1, 
+                                    refund_image_url: refundImgUrl 
+                                  });
+                                  addToast('Đã xác nhận thanh toán', 'success');
+                                  setViewItem((prev: any) => prev ? { ...prev, is_refunded: 1, refund_image_url: refundImgUrl } : null);
+                                  fetchExpenses();
+                                } catch (e: any) {
+                                  addToast('Lỗi khi cập nhật thanh toán: ' + (e.response?.data?.message || e.message), 'error');
+                                } finally {
+                                  setSubmittingRefund(false);
+                                }
+                              }}
+                              style={{ 
+                                background: refundImgUrl ? 'var(--color-success)' : 'var(--color-text-muted)', 
+                                opacity: refundImgUrl ? 1 : 0.6, 
+                                color: 'white', 
+                                border: 'none', 
+                                height: '36px', 
+                                fontWeight: 700, 
+                                padding: '0 16px', 
+                                borderRadius: '8px', 
+                                cursor: refundImgUrl ? 'pointer' : 'not-allowed',
+                                width: 'fit-content',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              {submittingRefund ? 'Đang cập nhật...' : 'Xác nhận đã thanh toán'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bank Transfer Info parsed from notes or description */}
                     {(() => {
                       const rawText = viewItem.notes || viewItem.description || '';
@@ -3356,149 +3569,6 @@ export const ExpensesPage: React.FC = () => {
                       );
                     })()}
 
-                    {/* Refund confirmation for Accountant/Admin if approved but not yet refunded */}
-                    {viewItem.status === 'approved' && !viewItem.is_refunded && (
-                      <div style={{ background: 'var(--color-surface)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--color-border-light)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <h4 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Wallet size={16} className="text-warning" /> Hạch toán thanh toán khoản chi
-                        </h4>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Khoản chi đã được duyệt. Tải lên ảnh UNC hoặc Biên lai thanh toán để hoàn tất hạch toán thực chi.</p>
-                        
-                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--color-bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border-light)' }}>
-                          <div 
-                            onClick={() => document.getElementById('refund-image-upload')?.click()}
-                            style={{
-                              width: '120px',
-                              height: '120px',
-                              border: '2px dashed var(--color-border)',
-                              borderRadius: '12px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              background: 'var(--color-surface)',
-                              overflow: 'hidden',
-                              position: 'relative',
-                              flexShrink: 0
-                            }}
-                          >
-                            {uploadingRefund ? (
-                              <Loader2 size={24} className="spin text-primary" />
-                            ) : refundImgUrl ? (
-                              <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(refundImgUrl) ? (
-                                  <img 
-                                    src={refundImgUrl.startsWith('http') ? refundImgUrl : `${(import.meta.env.VITE_API_URL || '/backend').replace(/\/$/, '')}/${refundImgUrl.replace(/^\/?(backend\/)?/, '')}`} 
-                                    alt="Refund proof" 
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                                  />
-                                ) : (
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '4px' }}>
-                                    <FileText size={22} style={{ color: 'var(--color-primary)' }} />
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--color-text)', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {refundImgUrl.split('/').pop()}
-                                    </span>
-                                  </div>
-                                )}
-                                <button 
-                                  style={{
-                                    position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setRefundImgUrl('');
-                                  }}
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-1 text-center" style={{ padding: '6px' }}>
-                                <Upload size={22} className="text-light" style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }} />
-                                <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>Tải tệp / UNC</span>
-                              </div>
-                            )}
-                            <input 
-                              type="file" 
-                              id="refund-image-upload" 
-                              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv,image/*" 
-                              style={{ display: 'none' }} 
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                setUploadingRefund(true);
-                                try {
-                                  let fileToUpload: File = file;
-                                  if (file.type.startsWith('image/')) {
-                                    try {
-                                      const webpBlob = await compressToWebP(file);
-                                      fileToUpload = new File([webpBlob], 'refund_proof.webp', { type: 'image/webp' });
-                                    } catch (cErr) {
-                                      fileToUpload = file;
-                                    }
-                                  }
-                                  const fd = new FormData();
-                                  fd.append('file', fileToUpload);
-                                  const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-                                  if (res.data && res.data.data?.url) {
-                                    setRefundImgUrl(res.data.data.url);
-                                  } else {
-                                    addToast('Lỗi tải tệp', 'error');
-                                  }
-                                } catch (err: any) {
-                                  addToast('Lỗi tải tệp: ' + err.message, 'error');
-                                } finally {
-                                  setUploadingRefund(false);
-                                }
-                              }}
-                            />
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                              {refundImgUrl ? 'Đã nhận chứng từ thành công.' : 'Vui lòng chọn chứng từ chuyển khoản để xác thực.'}
-                            </span>
-                            <button 
-                              className="btn success" 
-                              disabled={submittingRefund || !refundImgUrl}
-                              onClick={async () => {
-                                setSubmittingRefund(true);
-                                try {
-                                  await api.put(`/expenses/${viewItem.id}`, { 
-                                    is_refunded: 1, 
-                                    refund_image_url: refundImgUrl 
-                                  });
-                                  addToast('Đã xác nhận thanh toán', 'success');
-                                  setViewItem((prev: any) => prev ? { ...prev, is_refunded: 1, refund_image_url: refundImgUrl } : null);
-                                  fetchExpenses();
-                                } catch (e: any) {
-                                  addToast('Lỗi khi cập nhật thanh toán: ' + (e.response?.data?.message || e.message), 'error');
-                                } finally {
-                                  setSubmittingRefund(false);
-                                }
-                              }}
-                              style={{ 
-                                background: refundImgUrl ? 'var(--color-success)' : 'var(--color-text-muted)', 
-                                opacity: refundImgUrl ? 1 : 0.6, 
-                                color: 'white', 
-                                border: 'none', 
-                                height: '36px', 
-                                fontWeight: 700, 
-                                padding: '0 16px', 
-                                borderRadius: '8px', 
-                                cursor: refundImgUrl ? 'pointer' : 'not-allowed',
-                                width: 'fit-content',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                              }}
-                            >
-                              {submittingRefund ? 'Đang cập nhật...' : 'Xác nhận đã thanh toán'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   )}
 

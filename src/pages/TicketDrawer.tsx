@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { 
@@ -36,6 +36,16 @@ const PRIORITIES = [
 
 export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdate, onDelete, contacts = [], users = [], onOpenContact }) => {
   const [isMobile, setIsMobile] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsClosing(false);
+    } else {
+      setIsClosing(false);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     handleResize();
@@ -58,6 +68,25 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
   const [searchParams, setSearchParams] = useSearchParams();
   const [formData, setFormData] = useState<any>({});
   const [comments, setComments] = useState<any[]>([]);
+
+  const handleClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 280);
+  }, [isClosing, onClose]);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, handleClose]);
   const [newComment, setNewComment] = useState('');
   const [commentAttachments, setCommentAttachments] = useState<{ name: string; url: string; size?: number; type?: string }[]>([]);
   const [uploadingCommentFile, setUploadingCommentFile] = useState(false);
@@ -427,14 +456,15 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
 
   return createPortal(
     <AnimatePresence>
-      {isOpen && (
+      {isOpen && !isClosing && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000000000, display: 'flex', justifyContent: 'flex-end' }}>
           <motion.div
             className="drawer-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
+            onClick={handleClose}
             style={{
               position: 'fixed',
               inset: 0,
@@ -448,8 +478,8 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
           <motion.div
             initial={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
             animate={{ y: 0, x: 0, opacity: 1 }}
-            exit={isMobile ? { y: '100%' } : { opacity: 0, x: '250px' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 250, mass: 0.8 }}
+            exit={isMobile ? { y: '60%', opacity: 0 } : { x: '60%', opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as any }}
             onClick={e => e.stopPropagation()}
             style={{
               position: 'fixed',
@@ -610,7 +640,7 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                   </button>
                 )}
 
-                <button className={styles.closeBtn} onClick={onClose} style={{ borderRadius: '8px', padding: '6px', cursor: 'pointer' }}>
+                <button className={styles.closeBtn} onClick={handleClose} style={{ borderRadius: '8px', padding: '6px', cursor: 'pointer' }}>
                   <X size={18} />
                 </button>
               </div>
