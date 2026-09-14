@@ -681,8 +681,16 @@ class FinanceController
             }
         }
         if ($status) {
-            $where[] = 'e.status=?';
-            $params[] = $status;
+            if ($status === 'unpaid' || $status === 'approved_unpaid') {
+                $where[] = "e.status = 'approved' AND (e.is_refunded IS NULL OR e.is_refunded = 0)";
+            } elseif ($status === 'paid') {
+                $where[] = "(e.is_refunded = 1 OR e.status = 'paid' OR e.status = 'refunded')";
+            } elseif ($status === 'pending') {
+                $where[] = "(e.status = 'pending' OR e.status = 'level1_approved')";
+            } else {
+                $where[] = 'e.status=?';
+                $params[] = $status;
+            }
         }
 
         $creatorId = $_GET['created_by'] ?? $_GET['creator_id'] ?? '';

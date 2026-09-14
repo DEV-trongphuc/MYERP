@@ -2267,7 +2267,7 @@ class HRMController {
         $stmtExpenses = $this->db->prepare("
             SELECT e.id, e.created_by, u.full_name as employee_name, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3, e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps, e.related_user_ids, e.image_url, e.items,
+                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps, e.related_user_ids, e.image_url, e.items, e.is_refunded, e.refunded_at,
                    u_app1.full_name as approver_name,
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
@@ -2377,6 +2377,8 @@ class HRMController {
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
                     'status' => $e['status'] ?? 'pending',
+                    'is_refunded' => (int)($e['is_refunded'] ?? 0),
+                    'refunded_at' => $e['refunded_at'] ?? null,
                     'created_at' => $e['created_at']
                 ];
             }
@@ -2621,7 +2623,7 @@ class HRMController {
             SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3,
                    e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.related_user_ids, e.image_url, e.items,
+                   e.related_user_ids, e.image_url, e.items, e.is_refunded, e.refunded_at,
                    e.created_by as user_id, u.full_name as employee_name,
                    e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps,
                    u_app1.full_name as approver_name,
@@ -2686,6 +2688,8 @@ class HRMController {
                 'date' => $e['date'] ?? null,
                 'notes' => $e['notes'] ?? '',
                 'status' => $e['status'],
+                'is_refunded' => (int)($e['is_refunded'] ?? 0),
+                'refunded_at' => $e['refunded_at'] ?? null,
                 'created_at' => $e['created_at']
             ];
         }
@@ -2919,7 +2923,7 @@ class HRMController {
             SELECT e.id, e.title, e.amount, e.currency, e.category, e.date, e.notes, e.notes as description, e.status, e.created_at,
                    e.approver_id, e.approver_id_2, e.approver_id_3,
                    e.status_level_1, e.status_level_2, e.status_level_3,
-                   e.created_by as user_id, e.related_user_ids, e.image_url, e.items,
+                   e.created_by as user_id, e.related_user_ids, e.image_url, e.items, e.is_refunded, e.refunded_at,
                    e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps,
                    u.full_name as employee_name,
                    u_app1.full_name as approver_name,
@@ -2986,6 +2990,8 @@ class HRMController {
                     'date' => $e['date'] ?? null,
                     'notes' => $e['notes'] ?? '',
                     'status' => $e['status'],
+                    'is_refunded' => (int)($e['is_refunded'] ?? 0),
+                    'refunded_at' => $e['refunded_at'] ?? null,
                     'created_at' => $e['created_at'],
                     'is_following' => true
                 ];
@@ -3229,7 +3235,7 @@ class HRMController {
                    u_app2.full_name as approver_name_2,
                    u_app3.full_name as approver_name_3,
                    u_real.full_name as approved_by_name,
-                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps
+                   e.approved_by, e.approved_at, e.approved_at_2, e.approved_at_3, e.approval_steps, e.is_refunded, e.refunded_at
             FROM expenses e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN users u_app1 ON e.approver_id = u_app1.id
@@ -3307,6 +3313,8 @@ class HRMController {
                 'date' => $e['date'] ?? null,
                 'notes' => $e['notes'] ?? '',
                 'status' => $e['status'],
+                'is_refunded' => (int)($e['is_refunded'] ?? 0),
+                'refunded_at' => $e['refunded_at'] ?? null,
                 'created_at' => $e['created_at']
             ];
         }

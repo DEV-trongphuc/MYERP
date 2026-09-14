@@ -1318,6 +1318,26 @@ export const ExpensesPage: React.FC = () => {
     }
 
     if (overall === 'approved') {
+      if (!isPaid) {
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: '#d97706',
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.25)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            width: 'fit-content',
+            marginTop: '2px'
+          }}>
+            <Clock size={10} /> Đã duyệt - Chưa hạch toán
+          </span>
+        );
+      }
       return (
         <span style={{
           display: 'inline-flex',
@@ -1332,7 +1352,7 @@ export const ExpensesPage: React.FC = () => {
           width: 'fit-content',
           marginTop: '2px'
         }}>
-          <CheckCircle2 size={10} /> Đã duyệt
+          <CheckCircle2 size={10} /> Đã thanh toán
         </span>
       );
     }
@@ -1604,6 +1624,40 @@ export const ExpensesPage: React.FC = () => {
         </div>
       )}
 
+      {/* Quick Status Filter Pills */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {[
+          { key: '', label: 'Tất cả', color: 'var(--color-primary)' },
+          { key: 'pending', label: 'Chờ duyệt', color: '#f59e0b' },
+          { key: 'unpaid', label: 'Chưa thanh toán', color: '#d97706' },
+          { key: 'paid', label: 'Đã thanh toán', color: '#10b981' },
+        ].map(tab => {
+          const isActive = statusFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => { setStatusFilter(tab.key); setPage(1); }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '20px',
+                fontSize: '0.78rem',
+                fontWeight: isActive ? 700 : 500,
+                border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
+                background: isActive ? `${tab.color}15` : 'var(--color-surface)',
+                color: isActive ? tab.color : 'var(--color-text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filter bar */}
       <div className="card" style={{ padding: isMobile ? '8px 10px' : '0.875rem 1.25rem', marginBottom: '1rem', display: 'flex', gap: isMobile ? '8px' : '0.75rem', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
         <div className="filter-search" style={{ flex: 1, minWidth: 0 }}>
@@ -1702,8 +1756,10 @@ export const ExpensesPage: React.FC = () => {
                       <CustomSelect 
                         options={[
                           { value: '', label: 'Tất cả trạng thái' },
-                          { value: 'approved', label: 'Đã duyệt' },
-                          { value: 'pending', label: 'Chờ duyệt' }
+                          { value: 'pending', label: 'Chờ duyệt' },
+                          { value: 'unpaid', label: 'Chưa thanh toán' },
+                          { value: 'paid', label: 'Đã thanh toán' },
+                          { value: 'approved', label: 'Đã duyệt (Tất cả)' }
                         ]} 
                         value={statusFilter} 
                         onChange={val => { setStatusFilter(val.toString()); setPage(1); setShowMobileFilters(false); }} 
@@ -1773,8 +1829,10 @@ export const ExpensesPage: React.FC = () => {
               <CustomSelect 
                 options={[
                   { value: '', label: 'Tất cả trạng thái' },
-                  { value: 'approved', label: 'Đã duyệt' },
-                  { value: 'pending', label: 'Chờ duyệt' }
+                  { value: 'pending', label: 'Chờ duyệt' },
+                  { value: 'unpaid', label: 'Chưa thanh toán' },
+                  { value: 'paid', label: 'Đã thanh toán' },
+                  { value: 'approved', label: 'Đã duyệt (Tất cả)' }
                 ]} 
                 value={statusFilter} 
                 onChange={val => { setStatusFilter(val.toString()); setPage(1); }} 
@@ -2109,8 +2167,8 @@ export const ExpensesPage: React.FC = () => {
                       let badgeText = 'Chờ duyệt';
                       
                       if (viewItem.status === 'approved') {
-                        badgeClass = viewItem.is_refunded ? 'info' : 'success';
-                        badgeText = viewItem.is_refunded ? 'Đã thanh toán' : 'Đã duyệt';
+                        badgeClass = viewItem.is_refunded ? 'success' : 'warning';
+                        badgeText = viewItem.is_refunded ? 'Đã thanh toán' : 'Đã duyệt - Chưa hạch toán';
                       } else if (viewItem.status === 'rejected') {
                         badgeClass = 'danger';
                         badgeText = 'Từ chối';

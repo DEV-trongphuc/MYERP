@@ -1013,7 +1013,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     const app2User = app2Id > 0 ? usersMap.get(app2Id) : null;
     const app2Name = item.approver_name_2 || app2User?.full_name || app2User?.name || '';
     const app2Avatar = item.approver_avatar_2 || app2User?.avatar_url || app2User?.avatar || null;
-    if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+    if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
       else if (s2 === 'approved' || (overall === 'approved' && s2 !== 'rejected')) stepStatus = 'approved';
@@ -1036,7 +1036,7 @@ const DataListInner = ({ isActive, searchParams, setSearchParams, location }: { 
     const app3User = app3Id > 0 ? usersMap.get(app3Id) : null;
     const app3Name = item.approver_name_3 || app3User?.full_name || app3User?.name || '';
     const app3Avatar = item.approver_avatar_3 || app3User?.avatar_url || app3User?.avatar || null;
-    if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+    if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
       let stepStatus: StepInfo['status'] = 'waiting';
       if (isDraft) stepStatus = 'waiting';
       else if (s3 === 'approved' || (overall === 'approved' && s3 !== 'rejected')) stepStatus = 'approved';

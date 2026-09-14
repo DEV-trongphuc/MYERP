@@ -112,6 +112,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
   // Accountant Dashboard specific states
   const [poList, setPoList] = useState<any[]>([]);
+  const [poFilter, setPoFilter] = useState<'all' | 'pending' | 'unpaid' | 'paid'>('all');
   const [soList, setSoList] = useState<any[]>([]);
   const [activeOrderType, setActiveOrderType] = useState<'so' | 'po'>('po');
   const [selectedExpenseId, setSelectedExpenseId] = useState<number | null>(null);
@@ -2425,7 +2426,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       const u2 = app2Id ? usersMap.get(app2Id) : null;
       const app2Name = po.approver_name_2 || u2?.full_name || u2?.name || '';
       const app2Avatar = po.approver_avatar_2 || u2?.avatar_url || u2?.avatar;
-      if (app2Id > 0 || app2Name || (s2 !== 'none' && s2 !== '')) {
+      if (app2Id > 0 || (app2Name && app2Name.trim() !== '')) {
         let stepStatus: StepInfo['status'] = 'waiting';
         if (isDraft) stepStatus = 'waiting';
         else if (s2 === 'approved' || (overall === 'approved' && s2 !== 'rejected')) stepStatus = 'approved';
@@ -2448,7 +2449,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       const u3 = app3Id ? usersMap.get(app3Id) : null;
       const app3Name = po.approver_name_3 || u3?.full_name || u3?.name || '';
       const app3Avatar = po.approver_avatar_3 || u3?.avatar_url || u3?.avatar;
-      if (app3Id > 0 || app3Name || (s3 !== 'none' && s3 !== '')) {
+      if (app3Id > 0 || (app3Name && app3Name.trim() !== '')) {
         let stepStatus: StepInfo['status'] = 'waiting';
         if (isDraft) stepStatus = 'waiting';
         else if (s3 === 'approved' || (overall === 'approved' && s3 !== 'rejected')) stepStatus = 'approved';
@@ -2651,6 +2652,25 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
       }
 
       if (overall === 'approved') {
+        if (!isPaid) {
+          return (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              color: '#d97706',
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              width: 'fit-content'
+            }}>
+              <Clock size={10} /> Đã duyệt - Chưa hạch toán
+            </span>
+          );
+        }
         return (
           <span style={{
             display: 'inline-flex',
@@ -2664,7 +2684,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
             borderRadius: '4px',
             width: 'fit-content'
           }}>
-            <CheckCircle2 size={10} /> Đã duyệt
+            <CheckCircle2 size={10} /> Đã thanh toán
           </span>
         );
       }
@@ -2812,7 +2832,7 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
 
         {/* 1. Recent Orders Card (PO & SO) - Placed ON TOP as requested */}
         <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', marginBottom: '0.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: activeOrderType === 'po' ? '0.75rem' : '1.25rem', flexWrap: 'wrap', gap: '10px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
               <FileText size={18} color="var(--color-primary)" /> {t('Đơn Hàng Gần Đây (PO & SO)')}
             </h3>
@@ -2853,6 +2873,67 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
               </button>
             </div>
           </div>
+
+          {activeOrderType === 'po' && (() => {
+            let pendingCount = 0;
+            let unpaidCount = 0;
+            let paidCount = 0;
+            poList.forEach(po => {
+              const overall = String(po.status || 'pending').toLowerCase();
+              const isPaid = Boolean(po.is_refunded) || overall === 'paid' || overall === 'refunded';
+              const isApproved = overall === 'approved' || (po.status_level_1 === 'approved' && (!po.approver_id_2 || po.status_level_2 === 'approved') && (!po.approver_id_3 || po.status_level_3 === 'approved'));
+              if (isPaid) paidCount++;
+              else if (isApproved) unpaidCount++;
+              else if (overall !== 'rejected' && overall !== 'cancelled' && overall !== 'draft') pendingCount++;
+            });
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                {[
+                  { key: 'all', label: t('Tất cả'), count: poList.length, color: 'var(--color-primary)' },
+                  { key: 'pending', label: t('Chờ duyệt'), count: pendingCount, color: '#f59e0b' },
+                  { key: 'unpaid', label: t('Chưa thanh toán'), count: unpaidCount, color: '#d97706' },
+                  { key: 'paid', label: t('Đã thanh toán'), count: paidCount, color: '#10b981' },
+                ].map((tab) => {
+                  const isActive = poFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => {
+                        setPoFilter(tab.key as any);
+                        setPoPage(1);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: isActive ? 700 : 500,
+                        border: isActive ? `1.5px solid ${tab.color}` : '1px solid var(--color-border)',
+                        background: isActive ? `${tab.color}15` : 'var(--color-surface)',
+                        color: isActive ? tab.color : 'var(--color-text-muted)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <span>{tab.label}</span>
+                      <span style={{
+                        fontSize: '0.68rem',
+                        padding: '1px 5px',
+                        borderRadius: '10px',
+                        background: isActive ? tab.color : 'var(--color-bg)',
+                        color: isActive ? '#ffffff' : 'var(--color-text-muted)',
+                        fontWeight: 700
+                      }}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div style={{ overflowX: 'auto', maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--color-border-light)', borderRadius: '12px', background: 'var(--color-surface)' }} className="custom-scrollbar">
             {activeOrderType === 'so' ? (
@@ -2937,13 +3018,26 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         <td colSpan={6} style={{ padding: '12px' }}><Skeleton width="100%" height={16} /></td>
                       </tr>
                     ))
-                  ) : poList.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                        {t('Không có Purchase Order nào gần đây')}
-                      </td>
-                    </tr>
-                  ) : poList.slice((poPage - 1) * ORDER_PAGE_SIZE, poPage * ORDER_PAGE_SIZE).map((po, idx) => {
+                  ) : (() => {
+                    const filteredList = poList.filter(po => {
+                      const overall = String(po.status || 'pending').toLowerCase();
+                      const isPaid = Boolean(po.is_refunded) || overall === 'paid' || overall === 'refunded';
+                      const isApproved = overall === 'approved' || (po.status_level_1 === 'approved' && (!po.approver_id_2 || po.status_level_2 === 'approved') && (!po.approver_id_3 || po.status_level_3 === 'approved'));
+                      if (poFilter === 'pending') return !isPaid && !isApproved && overall !== 'rejected' && overall !== 'cancelled' && overall !== 'draft';
+                      if (poFilter === 'unpaid') return isApproved && !isPaid;
+                      if (poFilter === 'paid') return isPaid;
+                      return true;
+                    });
+                    if (filteredList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                            {t('Không có Purchase Order nào phù hợp')}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return filteredList.slice((poPage - 1) * ORDER_PAGE_SIZE, poPage * ORDER_PAGE_SIZE).map((po, idx) => {
                     const catInfo = getPoCatInfo(po.category);
                     const CatIcon = catInfo.icon;
                     return (
@@ -3012,26 +3106,38 @@ const DashboardInner = ({ isActive }: { isActive: boolean }) => {
                         </td>
                       </tr>
                     );
-                  })}
+                  });
+                  })()}
                 </tbody>
               </table>
             )}
           </div>
 
           {/* Pagination Controls */}
-          {activeOrderType === 'po' && poList.length > ORDER_PAGE_SIZE && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0 4px', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                {t('Hiển thị')} {(poPage - 1) * ORDER_PAGE_SIZE + 1} - {Math.min(poPage * ORDER_PAGE_SIZE, poList.length)} / {poList.length} {t('đơn PO')}
-              </span>
-              <Pagination
-                total={poList.length}
-                page={poPage}
-                pageSize={ORDER_PAGE_SIZE}
-                onChange={(p) => setPoPage(p)}
-              />
-            </div>
-          )}
+          {activeOrderType === 'po' && (() => {
+            const curFiltered = poList.filter(po => {
+              const overall = String(po.status || 'pending').toLowerCase();
+              const isPaid = Boolean(po.is_refunded) || overall === 'paid' || overall === 'refunded';
+              const isApproved = overall === 'approved' || (po.status_level_1 === 'approved' && (!po.approver_id_2 || po.status_level_2 === 'approved') && (!po.approver_id_3 || po.status_level_3 === 'approved'));
+              if (poFilter === 'pending') return !isPaid && !isApproved && overall !== 'rejected' && overall !== 'cancelled' && overall !== 'draft';
+              if (poFilter === 'unpaid') return isApproved && !isPaid;
+              if (poFilter === 'paid') return isPaid;
+              return true;
+            });
+            return curFiltered.length > ORDER_PAGE_SIZE ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0 4px', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                  {t('Hiển thị')} {(poPage - 1) * ORDER_PAGE_SIZE + 1} - {Math.min(poPage * ORDER_PAGE_SIZE, curFiltered.length)} / {curFiltered.length} {t('đơn PO')}
+                </span>
+                <Pagination
+                  total={curFiltered.length}
+                  page={poPage}
+                  pageSize={ORDER_PAGE_SIZE}
+                  onChange={(p) => setPoPage(p)}
+                />
+              </div>
+            ) : null;
+          })()}
           {activeOrderType === 'so' && soList.length > ORDER_PAGE_SIZE && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0 4px', flexWrap: 'wrap', gap: '8px' }}>
               <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>

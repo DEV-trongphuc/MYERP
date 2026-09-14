@@ -263,6 +263,8 @@ export interface ApprovalItem {
   is_following?: boolean;
   is_draft?: boolean;
   draft_id?: string;
+  is_refunded?: number | boolean;
+  refunded_at?: string | null;
 }
 
 export interface ApprovalDraft {
@@ -4186,8 +4188,11 @@ export default function Approvals() {
     toast.success(t('Đã nhân bản thông tin đề xuất! Vui lòng kiểm tra và gửi.'));
   };
 
-  const formatBadge = (status: string) => {
+  const formatBadge = (status: string, it?: any) => {
     const s = status ? status.toLowerCase() : 'pending';
+    const isPaid = it ? (Boolean(it.is_refunded) || s === 'paid' || s === 'refunded') : false;
+    const isExpense = it?.type === 'expense';
+
     if (s === 'draft') {
       return (
         <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', background: 'rgba(148, 163, 184, 0.16)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>
@@ -4196,6 +4201,20 @@ export default function Approvals() {
       );
     }
     if (s === 'approved' || s === 'confirmed') {
+      if (isExpense) {
+        if (!isPaid) {
+          return (
+            <span className="badge warning" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', color: '#d97706', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+              <Clock size={10} /> {t('Đã duyệt đủ cấp - Chưa hạch toán')}
+            </span>
+          );
+        }
+        return (
+          <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
+            <CheckCircle2 size={10} /> {t('Đã hoàn tất')}
+          </span>
+        );
+      }
       return (
         <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px' }}>
           <CheckCircle2 size={10} /> {t('Đã duyệt')}
@@ -4280,8 +4299,8 @@ export default function Approvals() {
       );
     }
 
-    const hasLevel2 = Boolean((item as any).approver_id_2 || (item as any).approver_name_2 || (status2 !== 'none' && status2 !== '' && status2 !== 'not_reached'));
-    const hasLevel3 = Boolean((item as any).approver_id_3 || (item as any).approver_name_3 || (status3 !== 'none' && status3 !== '' && status3 !== 'not_reached'));
+    const hasLevel2 = Boolean((item as any).approver_id_2 || ((item as any).approver_name_2 && String((item as any).approver_name_2).trim() !== ''));
+    const hasLevel3 = Boolean((item as any).approver_id_3 || ((item as any).approver_name_3 && String((item as any).approver_name_3).trim() !== ''));
 
     const isFullyApproved = overallStatus === 'approved' || overallStatus === 'confirmed' ||
       (status1 === 'approved' && (!hasLevel2 || status2 === 'approved') && (!hasLevel3 || status3 === 'approved'));
@@ -4332,18 +4351,54 @@ export default function Approvals() {
       const displayName = finalUser?.full_name || finalUser?.name || finalApproverName || t('Đã phê duyệt');
       const avatarUrl = finalUser?.avatar_url || finalUser?.avatar;
 
+      const isPaid = Boolean((item as any).is_refunded) || item.status === 'paid' || item.status === 'refunded';
+      const isExpense = item.type === 'expense';
+      
+      let badgeRingColor = '#10b981';
+      let badgeClass = 'badge success';
+      let badgeLabel = t('Đã duyệt đủ cấp');
+      let badgeIcon = <CheckCircle2 size={10} />;
+      let badgeCustomStyle: React.CSSProperties = {};
+
+      if (isExpense) {
+        if (isPaid) {
+          badgeLabel = t('Đã hoàn tất');
+        } else {
+          badgeRingColor = '#f59e0b';
+          badgeClass = 'badge warning';
+          badgeLabel = t('Đã duyệt đủ cấp - Chưa hạch toán');
+          badgeIcon = <Clock size={10} />;
+          badgeCustomStyle = {
+            color: '#d97706',
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.25)'
+          };
+        }
+      }
+
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={getAvatarRingStyle('#10b981')}>
+          <div style={getAvatarRingStyle(badgeRingColor)}>
             <Avatar src={avatarUrl} name={displayName} size={24} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text)' }}>
               {displayName}
             </span>
-            <span className="badge success" style={{ fontSize: '0.65rem', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px', height: 'auto', borderRadius: '6px', marginTop: '2px', width: 'fit-content' }}>
-              <CheckCircle2 size={10} />
-              <span>{t('Đã duyệt đủ cấp')}</span>
+            <span className={badgeClass} style={{ 
+              fontSize: '0.65rem', 
+              padding: '2px 6px', 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '3px', 
+              height: 'auto', 
+              borderRadius: '6px', 
+              marginTop: '2px', 
+              width: 'fit-content',
+              ...badgeCustomStyle
+            }}>
+              {badgeIcon}
+              <span>{badgeLabel}</span>
             </span>
           </div>
         </div>
@@ -5289,7 +5344,7 @@ export default function Approvals() {
                         </div>
                       </div>
                       <div style={{ flexShrink: 0 }}>
-                        {formatBadge(item.status || 'pending')}
+                        {formatBadge(item.status || 'pending', item)}
                       </div>
                     </div>
 
