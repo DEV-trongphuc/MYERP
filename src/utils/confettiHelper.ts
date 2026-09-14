@@ -72,3 +72,29 @@ export const triggerFullConfetti = () => {
     });
   }, 400);
 };
+
+/**
+ * Triggers an exquisite, subtle localized burst of micro-confetti right at the element or mouse position.
+ */
+export const triggerLocalConfetti = (clientX?: number, clientY?: number) => {
+  playSuccessSound();
+
+  const x = (typeof window !== 'undefined' && clientX !== undefined && clientX > 0)
+    ? Math.min(Math.max(clientX / window.innerWidth, 0.05), 0.95)
+    : 0.5;
+  const y = (typeof window !== 'undefined' && clientY !== undefined && clientY > 0)
+    ? Math.min(Math.max(clientY / window.innerHeight, 0.05), 0.95)
+    : 0.5;
+
+  confetti({
+    particleCount: 40,
+    spread: 60,
+    startVelocity: 22,
+    ticks: 100,
+    gravity: 1.1,
+    origin: { x, y },
+    colors: ['#10B981', '#34D399', '#3B82F6', '#F59E0B', '#BD1D2D'],
+    scalar: 0.8,
+    disableForReducedMotion: true
+  });
+};

@@ -5385,11 +5385,11 @@ a,
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
 
-  /* Floating check-in button on mobile: sit neatly above bottom nav */
+  /* Floating check-in button on mobile: sit neatly above bottom nav & all bottom sheets */
   .floating-checkin-btn {
     bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
     right: 16px !important;
-    z-index: 9999 !important;
+    z-index: 2147483646 !important;
   }
 
   /* Mobile page scroll spacing:
@@ -6353,4 +6353,58 @@ img[data-mention-avatar]:hover,
   -webkit-overflow-scrolling: touch;
 }
 
+/* ==========================================================================
+   Workspace Task Completion Dopamine Animations
+   ========================================================================== */
+@keyframes checkSpringBounce {
+  0% { transform: scale(0.75); }
+  45% { transform: scale(1.36); }
+  75% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
 
+@keyframes taskCompletedGlow {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.task-quick-check-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.8px solid var(--color-border, #cbd5e1);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  outline: none;
+  position: relative;
+}
+
+.task-quick-check-btn:hover {
+  border-color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  transform: scale(1.12);
+}
+
+.task-quick-check-btn.completed {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.task-quick-check-btn.bouncing {
+  animation: checkSpringBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, taskCompletedGlow 0.6s ease-out forwards;
+}
+
+.workspace-card-completing {
+  opacity: 0.45 !important;
+  transform: scale(0.98) translateY(6px) !important;
+  filter: grayscale(0.5) !important;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}

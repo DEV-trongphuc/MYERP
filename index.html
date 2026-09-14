@@ -741,14 +741,17 @@
           <!-- Core Ambient Glow behind Mascot -->
           <div class="splash-core-glow"></div>
 
-          <!-- 3D AI Mascot Image -->
-          <img 
-            src="/ideas_bot_v2.png?v=20260826_clean" 
-            alt="IDEAS AI Mascot" 
-            class="splash-mascot-img"
-            loading="eager"
-            onerror="this.style.display='none'"
-          />
+          <!-- 3D AI Mascot Image (Transparent Background) -->
+          <picture>
+            <source srcset="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+            <img 
+              src="/ideas_bot_kling.gif?v=20260915_perfect" 
+              alt="IDEAS AI Mascot" 
+              class="splash-mascot-img"
+              loading="eager"
+              onerror="this.style.display='none'"
+            />
+          </picture>
 
           <!-- Jet Thruster Pulse Glow -->
           <div class="splash-thruster-glow"></div>

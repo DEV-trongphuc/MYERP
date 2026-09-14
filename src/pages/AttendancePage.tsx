@@ -823,7 +823,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     return dayExceptions;
   }, [dayExceptions, exceptionFilter]);
 
-  const renderWorkflowStepsAndWatchers = (item: any) => {
+  const renderWorkflowStepsAndWatchers = (item: any, extraStyle?: React.CSSProperties) => {
     interface StepInfo {
       stepIndex: number;
       title: string;
@@ -930,7 +930,7 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
     }
 
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', ...extraStyle }}>
         {/* Step Approvers Chain */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           {steps.map((st, idx) => {
@@ -6720,41 +6720,57 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
               marginBottom: '1rem', 
               gap: '3px',
               width: '100%',
-              overflowX: 'auto'
+              overflowX: 'auto',
+              position: 'relative'
             }}>
               <button
                 type="button"
                 onClick={() => setModalTab('checkin')}
                 style={{
+                  position: 'relative',
                   padding: isMobile ? '6px 4px' : '6px 12px',
                   fontSize: isMobile ? '0.75rem' : '0.8125rem',
                   fontWeight: 700,
                   color: modalTab === 'checkin' ? 'var(--color-primary)' : 'var(--color-text-light)',
                   border: 'none',
-                  background: modalTab === 'checkin' ? 'var(--color-surface)' : 'transparent',
+                  background: 'transparent',
                   borderRadius: '7px',
-                  boxShadow: modalTab === 'checkin' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'color 0.2s',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flex: isMobile ? '0 0 auto' : 1,
-                  whiteSpace: 'nowrap',
-                  gap: '4px'
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <Clock size={isMobile ? 12 : 14} />
-                {t('Nhật ký')}
-                <span style={{
-                  fontSize: '0.625rem',
-                  padding: '1px 5px',
-                  borderRadius: '8px',
-                  background: modalTab === 'checkin' ? 'var(--color-primary-light)' : 'var(--color-border-light)',
-                  color: modalTab === 'checkin' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  fontWeight: 700
-                }}>
-                  {calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).length}
+                {modalTab === 'checkin' && (
+                  <motion.div
+                    layoutId="activeAttendanceModalTab"
+                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'var(--color-surface)',
+                      borderRadius: '7px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                      zIndex: 0
+                    }}
+                  />
+                )}
+                <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={isMobile ? 12 : 14} />
+                  <span>{t('Nhật ký')}</span>
+                  <span style={{
+                    fontSize: '0.625rem',
+                    padding: '1px 5px',
+                    borderRadius: '8px',
+                    background: modalTab === 'checkin' ? 'var(--color-primary-light)' : 'var(--color-border-light)',
+                    color: modalTab === 'checkin' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    fontWeight: 700
+                  }}>
+                    {calendarCheckIns.filter(c => c.check_in_date === selectedDateForDetail).length}
+                  </span>
                 </span>
               </button>
 
@@ -6762,61 +6778,91 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                 type="button"
                 onClick={() => setModalTab('fingerprint')}
                 style={{
+                  position: 'relative',
                   padding: isMobile ? '6px 4px' : '6px 12px',
                   fontSize: isMobile ? '0.75rem' : '0.8125rem',
                   fontWeight: 700,
                   color: modalTab === 'fingerprint' ? 'var(--color-primary)' : 'var(--color-text-light)',
                   border: 'none',
-                  background: modalTab === 'fingerprint' ? 'var(--color-surface)' : 'transparent',
+                  background: 'transparent',
                   borderRadius: '7px',
-                  boxShadow: modalTab === 'fingerprint' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'color 0.2s',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flex: isMobile ? '0 0 auto' : 1,
-                  whiteSpace: 'nowrap',
-                  gap: '4px'
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <FileText size={isMobile ? 12 : 14} />
-                {(isSales || isViewingSelf) ? t('Yêu cầu') : t('Bảng công')}
+                {modalTab === 'fingerprint' && (
+                  <motion.div
+                    layoutId="activeAttendanceModalTab"
+                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'var(--color-surface)',
+                      borderRadius: '7px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                      zIndex: 0
+                    }}
+                  />
+                )}
+                <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <FileText size={isMobile ? 12 : 14} />
+                  <span>{(isSales || isViewingSelf) ? t('Yêu cầu') : t('Bảng công')}</span>
+                </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setModalTab('requests')}
                 style={{
+                  position: 'relative',
                   padding: isMobile ? '6px 4px' : '6px 12px',
                   fontSize: isMobile ? '0.75rem' : '0.8125rem',
                   fontWeight: 700,
                   color: modalTab === 'requests' ? 'var(--color-primary)' : 'var(--color-text-light)',
                   border: 'none',
-                  background: modalTab === 'requests' ? 'var(--color-surface)' : 'transparent',
+                  background: 'transparent',
                   borderRadius: '7px',
-                  boxShadow: modalTab === 'requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'color 0.2s',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flex: isMobile ? '0 0 auto' : 1,
-                  whiteSpace: 'nowrap',
-                  gap: '4px'
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <AlertCircle size={isMobile ? 12 : 14} />
-                {t('Đơn & Biến động')}
-                <span style={{
-                  fontSize: '0.625rem',
-                  padding: '1px 5px',
-                  borderRadius: '8px',
-                  background: dayExceptions.length > 0 ? (modalTab === 'requests' ? '#BD1D2D' : 'rgba(189, 29, 45, 0.12)') : (modalTab === 'requests' ? 'var(--color-primary-light)' : 'var(--color-border-light)'),
-                  color: dayExceptions.length > 0 ? (modalTab === 'requests' ? '#ffffff' : '#BD1D2D') : (modalTab === 'requests' ? 'var(--color-primary)' : 'var(--color-text-muted)'),
-                  fontWeight: 700
-                }}>
-                  {dayExceptions.length}
+                {modalTab === 'requests' && (
+                  <motion.div
+                    layoutId="activeAttendanceModalTab"
+                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'var(--color-surface)',
+                      borderRadius: '7px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                      zIndex: 0
+                    }}
+                  />
+                )}
+                <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <AlertCircle size={isMobile ? 12 : 14} />
+                  <span>{t('Đơn & Biến động')}</span>
+                  <span style={{
+                    fontSize: '0.625rem',
+                    padding: '1px 5px',
+                    borderRadius: '8px',
+                    background: dayExceptions.length > 0 ? (modalTab === 'requests' ? '#BD1D2D' : 'rgba(189, 29, 45, 0.12)') : (modalTab === 'requests' ? 'var(--color-primary-light)' : 'var(--color-border-light)'),
+                    color: dayExceptions.length > 0 ? (modalTab === 'requests' ? '#ffffff' : '#BD1D2D') : (modalTab === 'requests' ? 'var(--color-primary)' : 'var(--color-text-muted)'),
+                    fontWeight: 700
+                  }}>
+                    {dayExceptions.length}
+                  </span>
                 </span>
               </button>
 
@@ -6850,34 +6896,50 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     type="button"
                     onClick={() => setModalTab('night_duty')}
                     style={{
+                      position: 'relative',
                       padding: isMobile ? '6px 4px' : '6px 12px',
                       fontSize: isMobile ? '0.75rem' : '0.8125rem',
                       fontWeight: 700,
                       color: modalTab === 'night_duty' ? 'var(--color-primary)' : 'var(--color-text-light)',
                       border: 'none',
-                      background: modalTab === 'night_duty' ? 'var(--color-surface)' : 'transparent',
+                      background: 'transparent',
                       borderRadius: '7px',
-                      boxShadow: modalTab === 'night_duty' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                       cursor: 'pointer',
-                      transition: 'all 0.2s',
+                      transition: 'color 0.2s',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       flex: 1,
-                      gap: '4px'
+                      whiteSpace: 'nowrap'
                     }}
                   >
-                    <TabIcon size={isMobile ? 12 : 14} />
-                    {tabLabel}
-                    <span style={{
-                      fontSize: '0.625rem',
-                      padding: '1px 5px',
-                      borderRadius: '8px',
-                      background: modalTab === 'night_duty' ? 'var(--color-primary-light)' : 'var(--color-border-light)',
-                      color: modalTab === 'night_duty' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                      fontWeight: 700
-                    }}>
-                      {detailDayShifts.length}
+                    {modalTab === 'night_duty' && (
+                      <motion.div
+                        layoutId="activeAttendanceModalTab"
+                        transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'var(--color-surface)',
+                          borderRadius: '7px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                          zIndex: 0
+                        }}
+                      />
+                    )}
+                    <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <TabIcon size={isMobile ? 12 : 14} />
+                      <span>{tabLabel}</span>
+                      <span style={{
+                        fontSize: '0.625rem',
+                        padding: '1px 5px',
+                        borderRadius: '8px',
+                        background: modalTab === 'night_duty' ? 'var(--color-primary-light)' : 'var(--color-border-light)',
+                        color: modalTab === 'night_duty' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        fontWeight: 700
+                      }}>
+                        {detailDayShifts.length}
+                      </span>
                     </span>
                   </button>
                 );
@@ -7409,7 +7471,8 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                     gap: '6px',
                     overflowX: 'auto',
                     paddingBottom: '4px',
-                    fontSize: '0.75rem'
+                    fontSize: '0.75rem',
+                    position: 'relative'
                   }}>
                     {[
                       { id: 'all', label: t('Tất cả'), count: dayExceptions.length },
@@ -7424,10 +7487,11 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                           type="button"
                           onClick={() => setExceptionFilter(tab.id as any)}
                           style={{
+                            position: 'relative',
                             padding: '4px 10px',
                             borderRadius: '20px',
                             border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                            backgroundColor: isActive ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                            backgroundColor: 'transparent',
                             color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
                             fontWeight: isActive ? 700 : 500,
                             cursor: 'pointer',
@@ -7435,20 +7499,34 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             fontSize: '0.71875rem',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px',
                             transition: 'all 0.15s'
                           }}
                         >
-                          <span>{tab.label}</span>
-                          <span style={{
-                            fontSize: '0.625rem',
-                            fontWeight: 700,
-                            padding: '0 5px',
-                            borderRadius: '10px',
-                            backgroundColor: isActive ? 'var(--color-primary)' : 'var(--color-bg-light)',
-                            color: isActive ? '#fff' : 'var(--color-text-muted)'
-                          }}>
-                            {tab.count}
+                          {isActive && (
+                            <motion.div
+                              layoutId="activeAttendanceFilterChip"
+                              transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                borderRadius: '20px',
+                                backgroundColor: 'var(--color-primary-light)',
+                                zIndex: 0
+                              }}
+                            />
+                          )}
+                          <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span>{tab.label}</span>
+                            <span style={{
+                              fontSize: '0.625rem',
+                              fontWeight: 700,
+                              padding: '0 5px',
+                              borderRadius: '10px',
+                              backgroundColor: isActive ? 'var(--color-primary)' : 'var(--color-bg-light)',
+                              color: isActive ? '#fff' : 'var(--color-text-muted)'
+                            }}>
+                              {tab.count}
+                            </span>
                           </span>
                         </button>
                       );
@@ -7544,22 +7622,21 @@ export const AttendancePageInner = ({ embedMode = false }: { embedMode?: boolean
                             {item.reason && (
                               <div style={{
                                 background: 'var(--color-surface)',
-                                borderLeft: `3px solid ${item.typeColor}`,
-                                borderRadius: '0 6px 6px 0',
+                                borderRadius: '6px',
                                 padding: '6px 10px',
                                 fontSize: '0.75rem',
                                 color: 'var(--color-text-muted)',
                                 lineHeight: 1.4,
                                 wordBreak: 'break-word'
                               }}>
-                                <strong style={{ color: 'var(--color-text)', marginRight: '4px' }}>💬 {t('Lý do / Giải trình')}:</strong>
+                                <strong style={{ color: 'var(--color-text)', marginRight: '4px' }}>{t('Lý do / Giải trình')}:</strong>
                                 <span>{item.reason}</span>
                               </div>
                             )}
 
                             {/* Workflow Steps & Watchers Chain */}
-                            <div style={{ paddingTop: '2px' }}>
-                              {renderWorkflowStepsAndWatchers(item)}
+                            <div style={{ paddingTop: '2px', display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+                              {renderWorkflowStepsAndWatchers(item, { justifyContent: 'flex-end', marginLeft: 'auto' })}
                             </div>
 
                             {/* Action Buttons for Manager / Admin: Only shown if current user is at active approval step */}

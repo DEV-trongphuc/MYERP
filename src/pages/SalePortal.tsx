@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { triggerFullConfetti } from '../utils/confettiHelper';
+import { triggerFullConfetti, triggerLocalConfetti } from '../utils/confettiHelper';
 import {
   DndContext,
   closestCenter,
@@ -82,6 +82,7 @@ const CustomerProfileDrawer = lazy(() => import('./CustomerProfileDrawer').then(
 const WorkspaceTaskDrawer = lazy(() => import('./WorkspaceTaskDrawer').then(module => ({ default: module.WorkspaceTaskDrawer })));
 import { WorkspaceCustomizerModal, preloadWorkspaceWallpapers } from '../components/ui/WorkspaceCustomizerModal';
 import { WorkspaceTaskStatsModal } from '../components/ui/WorkspaceTaskStatsModal';
+import { TaskCompleteConfirmModal } from '../components/ui/TaskCompleteConfirmModal';
 import { WORKSPACE_INSPIRATIONAL_QUOTES } from '../data/inspirationalQuotes';
 import { parseTaskBody, extractCleanCardDescription, isTaskEffectivelyDone, getTaskEffectiveProgress, isTaskPersonalForUser } from '../utils/taskBodyParser';
 import styles from './EntityDrawer.module.css';
@@ -225,6 +226,8 @@ interface WorkspaceCardInnerProps {
   onAssignGroup?: (taskId: number, groupId: number | null) => Promise<void>;
   onOpenCreateGroupModal?: () => void;
   onOpenCreateModal?: () => void;
+  onToggleComplete?: (taskId: number, e: React.MouseEvent) => void;
+  isCompleting?: boolean;
 }
 
 const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
@@ -248,7 +251,9 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
   taskGroups,
   onAssignGroup,
   onOpenCreateGroupModal,
-  onOpenCreateModal
+  onOpenCreateModal,
+  onToggleComplete,
+  isCompleting
 }) => {
   const isCompleted = isTaskEffectivelyDone(task);
   const isOverdue = !isCompleted && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0));
@@ -330,7 +335,7 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
         opacity: isDragging ? 0.35 : 1,
         userSelect: 'none'
       }}
-      className={isMobile ? 'active-press' : (isOverlay ? '' : 'hover-lift active-press')}
+      className={`${isMobile ? 'active-press' : (isOverlay ? '' : 'hover-lift active-press')} ${isCompleting ? 'workspace-card-completing' : ''}`}
       onClick={() => {
         if (isDragging) return;
         const parsed = parseDescriptionAndChecklist(description);
@@ -463,26 +468,53 @@ const WorkspaceCardInner: React.FC<WorkspaceCardInnerProps> = React.memo(({
         </div>
       )}
 
-      {/* Title & Description */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <h3 style={{ fontWeight: 700, fontSize: isMobile ? '0.875rem' : '0.925rem', color: 'var(--color-text)', margin: 0, lineHeight: 1.35 }}>
-          {task.subject}
-        </h3>
-        {cleanDesc && (
-          <p style={{
-            fontSize: isMobile ? '0.725rem' : '0.75rem',
-            color: 'var(--color-text-muted)',
-            margin: 0,
-            lineHeight: 1.4,
-            display: '-webkit-box',
-            WebkitLineClamp: isMobile ? 2 : 3,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}>
-            {cleanDesc}
-          </p>
+      {/* Title & Description with Quick Complete Checkbox */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+        {onToggleComplete && (
+          <button
+            type="button"
+            className={`task-quick-check-btn ${isCompleted ? 'completed' : ''} ${isCompleting ? 'bouncing' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleComplete(task.id, e);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            title={isCompleted ? t('Đánh dấu chưa xong') : t('Hoàn thành công việc')}
+            style={{ marginTop: '2px' }}
+          >
+            {isCompleted && <Check size={11} strokeWidth={3.5} />}
+          </button>
         )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
+          <h3 style={{ 
+            fontWeight: 700, 
+            fontSize: isMobile ? '0.875rem' : '0.925rem', 
+            color: isCompleted ? 'var(--color-text-muted)' : 'var(--color-text)', 
+            textDecoration: isCompleted ? 'line-through' : 'none',
+            textDecorationColor: isCompleted ? 'var(--color-text-muted)' : 'transparent',
+            transition: 'all 0.3s ease',
+            margin: 0, 
+            lineHeight: 1.35 
+          }}>
+            {task.subject}
+          </h3>
+          {cleanDesc && (
+            <p style={{
+              fontSize: isMobile ? '0.725rem' : '0.75rem',
+              color: 'var(--color-text-muted)',
+              margin: 0,
+              lineHeight: 1.4,
+              display: '-webkit-box',
+              WebkitLineClamp: isMobile ? 2 : 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              opacity: isCompleted ? 0.7 : 1
+            }}>
+              {cleanDesc}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Progress Bar indicator */}
@@ -1039,6 +1071,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [selectedPublicLeads, setSelectedPublicLeads] = useState<number[]>([]);
   const [calendarSubTab, setCalendarSubTab] = useState<'calendar' | 'attendance'>('calendar');
   const [wsTaskFilter, setWsTaskFilter] = useState<'all' | 'assigned_to_me' | 'approve_by_me' | 'collaborator'>('all');
+  const [completingTaskId, setCompletingTaskId] = useState<number | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [wsSubTab, setWsSubTab] = useState<'all' | 'customer' | 'team' | 'personal'>('all');
   const [wsTeamSubFilter, setWsTeamSubFilter] = useState<'all' | 'task' | 'announcement' | 'campaign' | 'policy'>('all');
@@ -1341,6 +1374,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [activeTaskGroupId, setActiveTaskGroupId] = useState<string | number>('all');
   const [loadingTaskGroups, setLoadingTaskGroups] = useState(false);
   const [showCardCreateGroupModal, setShowCardCreateGroupModal] = useState(false);
+  const [taskToConfirmComplete, setTaskToConfirmComplete] = useState<any | null>(null);
+  const [isConfirmingComplete, setIsConfirmingComplete] = useState(false);
 
 
 
@@ -4087,38 +4122,73 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   };
 
-  const handleToggleTaskStatus = async (taskId: number) => {
+  const handleToggleTaskStatus = async (taskId: number, e?: React.MouseEvent) => {
     try {
       const task = wsTasks.find(t => t.id === taskId);
-      if (task?.type === 'meeting') {
-        try {
-          const res = await api.get(`/activities/${taskId}/comments`);
-          const commentsList = res.data.data || [];
-          const hasImage = commentsList.some((c: any) => {
-            const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
-            return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
-          });
+      if (!task) return;
 
-          if (!hasImage) {
-            setMeetingToComplete(task);
-            setProofCommentText(t('Ảnh minh chứng hoàn thành gặp gỡ'));
-            setProofImageFile(null);
-            setProofImagePreview(null);
-            return;
-          }
-        } catch (e) {
-          toast.error(t('Lỗi khi kiểm tra minh chứng'));
-          return;
-        }
+      const isCurrentlyDone = isTaskEffectivelyDone(task);
+
+      // Nếu công việc đã xong, click để mở lại (un-complete)
+      if (isCurrentlyDone) {
+        await api.put(`/activities/${taskId}`, { status: 'planned', progress: 0 });
+        toast.success(t('Đã mở lại công việc'));
+        fetchPortalTasks();
+        fetchWorkspaceTasks();
+        return;
       }
 
-      await api.put(`/activities/${taskId}`, { status: 'done' });
-      toast.success(t('Đã hoàn thành công việc'));
-      triggerFullConfetti();
-      fetchPortalTasks();
-      fetchWorkspaceTasks();
+      // Mở modal xác nhận hoàn thành công việc (hiển thị ai tạo, ai thực hiện, liên quan, nội dung)
+      setTaskToConfirmComplete(task);
     } catch (e) {
       toast.error(t('Lỗi khi cập nhật trạng thái công việc'));
+    }
+  };
+
+  const handleConfirmCompleteTask = async (task: any) => {
+    if (!task?.id) return;
+    const taskId = task.id;
+
+    // Kiểm tra ảnh minh chứng nếu là meeting
+    if (task.type === 'meeting') {
+      try {
+        const res = await api.get(`/activities/${taskId}/comments`);
+        const commentsList = res.data.data || [];
+        const hasImage = commentsList.some((c: any) => {
+          const atts = Array.isArray(c.attachments) ? c.attachments : JSON.parse(c.attachments || '[]');
+          return atts.some((att: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(att));
+        });
+
+        if (!hasImage) {
+          setTaskToConfirmComplete(null);
+          setMeetingToComplete(task);
+          setProofCommentText(t('Ảnh minh chứng hoàn thành gặp gỡ'));
+          setProofImageFile(null);
+          setProofImagePreview(null);
+          return;
+        }
+      } catch (e) {
+        toast.error(t('Lỗi khi kiểm tra minh chứng'));
+        return;
+      }
+    }
+
+    setIsConfirmingComplete(true);
+    setCompletingTaskId(taskId);
+    // Kích hoạt pháo hoa dopamine ăn mừng!
+    triggerFullConfetti();
+
+    try {
+      await api.put(`/activities/${taskId}`, { status: 'done', progress: 100 });
+      toast.success(t('Đã hoàn thành công việc! 🎉'));
+      setTaskToConfirmComplete(null);
+      fetchPortalTasks();
+      fetchWorkspaceTasks();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t('Lỗi khi cập nhật trạng thái công việc'));
+    } finally {
+      setIsConfirmingComplete(false);
+      setCompletingTaskId(null);
     }
   };
 
@@ -6965,260 +7035,392 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
             width: isMobile ? '100%' : 'auto'
           }} className="custom-scrollbar-hidden">
             {/* Tất cả Pill */}
-            <div 
-              onClick={() => {
-                setWsDatePreset('all');
-                setWsStatus('planned');
-                setWsTaskFilter('all');
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsDatePreset === 'all' && wsTaskFilter === 'all' 
-                  ? '1.5px solid var(--color-primary)' 
-                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
-                background: wsDatePreset === 'all' && wsTaskFilter === 'all' 
-                  ? 'rgba(189, 29, 45, 0.15)' 
-                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
-                backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                color: wsDatePreset === 'all' && wsTaskFilter === 'all' 
-                  ? (wsBg ? (theme === 'dark' ? '#ffffff' : 'var(--color-primary)') : 'var(--color-primary)') 
-                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : 'var(--color-text-muted)'),
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease',
-                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
-              }}
-            >
-              <span>{t('Tất cả')}</span>
-            </div>
+            {(() => {
+              const isAllActive = wsDatePreset === 'all' && wsTaskFilter === 'all';
+              return (
+                <div 
+                  onClick={() => {
+                    setWsDatePreset('all');
+                    setWsStatus('planned');
+                    setWsTaskFilter('all');
+                    if (!wsTeamId) setWsTeamId('all_teams_bypass');
+                  }}
+                  style={{
+                    position: 'relative',
+                    padding: isMobile ? '4px 10px' : '5px 12px',
+                    borderRadius: '20px',
+                    border: isAllActive 
+                      ? '1.5px solid transparent' 
+                      : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)'),
+                    background: isAllActive ? 'transparent' : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.03)') : 'transparent'),
+                    backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    color: isAllActive 
+                      ? (wsBg ? (theme === 'dark' ? '#ffffff' : 'var(--color-primary)') : 'var(--color-primary)') 
+                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : 'var(--color-text-muted)'),
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: isMobile ? '0.725rem' : '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    userSelect: 'none',
+                    transition: 'color 0.2s ease',
+                    textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                  }}
+                >
+                  {isAllActive && (
+                    <motion.div
+                      layoutId="activeWorkspaceFilterPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '20px',
+                        background: 'rgba(189, 29, 45, 0.22)',
+                        border: '1.5px solid var(--color-primary, #BD1D2D)',
+                        boxShadow: '0 2px 10px rgba(189, 29, 45, 0.25)',
+                        zIndex: 0
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>{t('Tất cả')}</span>
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Assigned to me Pill (Tôi thực hiện) */}
-            <div 
-              onClick={() => {
-                if (wsTaskFilter === 'assigned_to_me') {
-                  setWsTaskFilter('all');
-                } else {
-                  setWsTaskFilter('assigned_to_me');
-                  setWsStatus('planned');
-                  setWsDatePreset('all');
-                }
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsTaskFilter === 'assigned_to_me' 
-                  ? '1.5px solid #3b82f6' 
-                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
-                background: wsTaskFilter === 'assigned_to_me' 
-                  ? 'rgba(37, 99, 235, 0.25)' 
-                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
-                backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                color: wsTaskFilter === 'assigned_to_me' 
-                  ? (theme === 'dark' ? '#60a5fa' : '#2563eb') 
-                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : '#2563eb'),
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease',
-                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
-              }}
-            >
-              <User size={isMobile ? 12 : 13} style={{ color: wsTaskFilter === 'assigned_to_me' ? (theme === 'dark' ? '#60a5fa' : '#2563eb') : '#2563eb' }} />
-              <span>{t('Tôi thực hiện')}</span>
-              <span style={{ background: '#2563eb', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
-                {workspaceStats.assignedToMe || 0}
-              </span>
-            </div>
+            {(() => {
+              const isAssignedActive = wsTaskFilter === 'assigned_to_me';
+              return (
+                <div 
+                  onClick={() => {
+                    if (wsTaskFilter === 'assigned_to_me') {
+                      setWsTaskFilter('all');
+                    } else {
+                      setWsTaskFilter('assigned_to_me');
+                      setWsStatus('planned');
+                      setWsDatePreset('all');
+                    }
+                    if (!wsTeamId) setWsTeamId('all_teams_bypass');
+                  }}
+                  style={{
+                    position: 'relative',
+                    padding: isMobile ? '4px 10px' : '5px 12px',
+                    borderRadius: '20px',
+                    border: isAssignedActive 
+                      ? '1.5px solid transparent' 
+                      : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)'),
+                    background: isAssignedActive ? 'transparent' : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.03)') : 'transparent'),
+                    backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    color: isAssignedActive 
+                      ? (theme === 'dark' ? '#93c5fd' : '#1d4ed8') 
+                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : '#2563eb'),
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: isMobile ? '0.725rem' : '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    userSelect: 'none',
+                    transition: 'color 0.2s ease',
+                    textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                  }}
+                >
+                  {isAssignedActive && (
+                    <motion.div
+                      layoutId="activeWorkspaceFilterPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '20px',
+                        background: 'rgba(37, 99, 235, 0.25)',
+                        border: '1.5px solid #3b82f6',
+                        boxShadow: '0 2px 10px rgba(59, 130, 246, 0.25)',
+                        zIndex: 0
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <User size={isMobile ? 12 : 13} style={{ color: isAssignedActive ? (theme === 'dark' ? '#93c5fd' : '#1d4ed8') : '#2563eb' }} />
+                    <span>{t('Tôi thực hiện')}</span>
+                    <span style={{ background: '#2563eb', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                      {workspaceStats.assignedToMe || 0}
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Overdue Pill (Quá hạn) */}
-            <div 
-              onClick={() => {
-                if (wsDatePreset === 'overdue') {
-                  setWsDatePreset('all');
-                } else {
-                  setWsDatePreset('overdue');
-                  setWsStatus('planned');
-                  setWsTaskFilter('all');
-                }
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsDatePreset === 'overdue' 
-                  ? '1.5px solid #ef4444' 
-                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
-                background: wsDatePreset === 'overdue' 
-                  ? 'rgba(239, 68, 68, 0.25)' 
-                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
-                backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                color: wsDatePreset === 'overdue' 
-                  ? (theme === 'dark' ? '#f87171' : '#dc2626') 
-                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : 'var(--color-danger)'),
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease',
-                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
-              }}
-            >
-              <Clock size={isMobile ? 12 : 13} style={{ color: 'var(--color-danger)' }} />
-              <span>{t('Quá hạn')}</span>
-              <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
-                {workspaceStats.overdue}
-              </span>
-            </div>
+            {(() => {
+              const isOverdueActive = wsDatePreset === 'overdue';
+              return (
+                <div 
+                  onClick={() => {
+                    if (wsDatePreset === 'overdue') {
+                      setWsDatePreset('all');
+                    } else {
+                      setWsDatePreset('overdue');
+                      setWsStatus('planned');
+                      setWsTaskFilter('all');
+                    }
+                    if (!wsTeamId) setWsTeamId('all_teams_bypass');
+                  }}
+                  style={{
+                    position: 'relative',
+                    padding: isMobile ? '4px 10px' : '5px 12px',
+                    borderRadius: '20px',
+                    border: isOverdueActive 
+                      ? '1.5px solid transparent' 
+                      : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)'),
+                    background: isOverdueActive ? 'transparent' : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.03)') : 'transparent'),
+                    backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    color: isOverdueActive 
+                      ? (theme === 'dark' ? '#fca5a5' : '#b91c1c') 
+                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : 'var(--color-danger)'),
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: isMobile ? '0.725rem' : '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    userSelect: 'none',
+                    transition: 'color 0.2s ease',
+                    textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                  }}
+                >
+                  {isOverdueActive && (
+                    <motion.div
+                      layoutId="activeWorkspaceFilterPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '20px',
+                        background: 'rgba(239, 68, 68, 0.25)',
+                        border: '1.5px solid #ef4444',
+                        boxShadow: '0 2px 10px rgba(239, 68, 68, 0.25)',
+                        zIndex: 0
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={isMobile ? 12 : 13} style={{ color: isOverdueActive ? (theme === 'dark' ? '#fca5a5' : '#b91c1c') : 'var(--color-danger)' }} />
+                    <span>{t('Quá hạn')}</span>
+                    <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                      {workspaceStats.overdue}
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Due Today Pill (Đến hạn) */}
-            <div 
-              onClick={() => {
-                if (wsDatePreset === 'today') {
-                  setWsDatePreset('all');
-                } else {
-                  setWsDatePreset('today');
-                  setWsStatus('planned');
-                  setWsTaskFilter('all');
-                }
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsDatePreset === 'today' 
-                  ? '1.5px solid #f59e0b' 
-                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
-                background: wsDatePreset === 'today' 
-                  ? 'rgba(245, 158, 11, 0.25)' 
-                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
-                backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                color: wsDatePreset === 'today' 
-                  ? (theme === 'dark' ? '#fbbf24' : '#d97706') 
-                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : 'var(--color-warning)'),
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease',
-                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
-              }}
-            >
-              <Calendar size={isMobile ? 12 : 13} style={{ color: 'var(--color-warning)' }} />
-              <span>{t('Đến hạn')}</span>
-              <span style={{ background: 'var(--color-warning)', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
-                {workspaceStats.dueToday}
-              </span>
-            </div>
+            {(() => {
+              const isTodayActive = wsDatePreset === 'today';
+              return (
+                <div 
+                  onClick={() => {
+                    if (wsDatePreset === 'today') {
+                      setWsDatePreset('all');
+                    } else {
+                      setWsDatePreset('today');
+                      setWsStatus('planned');
+                      setWsTaskFilter('all');
+                    }
+                    if (!wsTeamId) setWsTeamId('all_teams_bypass');
+                  }}
+                  style={{
+                    position: 'relative',
+                    padding: isMobile ? '4px 10px' : '5px 12px',
+                    borderRadius: '20px',
+                    border: isTodayActive 
+                      ? '1.5px solid transparent' 
+                      : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)'),
+                    background: isTodayActive ? 'transparent' : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.03)') : 'transparent'),
+                    backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    color: isTodayActive 
+                      ? (theme === 'dark' ? '#fde68a' : '#b45309') 
+                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : 'var(--color-warning)'),
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: isMobile ? '0.725rem' : '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    userSelect: 'none',
+                    transition: 'color 0.2s ease',
+                    textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                  }}
+                >
+                  {isTodayActive && (
+                    <motion.div
+                      layoutId="activeWorkspaceFilterPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '20px',
+                        background: 'rgba(245, 158, 11, 0.25)',
+                        border: '1.5px solid #f59e0b',
+                        boxShadow: '0 2px 10px rgba(245, 158, 11, 0.25)',
+                        zIndex: 0
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Calendar size={isMobile ? 12 : 13} style={{ color: isTodayActive ? (theme === 'dark' ? '#fde68a' : '#b45309') : 'var(--color-warning)' }} />
+                    <span>{t('Đến hạn')}</span>
+                    <span style={{ background: 'var(--color-warning)', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                      {workspaceStats.dueToday}
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Waiting Approval Pill (Chờ tôi duyệt) */}
-            <div 
-              onClick={() => {
-                if (wsTaskFilter === 'approve_by_me') {
-                  setWsTaskFilter('all');
-                } else {
-                  setWsTaskFilter('approve_by_me');
-                  setWsStatus('planned');
-                  setWsDatePreset('all');
-                }
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsTaskFilter === 'approve_by_me' 
-                  ? '1.5px solid #a855f7' 
-                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
-                background: wsTaskFilter === 'approve_by_me' 
-                  ? 'rgba(168, 85, 247, 0.25)' 
-                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
-                backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                color: wsTaskFilter === 'approve_by_me' 
-                  ? (theme === 'dark' ? '#c084fc' : '#7c3aed') 
-                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : '#8b5cf6'),
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease',
-                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
-              }}
-            >
-              <UserCheck size={isMobile ? 12 : 13} style={{ color: '#8b5cf6' }} />
-              <span>{t('Chờ tôi duyệt')}</span>
-              <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
-                {workspaceStats.pendingApproval}
-              </span>
-            </div>
+            {(() => {
+              const isApproveActive = wsTaskFilter === 'approve_by_me';
+              return (
+                <div 
+                  onClick={() => {
+                    if (wsTaskFilter === 'approve_by_me') {
+                      setWsTaskFilter('all');
+                    } else {
+                      setWsTaskFilter('approve_by_me');
+                      setWsStatus('planned');
+                      setWsDatePreset('all');
+                    }
+                    if (!wsTeamId) setWsTeamId('all_teams_bypass');
+                  }}
+                  style={{
+                    position: 'relative',
+                    padding: isMobile ? '4px 10px' : '5px 12px',
+                    borderRadius: '20px',
+                    border: isApproveActive 
+                      ? '1.5px solid transparent' 
+                      : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)'),
+                    background: isApproveActive ? 'transparent' : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.03)') : 'transparent'),
+                    backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    color: isApproveActive 
+                      ? (theme === 'dark' ? '#d8b4fe' : '#6d28d9') 
+                      : (wsBg ? (theme === 'dark' ? '#cbd5e1' : '#334155') : '#8b5cf6'),
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: isMobile ? '0.725rem' : '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    userSelect: 'none',
+                    transition: 'color 0.2s ease',
+                    textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                  }}
+                >
+                  {isApproveActive && (
+                    <motion.div
+                      layoutId="activeWorkspaceFilterPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '20px',
+                        background: 'rgba(168, 85, 247, 0.25)',
+                        border: '1.5px solid #a855f7',
+                        boxShadow: '0 2px 10px rgba(168, 85, 247, 0.25)',
+                        zIndex: 0
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <UserCheck size={isMobile ? 12 : 13} style={{ color: isApproveActive ? (theme === 'dark' ? '#d8b4fe' : '#6d28d9') : '#8b5cf6' }} />
+                    <span>{t('Chờ tôi duyệt')}</span>
+                    <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                      {workspaceStats.pendingApproval}
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Collaborator / Related Pill */}
-            <div 
-              onClick={() => {
-                if (wsTaskFilter === 'collaborator') {
-                  setWsTaskFilter('all');
-                } else {
-                  setWsTaskFilter('collaborator');
-                  setWsStatus('planned');
-                  setWsDatePreset('all');
-                }
-                if (!wsTeamId) setWsTeamId('all_teams_bypass');
-              }}
-              style={{
-                padding: isMobile ? '4px 10px' : '5px 12px',
-                borderRadius: '20px',
-                border: wsTaskFilter === 'collaborator' 
-                  ? '1.5px solid #64748b' 
-                  : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.12)') : '1px solid var(--color-border)'),
-                background: wsTaskFilter === 'collaborator' 
-                  ? 'rgba(100, 116, 139, 0.25)' 
-                  : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'),
-                backdropFilter: wsBg ? 'blur(8px)' : 'none',
-                WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
-                color: wsTaskFilter === 'collaborator' 
-                  ? (theme === 'dark' ? '#94a3b8' : '#475569') 
-                  : (wsBg ? (theme === 'dark' ? '#f1f5f9' : '#334155') : '#475569'),
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '0.725rem' : '0.78rem',
-                fontWeight: 700,
-                flexShrink: 0,
-                transition: 'all 0.15s ease',
-                textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
-              }}
-            >
-              <Users size={isMobile ? 12 : 13} style={{ color: '#64748b' }} />
-              <span>{t('Tôi liên quan')}</span>
-              <span style={{ background: '#475569', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
-                {workspaceStats.collaborator || 0}
-              </span>
-            </div>
+            {(() => {
+              const isCollabActive = wsTaskFilter === 'collaborator';
+              return (
+                <div 
+                  onClick={() => {
+                    if (wsTaskFilter === 'collaborator') {
+                      setWsTaskFilter('all');
+                    } else {
+                      setWsTaskFilter('collaborator');
+                      setWsStatus('planned');
+                      setWsDatePreset('all');
+                    }
+                    if (!wsTeamId) setWsTeamId('all_teams_bypass');
+                  }}
+                  style={{
+                    position: 'relative',
+                    padding: isMobile ? '4px 10px' : '5px 12px',
+                    borderRadius: '20px',
+                    border: isCollabActive 
+                      ? '1.5px solid transparent' 
+                      : (wsBg ? (theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.18)' : '1px solid rgba(0, 0, 0, 0.1)') : '1px solid var(--color-border)'),
+                    background: isCollabActive ? 'transparent' : (wsBg ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.03)') : 'transparent'),
+                    backdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    WebkitBackdropFilter: wsBg ? 'blur(8px)' : 'none',
+                    color: isCollabActive 
+                      ? (theme === 'dark' ? '#cbd5e1' : '#1e293b') 
+                      : (wsBg ? (theme === 'dark' ? '#94a3b8' : '#64748b') : '#475569'),
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: isMobile ? '0.725rem' : '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    userSelect: 'none',
+                    transition: 'color 0.2s ease',
+                    textShadow: wsBg && theme === 'dark' ? '0 1px 3px rgba(0,0,0,0.7)' : 'none'
+                  }}
+                >
+                  {isCollabActive && (
+                    <motion.div
+                      layoutId="activeWorkspaceFilterPill"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '20px',
+                        background: 'rgba(100, 116, 139, 0.25)',
+                        border: '1.5px solid #64748b',
+                        boxShadow: '0 2px 10px rgba(100, 116, 139, 0.25)',
+                        zIndex: 0
+                      }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Users size={isMobile ? 12 : 13} style={{ color: isCollabActive ? (theme === 'dark' ? '#cbd5e1' : '#1e293b') : '#64748b' }} />
+                    <span>{t('Tôi liên quan')}</span>
+                    <span style={{ background: '#475569', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.675rem', fontWeight: 800 }}>
+                      {workspaceStats.collaborator || 0}
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
 
 
           </div>
@@ -8226,6 +8428,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                         taskGroups={taskGroups}
                         onAssignGroup={handleAssignTaskGroup}
                         onOpenCreateGroupModal={() => setShowCardCreateGroupModal(true)}
+                        onToggleComplete={handleToggleTaskStatus}
+                        isCompleting={completingTaskId === task.id}
                       />
                     );
                   })}
@@ -9091,6 +9295,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
               taskGroups={taskGroups}
               onAssignGroup={handleAssignTaskGroup}
               onOpenCreateGroupModal={() => setShowCardCreateGroupModal(true)}
+              onToggleComplete={handleToggleTaskStatus}
+              isCompleting={completingTaskId === activeDragTask.id}
             />
           ) : null}
         </DragOverlay>
@@ -21279,6 +21485,16 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
           </div>
         </CustomModal>
       )}
+
+      {/* Task Complete Confirmation Modal */}
+      <TaskCompleteConfirmModal
+        isOpen={Boolean(taskToConfirmComplete)}
+        onClose={() => setTaskToConfirmComplete(null)}
+        task={taskToConfirmComplete}
+        users={users}
+        onConfirm={handleConfirmCompleteTask}
+        isSubmitting={isConfirmingComplete}
+      />
     </div>
   );
 };

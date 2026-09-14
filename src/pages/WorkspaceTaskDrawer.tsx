@@ -8,6 +8,7 @@ import {
   CheckCircle2, XCircle, Camera, Target, Shield, AlertTriangle, FileSpreadsheet, Maximize2, Download, Folder
 } from 'lucide-react';
 import { downloadFileWithName } from '../utils/fileDownloader';
+import { triggerLocalConfetti } from '../utils/confettiHelper';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -1859,7 +1860,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const handleToggleChecklist = (itemId: string) => {
     const updatedChecklist = erpMeta.checklist.map((item: any) => {
       if (item.id === itemId) {
-        return { ...item, done: !item.done };
+        const nextDone = !item.done;
+        if (nextDone) {
+          triggerLocalConfetti();
+        }
+        return { ...item, done: nextDone };
       }
       return item;
     });
@@ -5308,6 +5313,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           if (hasImage) {
                             await api.put(`/activities/${task.id}`, { status: 'done', progress: 100 });
                             setFormData((prev: any) => ({ ...prev, status: 'done', progress: 100 }));
+                            triggerLocalConfetti();
                             onUpdate();
                             toast.success(t('Đã cập nhật trạng thái lịch hẹn thành công'));
                           } else {
@@ -5817,7 +5823,8 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                           const res = await api.put(`/activities/${task.id}`, { approval_status: 'approved', status: 'done' });
                           if (res.data && res.data.success) {
                             setFormData((prev: any) => ({ ...prev, approval_status: 'approved', status: 'done' }));
-                            toast.success(t('Đã phê duyệt hoàn thành công việc!'));
+                            triggerLocalConfetti();
+                            toast.success(t('Đã phê duyệt hoàn thành công việc! 🎉'));
                             onUpdate();
                           }
                         } catch (e: any) {
@@ -7502,6 +7509,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
                           // Complete activity
                           await api.put(`/activities/${meetingToComplete.id}`, { status: 'done', progress: 100 });
+                          triggerLocalConfetti();
 
                           toast.success(t('Đã tải ảnh minh chứng và hoàn thành gặp gỡ'));
                           setFormData((prev: any) => ({ ...prev, status: 'done', progress: 100 }));

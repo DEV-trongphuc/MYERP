@@ -599,7 +599,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '0.5rem 1.25rem',
+                padding: '0.75rem 1rem',
                 background: 'var(--color-surface)',
                 borderBottom: '1px solid var(--color-border-light)',
                 height: '56px',
@@ -616,64 +616,77 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                       handleClose();
                     }
                   }} 
-                  style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center' }}
+                  style={{ 
+                    background: 'var(--color-bg)', 
+                    border: '1px solid var(--color-border-light)', 
+                    color: 'var(--color-text)', 
+                    cursor: 'pointer', 
+                    padding: 0,
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    display: 'flex', 
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                  title={activeTab ? 'Quay lại menu' : 'Đóng'}
                 >
-                  <ChevronLeft size={24} />
+                  <ChevronLeft size={20} />
                 </button>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '0 0.5rem', overflow: 'hidden' }}>
-                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--color-text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {activeTab ? (visibleTabs.find(t => t.id === activeTab)?.label || 'Chi tiết') : (formData?.name || 'Tên Giảng viên')}
                   </h3>
                 </div>
-                {isLecturer && formData?.id && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  {isLecturer && formData?.id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const publicLink = `/public-schedule/lecturer/${formData.id}`;
+                        window.open(publicLink, '_blank');
+                      }}
+                      style={{
+                        padding: 0,
+                        borderRadius: '8px',
+                        height: '36px',
+                        width: '36px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1px solid #fed7aa',
+                        background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
+                        color: '#ea580c',
+                        cursor: 'pointer'
+                      }}
+                      title="Xem lịch giảng công khai"
+                    >
+                      <Calendar size={18} />
+                    </button>
+                  )}
                   <button
-                    type="button"
-                    onClick={() => {
-                      const publicLink = `/public-schedule/lecturer/${formData.id}`;
-                      window.open(publicLink, '_blank');
-                    }}
+                    disabled={isSaving}
+                    onClick={handleSave}
                     style={{
-                      padding: '6px 12px',
-                      borderRadius: '10px',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
+                      padding: 0,
+                      borderRadius: '8px',
                       height: '36px',
-                      width: '44px',
+                      width: '36px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: '1px solid #fed7aa',
-                      background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
-                      color: '#ea580c',
-                      cursor: 'pointer',
-                      marginRight: '8px'
+                      background: 'var(--color-primary)',
+                      borderColor: 'var(--color-primary)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer'
                     }}
+                    title={isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                   >
-                    <Calendar size={18} />
+                    <Save size={18} />
                   </button>
-                )}
-                <button
-                  disabled={isSaving}
-                  onClick={handleSave}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '10px',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    height: '36px',
-                    width: '44px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'var(--color-primary)',
-                    borderColor: 'var(--color-primary)',
-                    color: 'white',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Save size={18} />
-                </button>
+                </div>
               </div>
             ) : (
               <div className={styles.header}>
@@ -1112,50 +1125,82 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                   <fieldset disabled={disableEdit} style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }} className="animate-fade">
                     {/* Partner Statistics Cards (For CTV / Đại lý / Referrer) */}
                     {(isPartner || ['f1', 'f2', 'f3', 'ctv', 'referrer', 'ca_nhan', 'doanh_nghiep'].includes(String(formData?.tier || entity?.tier || '').toLowerCase())) && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.125rem' }}>
                         {/* Card 1: Khách hàng giới thiệu */}
-                        <div className="stat-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', minHeight: '120px', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{
+                          padding: '1.35rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          minHeight: '130px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          borderRadius: '18px',
+                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 246, 255, 0.8) 100%)',
+                          border: '1px solid rgba(59, 130, 246, 0.22)',
+                          boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.02)',
+                          backdropFilter: 'blur(10px)',
+                          WebkitBackdropFilter: 'blur(10px)',
+                          transition: 'all 0.25s ease'
+                        }}>
                           {/* Decorative Background SVG */}
-                          <div className="decor-svg" style={{ color: '#3b82f6', opacity: 0.05, position: 'absolute', right: '-15px', bottom: '-15px', width: '90px', height: '90px', pointerEvents: 'none', zIndex: 1 }}>
+                          <div style={{ color: '#3b82f6', opacity: 0.06, position: 'absolute', right: '-12px', bottom: '-12px', width: '95px', height: '95px', pointerEvents: 'none', zIndex: 1 }}>
                             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                               <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
-                              <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.2" />
-                              <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.4" />
-                              <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.6" />
+                              <circle cx="35" cy="45" r="15" fill="currentColor" fillOpacity="0.25" />
+                              <circle cx="65" cy="45" r="15" fill="currentColor" fillOpacity="0.45" />
+                              <circle cx="50" cy="70" r="18" fill="currentColor" fillOpacity="0.65" />
                             </svg>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Khách hàng giới thiệu</span>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', position: 'relative', zIndex: 2 }}>
+                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800, fontSize: '0.7rem', color: '#1e40af' }}>
+                              Khách hàng giới thiệu
+                            </span>
                             <div style={{
-                              color: '#3b82f6',
-                              background: 'rgba(59, 130, 246, 0.08)',
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '50%',
+                              color: '#2563eb',
+                              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(37, 99, 235, 0.08) 100%)',
+                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '12px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0
+                              flexShrink: 0,
+                              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.15)'
                             }}>
-                              <Users size={18} />
+                              <Users size={19} />
                             </div>
                           </div>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-                            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.75rem', lineHeight: 1.1 }}>
+                            <div style={{ fontWeight: 850, color: '#0f172a', fontSize: '1.9rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.total ?? subContacts.length}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
-                              <span>{isPartner ? 'Khách hàng giới thiệu' : 'Liên hệ phụ thuộc'}</span>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2563eb', display: 'inline-block', boxShadow: '0 0 6px #2563eb' }} />
+                              <span>{isPartner ? 'Hồ sơ giới thiệu' : 'Liên hệ phụ thuộc'}</span>
                             </div>
                           </div>
                         </div>
 
                         {/* Card 2: Doanh thu mang lại */}
-                        <div className="stat-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', minHeight: '120px', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{
+                          padding: '1.35rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          minHeight: '130px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          borderRadius: '18px',
+                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(236, 253, 245, 0.8) 100%)',
+                          border: '1px solid rgba(16, 185, 129, 0.22)',
+                          boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.02)',
+                          backdropFilter: 'blur(10px)',
+                          WebkitBackdropFilter: 'blur(10px)',
+                          transition: 'all 0.25s ease'
+                        }}>
                           {/* Decorative Background SVG */}
-                          <div className="decor-svg" style={{ color: '#10b981', opacity: 0.05, position: 'absolute', right: '-15px', bottom: '-15px', width: '90px', height: '90px', pointerEvents: 'none', zIndex: 1 }}>
+                          <div style={{ color: '#10b981', opacity: 0.06, position: 'absolute', right: '-12px', bottom: '-12px', width: '95px', height: '95px', pointerEvents: 'none', zIndex: 1 }}>
                             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                               <path d="M10 50 Q 50 10 90 50 T 90 90" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />
                               <circle cx="10" cy="50" r="6" fill="currentColor" />
@@ -1165,73 +1210,95 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                             </svg>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Doanh thu mang lại</span>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', position: 'relative', zIndex: 2 }}>
+                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800, fontSize: '0.7rem', color: '#065f46' }}>
+                              Doanh thu mang lại
+                            </span>
                             <div style={{
-                              color: '#10b981',
-                              background: 'rgba(16, 185, 129, 0.08)',
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '50%',
+                              color: '#059669',
+                              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.08) 100%)',
+                              border: '1px solid rgba(16, 185, 129, 0.25)',
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '12px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0
+                              flexShrink: 0,
+                              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
                             }}>
-                              <TrendingUp size={18} />
+                              <TrendingUp size={19} />
                             </div>
                           </div>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-                            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.75rem', lineHeight: 1.1 }}>
+                            <div style={{ fontWeight: 850, color: '#065f46', fontSize: '1.75rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
                               {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(
                                 salesOrders.length > 0 
                                   ? salesOrders.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0) 
                                   : invoices.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0)
                               )}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
                               <span>{salesOrders.length > 0 ? 'Tổng đơn hàng SO' : 'Hóa đơn ghi nhận'}</span>
                             </div>
                           </div>
                         </div>
 
                         {/* Card 3: Hoa hồng phát sinh */}
-                        <div className="stat-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', minHeight: '120px', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{
+                          padding: '1.35rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          minHeight: '130px',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          borderRadius: '18px',
+                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(254, 242, 242, 0.8) 100%)',
+                          border: '1px solid rgba(239, 68, 68, 0.22)',
+                          boxShadow: '0 10px 25px -5px rgba(239, 68, 68, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.02)',
+                          backdropFilter: 'blur(10px)',
+                          WebkitBackdropFilter: 'blur(10px)',
+                          transition: 'all 0.25s ease'
+                        }}>
                           {/* Decorative Background SVG */}
-                          <div className="decor-svg" style={{ color: '#ef4444', opacity: 0.05, position: 'absolute', right: '-15px', bottom: '-15px', width: '90px', height: '90px', pointerEvents: 'none', zIndex: 1 }}>
+                          <div style={{ color: '#ef4444', opacity: 0.06, position: 'absolute', right: '-12px', bottom: '-12px', width: '95px', height: '95px', pointerEvents: 'none', zIndex: 1 }}>
                             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
                               <circle cx="50" cy="50" r="30" stroke="currentColor" strokeWidth="2" />
                               <path d="M50 35 V 65 M35 50 H 65" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                             </svg>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
-                            <span className="stat-label" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Hoa hồng phát sinh</span>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', position: 'relative', zIndex: 2 }}>
+                            <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 800, fontSize: '0.7rem', color: '#991b1b' }}>
+                              Hoa hồng phát sinh
+                            </span>
                             <div style={{
-                              color: '#ef4444',
-                              background: 'rgba(239, 68, 68, 0.08)',
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '50%',
+                              color: '#dc2626',
+                              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(220, 38, 38, 0.08) 100%)',
+                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '12px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0
+                              flexShrink: 0,
+                              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)'
                             }}>
-                              <DollarSign size={18} />
+                              <DollarSign size={19} />
                             </div>
                           </div>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', zIndex: 2 }}>
-                            <div className="stat-value" style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '1.75rem', lineHeight: 1.1 }}>
+                            <div style={{ fontWeight: 850, color: '#991b1b', fontSize: '1.75rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
                               {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(
                                 purchaseOrders.length > 0 
                                   ? purchaseOrders.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0) 
                                   : expenses.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0)
                               )}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '6px', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 6px #ef4444' }} />
                               <span>{purchaseOrders.length > 0 ? 'Tổng đơn mua PO' : 'Lịch sử chi trả'}</span>
                             </div>
                           </div>
@@ -1241,48 +1308,50 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
 
                     {/* Referral Pipeline Statistics Panel */}
                     {isPartner && (
-                      <div className="card-panel" style={{
+                      <div style={{
                         background: 'var(--color-surface)',
                         border: '1px solid var(--color-border-light)',
-                        borderRadius: '16px',
-                        padding: '1.25rem 1.5rem',
+                        borderRadius: '20px',
+                        padding: isMobileOrTablet ? '1.15rem' : '1.5rem',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '1.25rem',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.02)'
+                        gap: '1.35rem',
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.03)'
                       }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
-                              width: '36px',
-                              height: '36px',
-                              borderRadius: '10px',
-                              background: 'rgba(59, 130, 246, 0.1)',
-                              color: '#3b82f6',
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '12px',
+                              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.06) 100%)',
+                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                              color: '#2563eb',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              flexShrink: 0
+                              flexShrink: 0,
+                              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.12)'
                             }}>
-                              <GitBranch size={20} strokeWidth={2.2} />
+                              <GitBranch size={22} strokeWidth={2.2} />
                             </div>
                             <div>
-                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 750, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                              <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-text)', letterSpacing: '0.01em' }}>
                                 Thống kê Data theo Trạng thái Pipeline
                               </h4>
-                              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
-                                Tiến trình chuyển đổi và trạng thái các data do người này giới thiệu
+                              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                Tiến trình chuyển đổi & trạng thái các data do đối tác này giới thiệu
                               </p>
                             </div>
                           </div>
                           <button 
                             type="button"
-                            className="btn secondary sm"
+                            className="btn secondary sm hover-lift"
                             onClick={() => {
                               setSelectedStageFilter('all');
                               setActiveTab('contacts');
                             }}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', padding: '6px 12px' }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', padding: '7px 14px', borderRadius: '10px' }}
                           >
                             <Users size={14} />
                             <span>Xem danh sách ({pipelineStats?.summary?.total ?? subContacts.length})</span>
@@ -1290,62 +1359,128 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                           </button>
                         </div>
 
-                        {/* Mini KPI Chips Row */}
+                        {/* Mini KPI Chips Row - iOS Rounded Card Style */}
                         <div style={{
                           display: 'grid',
                           gridTemplateColumns: isMobileOrTablet ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
-                          gap: '10px'
+                          gap: '12px'
                         }}>
-                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 650 }}>
-                              <Users size={14} color="#3b82f6" /> Tổng nhận
+                          {/* 1. Tổng nhận */}
+                          <div style={{
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.03) 100%)',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.04)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700 }}>
+                              <Users size={15} color="#2563eb" /> Tổng nhận
                             </div>
-                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#3b82f6' }}>
+                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#1d4ed8', letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.total ?? subContacts.length}
                             </span>
                           </div>
 
-                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'var(--color-surface)', border: '1px solid var(--color-border-light)', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 650 }}>
-                              <Clock size={14} color="#0ea5e9" /> Đang tư vấn
+                          {/* 2. Đang tư vấn */}
+                          <div style={{
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: 'linear-gradient(145deg, rgba(14, 165, 233, 0.08) 0%, rgba(2, 132, 199, 0.03) 100%)',
+                            border: '1px solid rgba(14, 165, 233, 0.25)',
+                            boxShadow: '0 4px 12px rgba(14, 165, 233, 0.04)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#0284c7', fontWeight: 700 }}>
+                              <Clock size={15} color="#0ea5e9" /> Đang tư vấn
                             </div>
-                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0ea5e9' }}>
+                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#0284c7', letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.active ?? 0}
                             </span>
                           </div>
 
-                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.25)', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#10b981', fontWeight: 750 }}>
-                              <CheckCircle2 size={14} color="#10b981" /> Nhập học / Đậu
+                          {/* 3. Nhập học / Đậu */}
+                          <div style={{
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: 'linear-gradient(145deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.04) 100%)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            boxShadow: '0 4px 14px rgba(16, 185, 129, 0.08)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#059669', fontWeight: 800 }}>
+                              <CheckCircle2 size={15} color="#10b981" /> Nhập học / Đậu
                             </div>
-                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#10b981' }}>
+                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#059669', letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.won ?? 0}
                             </span>
                           </div>
 
-                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.05)', border: '1px solid rgba(139, 92, 246, 0.25)', boxShadow: '0 2px 8px rgba(139, 92, 246, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#8b5cf6', fontWeight: 750 }}>
-                              <TrendingUp size={14} color="#8b5cf6" /> Tỷ lệ chốt
+                          {/* 4. Tỷ lệ chốt */}
+                          <div style={{
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: 'linear-gradient(145deg, rgba(139, 92, 246, 0.1) 0%, rgba(109, 40, 217, 0.04) 100%)',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
+                            boxShadow: '0 4px 14px rgba(139, 92, 246, 0.08)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#7c3aed', fontWeight: 800 }}>
+                              <TrendingUp size={15} color="#8b5cf6" /> Tỷ lệ chốt
                             </div>
-                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#8b5cf6' }}>
+                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#7c3aed', letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.conversion_rate ?? 0}%
                             </span>
                           </div>
 
-                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.25)', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#d97706', fontWeight: 650 }}>
-                              <RefreshCw size={14} color="#f59e0b" /> Nuôi dưỡng
+                          {/* 5. Nuôi dưỡng */}
+                          <div style={{
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: 'linear-gradient(145deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.03) 100%)',
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.04)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#b45309', fontWeight: 700 }}>
+                              <RefreshCw size={15} color="#f59e0b" /> Nuôi dưỡng
                             </div>
-                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#d97706' }}>
+                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#b45309', letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.nurture ?? 0}
                             </span>
                           </div>
 
-                          <div style={{ padding: '12px 14px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.25)', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.04)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#ef4444', fontWeight: 650 }}>
-                              <XCircle size={14} color="#ef4444" /> Thất bại / Hủy
+                          {/* 6. Thất bại / Hủy */}
+                          <div style={{
+                            padding: '14px 16px',
+                            borderRadius: '14px',
+                            background: 'linear-gradient(145deg, rgba(239, 68, 68, 0.08) 0%, rgba(225, 29, 72, 0.03) 100%)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.04)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#e11d48', fontWeight: 700 }}>
+                              <XCircle size={15} color="#ef4444" /> Thất bại / Hủy
                             </div>
-                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#ef4444' }}>
+                            <span style={{ fontSize: '1.45rem', fontWeight: 900, color: '#e11d48', letterSpacing: '-0.02em' }}>
                               {pipelineStats?.summary?.lost ?? 0}
                             </span>
                           </div>
@@ -1354,11 +1489,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                         {/* Stage Breakdown Funnel Bars */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '6px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--color-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               Phân bổ theo giai đoạn Pipeline:
                             </span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                              Bấm vào giai đoạn để lọc nhanh danh sách data
+                            <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                              Chạm / Bấm vào giai đoạn để lọc nhanh danh sách
                             </span>
                           </div>
 
@@ -1376,27 +1511,29 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                             const zeroStages = pipelineStats.stages.filter((st: any) => st.count === 0);
 
                             return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {/* Horizontal Visual Segmented Distribution Bar */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                {/* Horizontal Visual Segmented Distribution Bar - Sleek iOS Pill Bar */}
                                 {activeStages.length > 0 && (
                                   <div style={{
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '8px',
+                                    gap: '10px',
                                     background: 'var(--color-surface)',
-                                    padding: '12px 14px',
-                                    borderRadius: '12px',
+                                    padding: '14px 16px',
+                                    borderRadius: '14px',
                                     border: '1px solid var(--color-border-light)',
-                                    boxShadow: 'var(--shadow-sm)'
+                                    boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
                                   }}>
                                     <div style={{
-                                      height: '10px',
+                                      height: '14px',
                                       width: '100%',
-                                      borderRadius: '6px',
+                                      borderRadius: '8px',
                                       background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))',
                                       display: 'flex',
                                       overflow: 'hidden',
-                                      gap: '2px'
+                                      gap: '3px',
+                                      padding: '2px',
+                                      boxSizing: 'border-box'
                                     }}>
                                       {activeStages.map((st: any) => (
                                         <div
@@ -1407,19 +1544,25 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                             setActiveTab('contacts');
                                           }}
                                           style={{
-                                            width: `${Math.max(2, st.percentage)}%`,
+                                            width: `${Math.max(3, st.percentage)}%`,
                                             background: st.color || '#3b82f6',
                                             height: '100%',
-                                            borderRadius: '3px',
+                                            borderRadius: '5px',
                                             cursor: 'pointer',
-                                            transition: 'transform 0.15s, opacity 0.15s'
+                                            transition: 'transform 0.18s ease, opacity 0.18s ease'
                                           }}
-                                          onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
-                                          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                                          onMouseEnter={e => {
+                                            e.currentTarget.style.transform = 'scaleY(1.15)';
+                                            e.currentTarget.style.opacity = '0.85';
+                                          }}
+                                          onMouseLeave={e => {
+                                            e.currentTarget.style.transform = 'none';
+                                            e.currentTarget.style.opacity = '1';
+                                          }}
                                         />
                                       ))}
                                     </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: '2px' }}>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: '2px' }}>
                                       {activeStages.map((st: any) => (
                                         <div
                                           key={st.id}
@@ -1427,11 +1570,11 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                             setSelectedStageFilter(String(st.id));
                                             setActiveTab('contacts');
                                           }}
-                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.72rem' }}
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem' }}
                                         >
-                                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color || '#3b82f6' }} />
+                                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: st.color || '#3b82f6', boxShadow: `0 0 5px ${st.color || '#3b82f6'}` }} />
                                           <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>{st.name}:</span>
-                                          <span style={{ fontWeight: 800, color: st.color || 'var(--color-primary)' }}>{st.count}</span>
+                                          <span style={{ fontWeight: 850, color: st.color || 'var(--color-primary)' }}>{st.count}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -1447,7 +1590,7 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                   <div style={{
                                     display: 'grid',
                                     gridTemplateColumns: isMobileOrTablet ? '1fr' : 'repeat(2, 1fr)',
-                                    gap: '10px'
+                                    gap: '12px'
                                   }}>
                                     {activeStages.map((st: any) => (
                                       <div
@@ -1457,31 +1600,31 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                           setActiveTab('contacts');
                                         }}
                                         style={{
-                                          padding: '12px 14px',
-                                          borderRadius: '12px',
+                                          padding: '14px 16px',
+                                          borderRadius: '14px',
                                           background: 'var(--color-surface)',
                                           border: `1.5px solid ${st.color ? st.color + '40' : 'var(--color-border)'}`,
-                                          boxShadow: 'var(--shadow-sm)',
+                                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
                                           cursor: 'pointer',
                                           transition: 'all 0.2s ease',
                                           display: 'flex',
                                           flexDirection: 'column',
-                                          gap: '8px'
+                                          gap: '10px'
                                         }}
                                         onMouseEnter={e => {
                                           e.currentTarget.style.transform = 'translateY(-2px)';
-                                          e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.06)';
                                         }}
                                         onMouseLeave={e => {
                                           e.currentTarget.style.transform = 'translateY(0)';
-                                          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+                                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
                                         }}
                                         title={`Bấm xem ${st.count} data ở giai đoạn ${st.name}`}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: st.color || '#3b82f6', flexShrink: 0 }} />
-                                            <span style={{ fontSize: '0.85rem', fontWeight: 750, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: st.color || '#3b82f6', flexShrink: 0, boxShadow: `0 0 6px ${st.color || '#3b82f6'}` }} />
+                                            <span style={{ fontSize: '0.875rem', fontWeight: 750, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {st.name}
                                             </span>
                                             {st.is_won && (
@@ -1490,13 +1633,13 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                               </span>
                                             )}
                                           </div>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                             <span style={{
                                               fontSize: '0.85rem',
                                               fontWeight: 900,
                                               color: st.color || 'var(--color-primary)',
                                               background: st.color ? st.color + '15' : 'rgba(59,130,246,0.1)',
-                                              padding: '2px 10px',
+                                              padding: '3px 10px',
                                               borderRadius: '12px'
                                             }}>
                                               {st.count} data
@@ -1507,12 +1650,12 @@ export const CompanyDrawer: React.FC<CompanyDrawerProps> = ({ isOpen, onClose, e
                                           </div>
                                         </div>
                                         {/* Micro progress bar */}
-                                        <div style={{ height: '4px', width: '100%', background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', borderRadius: '2px', overflow: 'hidden' }}>
+                                        <div style={{ height: '5px', width: '100%', background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', borderRadius: '3px', overflow: 'hidden' }}>
                                           <div style={{
                                             height: '100%',
                                             width: `${Math.max(2, st.percentage)}%`,
                                             background: st.color || '#3b82f6',
-                                            borderRadius: '2px',
+                                            borderRadius: '3px',
                                             transition: 'width 0.4s ease'
                                           }} />
                                         </div>

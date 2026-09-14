@@ -205,17 +205,20 @@ export const SplashPreviewPage: React.FC = () => {
               }}>
                 {/* 3D Robot Mascot with dynamic halo */}
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
-                  <img
-                    src="/ideas_bot.png"
-                    alt="IDEAS AI"
-                    style={{
-                      width: deviceView === 'mobile' ? '150px' : '175px',
-                      height: deviceView === 'mobile' ? '150px' : '175px',
-                      objectFit: 'contain',
-                      filter: 'drop-shadow(0 20px 25px rgba(189, 29, 45, 0.25))',
-                      animation: 'floatBot 3.6s ease-in-out infinite'
-                    }}
-                  />
+                  <picture>
+                    <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+                    <img
+                      src="/ideas_bot_kling.gif?v=20260915_perfect"
+                      alt="IDEAS AI"
+                      style={{
+                        width: deviceView === 'mobile' ? '150px' : '175px',
+                        height: deviceView === 'mobile' ? '150px' : '175px',
+                        objectFit: 'contain',
+                        filter: 'drop-shadow(0 20px 25px rgba(189, 29, 45, 0.25))',
+                        animation: 'floatBot 3.6s ease-in-out infinite'
+                      }}
+                    />
+                  </picture>
                   <div style={{
                     width: '90px',
                     height: '12px',
@@ -318,17 +321,20 @@ export const SplashPreviewPage: React.FC = () => {
               {/* Center Content */}
               <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-                  <img
-                    src="/ideas_bot.png"
-                    alt="IDEAS Mascot"
-                    style={{
-                      width: deviceView === 'mobile' ? '165px' : '190px',
-                      height: deviceView === 'mobile' ? '165px' : '190px',
-                      objectFit: 'contain',
-                      filter: 'drop-shadow(0 20px 30px rgba(225, 29, 72, 0.28))',
-                      animation: 'floatBot 3.6s ease-in-out infinite'
-                    }}
-                  />
+                  <picture>
+                    <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+                    <img
+                      src="/ideas_bot_kling.gif?v=20260915_perfect"
+                      alt="IDEAS Mascot"
+                      style={{
+                        width: deviceView === 'mobile' ? '165px' : '190px',
+                        height: deviceView === 'mobile' ? '165px' : '190px',
+                        objectFit: 'contain',
+                        filter: 'drop-shadow(0 20px 30px rgba(225, 29, 72, 0.28))',
+                        animation: 'floatBot 3.6s ease-in-out infinite'
+                      }}
+                    />
+                  </picture>
                   <div style={{
                     width: '100px',
                     height: '14px',
@@ -426,17 +432,20 @@ export const SplashPreviewPage: React.FC = () => {
               {/* Center Content */}
               <div style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-                  <img
-                    src="/ideas_bot.png"
-                    alt="IDEAS Mascot"
-                    style={{
-                      width: deviceView === 'mobile' ? '160px' : '185px',
-                      height: deviceView === 'mobile' ? '160px' : '185px',
-                      objectFit: 'contain',
-                      filter: 'drop-shadow(0 0 35px rgba(244, 63, 94, 0.5))',
-                      animation: 'floatBot 3.6s ease-in-out infinite'
-                    }}
-                  />
+                  <picture>
+                    <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+                    <img
+                      src="/ideas_bot_kling.gif?v=20260915_perfect"
+                      alt="IDEAS Mascot"
+                      style={{
+                        width: deviceView === 'mobile' ? '160px' : '185px',
+                        height: deviceView === 'mobile' ? '160px' : '185px',
+                        objectFit: 'contain',
+                        filter: 'drop-shadow(0 0 35px rgba(244, 63, 94, 0.5))',
+                        animation: 'floatBot 3.6s ease-in-out infinite'
+                      }}
+                    />
+                  </picture>
                   <div style={{
                     width: '90px',
                     height: '12px',

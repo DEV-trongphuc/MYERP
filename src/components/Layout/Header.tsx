@@ -3127,6 +3127,7 @@ export const Header = ({
               .floating-checkin-btn {
                 bottom: 80px !important;
                 right: 16px !important;
+                z-index: 2147483646 !important;
               }
             }
             @keyframes pulse-ring {
@@ -3227,7 +3228,7 @@ export const Header = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   boxShadow: btnShadow,
-                  zIndex: 9999,
+                  zIndex: 2147483646,
                   transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                   outline: 'none'
                 }}

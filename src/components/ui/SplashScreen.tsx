@@ -42,21 +42,24 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
             pointerEvents: 'none'
           }} 
         />
-        <img 
-          src="/ideas_bot.png" 
-          alt="IDEAS AI Mascot" 
-          style={{
-            width: isFullPage ? '150px' : '115px',
-            height: isFullPage ? '150px' : '115px',
-            objectFit: 'contain',
-            background: 'transparent',
-            filter: 'drop-shadow(0 0 30px rgba(244, 63, 94, 0.5))',
-            animation: 'floatMascot 3s ease-in-out infinite'
-          }}
-          onError={(e) => {
-            (e.target as HTMLElement).style.display = 'none';
-          }}
-        />
+        <picture>
+          <source srcSet="/ideas_bot_kling.webp?v=20260915_perfect" type="image/webp" />
+          <img 
+            src="/ideas_bot_kling.gif?v=20260915_perfect" 
+            alt="IDEAS AI Mascot" 
+            style={{
+              width: isFullPage ? '150px' : '115px',
+              height: isFullPage ? '150px' : '115px',
+              objectFit: 'contain',
+              background: 'transparent',
+              filter: 'drop-shadow(0 0 30px rgba(244, 63, 94, 0.5))',
+              animation: 'floatMascot 3s ease-in-out infinite'
+            }}
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        </picture>
         <div 
           style={{
             width: isFullPage ? '85px' : '65px',

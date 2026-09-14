@@ -560,6 +560,15 @@ export default function Approvals() {
   const isAdmin = isManagement(user) || isHR(user);
   const [activeTab, setActiveTab] = useState<'pending' | 'my_requests' | 'following' | 'all'>('pending');
   const hasAutoSwitchedTabRef = useRef(false);
+  const handleTabChange = useCallback((tab: 'pending' | 'my_requests' | 'following' | 'all') => {
+    hasAutoSwitchedTabRef.current = true;
+    setActiveTab(tab);
+  }, []);
+
+  useEffect(() => {
+    hasAutoSwitchedTabRef.current = false;
+  }, [location.key]);
+
   const pendingOpenRef = useRef<{ id: number; type?: string; status?: string } | null>(null);
   const [period, setPeriod] = useState<Period>('all');
   const [dateRange, setDateRange] = useState<DateRange>(() => getDateRange('all'));
@@ -1971,7 +1980,7 @@ export default function Approvals() {
       setAdvanceSettlementDate('');
       setExpenseCategory('general');
       setInvoiceType('vat_10');
-      setActiveTab('my_requests');
+      handleTabChange('my_requests');
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || t('Lỗi gửi đề xuất'));
@@ -3099,9 +3108,12 @@ export default function Approvals() {
   useEffect(() => {
     const params = new URLSearchParams(location.search || window.location.search);
     const tabParam = params.get('tab');
-    if (tabParam === 'pending' || tabParam === 'my_requests' || tabParam === 'following' || tabParam === 'all') {
+    if (tabParam === 'my_requests' || tabParam === 'following' || tabParam === 'all') {
       setActiveTab(tabParam);
       hasAutoSwitchedTabRef.current = true;
+    } else if (tabParam === 'pending') {
+      setActiveTab('pending');
+      // Không khóa hasAutoSwitchedTabRef để cho phép loadData tự động fallback nếu pendingList rỗng
     }
     const openId = params.get('open_id');
     const openType = params.get('open_type');
@@ -3304,12 +3316,19 @@ export default function Approvals() {
         localStorage.setItem('pending_approvals_count', String(totalBadgeCount));
       }
 
-      // Tự động active tab 'all' (Tất cả đề xuất) nếu tab 'pending' đang trống
+      // Tự động chuyển tab thông minh: Nếu tab 'pending' (Chờ tôi duyệt) không có quy trình nào:
+      // 1. Tự động chuyển sang 'my_requests' (Yêu cầu của tôi) nếu người dùng có đề xuất
+      // 2. Nếu tab 'my_requests' cũng không có đề xuất nào -> Chuyển sang 'all' (Tất cả đề xuất)
       if (!hasAutoSwitchedTabRef.current) {
         const params = new URLSearchParams(location.search || window.location.search);
         const specifiedTab = params.get('tab');
-        if (!specifiedTab && pList.length === 0) {
-          setActiveTab('all');
+        if ((!specifiedTab || specifiedTab === 'pending') && pList.length === 0) {
+          const hasMyRequests = (mList.length + (draftsList?.length || 0)) > 0;
+          if (hasMyRequests) {
+            setActiveTab('my_requests');
+          } else {
+            setActiveTab('all');
+          }
         }
         hasAutoSwitchedTabRef.current = true;
       }
@@ -3335,6 +3354,8 @@ export default function Approvals() {
       if (autoOpen && !selectedTimelineItem) {
         if (pList.length === 1) {
           setSelectedTimelineItem(pList[0]);
+        } else if (pList.length === 0 && mList.length === 1) {
+          setSelectedTimelineItem(mList[0]);
         }
         window.history.replaceState({}, document.title, window.location.pathname + (params.get('tab') ? `?tab=${params.get('tab')}` : ''));
       }
@@ -4864,123 +4885,73 @@ export default function Approvals() {
             gap: '3px',
             background: 'var(--color-bg-secondary, #f1f5f9)',
             padding: '3px',
-            borderRadius: '9px'
+            borderRadius: '9px',
+            position: 'relative'
           }}>
-            {/* Tab 1: All Requests */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 12px',
-                borderRadius: '7px',
-                fontWeight: activeTab === 'all' ? 700 : 500,
-                fontSize: '0.8125rem',
-                background: activeTab === 'all' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                color: activeTab === 'all' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                boxShadow: activeTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <FileText size={14} />
-              <span>{t('Tất cả đề xuất')}</span>
-              {allList.length > 0 && (
-                <span style={{ fontSize: '0.68rem', background: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
-                  {allList.length}
-                </span>
-              )}
-            </button>
-
-            {/* Tab 2: Pending Requests */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('pending')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 12px',
-                borderRadius: '7px',
-                fontWeight: activeTab === 'pending' ? 700 : 500,
-                fontSize: '0.8125rem',
-                background: activeTab === 'pending' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                color: activeTab === 'pending' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                boxShadow: activeTab === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Activity size={14} />
-              <span>{t('Chờ tôi duyệt')}</span>
-              {pendingList.length > 0 && (
-                <span style={{ fontSize: '0.68rem', background: '#ef4444', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
-                  {pendingList.length}
-                </span>
-              )}
-            </button>
-
-            {/* Tab 3: My Requests */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('my_requests')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 12px',
-                borderRadius: '7px',
-                fontWeight: activeTab === 'my_requests' ? 700 : 500,
-                fontSize: '0.8125rem',
-                background: activeTab === 'my_requests' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                color: activeTab === 'my_requests' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                boxShadow: activeTab === 'my_requests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <User size={14} />
-              <span>{t('Yêu cầu của tôi')}</span>
-              {(myRequestsList.length + draftApprovalItems.length) > 0 && (
-                <span style={{ fontSize: '0.68rem', background: activeTab === 'my_requests' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', color: 'var(--color-text)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
-                  {myRequestsList.length + draftApprovalItems.length}
-                </span>
-              )}
-            </button>
-
-            {/* Tab 4: Following */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('following')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '5px 12px',
-                borderRadius: '7px',
-                fontWeight: activeTab === 'following' ? 700 : 500,
-                fontSize: '0.8125rem',
-                background: activeTab === 'following' ? 'var(--color-surface, #ffffff)' : 'transparent',
-                color: activeTab === 'following' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                boxShadow: activeTab === 'following' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Eye size={14} />
-              <span>{t('Được gắn theo dõi')}</span>
-              {followingList.length > 0 && (
-                <span style={{ fontSize: '0.68rem', background: '#3b82f6', color: 'white', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>
-                  {followingList.length}
-                </span>
-              )}
-            </button>
+            {[
+              { id: 'all', label: t('Tất cả đề xuất'), icon: FileText, count: allList.length, countBg: activeTab === 'all' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
+              { id: 'pending', label: t('Chờ tôi duyệt'), icon: Activity, count: pendingList.length, countBg: '#ef4444', countColor: 'white' },
+              { id: 'my_requests', label: t('Yêu cầu của tôi'), icon: User, count: (myRequestsList.length + draftApprovalItems.length), countBg: activeTab === 'my_requests' ? 'var(--color-bg-secondary, #f1f5f9)' : 'rgba(0,0,0,0.06)', countColor: 'var(--color-text)' },
+              { id: 'following', label: t('Được gắn theo dõi'), icon: Eye, count: followingList.length, countBg: '#3b82f6', countColor: 'white' }
+            ].map(tab => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabChange(tab.id as any)}
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 12px',
+                    borderRadius: '7px',
+                    fontWeight: isActive ? 700 : 500,
+                    fontSize: '0.8125rem',
+                    background: 'transparent',
+                    color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'color 0.15s ease'
+                  }}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeApprovalTab"
+                      transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'var(--color-surface, #ffffff)',
+                        borderRadius: '7px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                        zIndex: 0
+                      }}
+                    />
+                  )}
+                  <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <Icon size={14} />
+                    <span>{tab.label}</span>
+                    {tab.count > 0 && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        background: tab.countBg,
+                        color: tab.countColor,
+                        padding: '1px 6px',
+                        borderRadius: 99,
+                        fontWeight: 700,
+                        lineHeight: 1.2
+                      }}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -5131,7 +5102,7 @@ export default function Approvals() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                           <button
                             type="button"
-                            onClick={() => { setActiveTab('all'); setShowMobileFilters(false); }}
+                            onClick={() => { handleTabChange('all'); setShowMobileFilters(false); }}
                             style={{
                               padding: '6px 8px',
                               borderRadius: '6px',
@@ -5147,7 +5118,7 @@ export default function Approvals() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => { setActiveTab('pending'); setShowMobileFilters(false); }}
+                            onClick={() => { handleTabChange('pending'); setShowMobileFilters(false); }}
                             style={{
                               padding: '6px 8px',
                               borderRadius: '6px',
@@ -5163,7 +5134,7 @@ export default function Approvals() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => { setActiveTab('my_requests'); setShowMobileFilters(false); }}
+                            onClick={() => { handleTabChange('my_requests'); setShowMobileFilters(false); }}
                             style={{
                               padding: '6px 8px',
                               borderRadius: '6px',
@@ -5179,7 +5150,7 @@ export default function Approvals() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => { setActiveTab('following'); setShowMobileFilters(false); }}
+                            onClick={() => { handleTabChange('following'); setShowMobileFilters(false); }}
                             style={{
                               padding: '6px 8px',
                               borderRadius: '6px',
@@ -15759,7 +15730,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         
         {/* Drawer Header */}
         <div style={{
-          padding: isMobile ? '0.625rem 0.875rem' : '1.25rem 1.5rem',
+          padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem',
           borderBottom: '1px solid var(--color-border-light)',
           display: 'flex',
           alignItems: 'center',
@@ -15776,8 +15747,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               src="/LOGO.jpg" 
               alt="IDEAS LOGO" 
               style={{ 
-                height: isMobile ? '22px' : '32px', 
-                width: isMobile ? '22px' : '32px', 
+                height: isMobile ? '24px' : '32px', 
+                width: isMobile ? '24px' : '32px', 
                 borderRadius: '6px', 
                 border: '1px solid var(--color-border-light)',
                 objectFit: 'cover',
@@ -15786,7 +15757,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
             />
             <h3 style={{ 
               margin: 0, 
-              fontSize: isMobile ? '0.78rem' : '1.1rem', 
+              fontSize: isMobile ? '0.8rem' : '1.1rem', 
               fontWeight: 800, 
               textTransform: 'uppercase', 
               color: 'var(--color-text)', 
@@ -15798,19 +15769,21 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               IDEAS - {t('Quy trình')} <span style={{ color: 'var(--color-primary)' }}>#{item.id}</span>
             </h3>
           </div>
-          <div style={{ display: 'flex', gap: isMobile ? '5px' : '8px', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: isMobile ? '6px' : '8px', alignItems: 'center', flexShrink: 0 }}>
             {isMyTurnToApprove() && (
               <>
                  <button
                   onClick={() => onReject(item)}
                   style={{
-                    height: isMobile ? '30px' : '36px',
-                    padding: isMobile ? '0 10px' : '0 16px',
+                    height: isMobile ? '32px' : '36px',
+                    width: isMobile ? '32px' : 'auto',
+                    padding: isMobile ? 0 : '0 16px',
                     fontSize: isMobile ? '0.725rem' : '0.8rem',
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     gap: '4px',
-                    borderRadius: '7px',
+                    borderRadius: '8px',
                     background: '#b91c1c',
                     border: 'none',
                     color: '#ffffff',
@@ -15818,6 +15791,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     cursor: 'pointer',
                     transition: 'all 0.15s ease-in-out'
                   }}
+                  title={t('Từ chối')}
                   onMouseEnter={e => {
                     e.currentTarget.style.background = '#991b1b';
                     e.currentTarget.style.transform = 'translateY(-1px)';
@@ -15829,8 +15803,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  <XCircle size={isMobile ? 12 : 14} />
-                  {t('Từ chối')}
+                  <XCircle size={isMobile ? 16 : 14} />
+                  {!isMobile && <span>{t('Từ chối')}</span>}
                 </button>
                 <button
                   onClick={async () => {
@@ -15838,13 +15812,15 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     handleClose();
                   }}
                   style={{
-                    height: isMobile ? '30px' : '36px',
-                    padding: isMobile ? '0 12px' : '0 18px',
+                    height: isMobile ? '32px' : '36px',
+                    width: isMobile ? '32px' : 'auto',
+                    padding: isMobile ? 0 : '0 18px',
                     fontSize: isMobile ? '0.725rem' : '0.8rem',
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     gap: '4px',
-                    borderRadius: '7px',
+                    borderRadius: '8px',
                     background: '#10b981',
                     border: 'none',
                     color: '#ffffff',
@@ -15852,6 +15828,7 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     cursor: 'pointer',
                     transition: 'all 0.15s ease-in-out'
                   }}
+                  title={t('Phê duyệt')}
                   onMouseEnter={e => {
                     e.currentTarget.style.background = '#059669';
                     e.currentTarget.style.transform = 'translateY(-1px)';
@@ -15863,8 +15840,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
-                  <CheckCircle2 size={isMobile ? 12 : 14} />
-                  {t('Phê duyệt')}
+                  <CheckCircle2 size={isMobile ? 16 : 14} />
+                  {!isMobile && <span>{t('Phê duyệt')}</span>}
                 </button>
               </>
             )}
@@ -15876,12 +15853,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 className="btn secondary hover-lift"
                 style={{
-                  height: isMobile ? '30px' : '36px',
-                  padding: isMobile ? '0 8px' : '0 12px',
+                  height: isMobile ? '32px' : '36px',
+                  width: isMobile ? '32px' : 'auto',
+                  padding: isMobile ? 0 : '0 12px',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   gap: '4px',
-                  borderRadius: '7px',
+                  borderRadius: '8px',
                   background: 'var(--color-bg)',
                   border: '1px solid var(--color-border)',
                   color: 'var(--color-primary)',
@@ -15891,8 +15870,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 title={t('Chỉnh sửa đề xuất')}
               >
-                <Pencil size={isMobile ? 12 : 14} />
-                <span>{t('Sửa')}</span>
+                <Pencil size={isMobile ? 15 : 14} />
+                {!isMobile && <span>{t('Sửa')}</span>}
               </button>
             )}
 
@@ -15903,17 +15882,17 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 className="btn secondary hover-lift"
                 style={{
-                  height: isMobile ? '30px' : '36px',
-                  width: isMobile ? '30px' : '36px',
+                  height: isMobile ? '32px' : '36px',
+                  width: isMobile ? '32px' : '36px',
                   padding: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: '7px'
+                  borderRadius: '8px'
                 }}
                 title={t('Nhân bản đề xuất')}
               >
-                <Copy size={isMobile ? 14 : 16} />
+                <Copy size={isMobile ? 15 : 16} />
               </button>
             )}
             {onDelete && item.status !== 'approved' && item.status !== 'completed' && (Number(item.user_id) === Number(user?.id) || Number(item.created_by) === Number(user?.id) || ['admin', 'superadmin', 'super_admin', 'director', 'manager', 'hr'].includes(String(user?.role).toLowerCase())) && (
@@ -15924,12 +15903,14 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 className="btn secondary hover-lift"
                 style={{
-                  height: isMobile ? '30px' : '36px',
-                  padding: isMobile ? '0 8px' : '0 12px',
+                  height: isMobile ? '32px' : '36px',
+                  width: isMobile ? '32px' : 'auto',
+                  padding: isMobile ? 0 : '0 12px',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   gap: '4px',
-                  borderRadius: '7px',
+                  borderRadius: '8px',
                   background: 'rgba(239, 68, 68, 0.08)',
                   border: '1px solid rgba(239, 68, 68, 0.2)',
                   color: '#ef4444',
@@ -15939,8 +15920,8 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
                 }}
                 title={t('Xóa đề xuất')}
               >
-                <Trash2 size={isMobile ? 12 : 14} />
-                <span>{t('Xóa')}</span>
+                <Trash2 size={isMobile ? 15 : 14} />
+                {!isMobile && <span>{t('Xóa')}</span>}
               </button>
             )}
             <button 
@@ -15949,18 +15930,19 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
               style={{
                 background: 'var(--color-bg)',
                 border: '1px solid var(--color-border)',
-                padding: isMobile ? '5px' : '8px',
-                borderRadius: '7px',
+                padding: 0,
+                borderRadius: '8px',
                 cursor: 'pointer',
                 color: 'var(--color-text-muted)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                height: isMobile ? '30px' : '36px',
-                width: isMobile ? '30px' : '36px'
+                height: isMobile ? '32px' : '36px',
+                width: isMobile ? '32px' : '36px'
               }}
+              title={t('Đóng')}
             >
-              <X size={isMobile ? 15 : 18} />
+              <X size={isMobile ? 16 : 18} />
             </button>
           </div>
         </div>
@@ -15969,10 +15951,10 @@ export function ApprovalDetailDrawer({ item, onClose, users, t, onApprove, onRej
         <div className="custom-scrollbar" style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '1.5rem',
+          padding: isMobile ? '1rem' : '1.5rem',
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr',
-          gap: '1.5rem',
+          gap: isMobile ? '1rem' : '1.5rem',
           background: 'var(--color-bg-light, #f8fafc)'
         }}>
           {/* Left Column: Detailed Proposal Fields */}
