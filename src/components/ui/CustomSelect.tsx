@@ -40,6 +40,8 @@ interface CustomSelectProps {
   disabled?: boolean;
   hideSelectedSublabel?: boolean;
   onSearchChange?: (search: string) => void;
+  allowCustomInput?: boolean;
+  customInputLabel?: string;
 }
 
 export const removeVietnameseTones = (str: string): string => {
@@ -106,7 +108,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   size = 'sm',
   disabled = false,
   hideSelectedSublabel = false,
-  onSearchChange
+  onSearchChange,
+  allowCustomInput = false,
+  customInputLabel
 }) => {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -401,7 +405,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           </span>
         )}
       </span>
-    ) : t(placeholder);
+    ) : (value && typeof value === 'string' && value.trim() && value !== '__CUSTOM_FOREIGN__' ? (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: size === 'xs' ? 4 : 6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontWeight: 650 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, fontSize: size === 'xs' ? '0.75rem' : undefined }}>{value}</span>
+      </span>
+    ) : t(placeholder));
   };
 
   return (
@@ -530,6 +538,33 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 </div>
               )) : (
                 <div className={styles.empty}>{t("Không tìm thấy")}</div>
+              )}
+              {allowCustomInput && search.trim() && !filtered.some(o => removeVietnameseTones(o.label) === removeVietnameseTones(search.trim()) || String(o.value).toLowerCase() === search.trim().toLowerCase()) && (
+                <div
+                  className={styles.option}
+                  style={{
+                    borderTop: filtered.length > 0 ? '1px dashed var(--color-border)' : 'none',
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    color: 'var(--color-primary)',
+                    fontWeight: 700,
+                    padding: '9px 12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(search.trim());
+                    setIsOpen(false);
+                    setSearch('');
+                  }}
+                >
+                  <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>➕</span>
+                  <span style={{ fontSize: '0.8rem' }}>
+                    {customInputLabel ? `${customInputLabel}: "${search.trim()}"` : `${t('Sử dụng')}: "${search.trim()}"`}
+                  </span>
+                </div>
               )}
             </div>
           </motion.div>

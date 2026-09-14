@@ -2317,7 +2317,7 @@ switch ($action) {
                     ],
                     'program' => [
                         'id' => 0,
-                        'name' => 'Hệ thống IDEAS ERP',
+                        'name' => 'Hệ thống MYERP',
                         'code' => 'IDEAS',
                         'degree_awarding_body' => 'Viện IDEAS'
                     ],
@@ -13021,7 +13021,7 @@ switch ($action) {
             $frontendUrl = get_system_setting($conn, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
             $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
-            $subject = "[IDEAS ERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
+            $subject = "[MYERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
             $title = "NHẮC NHỞ CHẤM CÔNG VÀO CA";
             $content = "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                        "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Sắp đến giờ bắt đầu ca làm việc</h3>" .
@@ -13038,7 +13038,7 @@ switch ($action) {
             $frontendUrl = get_system_setting($conn, 'frontend_url') ?: 'https://myerp.ideas.edu.vn';
             $loginAttendanceLink = rtrim($frontendUrl, '/') . '/login?redirect=/attendance';
 
-            $subject = "[IDEAS ERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
+            $subject = "[MYERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
             $title = "CẢNH BÁO CHƯA CHẤM CÔNG HÔM NAY";
             $content = "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                        "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công vào ca</h3>" .

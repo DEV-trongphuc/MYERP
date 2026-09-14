@@ -426,7 +426,7 @@ class NotificationController {
         $sentResults = [];
 
         if ($type === 'attendance_reminder' || $type === 'all') {
-            $subject1 = "⏰ [IDEAS ERP] Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
+            $subject1 = "⏰ [MYERP] Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
             $title1 = "NHẮC NHỞ CHẤM CÔNG VÀO CA";
             $content1 = "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                         "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Sắp đến giờ bắt đầu ca làm việc</h3>" .
@@ -440,7 +440,7 @@ class NotificationController {
         }
 
         if ($type === 'checkin_missing_reminder' || $type === 'all') {
-            $subject2 = "⚠️ [IDEAS ERP] Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
+            $subject2 = "⚠️ [MYERP] Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]";
             $title2 = "CẢNH BÁO CHƯA CHẤM CÔNG HÔM NAY";
             $content2 = "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                         "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công vào ca</h3>" .

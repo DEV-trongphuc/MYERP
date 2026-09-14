@@ -4071,7 +4071,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
     setLoadingRelated(true);
     try {
       const shouldFetchContact = forceFreshContact || !targetTab || currentCId !== lastLoadedContactIdRef.current;
-      const isTaskOrTimelineTab = tabToLoad === 'tasks' || tabToLoad === 'timeline';
+      const needActivities = shouldFetchContact || tabToLoad === 'tasks' || tabToLoad === 'timeline';
       const needNotes = shouldFetchContact || tabToLoad === 'timeline' || tabToLoad === 'tags';
       const needProjects = tabToLoad === 'info' && (!globalProjectsCache || globalProjectsCache.length === 0) && projectsList.length === 0;
       const needCompanies = tabToLoad === 'info' && (!globalCompaniesCache || globalCompaniesCache.length === 0) && companiesList.length === 0;
@@ -4094,7 +4094,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
         needCompanies ? api.get('/companies?limit=100') : Promise.resolve(null),
         needContacts ? api.get('/contacts?limit=30') : Promise.resolve(null),
         needNotes ? api.get(`/notes?entity_type=contact&entity_id=${currentCId}`) : Promise.resolve(null),
-        isTaskOrTimelineTab ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=100`) : Promise.resolve(null)
+        needActivities ? api.get(`/activities?related_type=contact&related_id=${currentCId}&limit=100`) : Promise.resolve(null)
       ]);
 
       // 2. Xử lý Fresh Contact Details
@@ -4906,6 +4906,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
       if (isNewContact) {
         setNotes([]);
         setTasks([]);
+        setDrawerActivities([]);
         setDeals([]);
         setDrawerInvoices([]);
         setDrawerQuotes([]);
@@ -12849,6 +12850,17 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
                             return pIds.includes(currentUserId);
                           }
                           return true;
+                        }).sort((a, b) => {
+                          const aUrgent = (a.priority === 'urgent' || a.priority === 'high' || a.priority === 'cao');
+                          const bUrgent = (b.priority === 'urgent' || b.priority === 'high' || b.priority === 'cao');
+                          if (aUrgent && !bUrgent) return -1;
+                          if (!aUrgent && bUrgent) return 1;
+
+                          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                          if (timeB !== timeA) return timeB - timeA;
+
+                          return Number(b.id || 0) - Number(a.id || 0);
                         });
 
                         if (loadingRelated) {
@@ -16818,7 +16830,7 @@ export const CustomerProfileDrawer: React.FC<Props> = ({ isOpen, onClose, contac
             {/* Invoice Layout */}
             <div className="card-panel" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '1.5rem', boxShadow: 'var(--shadow-sm)', marginBottom: '1.5rem' }}>
               <div style={{ textAlign: 'center', marginBottom: '1.25rem', borderBottom: '2px dashed var(--color-border-light)', paddingBottom: '1.25rem' }}>
-                <h4 style={{ textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>Ideas ERP Automation</h4>
+                <h4 style={{ textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '0.25rem' }}>MYERP Automation</h4>
                 <h2 style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 800, fontSize: '1.2rem', color: 'var(--color-text)', margin: 0 }}>HÓA ĐƠN CHI PHÍ</h2>
                 <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', margin: 0 }}>Mã số: #EXP-{viewExpense.id}</p>
               </div>

@@ -3376,7 +3376,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'email')) {
                                         try {
                                             if (!empty($user['email']) && function_exists('sendEmailNotification')) {
-                                                $emailSubject = "⏰ [IDEAS ERP] Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
+                                                $emailSubject = "⏰ [MYERP] Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]";
                                                 $emailTitle = "NHẮC NHỞ CHẤM CÔNG VÀO CA";
                                                 $emailContent = "Chào <strong>" . htmlspecialchars($user['full_name']) . "</strong>,<br/><br/>Hệ thống nhắc nhở bạn sắp đến giờ bắt đầu ca làm việc (lúc <strong>" . htmlspecialchars($workStart) . "</strong>). Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công đúng giờ.";
                                                 sendEmailNotification($user['email'], $emailSubject, $emailTitle, $emailContent, '', false);
@@ -3453,7 +3453,7 @@ function sendShiftRemindersAndCheckInAlerts($conn) {
                                     if ($getSaleMatrixSetting($conn, $userId, 'ATTENDANCE_REMINDER', 'email')) {
                                         try {
                                             if (!empty($user['email']) && function_exists('sendEmailNotification')) {
-                                                $emailSubject = "⏰ [IDEAS ERP] Nhắc nhở: Đến giờ chấm công ra ca [Ca $workEnd]";
+                                                $emailSubject = "⏰ [MYERP] Nhắc nhở: Đến giờ chấm công ra ca [Ca $workEnd]";
                                                 $emailTitle = "NHẮC NHỞ CHẤM CÔNG RA CA";
                                                 $emailContent = "Chào <strong>" . htmlspecialchars($user['full_name']) . "</strong>,<br/><br/>Hệ thống ghi nhận đã đến giờ kết thúc ca làm việc hôm nay (lúc <strong>" . htmlspecialchars($workEnd) . "</strong>).<br/><br/>Bạn đã thực hiện chấm công vào sáng nay nhưng <strong>chưa thực hiện chấm công ra ca</strong>.<br/><br/>Vui lòng truy cập hệ thống MYERP để thực hiện điểm danh/chấm công ra ca đúng quy định.";
                                                 sendEmailNotification($user['email'], $emailSubject, $emailTitle, $emailContent, '', false);

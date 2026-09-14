@@ -542,7 +542,7 @@ class NotificationService {
                     'email_content' => "Chào <strong>" . htmlspecialchars($userName) . "</strong>,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
                                     $body . "<br/>" .
-                                    "Vui lòng kiểm tra trên hệ thống IDEAS ERP."
+                                    "Vui lòng kiểm tra trên hệ thống MYERP."
                 ];
 
             case 'HOLIDAY_REGISTRATION_OPENED':
@@ -625,7 +625,7 @@ class NotificationService {
                         . "Kỳ nghỉ lễ <b>$holidayName</b> đã kết thúc.\n"
                         . "👉 Ngày mai (<b>$nextDayText</b>), công ty bắt đầu làm việc trở lại bình thường lúc <code>$workStart</code>.\n\n"
                         . "Chúc các bạn có một ngày làm việc mới tràn đầy năng lượng!",
-                    'email_subject' => "[IDEAS ERP] Nhắc nhở: Ngày mai bắt đầu làm việc trở lại ($nextDayText)",
+                    'email_subject' => "[MYERP] Nhắc nhở: Ngày mai bắt đầu làm việc trở lại ($nextDayText)",
                     'email_title' => "THÔNG BÁO LỊCH LÀM VIỆC",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Nhắc nhở: Ngày mai bắt đầu làm việc trở lại!</h3>" .
@@ -694,7 +694,7 @@ class NotificationService {
                     'link' => "/attendance",
                     'zalo_msg' => "⏰ [ NHẮC NHỞ CHẤM CÔNG ]\n\nXin chào $name,\nĐã sắp đến giờ vào ca làm việc{$timeText}. Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!\n👉 $loginAttendanceLink",
                     'tg_msg' => "⏰ <b>[ NHẮC NHỞ CHẤM CÔNG ]</b> (Ca {$workStart})\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã sắp đến giờ vào ca làm việc (<code>$workStart</code>). Vui lòng đăng nhập MYERP để chấm công đúng giờ nhé!\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công ngay</b></a>",
-                    'email_subject' => "[IDEAS ERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]",
+                    'email_subject' => "[MYERP] ⏰ Nhắc nhở: Sắp đến giờ chấm công vào ca [Ca $workStart]",
                     'email_title' => "NHẮC NHỞ CHẤM CÔNG VÀO CA",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Sắp đến giờ bắt đầu ca làm việc</h3>" .
@@ -747,7 +747,7 @@ class NotificationService {
                     'link' => "/attendance",
                     'zalo_msg' => "⚠️ [ CẢNH BÁO: CHƯA CHẤM CÔNG HÔM NAY ]\n\nXin chào $name,\nĐã quá giờ bắt đầu ca làm việc{$timeText} nhưng hệ thống chưa ghi nhận lượt chấm công vào hôm nay của bạn.\n👉 Đăng nhập MYERP để chấm công ngay:\n$loginAttendanceLink",
                     'tg_msg' => "⚠️ <b>[ CẢNH BÁO: CHƯA CHẤM CÔNG HÔM NAY ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã quá giờ bắt đầu ca làm việc" . (!empty($workStart) ? " (<code>$workStart</code>)" : "") . " nhưng bạn chưa thực hiện chấm công vào hôm nay.\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công ngay</b></a>",
-                    'email_subject' => "[IDEAS ERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]",
+                    'email_subject' => "[MYERP] ⚠️ Cảnh báo: Bạn chưa thực hiện chấm công hôm nay [Ca $workStart]",
                     'email_title' => "CẢNH BÁO CHƯA CHẤM CÔNG HÔM NAY",
                     'email_content' => "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công vào ca</h3>" .
@@ -802,7 +802,7 @@ class NotificationService {
                         'link' => "/attendance",
                         'zalo_msg' => "⏰ [ NHẮC NHỞ CHẤM CÔNG RA CA ]\n\nXin chào $name,\nĐã đến giờ kết thúc ca làm việc (tan làm){$timeTextEnd}. Vui lòng đăng nhập MYERP để thực hiện chấm công ra ca nhé!\n👉 $loginAttendanceLink",
                         'tg_msg' => "⏰ <b>[ NHẮC NHỞ CHẤM CÔNG RA CA ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã đến giờ tan làm / kết thúc ca làm việc" . (!empty($workEnd) ? " (<code>$workEnd</code>)" : "") . ". Vui lòng đăng nhập MYERP để thực hiện chấm công ra ca nhé!\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công Ra ca</b></a>",
-                        'email_subject' => "[IDEAS ERP] ⏰ Nhắc nhở chấm công Ra ca (tan làm [Ca $workEnd])",
+                        'email_subject' => "[MYERP] ⏰ Nhắc nhở chấm công Ra ca (tan làm [Ca $workEnd])",
                         'email_title' => "NHẮC NHỞ CHẤM CÔNG RA CA",
                         'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                         "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">Nhắc nhở chấm công Ra ca</h3>" .
@@ -822,7 +822,7 @@ class NotificationService {
                     'link' => "/attendance",
                     'zalo_msg' => "🌆 [ CẢNH BÁO QUÊN CHẤM CÔNG RA CA ]\n\nXin chào $name,\nĐã quá 15 phút sau giờ tan làm{$timeTextEnd} nhưng hệ thống chưa ghi nhận bạn thực hiện chấm công ra ca hôm nay.\n👉 Đăng nhập MYERP để chấm công ngay:\n$loginAttendanceLink",
                     'tg_msg' => "🌆 <b>[ CẢNH BÁO QUÊN CHẤM CÔNG RA CA ]</b>\n\nXin chào <b>" . htmlspecialchars($name) . "</b>,\nĐã quá 15 phút sau giờ tan làm" . (!empty($workEnd) ? " (<code>$workEnd</code>)" : "") . " nhưng hệ thống chưa ghi nhận bạn chấm công ra ca hôm nay.\n\n👉 <a href=\"$loginAttendanceLink\"><b>Đăng nhập MYERP để Chấm công Ra ca ngay</b></a>",
-                    'email_subject' => "[IDEAS ERP] ⚠️ Cảnh báo: Quên chấm công ra ca hôm nay [Ca $workEnd]",
+                    'email_subject' => "[MYERP] ⚠️ Cảnh báo: Quên chấm công ra ca hôm nay [Ca $workEnd]",
                     'email_title' => "CẢNH BÁO CHẤM CÔNG RA CA",
                     'email_content' => "<div style=\"background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #991b1b; margin: 0 0 10px; font-size: 16px;\">Cảnh báo chưa chấm công ra ca</h3>" .
@@ -1429,7 +1429,7 @@ class NotificationService {
                         . "<b>" . htmlspecialchars($authorName) . "</b> vừa bình luận về bài viết của bạn:\n"
                         . "  • Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
                         . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
-                    'email_subject' => "[IDEAS ERP] $authorName đã bình luận về bài viết của bạn",
+                    'email_subject' => "[MYERP] $authorName đã bình luận về bài viết của bạn",
                     'email_title' => "BÌNH LUẬN MỚI TRÊN BẢNG TIN",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " đã bình luận về bài viết của bạn</h3>" .
@@ -1465,7 +1465,7 @@ class NotificationService {
                         . "<b>" . htmlspecialchars($authorName) . "</b> vừa phản hồi bình luận của bạn:\n"
                         . "  • Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
                         . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
-                    'email_subject' => "[IDEAS ERP] $authorName đã phản hồi bình luận của bạn",
+                    'email_subject' => "[MYERP] $authorName đã phản hồi bình luận của bạn",
                     'email_title' => "PHẢN HỒI BÌNH LUẬN TRÊN BẢNG TIN",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " đã phản hồi bình luận của bạn</h3>" .
@@ -1503,7 +1503,7 @@ class NotificationService {
                         . "<b>" . htmlspecialchars($authorName) . "</b> vừa nhắc tên bạn trong $contextText:\n"
                         . "  • Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
                         . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
-                    'email_subject' => "[IDEAS ERP] $authorName vừa nhắc tên bạn",
+                    'email_subject' => "[MYERP] $authorName vừa nhắc tên bạn",
                     'email_title' => "NHẮC TÊN TRONG " . mb_strtoupper($contextText, 'UTF-8'),
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " vừa nhắc tên bạn</h3>" .
@@ -1542,7 +1542,7 @@ class NotificationService {
                         . "Công việc: <b>" . htmlspecialchars($taskTitle) . "</b>\n"
                         . "Nội dung: <i>\"" . htmlspecialchars($commentTextPlain) . "\"</i>\n\n"
                         . "👉 <a href=\"$fullDirectLink\"><b>Bấm vào đây để xem chi tiết</b></a>",
-                    'email_subject' => "[IDEAS ERP] $authorName đã bình luận trong công việc: $taskTitle",
+                    'email_subject' => "[MYERP] $authorName đã bình luận trong công việc: $taskTitle",
                     'email_title' => "BÌNH LUẬN MỚI TRONG CÔNG VIỆC",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($authorName) . " đã bình luận trong công việc</h3>" .
@@ -1582,7 +1582,7 @@ class NotificationService {
                         . "  • Tiêu đề: <b>" . htmlspecialchars($taskTitle) . "</b>\n"
                         . ($dueDate ? "  • Hạn hoàn thành: <code>$dueDate</code>\n" : "")
                         . "\nVui lòng kiểm tra và xử lý.",
-                    'email_subject' => "[IDEAS ERP] Bạn được giao công việc: $taskTitle",
+                    'email_subject' => "[MYERP] Bạn được giao công việc: $taskTitle",
                     'email_title' => "CÔNG VIỆC ĐƯỢC GIAO",
                     'email_content' => "<div style=\"background: #f1f5f9; border-left: 4px solid #BD1D2D; padding: 20px; margin: 0 0 25px 0; border-radius: 0 8px 8px 0;\">" .
                                     "  <h3 style=\"color: #0f172a; margin: 0 0 10px; font-size: 16px;\">" . htmlspecialchars($taskTitle) . "</h3>" .
@@ -1781,19 +1781,19 @@ class NotificationService {
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "Nhân viên: $userName\n"
                         . "Thời gian: $leavePeriod ($leaveDays ngày/giờ)\n"
-                        . "Lý do: \"$reasonDisplay\"\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
+                        . "Lý do: \"$reasonDisplay\"\n\nVui lòng truy cập hệ thống MYERP để phê duyệt.",
                     'tg_msg' => "$icon <b>[ $headerTitle MỚI ]</b>\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
                         . "Nhân viên: <b>$userName</b>\n"
                         . "Thời gian: <code>$leavePeriod</code> ($leaveDays ngày/giờ)\n"
-                        . "Lý do: <i>\"" . htmlspecialchars($reasonDisplay) . "\"</i>\n\nVui lòng truy cập hệ thống IDEAS ERP để phê duyệt.",
+                        . "Lý do: <i>\"" . htmlspecialchars($reasonDisplay) . "\"</i>\n\nVui lòng truy cập hệ thống MYERP để phê duyệt.",
                     'email_subject' => "[IDEAS] {$codePrefix}$headerTitle mới - $userName",
                     'email_title' => $headerTitle . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào quản lý,<br/><br/>" .
                                     (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "") .
                                     "Nhân viên <strong>$userName</strong> vừa gửi <strong>$actionName</strong> từ <strong>$leavePeriod</strong> ($leaveDays ngày/giờ).<br/>" .
                                     "Lý do: <em>\"" . htmlspecialchars($reasonDisplay) . "\"</em>.<br/>" .
-                                    "Vui lòng truy cập hệ thống IDEAS ERP để xem chi tiết và phê duyệt."
+                                    "Vui lòng truy cập hệ thống MYERP để xem chi tiết và phê duyệt."
                 ];
 
             case 'HRM_LEAVE_APPROVAL':
@@ -2032,19 +2032,19 @@ class NotificationService {
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "$approverName đã $statusText đơn nhập hàng $poNumber của bạn.\n"
                         . (!empty($reason) ? "  • Lý do: \"$reason\"\n" : "")
-                        . "\nVui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                        . "\nVui lòng kiểm tra trên hệ thống MYERP.",
                     'tg_msg' => "$icon <b>[ ĐƠN NHẬP HÀNG <code>$poNumber</code> ]</b>\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
                         . "<b>$approverName</b> đã <b>$statusText</b> đơn nhập hàng <code>$poNumber</code> của bạn.\n"
                         . (!empty($reason) ? "  • Lý do: <i>\"" . htmlspecialchars($reason) . "\"</i>\n" : "")
-                        . "\nVui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                        . "\nVui lòng kiểm tra trên hệ thống MYERP.",
                     'email_subject' => "[IDEAS] {$codePrefix}$approverName đã $statusText đơn nhập hàng $poNumber",
                     'email_title' => ($isApproved ? "ĐƠN NHẬP HÀNG ĐÃ ĐƯỢC PHÊ DUYỆT" : "ĐƠN NHẬP HÀNG ĐÃ BỊ TỪ CHỐI") . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào bạn,<br/><br/>"
                         . (!empty($procCode) ? "Mã quy trình: <strong>$procCode</strong>.<br/>" : "")
                         . "<strong>$approverName</strong> đã <strong>$statusText</strong> đơn nhập hàng <strong>$poNumber</strong> của bạn.<br/>"
                         . (!empty($reason) ? "Lý do: <em>\"" . htmlspecialchars($reason) . "\"</em><br/>" : "")
-                        . "Vui lòng truy cập hệ thống IDEAS ERP để kiểm tra."
+                        . "Vui lòng truy cập hệ thống MYERP để kiểm tra."
                 ];
 
             case 'SO_WAITING_APPROVAL':
@@ -2100,11 +2100,11 @@ class NotificationService {
                     'zalo_msg' => "✅ [ ĐƠN BÁN HÀNG $soNumber ]\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: $procCode\n" : "")
                         . "$approverName đã phê duyệt đơn bán hàng $soNumber của bạn.\n"
-                        . "Vui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                        . "Vui lòng kiểm tra trên hệ thống MYERP.",
                     'tg_msg' => "✅ <b>[ ĐƠN BÁN HÀNG <code>$soNumber</code> ]</b>\n\n"
                         . (!empty($procCode) ? "  • Mã quy trình: <code>$procCode</code>\n" : "")
                         . "<b>$approverName</b> đã phê duyệt đơn bán hàng <code>$soNumber</code> của bạn.\n"
-                        . "Vui lòng kiểm tra trên hệ thống IDEAS ERP.",
+                        . "Vui lòng kiểm tra trên hệ thống MYERP.",
                     'email_subject' => "[IDEAS] {$codePrefix}Đơn bán hàng $soNumber đã được duyệt",
                     'email_title' => "ĐƠN BÁN HÀNG ĐÃ ĐƯỢC DUYỆT" . (!empty($procCode) ? " ($procCode)" : ""),
                     'email_content' => "Chào bạn,<br/><br/>"

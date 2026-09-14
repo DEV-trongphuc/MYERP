@@ -730,6 +730,152 @@ export const VIETNAM_BANKS: VietnamBank[] = [
     "code": "Vikki",
     "bin": "970406",
     "logo": "https://cdn.vietqr.io/img/Vikki.png"
+  },
+  {
+    "name": "Ngân hàng TNHH MTV Standard Chartered Bank (Việt Nam)",
+    "shortName": "Standard Chartered",
+    "code": "SCVN",
+    "bin": "970410",
+    "logo": "https://cdn.vietqr.io/img/SCVN.png",
+    "aliases": ["standard chartered", "standard chartered bank", "stanchart", "standard", "scvn", "scb vn", "scb", "sd"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV HSBC (Việt Nam)",
+    "shortName": "HSBC",
+    "code": "HSBC",
+    "bin": "970442",
+    "logo": "https://cdn.vietqr.io/img/HSBC.png",
+    "aliases": ["hsbc", "hsbc bank", "hongkong shanghai"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV Shinhan Việt Nam",
+    "shortName": "Shinhan Bank",
+    "code": "SHBVN",
+    "bin": "970440",
+    "logo": "https://cdn.vietqr.io/img/SHBVN.png",
+    "aliases": ["shinhan", "shinhan bank", "shbvn"]
+  },
+  {
+    "name": "Citibank, N.A. - Chi nhánh Việt Nam / Quốc tế",
+    "shortName": "Citibank",
+    "code": "CITIBANK",
+    "bin": "533948",
+    "logo": "https://cdn.vietqr.io/img/CITIBANK.png",
+    "aliases": ["citibank", "citi", "citi bank"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV United Overseas Bank (Việt Nam)",
+    "shortName": "UOB",
+    "code": "UOB",
+    "bin": "970458",
+    "logo": "https://cdn.vietqr.io/img/UOB.png",
+    "aliases": ["uob", "united overseas bank"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV Woori Việt Nam",
+    "shortName": "Woori Bank",
+    "code": "WOO",
+    "bin": "970457",
+    "logo": "https://cdn.vietqr.io/img/WOO.png",
+    "aliases": ["woori", "woori bank", "woo"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV CIMB Việt Nam",
+    "shortName": "CIMB",
+    "code": "CIMB",
+    "bin": "422589",
+    "logo": "https://cdn.vietqr.io/img/CIMB.png",
+    "aliases": ["cimb", "cimb bank"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV Public Bank Việt Nam",
+    "shortName": "Public Bank",
+    "code": "PBVN",
+    "bin": "970439",
+    "logo": "https://cdn.vietqr.io/img/PBVN.png",
+    "aliases": ["public bank", "pbvn"]
+  },
+  {
+    "name": "Ngân hàng TNHH MTV Hong Leong Việt Nam",
+    "shortName": "Hong Leong",
+    "code": "HLBVN",
+    "bin": "970444",
+    "logo": "https://cdn.vietqr.io/img/HLBVN.png",
+    "aliases": ["hong leong", "hlbvn", "hongleong"]
+  },
+  {
+    "name": "Ngân hàng KEB Hana - Chi nhánh Hà Nội / TP.HCM",
+    "shortName": "KEB Hana",
+    "code": "KEBHANA",
+    "bin": "970466",
+    "logo": "https://cdn.vietqr.io/img/KEBHANA.png",
+    "aliases": ["keb hana", "hana", "keb", "kebhana"]
+  },
+  {
+    "name": "Ngân hàng Công nghiệp Hàn Quốc (IBK) - Chi nhánh VN",
+    "shortName": "IBK",
+    "code": "IBK",
+    "bin": "970456",
+    "logo": "https://cdn.vietqr.io/img/IBK.png",
+    "aliases": ["ibk", "industrial bank of korea"]
+  },
+  {
+    "name": "DBS Bank Ltd - Chi nhánh TP.HCM / Singapore",
+    "shortName": "DBS Bank",
+    "code": "DBS",
+    "bin": "796500",
+    "logo": "https://cdn.vietqr.io/img/DBS.png",
+    "aliases": ["dbs", "dbs bank"]
+  },
+  {
+    "name": "Bank of China - Chi nhánh TP.HCM / Quốc tế",
+    "shortName": "Bank of China",
+    "code": "BOC",
+    "bin": "970462",
+    "logo": "https://cdn.vietqr.io/img/BOC.png",
+    "aliases": ["boc", "bank of china", "ngân hàng trung quốc"]
+  },
+  {
+    "name": "JPMorgan Chase Bank, N.A. - Quốc tế",
+    "shortName": "JPMorgan Chase",
+    "code": "JPM",
+    "bin": "000001",
+    "aliases": ["jpmorgan", "jp morgan", "chase", "jpm"]
+  },
+  {
+    "name": "Bank of America, N.A. - Quốc tế",
+    "shortName": "Bank of America",
+    "code": "BOA",
+    "bin": "000002",
+    "aliases": ["bank of america", "bofa", "boa"]
+  },
+  {
+    "name": "Deutsche Bank AG - Quốc tế",
+    "shortName": "Deutsche Bank",
+    "code": "DB",
+    "bin": "000003",
+    "aliases": ["deutsche bank", "deutsche", "db"]
+  },
+  {
+    "name": "Bangkok Bank Public Company Ltd - Chi nhánh VN",
+    "shortName": "Bangkok Bank",
+    "code": "BANGKOK",
+    "bin": "000004",
+    "aliases": ["bangkok bank", "bangkok"]
+  },
+  {
+    "name": "Ngân hàng Mizuho - Chi nhánh VN / Quốc tế",
+    "shortName": "Mizuho Bank",
+    "code": "MIZUHO",
+    "bin": "000005",
+    "aliases": ["mizuho", "mizuho bank"]
+  },
+  {
+    "name": "Sumitomo Mitsui Banking Corporation (SMBC)",
+    "shortName": "SMBC",
+    "code": "SMBC",
+    "bin": "000006",
+    "aliases": ["smbc", "sumitomo mitsui"]
   }
 ];
 
@@ -954,6 +1100,19 @@ export interface VietQrOptions {
 }
 
 /**
+ * Kiểm tra xem ngân hàng có phải ngân hàng quốc tế/nước ngoài hoặc tự nhập không
+ */
+export function isForeignOrCustomBank(bankInput?: string | null): boolean {
+  if (!bankInput) return false;
+  const raw = bankInput.trim().toLowerCase();
+  if (raw.includes('nước ngoài') || raw.includes('quốc tế') || raw.includes('foreign') || raw.includes('international')) return true;
+  const found = findBank(bankInput);
+  if (!found) return true;
+  const foreignCodes = ['SCVN', 'HSBC', 'SHBVN', 'CITIBANK', 'UOB', 'WOO', 'CIMB', 'PBVN', 'HLBVN', 'KEBHANA', 'IBK', 'DBS', 'BOC', 'JPM', 'BOA', 'DB', 'BANGKOK', 'SMBC', 'MIZUHO'];
+  return foreignCodes.includes(found.code.toUpperCase()) || (Boolean(found.bin) && String(found.bin).startsWith('00000'));
+}
+
+/**
  * Tạo URL mã VietQR từ cổng dịch vụ img.vietqr.io
  */
 export function getVietQrUrl(options: VietQrOptions): string {
@@ -966,19 +1125,18 @@ export function getVietQrUrl(options: VietQrOptions): string {
   
   // Lấy BIN nếu đầu vào là tên ngân hàng hoặc mã ngân hàng
   let bin = findBankBin(bankBinOrCode);
-  if (!bin) {
+  if (!bin || bin.startsWith('00000')) {
     const trimmed = bankBinOrCode.trim();
     // Nếu là mã chuẩn không chứa dấu cách (như VCB, HDB, TCB...)
-    if (/^[A-Za-z0-9_]+$/.test(trimmed)) {
+    if (/^[A-Za-z0-9_]+$/.test(trimmed) && !trimmed.startsWith('00000')) {
       bin = trimmed;
     } else {
       // Cố gắng tìm lần nữa bằng standardizeBankName
       const std = standardizeBankName(trimmed);
       const secondBin = findBankBin(std);
-      if (secondBin) {
+      if (secondBin && !secondBin.startsWith('00000')) {
         bin = secondBin;
       } else {
-        console.warn(`[VietQR] Không xác định được mã BIN hợp lệ cho ngân hàng "${bankBinOrCode}". Tránh sinh sai mã chuyển tiền.`);
         return '';
       }
     }

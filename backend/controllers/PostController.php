@@ -457,6 +457,9 @@ class PostController {
         foreach ($comments as $c) {
             $c['attachments'] = json_decode($c['attachments_json'] ?? '[]', true) ?: [];
             unset($c['attachments_json']);
+            if (!empty($c['content'])) {
+                $c['content'] = str_ireplace(['&amp;nbsp;', '&nbsp;', "\xc2\xa0"], ' ', $c['content']);
+            }
             
             $pid = $c['parent_id'];
             if ($pid === null || $pid === 0 || $pid === '0' || $pid === '') {
@@ -488,7 +491,8 @@ class PostController {
         $userId = (int)$auth['user_id'];
         $b = getBody();
 
-        $content = isset($b['content']) ? trim($b['content']) : '';
+        $rawContent = isset($b['content']) ? trim($b['content']) : '';
+        $content = str_ireplace(['&amp;nbsp;', '&nbsp;', "\xc2\xa0"], ' ', $rawContent);
         if (empty($content)) {
             respond(400, null, 'Nội dung bình luận không được bỏ trống', false);
         }

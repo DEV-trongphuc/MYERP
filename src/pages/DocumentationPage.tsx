@@ -4052,7 +4052,7 @@ export const DocumentationPage: React.FC = () => {
                   <li>
                     <strong>Email Gửi Khách Hàng / Học Viên:</strong>
                     <ul>
-                      <li>Tiêu đề tiền tố chuẩn hóa: <code>[IDEAS] + [Tiêu đề thư] + [H:i d/m/Y]</code> (loại bỏ tuyệt đối các tiền tố nội bộ như <em>[IDEAS ERP]</em>).</li>
+                      <li>Tiêu đề tiền tố chuẩn hóa: <code>[IDEAS] + [Tiêu đề thư] + [H:i d/m/Y]</code> (loại bỏ tuyệt đối các tiền tố nội bộ như <em>[MYERP]</em>).</li>
                       <li>Khung nội dung: Khung viền đỏ thương hiệu <code>#BD1D2D</code> với font chữ Inter hiện đại, nền xám thanh lịch <code>#f8fafc</code>.</li>
                       <li><strong>Bỏ nút "Đăng Nhập Hệ Thống":</strong> Thay thế bằng dòng lưu ý pháp lý tự động: <em>"Đây là tin tự động theo lịch thanh toán trên hợp đồng, vui lòng bỏ qua nếu bạn đã thanh toán."</em> để bảo mật đường dẫn nội bộ.</li>
                     </ul>
@@ -4060,7 +4060,7 @@ export const DocumentationPage: React.FC = () => {
                   <li>
                     <strong>Email Gửi Nội Bộ Nhân Sự:</strong>
                     <ul>
-                      <li>Tiêu đề tiền tố chuẩn hóa: <code>[IDEAS ERP] + [Nội dung cảnh báo] + [H:i d/m/Y]</code>.</li>
+                      <li>Tiêu đề tiền tố chuẩn hóa: <code>[MYERP] + [Nội dung cảnh báo] + [H:i d/m/Y]</code>.</li>
                       <li>Khung nội dung: Kèm nút bấm kêu gọi hành động (Call To Action) đỏ nổi bật <strong>"ĐĂNG NHẬP HỆ THỐNG"</strong> trỏ trực tiếp về địa chỉ ERP <code>https://myerp.ideas.edu.vn</code> để xử lý công việc ngay.</li>
                     </ul>
                   </li>

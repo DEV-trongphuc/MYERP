@@ -304,7 +304,7 @@ export const Login = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <h1 className="title-main">
-              IDEAS ERP <br />
+              MYERP <br />
               <span className="title-gradient">AUTOMATION SYSTEM.</span>
             </h1>
             <p className="subtitle-main">

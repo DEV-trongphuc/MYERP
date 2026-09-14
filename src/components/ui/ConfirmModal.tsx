@@ -14,6 +14,7 @@ interface ConfirmModalProps {
   confirmType?: 'danger' | 'primary' | 'success';
   children?: React.ReactNode;
   width?: string | number;
+  zIndex?: number;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -26,6 +27,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   cancelText = 'Hủy',
   confirmType = 'danger',
   width = 440,
+  zIndex = 2147483645,
   children
 }) => {
   const { t } = useLanguage();
@@ -62,7 +64,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   };
 
   return (
-    <CustomModal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title={t(title)} width={width}>
+    <CustomModal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title={t(title)} width={width} zIndex={zIndex}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '0.5rem 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ 

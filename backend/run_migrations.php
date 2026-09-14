@@ -18,7 +18,7 @@ $apply = (isset($_GET['apply']) && $_GET['apply'] === 'true')
       || (isset($_POST['execute_migration']) && $_POST['execute_migration'] === '1')
       || ($isCli && in_array('--apply', $argv));
 
-$targetVersion = 277;
+$targetVersion = 278;
 $currentVersion = 186;
 
 // Query current DB version
@@ -3285,8 +3285,22 @@ try {
         $logMsg("Nâng cấp lên phiên bản 277 hoàn tất.", "success");
     }
 
+    // --- PHIÊN BẢN 278: DỌN DẸP THỰC THỂ &NBSP; TRONG BÌNH LUẬN ---
+    if ($currentVersion < 278) {
+        $logMsg("Bắt đầu nâng cấp phiên bản 278: Dọn dẹp thực thể &nbsp; trong bình luận cũ...", "info");
+        try {
+            $conn->query("UPDATE activity_comments SET content = REPLACE(REPLACE(content, '&amp;nbsp;', ' '), '&nbsp;', ' ') WHERE content LIKE '%&nbsp;%'");
+            $conn->query("UPDATE ticket_comments SET body = REPLACE(REPLACE(body, '&amp;nbsp;', ' '), '&nbsp;', ' ') WHERE body LIKE '%&nbsp;%'");
+            $conn->query("UPDATE enterprise_comments SET content = REPLACE(REPLACE(content, '&amp;nbsp;', ' '), '&nbsp;', ' ') WHERE content LIKE '%&nbsp;%'");
+            $logMsg("Dọn dẹp &nbsp; trong bình luận phiên bản 278 hoàn tất.", "success");
+        } catch (Throwable $e) {
+            $logMsg("Lỗi khi dọn dẹp &nbsp; v278: " . $e->getMessage(), "error");
+        }
+        $logMsg("Nâng cấp lên phiên bản 278 hoàn tất.", "success");
+    }
+
     // Update DB version in system_settings
-    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '277') ON DUPLICATE KEY UPDATE setting_value = '277'");
+    $conn->query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('db_version', '278') ON DUPLICATE KEY UPDATE setting_value = '278'");
 
     $logMsg("Hệ thống đã duy trì cấu trúc Cơ sở dữ liệu ở phiên bản mới nhất: " . $targetVersion, "success");
 

@@ -591,6 +591,9 @@ class TicketController {
         $comments = $stmt->fetchAll();
         foreach ($comments as &$c) {
             $c['attachments'] = !empty($c['attachments']) ? (is_string($c['attachments']) ? json_decode($c['attachments'], true) : $c['attachments']) : [];
+            if (!empty($c['body'])) {
+                $c['body'] = str_ireplace(['&amp;nbsp;', '&nbsp;', "\xc2\xa0"], ' ', $c['body']);
+            }
         }
         respond(200, $comments);
     }
@@ -601,17 +604,19 @@ class TicketController {
             respond(403, null, 'Bạn không có quyền phản hồi ticket này', false);
         }
         $data = getBody();
-        if (empty($data['body'])) respond(400, null, 'Nội dung ghi chú không được để trống', false);
+        $rawBody = $data['body'] ?? '';
+        $cleanBody = str_ireplace(['&amp;nbsp;', '&nbsp;', "\xc2\xa0"], ' ', (string)$rawBody);
+        if (trim($cleanBody) === '') respond(400, null, 'Nội dung ghi chú không được để trống', false);
 
         $parentId = !empty($data['parent_id']) ? (int)$data['parent_id'] : null;
         $attachments = !empty($data['attachments']) ? (is_string($data['attachments']) ? $data['attachments'] : json_encode($data['attachments'], JSON_UNESCAPED_UNICODE)) : null;
 
         $stmt = $this->db->prepare("INSERT INTO ticket_comments (ticket_id, user_id, body, parent_id, attachments) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$ticketId, $auth['user_id'], $data['body'], $parentId, $attachments]);
+        $stmt->execute([$ticketId, $auth['user_id'], $cleanBody, $parentId, $attachments]);
         $newId = $this->db->lastInsertId();
         $notifiedUserIds = [(int)$auth['user_id']];
         $commenterName = $auth['full_name'] ?? 'Đồng nghiệp';
-        $bodyText = (string)($data['body'] ?? '');
+        $bodyText = $cleanBody;
         $mentions = [];
 
         // 1. First, parse by data-user-id (HTML editor mentions)

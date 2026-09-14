@@ -685,6 +685,9 @@ export const TicketDrawer: React.FC<Props> = ({ isOpen, onClose, ticket, onUpdat
                         const isSelf = currentUser && String(msg.user_id) === String(currentUser.id);
                         const cAtt = parseAttachments(msg);
                         const cleanCommentText = (msg.body || msg.text || '')
+                          .replace(/&amp;nbsp;/gi, ' ')
+                          .replace(/&nbsp;/gi, ' ')
+                          .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ')
                           .replace(/!\[.*?\]\([^)]+\)/g, '')
                           .replace(/\[.*?\]\([^)]+\)/g, '')
                           .replace(/(?:https?:\/\/[^\s<"'\)]+)?\/?uploads\/[^\s<"'\)]+/gi, '')

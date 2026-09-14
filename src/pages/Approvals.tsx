@@ -12,7 +12,7 @@ import {
   FileCheck, Settings, ArrowLeft, X, Save, GitBranch, Clock3, Copy, Bell, Edit, Pencil, RefreshCw, Eye, MessageSquare, Info, Loader2,
   UserPlus, Check, MoreHorizontal, Filter, Zap, Download, Image as ImageIcon, Building2, Truck,
   GraduationCap, Utensils, Phone, Mail, MapPin, Sparkles, AlertCircle, Bookmark, Edit3,
-  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag
+  Landmark, Wallet, BarChart2, Palmtree, QrCode, Coffee, Tag, Globe
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DraftExitConfirmModal } from '../components/ui/DraftExitConfirmModal';
@@ -26,7 +26,7 @@ import { CustomSelect, getAvatarRingStyle, type SelectOption } from '../componen
 import { MentionInput } from '../components/ui/MentionInput';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isExecutive, isHR, isManagement, isAccountant } from '../utils/roleUtils';
-import { VIETNAM_BANKS, getVietQrUrl, findBank, standardizeBankName } from '../utils/vietnamBanks';
+import { VIETNAM_BANKS, getVietQrUrl, findBank, standardizeBankName, isForeignOrCustomBank } from '../utils/vietnamBanks';
 import { BankSelect } from '../components/ui/BankSelect';
 import { BankLogo } from '../components/ui/BankLogo';
 import { Pagination } from '../components/ui/Pagination';
@@ -9834,48 +9834,51 @@ export default function Approvals() {
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                                      {t('Phân loại chi phí')}
-                                    </label>
-                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '2px' }}>
-                                      {[
-                                        { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
-                                        { value: 'client_meeting', label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
-                                        { value: 'general', label: 'Vận hành', icon: Home, color: '#10b981' },
-                                        { value: 'marketing', label: 'Marketing', icon: Briefcase, color: '#ef4444' },
-                                        { value: 'stationery', label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
-                                        { value: 'hr', label: 'Nhân sự', icon: Tag, color: '#06b6d4' }
-                                      ].map(c => {
-                                        const Icon = c.icon;
-                                        const isSelected = expenseCategory === c.value || (c.value === 'general' && !expenseCategory);
-                                        return (
-                                          <button
-                                            key={c.value}
-                                            type="button"
-                                            onClick={() => setExpenseCategory(c.value)}
-                                            style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '6px',
-                                              padding: '5px 12px',
-                                              borderRadius: 'var(--radius-full)',
-                                              border: `1.5px solid ${isSelected ? c.color : 'var(--color-border)'}`,
-                                              background: isSelected ? `${c.color}18` : 'transparent',
-                                              color: isSelected ? c.color : 'var(--color-text-light)',
-                                              fontSize: '0.78rem',
-                                              fontWeight: isSelected ? 750 : 600,
-                                              cursor: 'pointer',
-                                              transition: 'all 0.18s ease'
-                                            }}
-                                          >
-                                            <Icon size={13} />
-                                            <span>{t(c.label)}</span>
-                                          </button>
-                                        );
-                                      })}
+                                  {/* Tạm thời ẩn phân loại chi phí theo yêu cầu */}
+                                  {false && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                                        {t('Phân loại chi phí')}
+                                      </label>
+                                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '2px' }}>
+                                        {[
+                                          { value: 'travel', label: 'Vận Chuyển', icon: Truck, color: '#3b82f6' },
+                                          { value: 'client_meeting', label: 'Ăn uống', icon: Coffee, color: '#f59e0b' },
+                                          { value: 'general', label: 'Vận hành', icon: Home, color: '#10b981' },
+                                          { value: 'marketing', label: 'Marketing', icon: Briefcase, color: '#ef4444' },
+                                          { value: 'stationery', label: 'Văn phòng phẩm', icon: CreditCard, color: '#BD1D2D' },
+                                          { value: 'hr', label: 'Nhân sự', icon: Tag, color: '#06b6d4' }
+                                        ].map(c => {
+                                          const Icon = c.icon;
+                                          const isSelected = expenseCategory === c.value || (c.value === 'general' && !expenseCategory);
+                                          return (
+                                            <button
+                                              key={c.value}
+                                              type="button"
+                                              onClick={() => setExpenseCategory(c.value)}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                padding: '5px 12px',
+                                                borderRadius: 'var(--radius-full)',
+                                                border: `1.5px solid ${isSelected ? c.color : 'var(--color-border)'}`,
+                                                background: isSelected ? `${c.color}18` : 'transparent',
+                                                color: isSelected ? c.color : 'var(--color-text-light)',
+                                                fontSize: '0.78rem',
+                                                fontWeight: isSelected ? 750 : 600,
+                                                cursor: 'pointer',
+                                                transition: 'all 0.18s ease'
+                                              }}
+                                            >
+                                              <Icon size={13} />
+                                              <span>{t(c.label)}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  </div>
+                                  )}
 
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
@@ -10500,7 +10503,7 @@ export default function Approvals() {
                                   return (
                                     <div style={{
                                       display: 'grid',
-                                      gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 155px',
+                                      gridTemplateColumns: isMobile ? '1fr' : (vietQrUrl || isForeignOrCustomBank(paymentBankName) ? 'minmax(0, 1fr) 155px' : '1fr'),
                                       gap: '12px',
                                       marginTop: '6px',
                                       alignItems: 'stretch'
@@ -10670,6 +10673,16 @@ export default function Approvals() {
                                               objectFit: 'contain'
                                             }}
                                           />
+                                        ) : isForeignOrCustomBank(paymentBankName) ? (
+                                          <div style={{ textAlign: 'center', padding: '6px' }}>
+                                            <Globe size={24} color="#dc2626" style={{ margin: '0 auto 6px' }} />
+                                            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#dc2626', lineHeight: 1.3 }}>
+                                              {t('Chuyển khoản quốc tế')}
+                                            </div>
+                                            <div style={{ fontSize: '0.6rem', color: '#64748b', marginTop: '2px', lineHeight: 1.2 }}>
+                                              {t('Không hỗ trợ VietQR')}
+                                            </div>
+                                          </div>
                                         ) : (
                                           <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Chưa có mã QR</span>
                                         )}

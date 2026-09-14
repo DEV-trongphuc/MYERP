@@ -2,14 +2,14 @@
 export const API_BASE = import.meta.env.VITE_API_URL ?? '/backend';
 
 /** Tên / Title hệ thống ERP mặc định */
-export const DEFAULT_SYSTEM_TITLE = 'IDEAS ERP';
+export const DEFAULT_SYSTEM_TITLE = 'MYERP';
 
 /**
  * Hàm lấy tên / Title hệ thống động
  * Ưu tiên:
  * 1. Cấu hình tuỳ chỉnh trong localStorage (system_title hoặc system_name)
  * 2. Biến môi trường VITE_APP_TITLE
- * 3. Mặc định là 'IDEAS ERP'
+ * 3. Mặc định là 'MYERP'
  */
 export const getSystemTitle = (): string => {
   if (typeof window !== 'undefined') {

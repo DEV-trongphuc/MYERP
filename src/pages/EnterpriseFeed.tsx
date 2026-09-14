@@ -808,13 +808,18 @@ export const EnterpriseFeed: React.FC = () => {
       );
     }
 
-    const isHtml = /<[a-z][\s\S]*>/i.test(content);
+    const cleanContent = (content || '')
+      .replace(/&amp;nbsp;/gi, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
+
+    const isHtml = /<[a-z][\s\S]*>/i.test(cleanContent);
     if (isHtml) {
       return (
         <div 
           className="rich-text-content feed-rich-comment" 
           dangerouslySetInnerHTML={{ 
-            __html: DOMPurify.sanitize(content, { 
+            __html: DOMPurify.sanitize(cleanContent, { 
               ADD_TAGS: ['img', 'span', 'a'], 
               ADD_ATTR: ['src', 'alt', 'style', 'class', 'href', 'target', 'rel'] 
             }) 
@@ -825,7 +830,7 @@ export const EnterpriseFeed: React.FC = () => {
     }
     return (
       <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text)', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
-        {content}
+        {cleanContent}
       </p>
     );
   };

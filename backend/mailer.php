@@ -12,8 +12,8 @@ use PHPMailer\PHPMailer\Exception;
 function _getBaseHtml($title, $subtitle, $contentHtml, $isCustomer = false)
 {
     $headerSub = !empty($title) ? mb_strtoupper($title, 'UTF-8') : ($isCustomer ? 'THÔNG BÁO' : 'THÔNG BÁO HỆ THỐNG');
-    $brandTitle = $isCustomer ? 'IDEAS' : 'IDEAS ERP';
-    $footerBrand = $isCustomer ? 'IDEAS' : 'IDEAS ERP';
+    $brandTitle = $isCustomer ? 'IDEAS' : 'MYERP';
+    $footerBrand = $isCustomer ? 'IDEAS' : 'MYERP';
 
     return '
     <div style="background-color: #f8fafc; padding: 40px 10px; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">
@@ -102,16 +102,16 @@ function sendEmailNotification($to, $subject, $title, $content, $ccEmailString =
     }
 
     if ($isCustomer) {
-        // Mail gửi cho khách hàng / học viên: chuẩn hóa thương hiệu là [IDEAS] (không dùng IDEAS ERP)
+        // Mail gửi cho khách hàng / học viên: chuẩn hóa thương hiệu là [IDEAS] (không dùng MYERP)
         $subject = str_ireplace(['[Rich Land]', '[Richland]', '[IDEAS ERP]', '[MYERP]'], '[IDEAS]', $subject);
         if (strpos($subject, '[IDEAS]') === false) {
             $subject = '[IDEAS] ' . $subject;
         }
     } else {
-        // Mail nội bộ: chuẩn hóa thương hiệu sang [IDEAS ERP]
-        $subject = str_ireplace(['[Rich Land]', '[Richland]', '[IDEAS]', '[MYERP]'], '[IDEAS ERP]', $subject);
-        if (strpos($subject, '[IDEAS ERP]') === false) {
-            $subject = '[IDEAS ERP] ' . $subject;
+        // Mail nội bộ: chuẩn hóa thương hiệu sang [MYERP]
+        $subject = str_ireplace(['[Rich Land]', '[Richland]', '[IDEAS]', '[IDEAS ERP]'], '[MYERP]', $subject);
+        if (strpos($subject, '[MYERP]') === false) {
+            $subject = '[MYERP] ' . $subject;
         }
     }
 

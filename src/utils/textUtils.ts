@@ -28,6 +28,14 @@ export const stripHtml = (html: string): string => {
   return decodeHtmlEntities(noTags).replace(/\s+/g, ' ').trim();
 };
 
+export const cleanCommentText = (str: string | null | undefined): string => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&amp;nbsp;/gi, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
+};
+
 export const cleanNotificationText = (text: string | null | undefined): string => {
   if (!text) return '';
   let str = String(text);
@@ -38,3 +46,4 @@ export const cleanNotificationText = (text: string | null | undefined): string =
   str = str.replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
   return str.replace(/\s+/g, ' ').trim();
 };
+

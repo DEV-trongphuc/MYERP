@@ -28,6 +28,7 @@ import { NoteDetailModal, NoteCell, renderLinkifiedText } from '../components/ui
 import { QrImageModal } from '../components/ui/QrImageModal';
 import { getVietQrUrl } from '../utils/vietnamBanks';
 import { AttachmentLightboxModal, type AttachmentItem } from '../components/ui/AttachmentLightboxModal';
+import { formatWaitDuration } from './Approvals';
 
 const PAGE_SIZE = 10;
 
@@ -550,152 +551,297 @@ export const ExpensesPage: React.FC = () => {
   const renderTimeline = () => {
     if (!viewItem) return null;
 
-    // Helper to get step status and details
-    const getStepStatus = (stepKey: 'creator' | 'level1' | 'level2' | 'level3' | 'payment', stepNum: number) => {
+    const formatApprovalTime = (raw: any) => {
+      if (!raw) return '';
+      const str = String(raw).trim();
+      const d = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str);
+      return !isNaN(d.getTime()) ? d.toLocaleString('vi-VN') : '';
+    };
+
+    const rawNotes = viewItem.notes || viewItem.description || '';
+    const approvalStepsMatch = rawNotes.match(/\[APPROVAL_STEPS\]:\s*(\[[\s\S]*?\])(?=\n\n|\n\[|$)/i);
+    let misaSteps: any[] | null = null;
+    if (viewItem.approval_steps && Array.isArray(viewItem.approval_steps)) {
+      misaSteps = viewItem.approval_steps;
+    } else if (approvalStepsMatch) {
+      try {
+        misaSteps = JSON.parse(approvalStepsMatch[1]);
+      } catch (e) {}
+    }
+
+    const steps: Array<{
+      stepNumber: number;
+      title: string;
+      roleTitle: string;
+      user: any;
+      status: 'approved' | 'rejected' | 'pending' | 'not_reached';
+      approvedAt?: string;
+      waitingSince?: any;
+      showBell?: boolean;
+      notes?: string;
+      customNotReachedText?: string;
+      isPayment?: boolean;
+    }> = [];
+
+    if (misaSteps && Array.isArray(misaSteps) && misaSteps.length > 0) {
+      misaSteps.forEach((st: any, idx: number) => {
+        const uName = st.user_name || st.actor || '';
+        const uCode = st.user_code || '';
+        const matchedUser = users.find((u: any) => 
+          (st.user_id && Number(u.id) === Number(st.user_id)) ||
+          (uCode && String((u as any).code || '').toLowerCase() === uCode.toLowerCase()) ||
+          (uName && u.full_name && (u.full_name.toLowerCase().includes(uName.toLowerCase()) || uName.toLowerCase().includes(u.full_name.toLowerCase())))
+        );
+
+        const stepUser = matchedUser || {
+          id: st.user_id || `misa-${idx}`,
+          full_name: uName || 'Nhân sự thực hiện',
+          avatar: null,
+          avatar_url: null
+        };
+
+        const rawStatus = (st.status || '').toLowerCase();
+        let stepStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+        if (['approved', 'done', 'completed', 'đã duyệt', 'đã thực hiện'].includes(rawStatus)) {
+          stepStatus = 'approved';
+        } else if (['rejected', 'từ chối'].includes(rawStatus)) {
+          stepStatus = 'rejected';
+        } else if (['not_reached', 'chưa đến'].includes(rawStatus)) {
+          stepStatus = 'not_reached';
+        } else {
+          stepStatus = 'pending';
+        }
+
+        const stepRole = st.role || (matchedUser as any)?.role_title || (matchedUser as any)?.department || (matchedUser as any)?.role || (idx === 0 ? 'Người lập đề xuất' : 'Người phê duyệt');
+        const stepTitle = st.title || st.step_name || (idx === 0 ? 'Lập đề xuất & gửi' : `Phê duyệt (Cấp ${idx})`);
+        const prevStepTime = idx > 0 ? (misaSteps[idx - 1]?.time || misaSteps[idx - 1]?.action_time || viewItem?.created_at) : viewItem?.created_at;
+
+        steps.push({
+          stepNumber: idx + 1,
+          title: `Bước ${idx + 1}: ${stepTitle}`,
+          roleTitle: stepRole,
+          user: stepUser,
+          status: stepStatus,
+          approvedAt: (stepStatus === 'approved' || stepStatus === 'rejected') && (st.time || st.action_time) ? formatApprovalTime(st.time || st.action_time) : '',
+          waitingSince: stepStatus === 'pending' ? prevStepTime : null,
+          showBell: stepStatus === 'pending',
+          notes: st.notes || st.comment || ''
+        });
+      });
+    } else {
       const overall = (viewItem.status || 'pending').toLowerCase();
       const s1 = (viewItem.status_level_1 || 'pending').toLowerCase();
       const s2 = (viewItem.status_level_2 || 'pending').toLowerCase();
       const s3 = (viewItem.status_level_3 || 'pending').toLowerCase();
       const isRefunded = !!viewItem.is_refunded;
+      const hasL2 = !!viewItem.approver_id_2;
+      const hasL3 = !!viewItem.approver_id_3;
 
-      let status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      // Step 1: Creator / Proposer
+      const creatorUser = users.find((u: any) => 
+        (viewItem.created_by && Number(u.id) === Number(viewItem.created_by)) ||
+        (viewItem.user_id && Number(u.id) === Number(viewItem.user_id)) ||
+        (viewItem.creator_name && (u.full_name === viewItem.creator_name || u.name === viewItem.creator_name))
+      ) || {
+        id: viewItem.created_by || viewItem.user_id || 'creator',
+        full_name: viewItem.creator_name || 'Người lập',
+        avatar: viewItem.creator_avatar,
+        avatar_url: viewItem.creator_avatar
+      };
 
-      if (stepKey === 'creator') {
-        status = 'approved';
-      } else if (stepKey === 'level1') {
-        if (overall === 'approved' || overall === 'refunded' || isRefunded || s1 === 'approved') status = 'approved';
-        else if (overall === 'rejected' || s1 === 'rejected') status = 'rejected';
-        else status = 'pending';
-      } else if (stepKey === 'level2') {
-        if (s2 === 'approved' || isRefunded) status = 'approved';
-        else if (s2 === 'rejected') status = 'rejected';
-        else if (overall === 'rejected' || s1 === 'rejected') status = 'not_reached';
-        else if (s1 === 'approved') status = 'pending';
-        else status = 'not_reached';
-      } else if (stepKey === 'level3') {
-        if (s3 === 'approved' || isRefunded) status = 'approved';
-        else if (s3 === 'rejected') status = 'rejected';
-        else if (overall === 'rejected' || s1 === 'rejected' || s2 === 'rejected') status = 'not_reached';
-        else if (s2 === 'approved') status = 'pending';
-        else status = 'not_reached';
-      } else if (stepKey === 'payment') {
-        if (isRefunded) status = 'approved';
-        else if (overall === 'approved') {
-          // If multi-level, must wait for the last active level to be approved
-          const hasL2 = !!viewItem.approver_id_2;
-          const hasL3 = !!viewItem.approver_id_3;
-          if (hasL3) {
-            status = s3 === 'approved' ? 'pending' : 'not_reached';
-          } else if (hasL2) {
-            status = s2 === 'approved' ? 'pending' : 'not_reached';
-          } else {
-            status = 'pending';
-          }
-        } else {
-          status = 'not_reached';
-        }
+      const step1CreatedTime = viewItem.created_at || viewItem.expense_date;
+
+      steps.push({
+        stepNumber: 1,
+        title: 'Bước 1: Lập đề xuất & gửi',
+        roleTitle: 'Người lập đề xuất',
+        user: creatorUser,
+        status: 'approved',
+        approvedAt: formatApprovalTime(step1CreatedTime)
+      });
+
+      // Step 2: Level 1 Approver
+      let s1Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'pending';
+      if (overall === 'approved' || overall === 'refunded' || isRefunded || s1 === 'approved') {
+        s1Status = 'approved';
+      } else if (overall === 'rejected' || s1 === 'rejected') {
+        s1Status = 'rejected';
+      } else {
+        s1Status = 'pending';
       }
 
-      // Styles based on status
-      let bg = 'var(--color-primary)';
-      let textCol = '#ffffff';
-      let iconContent: React.ReactNode = String(stepNum);
-      let showBell = false;
+      const s1ApprovedTime = s1Status === 'approved' || s1Status === 'rejected' ? (viewItem.approved_at || viewItem.updated_at) : null;
 
-      if (status === 'approved') {
-        bg = '#10b981'; // Green
-        iconContent = '✓';
-      } else if (status === 'rejected') {
-        bg = '#ef4444'; // Red
-        iconContent = '✗';
-      } else if (status === 'not_reached') {
-        bg = 'var(--color-border-light)';
-        textCol = 'var(--color-text-muted)';
-        iconContent = String(stepNum);
-      } else if (status === 'pending') {
-        bg = 'var(--color-primary)';
-        iconContent = String(stepNum);
-        showBell = true;
+      const approverUser1 = users.find((u: any) => 
+        (viewItem.approver_id && Number(u.id) === Number(viewItem.approver_id)) ||
+        (viewItem.approver_name && (u.full_name === viewItem.approver_name || u.name === viewItem.approver_name))
+      ) || {
+        id: viewItem.approver_id || 'approver1',
+        full_name: viewItem.approver_name || 'Người duyệt Cấp 1',
+        avatar: viewItem.approver_avatar,
+        avatar_url: viewItem.approver_avatar,
+        role: 'Người duyệt Cấp 1'
+      };
+
+      steps.push({
+        stepNumber: 2,
+        title: 'Bước 2: Phê duyệt (Cấp 1)',
+        roleTitle: approverUser1.role || 'Người duyệt Cấp 1',
+        user: approverUser1,
+        status: s1Status,
+        approvedAt: s1Status === 'approved' || s1Status === 'rejected' ? formatApprovalTime(s1ApprovedTime) : '',
+        waitingSince: s1Status === 'pending' ? step1CreatedTime : null,
+        showBell: s1Status === 'pending'
+      });
+
+      // Step 3: Level 2 Approver (Optional)
+      let s2ApprovedTime: any = null;
+      let s2Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+      if (hasL2) {
+        if (s2 === 'approved' || isRefunded) s2Status = 'approved';
+        else if (s2 === 'rejected') s2Status = 'rejected';
+        else if (overall === 'rejected' || s1 === 'rejected') s2Status = 'not_reached';
+        else if (s1Status === 'approved') s2Status = 'pending';
+        else s2Status = 'not_reached';
+
+        s2ApprovedTime = s2Status === 'approved' || s2Status === 'rejected' ? (viewItem.approved_at_2 || (s2 === 'approved' ? viewItem.updated_at : null)) : null;
+
+        const approverUser2 = users.find((u: any) => 
+          (viewItem.approver_id_2 && Number(u.id) === Number(viewItem.approver_id_2)) ||
+          (viewItem.approver_name_2 && (u.full_name === viewItem.approver_name_2 || u.name === viewItem.approver_name_2))
+        ) || {
+          id: viewItem.approver_id_2 || 'approver2',
+          full_name: viewItem.approver_name_2 || 'Người duyệt Cấp 2',
+          avatar: viewItem.approver_avatar_2,
+          avatar_url: viewItem.approver_avatar_2,
+          role: 'Người duyệt Cấp 2'
+        };
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: `Bước ${steps.length + 1}: Phê duyệt (Cấp 2)`,
+          roleTitle: approverUser2.role || 'Người duyệt Cấp 2',
+          user: approverUser2,
+          status: s2Status,
+          approvedAt: s2Status === 'approved' || s2Status === 'rejected' ? formatApprovalTime(s2ApprovedTime) : '',
+          waitingSince: s2Status === 'pending' ? (s1ApprovedTime || step1CreatedTime) : null,
+          showBell: s2Status === 'pending',
+          customNotReachedText: 'Sẽ thực hiện sau khi Cấp 1 duyệt'
+        });
       }
 
-      return { bg, textCol, iconContent, showBell };
-    };
+      // Step 4: Level 3 Approver (Optional)
+      let s3ApprovedTime: any = null;
+      let s3Status: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+      if (hasL3) {
+        if (s3 === 'approved' || isRefunded) s3Status = 'approved';
+        else if (s3 === 'rejected') s3Status = 'rejected';
+        else if (overall === 'rejected' || s1 === 'rejected' || s2 === 'rejected') s3Status = 'not_reached';
+        else if (hasL2 ? s2Status === 'approved' : s1Status === 'approved') s3Status = 'pending';
+        else s3Status = 'not_reached';
 
-    let stepCount = 1;
-    const stepCreatorNum = stepCount++;
-    const stepL1Num = stepCount++;
-    const stepL2Num = viewItem.approver_id_2 ? stepCount++ : null;
-    const stepL3Num = viewItem.approver_id_3 ? stepCount++ : null;
-    const stepPaymentNum = stepCount++;
+        s3ApprovedTime = s3Status === 'approved' || s3Status === 'rejected' ? (viewItem.approved_at_3 || (s3 === 'approved' ? viewItem.updated_at : null)) : null;
+
+        const approverUser3 = users.find((u: any) => 
+          (viewItem.approver_id_3 && Number(u.id) === Number(viewItem.approver_id_3)) ||
+          (viewItem.approver_name_3 && (u.full_name === viewItem.approver_name_3 || u.name === viewItem.approver_name_3))
+        ) || {
+          id: viewItem.approver_id_3 || 'approver3',
+          full_name: viewItem.approver_name_3 || 'Người duyệt Cấp 3',
+          avatar: viewItem.approver_avatar_3,
+          avatar_url: viewItem.approver_avatar_3,
+          role: 'Người duyệt Cấp 3'
+        };
+
+        steps.push({
+          stepNumber: steps.length + 1,
+          title: `Bước ${steps.length + 1}: Phê duyệt (Cấp 3)`,
+          roleTitle: approverUser3.role || 'Người duyệt Cấp 3',
+          user: approverUser3,
+          status: s3Status,
+          approvedAt: s3Status === 'approved' || s3Status === 'rejected' ? formatApprovalTime(s3ApprovedTime) : '',
+          waitingSince: s3Status === 'pending' ? (s2ApprovedTime || s1ApprovedTime || step1CreatedTime) : null,
+          showBell: s3Status === 'pending',
+          customNotReachedText: 'Sẽ thực hiện sau khi Cấp 2 duyệt'
+        });
+      }
+
+      // Step Payment: Hạch toán thanh toán thực tế
+      const lastApprovalTime = (hasL3 ? s3ApprovedTime : hasL2 ? s2ApprovedTime : s1ApprovedTime) || viewItem.approved_at || viewItem.updated_at;
+      let isPreApproved = false;
+      if (hasL3) {
+        isPreApproved = s3Status === 'approved' || overall === 'approved' || isRefunded;
+      } else if (hasL2) {
+        isPreApproved = s2Status === 'approved' || overall === 'approved' || isRefunded;
+      } else {
+        isPreApproved = s1Status === 'approved' || overall === 'approved' || isRefunded;
+      }
+
+      let paymentStatus: 'approved' | 'rejected' | 'pending' | 'not_reached' = 'not_reached';
+      if (isRefunded) {
+        paymentStatus = 'approved';
+      } else if (isPreApproved) {
+        paymentStatus = 'pending';
+      } else {
+        paymentStatus = 'not_reached';
+      }
+
+      const defaultAccountant = users.find((u: any) => String(u.role).toLowerCase() === 'accountant') || users.find((u: any) => ['admin', 'superadmin'].includes(String(u.role).toLowerCase())) || {
+        id: 1001,
+        full_name: 'Kế toán / Thủ quỹ',
+        avatar: undefined,
+        avatar_url: undefined,
+        role: 'Thủ quỹ'
+      };
+
+      const refunderUser = isRefunded ? (users.find((u: any) => Number(u.id) === Number(viewItem.refunder_id)) || {
+        id: viewItem.refunder_id,
+        full_name: viewItem.refunder_name || 'Kế toán / Thủ quỹ',
+        avatar: viewItem.refunder_avatar,
+        avatar_url: viewItem.refunder_avatar,
+        role: 'Kế toán chi'
+      }) : defaultAccountant;
+
+      steps.push({
+        stepNumber: steps.length + 1,
+        title: `Bước ${steps.length + 1}: Hạch toán thanh toán thực tế`,
+        roleTitle: refunderUser.role || (isRefunded ? 'Kế toán chi' : 'Thủ quỹ'),
+        user: refunderUser,
+        status: paymentStatus,
+        approvedAt: isRefunded && viewItem.refunded_at ? formatApprovalTime(viewItem.refunded_at) : '',
+        waitingSince: paymentStatus === 'pending' ? (lastApprovalTime || step1CreatedTime) : null,
+        showBell: paymentStatus === 'pending',
+        customNotReachedText: 'Sẽ thực hiện sau khi đề xuất được duyệt',
+        isPayment: true
+      });
+    }
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '12px', position: 'relative', paddingLeft: '30px', textAlign: 'left' }}>
         <div style={{ position: 'absolute', left: '10px', top: '10px', bottom: '10px', width: '2px', background: 'var(--color-border-light)' }} />
 
-        {/* Step 1: Proposer */}
-        {(() => {
-          const sDetails = getStepStatus('creator', stepCreatorNum);
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', display: 'block', marginBottom: '6px' }}>Bước 1: Lập đề xuất & gửi</strong>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={viewItem.creator_avatar} 
-                    name={viewItem.creator_name || 'Người lập'} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {viewItem.creator_name || 'Người lập'} (Người lập)
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                  Đã gửi lúc {viewItem.created_at ? new Date(viewItem.created_at).toLocaleString('vi-VN') : '—'}
-                </span>
-              </div>
-            </div>
-          );
-        })()}
+        {steps.map((st) => {
+          let bg = 'var(--color-primary)';
+          let textCol = '#ffffff';
+          let iconContent: React.ReactNode = String(st.stepNumber);
+          let avatarBorderColor = '#f59e0b'; // Cam chờ duyệt
 
-        {/* Step 2: Level 1 Approver */}
-        {(() => {
-          const sDetails = getStepStatus('level1', stepL1Num);
-          const approverUser = users.find(u => Number(u.id) === Number(viewItem.approver_id)) || {
-            id: viewItem.approver_id,
-            full_name: viewItem.approver_name || 'Người duyệt Cấp 1',
-            avatar_url: viewItem.approver_avatar,
-            role: 'Người duyệt Cấp 1'
-          };
+          if (st.status === 'approved') {
+            bg = '#10b981';
+            iconContent = '✓';
+            avatarBorderColor = '#10b981'; // Xanh lá đã duyệt
+          } else if (st.status === 'rejected') {
+            bg = '#ef4444';
+            iconContent = '✗';
+            avatarBorderColor = '#ef4444'; // Đỏ từ chối
+          } else if (st.status === 'not_reached') {
+            bg = 'var(--color-border-light)';
+            textCol = 'var(--color-text-muted)';
+            avatarBorderColor = '#cbd5e1'; // Xám chưa tới lượt
+          }
+
           return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+            <div key={st.stepNumber} style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
               <div style={{
                 position: 'absolute',
                 left: '-30px',
@@ -703,8 +849,8 @@ export const ExpensesPage: React.FC = () => {
                 width: '22px',
                 height: '22px',
                 borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
+                background: bg,
+                color: textCol,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -712,14 +858,14 @@ export const ExpensesPage: React.FC = () => {
                 fontWeight: 800,
                 zIndex: 2
               }}>
-                {sDetails.iconContent}
+                {iconContent}
               </div>
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Bước 2: Phê duyệt (Cấp 1)</strong>
-                  {sDetails.showBell && approverUser.id && (
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>{st.title}</strong>
+                  {st.showBell && st.user && (
                     <button 
-                      onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
+                      onClick={() => { setReminderTargetUser(st.user); setReminderMessage(''); }}
                       style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
                       title="Gửi nhắc nhở"
                     >
@@ -727,301 +873,90 @@ export const ExpensesPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={approverUser.avatar_url} 
-                    name={approverUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {approverUser.full_name} ({approverUser.role || 'Người duyệt'})
-                  </span>
+                <CustomSelect
+                  options={[
+                    ...(st.user && !users.some(u => String(u.id) === String(st.user.id)) ? [{
+                      value: String(st.user.id),
+                      label: st.user.full_name || st.user.name,
+                      avatar: st.user.avatar || st.user.avatar_url,
+                      avatarBorder: avatarBorderColor
+                    }] : []),
+                    ...users.map((u: any) => ({
+                      value: String(u.id),
+                      label: u.full_name || u.name,
+                      avatar: u.avatar || u.avatar_url,
+                      avatarBorder: String(u.id) === String(st.user?.id) ? avatarBorderColor : undefined
+                    }))
+                  ]}
+                  value={st.user ? String(st.user.id) : ''}
+                  onChange={() => {}}
+                  disabled
+                  showAvatars
+                  width="100%"
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                  <span style={{ fontWeight: 600 }}>{st.roleTitle}</span>
+                  {st.approvedAt && <span>{st.approvedAt}</span>}
                 </div>
-                {sDetails.bg === '#10b981' && (
+                {st.status === 'approved' && (
                   <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
+                    {st.stepNumber === 1 ? `Đã gửi lúc ${st.approvedAt || new Date().toLocaleString('vi-VN')}` : st.isPayment ? `✓ Đã chi ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}` : `✓ Đã duyệt ${st.approvedAt ? `lúc ${st.approvedAt}` : ''}`}
                   </span>
                 )}
-                {sDetails.bg === '#ef4444' && (
+                {st.status === 'rejected' && (
                   <span style={{ fontSize: '0.725rem', color: '#ef4444', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✗ Bị từ chối lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
+                    ✗ Bị từ chối {st.approvedAt ? `lúc ${st.approvedAt}` : ''}
                   </span>
                 )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Đang chờ duyệt bởi Admin / Quản lý
+                {st.status === 'pending' && (
+                  <span style={{ 
+                    fontSize: '0.72rem', 
+                    color: '#d97706', 
+                    marginTop: '4px', 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontWeight: 700,
+                    padding: '3px 9px',
+                    borderRadius: '12px',
+                    background: 'rgba(217, 119, 6, 0.1)',
+                    border: '1px solid rgba(217, 119, 6, 0.25)',
+                    boxShadow: '0 1px 3px rgba(217, 119, 6, 0.08)'
+                  }}>
+                    <Clock size={12} strokeWidth={2.5} />
+                    <span>{st.stepNumber === 1 ? 'Đang thực hiện' : (st.isPayment ? 'Chờ thanh toán' : 'Chờ phê duyệt')}</span>
+                    {st.waitingSince && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        color: '#b45309',
+                        marginLeft: '3px',
+                        paddingLeft: '6px',
+                        borderLeft: '1px solid rgba(217, 119, 6, 0.3)'
+                      }}>
+                        Đã chờ {formatWaitDuration(st.waitingSince)}
+                      </span>
+                    )}
                   </span>
                 )}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Step 3: Level 2 Approver (Optional) */}
-        {stepL2Num && (() => {
-          const sDetails = getStepStatus('level2', stepL2Num);
-          const approverUser = users.find(u => Number(u.id) === Number(viewItem.approver_id_2)) || {
-            id: viewItem.approver_id_2,
-            full_name: 'Người duyệt Cấp 2',
-            avatar_url: undefined,
-            role: 'Người duyệt Cấp 2'
-          };
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Bước 3: Phê duyệt (Cấp 2)</strong>
-                  {sDetails.showBell && approverUser.id && (
-                    <button 
-                      onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                      title="Gửi nhắc nhở"
-                    >
-                      <Bell size={18} fill="#ef4444" />
-                    </button>
-                  )}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={approverUser.avatar_url} 
-                    name={approverUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {approverUser.full_name} ({approverUser.role || 'Người duyệt'})
-                  </span>
-                </div>
-                {sDetails.bg === '#10b981' && (
-                  <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Đang chờ duyệt Cấp 2
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-border-light)' && (
+                {st.status === 'not_reached' && (
                   <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Sẽ thực hiện sau khi Cấp 1 duyệt
+                    {st.customNotReachedText || 'Sẽ thực hiện sau khi đề xuất được duyệt'}
                   </span>
+                )}
+                {st.notes && (
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: 'var(--color-bg-secondary)', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--color-text)', borderLeft: '3px solid var(--color-primary)', fontStyle: 'italic' }}>
+                    "{st.notes}"
+                  </div>
                 )}
               </div>
             </div>
           );
-        })()}
-
-        {/* Step 4: Level 3 Approver (Optional) */}
-        {stepL3Num && (() => {
-          const sDetails = getStepStatus('level3', stepL3Num);
-          const approverUser = users.find(u => Number(u.id) === Number(viewItem.approver_id_3)) || {
-            id: viewItem.approver_id_3,
-            full_name: 'Người duyệt Cấp 3',
-            avatar_url: undefined,
-            role: 'Người duyệt Cấp 3'
-          };
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Bước 4: Phê duyệt (Cấp 3)</strong>
-                  {sDetails.showBell && approverUser.id && (
-                    <button 
-                      onClick={() => { setReminderTargetUser(approverUser); setReminderMessage(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                      title="Gửi nhắc nhở"
-                    >
-                      <Bell size={18} fill="#ef4444" />
-                    </button>
-                  )}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={approverUser.avatar_url} 
-                    name={approverUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {approverUser.full_name} ({approverUser.role || 'Người duyệt'})
-                  </span>
-                </div>
-                {sDetails.bg === '#10b981' && (
-                  <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã duyệt lúc {formatTimestamp(viewItem.approved_at || viewItem.updated_at)}
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Đang chờ duyệt Cấp 3
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-border-light)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Sẽ thực hiện sau khi Cấp 2 duyệt
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Step 5: Accountant Payment */}
-        {(() => {
-          const sDetails = getStepStatus('payment', stepPaymentNum);
-          const defaultAccountant = users.find(u => String(u.role).toLowerCase() === 'accountant') || users.find(u => String(u.full_name || '').includes('Thu Thảo') || String(u.full_name || '').includes('Duy Phương')) || users.find(u => String(u.role).toLowerCase() === 'admin' && !['superadmin', 'super_admin'].includes(String(u.role).toLowerCase()) && u.email !== 'turniodev@gmail.com') || {
-            id: 1001,
-            full_name: 'Kế toán / Thủ quỹ',
-            avatar_url: undefined,
-            role: 'Thủ quỹ'
-          };
-          const refunderUser = viewItem.is_refunded ? {
-            id: viewItem.refunder_id,
-            full_name: viewItem.refunder_name || 'Kế toán / Thủ quỹ',
-            avatar_url: viewItem.refunder_avatar,
-            role: 'Kế toán chi'
-          } : defaultAccountant;
-
-          return (
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                position: 'absolute',
-                left: '-30px',
-                top: '0px',
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: sDetails.bg,
-                color: sDetails.textCol,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                zIndex: 2
-              }}>
-                {sDetails.iconContent}
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>Hạch toán thanh toán thực tế</strong>
-                  {sDetails.showBell && refunderUser.id && (
-                    <button 
-                      onClick={() => { setReminderTargetUser(refunderUser); setReminderMessage(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
-                      title="Gửi nhắc nhở"
-                    >
-                      <Bell size={18} fill="#ef4444" />
-                    </button>
-                  )}
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  padding: '6px 12px', 
-                  background: 'var(--color-bg-light)', 
-                  border: '1px solid var(--color-border-light)', 
-                  borderRadius: '8px',
-                  height: '38px',
-                  marginTop: '4px'
-                }}>
-                  <Avatar 
-                    src={refunderUser.avatar_url || refunderUser.avatar} 
-                    name={refunderUser.full_name} 
-                    size={20} 
-                  />
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {refunderUser.full_name} ({refunderUser.role || 'Kế toán'})
-                  </span>
-                </div>
-                {sDetails.bg === '#10b981' && (
-                  <span style={{ fontSize: '0.725rem', color: '#10b981', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    ✓ Đã chi lúc {viewItem.refunded_at ? new Date(viewItem.refunded_at).toLocaleString('vi-VN') : '—'}
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-primary)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-warning)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Chờ kế toán xác nhận thanh toán thực tế (Tải ảnh UNC)
-                  </span>
-                )}
-                {sDetails.bg === 'var(--color-border-light)' && (
-                  <span style={{ fontSize: '0.725rem', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block', fontWeight: 600 }}>
-                    Sẽ thực hiện sau khi đề xuất được duyệt
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+        })}
       </div>
     );
   };
+
 
   const usersMap = useMemo(() => {
     const map = new Map<number, any>();
@@ -1422,13 +1357,6 @@ export const ExpensesPage: React.FC = () => {
           width: isMobile ? '100%' : 'auto',
           flexWrap: 'nowrap'
         }}>
-          <div style={{ flex: isMobile ? 1 : 'none', minWidth: 0 }}>
-            <PeriodFilter
-              value={period}
-              onChange={(p, r) => { setPeriod(p); setDateRange(r); setPage(1); }}
-              buttonStyle={{ minWidth: isMobile ? '0' : '160px', width: '100%', height: '40px', borderRadius: '10px' }}
-            />
-          </div>
           {!isMobile && (
             <button 
               className="btn secondary" 
@@ -1439,6 +1367,13 @@ export const ExpensesPage: React.FC = () => {
               <Download size={16} />
             </button>
           )}
+          <div style={{ flex: isMobile ? 1 : 'none', minWidth: 0 }}>
+            <PeriodFilter
+              value={period}
+              onChange={(p, r) => { setPeriod(p); setDateRange(r); setPage(1); }}
+              buttonStyle={{ minWidth: isMobile ? '0' : '160px', width: '100%', height: '40px', borderRadius: '10px' }}
+            />
+          </div>
           <button 
             className="btn primary" 
             onClick={openCreate} 
@@ -1605,24 +1540,6 @@ export const ExpensesPage: React.FC = () => {
         })}
       </div>
 
-      {/* Category breakdown mini-bar (Desktop only) */}
-      {catBreakdown.length > 0 && (
-        <div className="card responsive-hide-mobile" style={{ padding: '1rem 1.5rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Theo danh mục:</span>
-          {catBreakdown.map(c => {
-            const Icon = c.icon;
-            return (
-              <button key={c.label} onClick={() => { setCatFilter(catFilter === c.label ? '' : c.label); setPage(1); }}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `1.5px solid ${catFilter === c.label ? c.color : 'var(--color-border)'}`, background: catFilter === c.label ? `${c.color}15` : 'transparent', cursor: 'pointer', transition: 'all 0.18s', fontSize: '0.8125rem' }}>
-                <Icon size={13} color={c.color} />
-                <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{c.label}</span>
-                <span style={{ color: 'var(--color-text-muted)' }}>{fmtShort(c.total)}</span>
-              </button>
-            );
-          })}
-          {catFilter && <button onClick={() => { setCatFilter(''); setPage(1); }} style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}><X size={13} /> Bỏ lọc</button>}
-        </div>
-      )}
 
       {/* Quick Status Filter Pills */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem', flexWrap: 'wrap' }}>

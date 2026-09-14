@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   X, CheckSquare, Check, Paperclip, Link2, MessageSquare, Calendar, User, Clock, 
   Settings, AlertCircle, Trash2, Plus, Send, Share2, FileText, Globe,
@@ -225,6 +225,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
     links: []
   });
 
+  const [isCustomerLinked, setIsCustomerLinked] = useState<boolean>(false);
   const hasLinkedCustomer = Boolean(
     formData.contact_id || 
     (formData.related_type === 'contact' && formData.related_id) || 
@@ -235,6 +236,23 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const currentUid = Number(currentUser?.id || (currentUser as any)?.user_id || 0);
   const taskUid = Number(formData.user_id || 0);
   const taskCreatedBy = Number(formData.created_by || task?.created_by || currentUid);
+
+  const unpinIfDone = (status?: string, progress?: number) => {
+    const isDone = status === 'done' || Number(progress || 0) >= 100;
+    if (isDone && currentUid && task?.id && task.id !== 'new') {
+      try {
+        const key = `pinned_tasks_${currentUid}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const arr = JSON.parse(stored);
+          const filtered = arr.filter((id: any) => Number(id) !== Number(task.id));
+          localStorage.setItem(key, JSON.stringify(filtered));
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  };
 
   const isPersonalTask = useMemo(() => {
     const tagsStr = String(formData.tags || '');
@@ -889,13 +907,22 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const [contacts, setContacts] = useState<any[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [originalHash, setOriginalHash] = useState<string>('');
+  const prevTaskIdRef = useRef<any>(null);
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
+  const taskRef = useRef(task);
+  taskRef.current = task;
 
-  // Load contacts with cache
-  useEffect(() => {
-    if (!isOpen) return;
-
+  // Load contacts with cache (stable callback)
+  const fetchContactsList = useCallback(async (preferredContactId?: number | string | null) => {
     const now = Date.now();
-    const activeContactId = task?.contact_id || (task?.related_type === 'contact' ? task?.related_id : null);
+    const currentFd = formDataRef.current;
+    const currentT = taskRef.current;
+    const activeContactId = preferredContactId || 
+      currentFd.contact_id || 
+      (currentFd.related_type === 'contact' ? currentFd.related_id : null) || 
+      currentT?.contact_id || 
+      (currentT?.related_type === 'contact' ? currentT?.related_id : null);
 
     const applyContacts = async (initialList: any[]) => {
       let list = [...initialList];
@@ -915,27 +942,48 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       setLoadingContacts(false);
     };
 
-    if (cachedContacts && (now - cachedContacts.timestamp < METADATA_CACHE_TTL)) {
-      applyContacts(cachedContacts.data);
-    } else if (activeContactId) {
-      setLoadingContacts(true);
-      api.get(`/contacts/${activeContactId}`).then(res => {
-        const cObj = res.data?.data || res.data;
-        if (cObj && cObj.id) {
-          applyContacts([cObj]);
-        } else {
-          applyContacts([]);
-        }
-      }).catch(() => {
-        applyContacts([]);
-      }).finally(() => {
-        setLoadingContacts(false);
-      });
-    } else {
-      setContacts([]);
+    if (cachedContacts && (now - cachedContacts.timestamp < METADATA_CACHE_TTL) && cachedContacts.data?.length > 0) {
+      await applyContacts(cachedContacts.data);
+      return;
+    }
+
+    setLoadingContacts(true);
+    try {
+      const res = await api.get('/contacts', { params: { limit: 1000 } });
+      const rawData = res.data?.data?.items || res.data?.data || (Array.isArray(res.data) ? res.data : []);
+      const list = Array.isArray(rawData) ? rawData : [];
+      cachedContacts = { data: list, timestamp: Date.now() };
+      await applyContacts(list);
+    } catch (err) {
+      console.error("Lỗi tải danh sách contacts:", err);
+      if (activeContactId) {
+        try {
+          const singleRes = await api.get(`/contacts/${activeContactId}`);
+          const cObj = singleRes.data?.data || singleRes.data;
+          if (cObj && cObj.id) {
+            setContacts([cObj]);
+          }
+        } catch {}
+      }
       setLoadingContacts(false);
     }
-  }, [isOpen, task?.id, task?.contact_id, task?.related_id]);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      prevTaskIdRef.current = null;
+      return;
+    }
+    const hasCust = Boolean(
+      task?.contact_id || 
+      (task?.related_type === 'contact' && task?.related_id) || 
+      isFromCustomerDrawer || 
+      task?.from_customer_drawer
+    );
+    if (hasCust || isCustomerLinked) {
+      fetchContactsList();
+    }
+  }, [isOpen, task?.id, task?.contact_id, task?.related_id, isFromCustomerDrawer, isCustomerLinked, fetchContactsList]);
 
   const loadComments = async (taskId: number) => {
     if (!taskId) return;
@@ -1175,7 +1223,10 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         campaign_id: normalizedTask.related_type === 'campaign' ? normalizedTask.related_id : (parsedBody.campaign_id || null),
         team_id: normalizedTask.related_type === 'team' ? normalizedTask.related_id : (parsedBody.team_id || null),
         due_sla_notified: parsedBody.due_sla_notified || Boolean(task.due_sla_notified),
-        subtask_sla_notified: parsedBody.subtask_sla_notified || Boolean(task.subtask_sla_notified)
+        subtask_sla_notified: parsedBody.subtask_sla_notified || Boolean(task.subtask_sla_notified),
+        related_contact_ids: Array.isArray(parsedBody.rawMeta?.related_contact_ids) 
+          ? parsedBody.rawMeta.related_contact_ids 
+          : (Array.isArray((parsedBody as any).related_contact_ids) ? (parsedBody as any).related_contact_ids : [])
       };
 
       if (normalizedTask.related_type === 'project' && normalizedTask.related_id) {
@@ -1189,6 +1240,26 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
       }
 
       setErpMeta(parsedMeta);
+
+      const hasInitialCustomer = Boolean(
+        normalizedTask.contact_id || 
+        (normalizedTask.related_type === 'contact' && normalizedTask.related_id) || 
+        (parsedMeta.related_contact_ids && parsedMeta.related_contact_ids.length > 0) ||
+        isFromCustomerDrawer ||
+        task?.from_customer_drawer
+      );
+      const isSameTask = prevTaskIdRef.current !== null && prevTaskIdRef.current === (task?.id ?? null);
+      if (!isSameTask) {
+        setIsCustomerLinked(hasInitialCustomer);
+        prevTaskIdRef.current = task?.id ?? null;
+      } else if (hasInitialCustomer) {
+        setIsCustomerLinked(true);
+      }
+
+      if (hasInitialCustomer) {
+        fetchContactsList(normalizedTask.contact_id || (normalizedTask.related_type === 'contact' ? normalizedTask.related_id : null));
+      }
+
       setChecklistPage(1);
       setCampaignTarget(parsedMeta.campaign_target || '');
       if (normalizedTask.id !== 'new') {
@@ -1217,7 +1288,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         erpMeta: cleanObj(parsedMeta)
       }));
     }
-  }, [task]);
+  }, [task, isFromCustomerDrawer]);
 
   const validateRecurrence = (meta: any): { isValid: boolean; error?: string } => {
     const rec = meta?.recurrence;
@@ -1259,7 +1330,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const linkifyHtml = (html: string) => {
     if (!html) return '';
-    return html.replace(/<a\b[^>]*>([\s\S]*?)<\/a>|(<[^>]+>)|(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi, (match, aContent, htmlTag, url) => {
+    const cleanHtml = html
+      .replace(/&amp;nbsp;/gi, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
+    return cleanHtml.replace(/<a\b[^>]*>([\s\S]*?)<\/a>|(<[^>]+>)|(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi, (match, aContent, htmlTag, url) => {
       if (aContent) return match;
       if (htmlTag) return match;
       if (url) {
@@ -1272,8 +1347,12 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
 
   const renderCommentContent = (text: string) => {
     if (!text) return '';
+    const cleanText = text
+      .replace(/&amp;nbsp;/gi, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
     const regex = /(https?:\/\/[^\s]+|@[\p{L}\p{N}_()]+)/gu;
-    const parts = text.split(regex);
+    const parts = cleanText.split(regex);
     return parts.map((part, idx) => {
       if (part.startsWith('http://') || part.startsWith('https://')) {
         return (
@@ -1434,6 +1513,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
           erpMeta: cleanObj(updatedMeta)
         }));
 
+        unpinIfDone(updatedFormData.status, updatedFormData.progress);
         onUpdate();
       }
     } catch (e: any) {
@@ -1600,6 +1680,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
             setShowApprovalSuccessModal(approverName);
           }
 
+          unpinIfDone(formData.status, formData.progress);
           // Background non-blocking sync
           setTimeout(() => onUpdate(), 50);
         } else {
@@ -2077,7 +2158,11 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         }
       }
 
-      const commentText = newCommentText.trim();
+      const commentText = newCommentText
+        .replace(/&amp;nbsp;/gi, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ')
+        .trim();
       setNewCommentText('');
       setCommentAttachments([]);
       setReplyTo(null);
@@ -2305,6 +2390,9 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
   const approverOptions = users;
 
   const contactOptions = React.useMemo(() => {
+    if (loadingContacts && allowedContacts.length === 0) {
+      return [{ value: '', label: t('Đang tải danh sách khách hàng...') }];
+    }
     return [
       { value: '', label: t('Chọn khách hàng chính...') },
       ...allowedContacts.map(c => ({
@@ -2313,7 +2401,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
         avatar: c.avatar_url || c.avatar
       }))
     ];
-  }, [allowedContacts, t]);
+  }, [allowedContacts, loadingContacts, t]);
 
   const userSelectOptions = React.useMemo(() => {
     return users.map(u => ({
@@ -4748,7 +4836,7 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
                                               avatar: comment.avatar_url || commUser?.avatar || commUser?.avatar_url 
                                             });
                                             if (targetName) {
-                                              const mentionTag = `<span class="mention" data-user-id="${comment.user_id || commUser?.id || ''}" contenteditable="false" style="color: #2563eb; font-weight: 700; background: rgba(37, 99, 235, 0.1); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; margin: 0 2px;">@${targetName}</span>&nbsp;`;
+                                              const mentionTag = `<span class="mention" data-user-id="${comment.user_id || commUser?.id || ''}" contenteditable="false" style="color: #2563eb; font-weight: 700; background: rgba(37, 99, 235, 0.1); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; margin: 0 2px;">@${targetName}</span> `;
                                               setNewCommentText(prev => {
                                                 if (!prev || prev === '<p><br></p>' || prev.trim() === '') return `<p>${mentionTag}</p>`;
                                                 return prev.endsWith('</p>') ? prev.replace(/<\/p>$/, ` ${mentionTag}</p>`) : `${prev} ${mentionTag}`;
@@ -5363,247 +5451,335 @@ export const WorkspaceTaskDrawer: React.FC<WorkspaceTaskDrawerProps> = ({
               )}
             </div>
 
-            {/* Khách hàng liên quan */}
-            {shouldShowCustomerCard && (
+            {/* Khách hàng liên kết */}
             <div className="card" style={cardStyle}>
-              
-              {/* Primary Contact (if any) */}
-              {((formData.related_type === 'contact' || formData.contact_id) && (formData.related_type === 'contact' ? formData.related_id : formData.contact_id)) ? (
-                <div style={{ marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                      {t('Khách hàng liên kết')}
-                    </div>
-                    {task.id === 'new' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData({ 
-                            ...formData, 
-                            contact_id: null, 
-                            contact_name: '',
-                            ...(formData.related_type === 'contact' ? { related_id: '', related_type: null } : {})
-                          });
-                        }}
-                        style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.75rem', padding: '2px' }}
-                      >
-                        {t('Thay đổi')}
-                      </button>
-                    )}
-                  </div>
-                  <div 
-                    className="hover-lift"
-                    onClick={() => {
-                      const contactIdVal = Number(formData.related_type === 'contact' ? formData.related_id : formData.contact_id);
-                      if (contactIdVal) {
-                        const initData = {
-                          id: contactIdVal,
-                          full_name: formData.contact_name,
-                          avatar_url: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || 
-                                      allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar ||
-                                      formData.contact_avatar,
-                          phone: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.phone,
-                          email: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.email,
-                          _isLoading: true
-                        };
-                        if (onOpenContact) {
-                          onOpenContact(contactIdVal, initData);
-                        } else {
-                          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-                            detail: { id: contactIdVal, contactId: contactIdVal, initialData: initData }
-                          }));
-                        }
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      background: 'rgba(0, 0, 0, 0.015)',
-                      border: '1px solid var(--color-border-light)',
-                      borderRadius: '12px',
-                      cursor: 'pointer'
-                    }}
-                    title={t('Nhấn để mở chi tiết hồ sơ khách hàng')}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Avatar 
-                        name={formData.contact_name || t('Khách hàng')} 
-                        src={
-                          allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || 
-                          allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar ||
-                          formData.contact_avatar
-                        }
-                        size={24} 
-                      />
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                          {formData.contact_name || t('Khách hàng')}
-                        </span>
-                        <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>
-                          {allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.phone || 
-                           allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.email || 
-                           formData.contact_phone || 
-                           formData.contact_email || 
-                           t('Xem hồ sơ')}
-                        </span>
-                      </div>
-                    </div>
-                    <ArrowUpRight size={16} />
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text)' }}>{t('Liên kết khách hàng')}</span>
+                  <p style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', margin: 0 }}>{t('Gắn công việc với khách hàng')}</p>
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {t('Khách hàng liên kết')}
-                  </div>
-                  <CustomSelect
-                    searchable
-                    showAvatars
-                    options={contactOptions}
-                    value={formData.contact_id ? String(formData.contact_id) : (formData.related_type === 'contact' && formData.related_id ? String(formData.related_id) : '')}
-                    onChange={async val => {
-                      const selected = allowedContacts.find(c => String(c.id) === String(val));
-                      const contactIdVal = val ? Number(val) : null;
-                      const contactNameVal = selected ? getContactFullName(selected) : '';
-                      const isContactRelated = (formData.related_type === 'contact' || !formData.related_type);
-                      
-                      setFormData({
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const next = !isCustomerLinked;
+                    setIsCustomerLinked(next);
+
+                    if (next) {
+                      fetchContactsList();
+                    } else {
+                      const isContactRelated = formData.related_type === 'contact';
+                      const nextFormData = {
                         ...formData,
-                        contact_id: contactIdVal,
-                        contact_name: contactNameVal,
-                        ...(isContactRelated ? {
-                          related_id: contactIdVal,
-                          related_type: contactIdVal ? 'contact' : null
-                        } : {})
-                      });
+                        contact_id: null,
+                        contact_name: '',
+                        contact_avatar: '',
+                        contact_phone: '',
+                        contact_email: '',
+                        ...(isContactRelated ? { related_id: null, related_type: null } : {})
+                      };
+                      setFormData(nextFormData);
+
+                      const updatedMeta = {
+                        ...erpMeta,
+                        related_contact_ids: []
+                      };
+                      setErpMeta(updatedMeta);
 
                       if (task.id !== 'new') {
                         try {
+                          const payloadObj: any = { erp_task: updatedMeta };
+                          if (updatedMeta.due_sla_notified || task.due_sla_notified) payloadObj.due_sla_notified = true;
+                          if (updatedMeta.subtask_sla_notified || task.subtask_sla_notified) payloadObj.subtask_sla_notified = true;
                           await api.put(`/activities/${task.id}`, {
+                            contact_id: null,
+                            ...(isContactRelated ? { related_id: null, related_type: null } : {}),
+                            body: JSON.stringify(payloadObj)
+                          });
+                          onUpdate();
+                        } catch (e: any) {
+                          toast.error(t('Lỗi gỡ liên kết khách hàng: ') + (e.message || ''));
+                        }
+                      }
+                    }
+                  }}
+                  style={{
+                    width: '38px',
+                    height: '20px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: isCustomerLinked ? 'var(--color-success)' : '#e5e7eb',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    flexShrink: 0
+                  }}
+                >
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    background: 'var(--color-surface)',
+                    position: 'absolute',
+                    top: '2px',
+                    left: isCustomerLinked ? 20 : 2,
+                    transition: 'left 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                  }} />
+                </button>
+              </div>
+
+              {isCustomerLinked && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', borderTop: '1px solid var(--color-border-light)', paddingTop: '8px' }}>
+                  {/* Primary Contact (if any) */}
+                  {((formData.related_type === 'contact' || formData.contact_id) && (formData.related_type === 'contact' ? formData.related_id : formData.contact_id)) ? (
+                    <div style={{ marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                          {t('Khách hàng chính')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev: any) => ({ 
+                              ...prev, 
+                              contact_id: null, 
+                              contact_name: '',
+                              contact_avatar: '',
+                              contact_phone: '',
+                              contact_email: '',
+                              ...(prev.related_type === 'contact' ? { related_id: null, related_type: null } : {})
+                            }));
+                          }}
+                          style={{ border: 'none', background: 'transparent', color: 'var(--color-primary, #bd1d2d)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, padding: '2px' }}
+                        >
+                          {t('Thay đổi')}
+                        </button>
+                      </div>
+                      <div 
+                        className="hover-lift"
+                        onClick={() => {
+                          const contactIdVal = Number(formData.related_type === 'contact' ? formData.related_id : formData.contact_id);
+                          if (contactIdVal) {
+                            const initData = {
+                              id: contactIdVal,
+                              full_name: formData.contact_name,
+                              avatar_url: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || 
+                                          allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar ||
+                                          formData.contact_avatar,
+                              phone: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.phone,
+                              email: allowedContacts.find((c: any) => String(c.id) === String(formData.contact_id || formData.related_id))?.email,
+                              _isLoading: true
+                            };
+                            if (onOpenContact) {
+                              onOpenContact(contactIdVal, initData);
+                            } else {
+                              window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+                                detail: { id: contactIdVal, contactId: contactIdVal, initialData: initData }
+                              }));
+                            }
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 12px',
+                          background: 'rgba(0, 0, 0, 0.015)',
+                          border: '1px solid var(--color-border-light)',
+                          borderRadius: '12px',
+                          cursor: 'pointer'
+                        }}
+                        title={t('Nhấn để mở chi tiết hồ sơ khách hàng')}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <Avatar 
+                            name={formData.contact_name || t('Khách hàng')} 
+                            src={
+                              allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar_url || 
+                              allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.avatar ||
+                              formData.contact_avatar
+                            }
+                            size={28} 
+                          />
+                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {formData.contact_name || t('Khách hàng')}
+                            </span>
+                            <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.phone || 
+                               allowedContacts.find(c => String(c.id) === String(formData.contact_id || formData.related_id))?.email || 
+                               formData.contact_phone || 
+                               formData.contact_email || 
+                               t('Xem hồ sơ')}
+                            </span>
+                          </div>
+                        </div>
+                        <ArrowUpRight size={16} style={{ flexShrink: 0, marginLeft: 8 }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        {t('Khách hàng chính')}
+                      </div>
+                      <CustomSelect
+                        searchable
+                        showAvatars
+                        options={contactOptions}
+                        value={formData.contact_id ? String(formData.contact_id) : (formData.related_type === 'contact' && formData.related_id ? String(formData.related_id) : '')}
+                        onChange={async val => {
+                          const selected = allowedContacts.find(c => String(c.id) === String(val));
+                          const contactIdVal = val ? Number(val) : null;
+                          const contactNameVal = selected ? getContactFullName(selected) : '';
+                          const isContactRelated = (formData.related_type === 'contact' || !formData.related_type);
+                          
+                          const nextFormData = {
+                            ...formData,
                             contact_id: contactIdVal,
+                            contact_name: contactNameVal,
+                            contact_avatar: selected?.avatar_url || selected?.avatar || '',
+                            contact_phone: selected?.phone || '',
+                            contact_email: selected?.email || '',
                             ...(isContactRelated ? {
                               related_id: contactIdVal,
                               related_type: contactIdVal ? 'contact' : null
                             } : {})
-                          });
-                          onUpdate();
-                        } catch (e: any) {
-                          toast.error(t('Lỗi cập nhật khách hàng liên kết: ') + e.message);
-                        }
-                      }
-                    }}
-                    placeholder={t('Chọn khách hàng liên kết...')}
-                  />
-                </div>
-              )}
+                          };
+                          setFormData(nextFormData);
+                          setIsCustomerLinked(true);
 
-              {/* Additional Contacts list */}
-              {(() => {
-                const addContactIds = erpMeta.related_contact_ids || [];
-                const addContacts = allowedContacts.filter(c => addContactIds.includes(Number(c.id)));
-                const mainContactId = Number(formData.related_id || formData.contact_id || 0);
-                
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {addContacts.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                          {t('Khách hàng liên kết thêm')} ({addContacts.length})
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {addContacts.map(c => (
-                            <div 
-                              key={c.id} 
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                background: 'rgba(0, 0, 0, 0.015)',
-                                border: '1px solid var(--color-border-light)',
-                                padding: '8px 12px',
-                                borderRadius: '10px'
-                              }}
-                            >
-                              <div 
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1 }}
-                                onClick={() => {
-                                  const targetAddId = Number(c.id);
-                                  if (targetAddId) {
-                                    const initData = {
-                                      id: targetAddId,
-                                      full_name: getContactFullName(c),
-                                      avatar_url: c.avatar_url || c.avatar,
-                                      phone: c.phone,
-                                      email: c.email,
-                                      _isLoading: true
-                                    };
-                                    if (onOpenContact) {
-                                      onOpenContact(targetAddId, initData);
-                                    } else {
-                                      window.dispatchEvent(new CustomEvent('open-contact-drawer', {
-                                        detail: { id: targetAddId, contactId: targetAddId, initialData: initData }
-                                      }));
-                                    }
-                                  }
-                                }}
-                              >
-                                <Avatar name={getContactFullName(c)} src={c.avatar_url || c.avatar} size={22} />
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)' }}>{getContactFullName(c)}</span>
-                                  <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)' }}>{c.phone || c.email || t('Xem hồ sơ')}</span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const nextIds = addContactIds.filter((id: number) => id !== Number(c.id));
-                                  const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
-                                  setErpMeta(updatedMeta);
-                                  handleSaveMeta(updatedMeta);
-                                }}
-                                style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.8rem', padding: '4px' }}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Picker/Dropdown */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                        {t('Thêm khách hàng liên kết')}
-                      </div>
-                      <CustomSelect
-                        multiple
-                        searchable
-                        showAvatars
-                        options={allowedContacts
-                          .filter(c => Number(c.id) !== mainContactId)
-                          .map(c => ({
-                            value: String(c.id),
-                            label: `${getContactFullName(c)} ${c.phone ? `(${c.phone})` : ''}`,
-                            avatar: c.avatar_url || c.avatar
-                          }))}
-                        value={addContactIds.map(String)}
-                        onChange={(vals) => {
-                          const nextIds = vals.map(Number);
-                          const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
-                          setErpMeta(updatedMeta);
-                          handleSaveMeta(updatedMeta);
+                          if (task.id !== 'new') {
+                            try {
+                              await api.put(`/activities/${task.id}`, {
+                                contact_id: contactIdVal,
+                                ...(isContactRelated ? {
+                                  related_id: contactIdVal,
+                                  related_type: contactIdVal ? 'contact' : null
+                                } : {})
+                              });
+                              onUpdate();
+                            } catch (e: any) {
+                              toast.error(t('Lỗi cập nhật khách hàng liên kết: ') + e.message);
+                            }
+                          }
                         }}
-                        placeholder={t('Chọn khách hàng...')}
+                        placeholder={loadingContacts ? t('Đang tải danh sách...') : t('Chọn khách hàng chính...')}
                       />
                     </div>
-                  </div>
-                );
-              })()}
+                  )}
+
+                  {/* Additional Contacts list */}
+                  {(() => {
+                    const addContactIds = erpMeta.related_contact_ids || [];
+                    const addContacts = allowedContacts.filter(c => addContactIds.includes(Number(c.id)));
+                    const mainContactId = Number(formData.related_id || formData.contact_id || 0);
+                    
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                        {addContacts.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                              {t('Khách hàng liên kết thêm')} ({addContacts.length})
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {addContacts.map(c => (
+                                <div 
+                                  key={c.id} 
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: 'rgba(0, 0, 0, 0.015)',
+                                    border: '1px solid var(--color-border-light)',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px'
+                                  }}
+                                >
+                                  <div 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                                    onClick={() => {
+                                      const targetAddId = Number(c.id);
+                                      if (targetAddId) {
+                                        const initData = {
+                                          id: targetAddId,
+                                          full_name: getContactFullName(c),
+                                          avatar_url: c.avatar_url || c.avatar,
+                                          phone: c.phone,
+                                          email: c.email,
+                                          _isLoading: true
+                                        };
+                                        if (onOpenContact) {
+                                          onOpenContact(targetAddId, initData);
+                                        } else {
+                                          window.dispatchEvent(new CustomEvent('open-contact-drawer', {
+                                            detail: { id: targetAddId, contactId: targetAddId, initialData: initData }
+                                          }));
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <Avatar name={getContactFullName(c)} src={c.avatar_url || c.avatar} size={22} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getContactFullName(c)}</span>
+                                      <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.phone || c.email || t('Xem hồ sơ')}</span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextIds = addContactIds.filter((id: number) => id !== Number(c.id));
+                                      const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
+                                      setErpMeta(updatedMeta);
+                                      if (task.id !== 'new') {
+                                        handleSaveMeta(updatedMeta);
+                                      }
+                                    }}
+                                    style={{ border: 'none', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '0.9rem', padding: '4px', lineHeight: 1 }}
+                                    title={t('Xóa')}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Picker/Dropdown */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                            {t('Thêm khách hàng liên kết')}
+                          </div>
+                          <CustomSelect
+                            multiple
+                            searchable
+                            showAvatars
+                            options={allowedContacts
+                              .filter(c => Number(c.id) !== mainContactId)
+                              .map(c => ({
+                                value: String(c.id),
+                                label: `${getContactFullName(c)} ${c.phone ? `(${c.phone})` : ''}`,
+                                avatar: c.avatar_url || c.avatar
+                              }))}
+                            value={addContactIds.map(String)}
+                            onChange={(vals) => {
+                              const nextIds = vals.map(Number);
+                              const updatedMeta = { ...erpMeta, related_contact_ids: nextIds };
+                              setErpMeta(updatedMeta);
+                              setIsCustomerLinked(true);
+                              if (task.id !== 'new') {
+                                handleSaveMeta(updatedMeta);
+                              }
+                            }}
+                            placeholder={t('Chọn khách hàng...')}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
-            )}
 
 
             {/* Approval Banner */}

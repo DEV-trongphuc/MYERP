@@ -1371,45 +1371,47 @@ export const ExpenseCreateDrawer: React.FC<ExpenseCreateDrawerProps> = ({
                     </span>
                   </div>
 
-                  {/* Phân loại chi phí */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                      Phân loại chi phí
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {CATEGORIES.map(c => {
-                        const Icon = c.icon;
-                        const isSelected = expenseCategory === c.value;
-                        return (
-                          <button
-                            key={c.value}
-                            type="button"
-                            onClick={() => {
-                              setExpenseCategory(c.value);
-                              setForm((prev: any) => ({ ...prev, category: c.label }));
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '5px 12px',
-                              borderRadius: 'var(--radius-full)',
-                              border: `1.5px solid ${isSelected ? c.color : 'var(--color-border)'}`,
-                              background: isSelected ? `${c.color}18` : 'transparent',
-                              color: isSelected ? c.color : 'var(--color-text-light)',
-                              fontSize: '0.78rem',
-                              fontWeight: isSelected ? 750 : 600,
-                              cursor: 'pointer',
-                              transition: 'all 0.18s ease'
-                            }}
-                          >
-                            <Icon size={13} />
-                            <span>{c.label}</span>
-                          </button>
-                        );
-                      })}
+                  {/* Tạm thời ẩn phân loại chi phí theo yêu cầu */}
+                  {false && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                        Phân loại chi phí
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {CATEGORIES.map(c => {
+                          const Icon = c.icon;
+                          const isSelected = expenseCategory === c.value;
+                          return (
+                            <button
+                              key={c.value}
+                              type="button"
+                              onClick={() => {
+                                setExpenseCategory(c.value);
+                                setForm((prev: any) => ({ ...prev, category: c.label }));
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '5px 12px',
+                                borderRadius: 'var(--radius-full)',
+                                border: `1.5px solid ${isSelected ? c.color : 'var(--color-border)'}`,
+                                background: isSelected ? `${c.color}18` : 'transparent',
+                                color: isSelected ? c.color : 'var(--color-text-light)',
+                                fontSize: '0.78rem',
+                                fontWeight: isSelected ? 750 : 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.18s ease'
+                              }}
+                            >
+                              <Icon size={13} />
+                              <span>{c.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Loại chứng từ hóa đơn */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

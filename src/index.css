@@ -6348,4 +6348,9 @@ img[data-mention-avatar]:hover,
   padding: 0 !important;
 }
 
+.workspace-custom-wrapper {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
 

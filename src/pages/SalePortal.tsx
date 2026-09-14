@@ -666,20 +666,20 @@ const SortableWorkspaceCard: React.FC<WorkspaceCardInnerProps> = React.memo((pro
     transform,
     transition,
     isDragging
-  } = useSortable({ id: props.task.id });
+  } = useSortable({ id: props.task.id, disabled: props.isMobile });
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
     transition,
     zIndex: isDragging ? 50 : 1,
-    touchAction: 'none',
+    touchAction: props.isMobile ? 'pan-y' : 'none',
     height: '100%',
     display: 'flex',
     flexDirection: 'column'
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...(props.isMobile ? {} : listeners)}>
       <WorkspaceCardInner {...props} isDragging={isDragging} />
     </div>
   );
@@ -1262,25 +1262,6 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
     }
   }, [currentUser]);
 
-  const togglePinTask = (taskId: number) => {
-    const numericId = Number(taskId);
-    let updated = [...pinnedTaskIds];
-    if (updated.includes(numericId)) {
-      updated = updated.filter(id => id !== numericId);
-      toast.success(t('Đã bỏ ghim công việc'));
-    } else {
-      if (updated.length >= 8) {
-        toast.error(t('Bạn chỉ được ghim tối đa 8 công việc lên đầu ưu tiên.'));
-        return;
-      }
-      updated.push(numericId);
-      toast.success(t('Đã ghim công việc thành công!'));
-    }
-    setPinnedTaskIds(updated);
-    if (currentUser?.id) {
-      localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(updated));
-    }
-  };
   const [activeOverCol, setActiveOverCol] = useState<'todo' | 'in_progress' | 'done' | null>(null);
   const [wsDatePreset, setWsDatePreset] = useState('all');
   const [completedCallsCount, setCompletedCallsCount] = useState<number>(0);
@@ -1311,6 +1292,48 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
   const [portalTasks, setPortalTasks] = useState<any[]>([]);
   const [wsTasksPage, setWsTasksPage] = useState(1);
   const [wsTasksPageSize, setWsTasksPageSize] = useState(20);
+
+  // Auto-unpin completed tasks
+  useEffect(() => {
+    if (!currentUser?.id || !pinnedTaskIds.length || !wsTasks.length) return;
+    const doneTaskIds = new Set(
+      wsTasks
+        .filter((t: any) => isTaskEffectivelyDone(t) || t.status === 'done' || Number(t.progress || 0) >= 100)
+        .map((t: any) => Number(t.id))
+    );
+    const remainingPinned = pinnedTaskIds.filter(id => !doneTaskIds.has(Number(id)));
+    if (remainingPinned.length !== pinnedTaskIds.length) {
+      setPinnedTaskIds(remainingPinned);
+      try {
+        localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(remainingPinned));
+      } catch (e) {}
+    }
+  }, [wsTasks, pinnedTaskIds, currentUser?.id]);
+
+  const togglePinTask = (taskId: number) => {
+    const numericId = Number(taskId);
+    let updated = [...pinnedTaskIds];
+    if (updated.includes(numericId)) {
+      updated = updated.filter(id => id !== numericId);
+      toast.success(t('Đã bỏ ghim công việc'));
+    } else {
+      const targetTask = wsTasks.find((t: any) => Number(t.id) === numericId);
+      if (targetTask && (isTaskEffectivelyDone(targetTask) || targetTask.status === 'done' || Number(targetTask.progress || 0) >= 100)) {
+        toast.error(t('Không thể ghim công việc đã hoàn thành.'));
+        return;
+      }
+      if (updated.length >= 8) {
+        toast.error(t('Bạn chỉ được ghim tối đa 8 công việc lên đầu ưu tiên.'));
+        return;
+      }
+      updated.push(numericId);
+      toast.success(t('Đã ghim công việc thành công!'));
+    }
+    setPinnedTaskIds(updated);
+    if (currentUser?.id) {
+      localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(updated));
+    }
+  };
 
   // Task Groups State
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
@@ -1977,7 +2000,7 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       return true;
     });
 
-    // Sắp xếp đưa pinned tasks lên đầu danh sách đã lọc, tiếp theo là task Khẩn cấp, và theo wsTaskOrder nếu có
+    // Sắp xếp: 1. Ghim (Pinned) -> 2. Khẩn cấp (Urgent / High) -> 3. Tạo gần nhất lên trên (created_at DESC)
     return [...filtered].sort((a, b) => {
       const aPinned = pinnedTaskIds.includes(Number(a.id));
       const bPinned = pinnedTaskIds.includes(Number(b.id));
@@ -1990,15 +2013,12 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       if (aUrgent && !bUrgent) return -1;
       if (!aUrgent && bUrgent) return 1;
 
-      if (wsTaskOrder.length > 0) {
-        const aIdx = wsTaskOrder.indexOf(Number(a.id));
-        const bIdx = wsTaskOrder.indexOf(Number(b.id));
-        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-        if (aIdx !== -1) return -1;
-        if (bIdx !== -1) return 1;
-      }
+      // Ưu tiên 3: Nếu không phải pin hay task khẩn cấp, render các task tạo gần nhất lên trên
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeB !== timeA) return timeB - timeA;
 
-      return 0;
+      return Number(b.id || 0) - Number(a.id || 0);
     });
   }, [wsTasks, debouncedWsSearch, wsTaskFilter, wsSubTab, wsTeamSubFilter, currentUser, wsUserId, wsPriority, wsStatus, showDoneTasks, wsDatePreset, pinnedTaskIds, adminViewFull, isTopAdmin, wsTaskOrder, activeTaskGroupId]);
 
@@ -3600,6 +3620,13 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
       const colLabel = targetCol === 'todo' ? 'Cần làm' : targetCol === 'in_progress' ? 'Đang làm' : 'Đã xong';
       toast.success(`Đã chuyển công việc sang cột ${colLabel}`);
       if (nextStatus === 'done') {
+        setPinnedTaskIds(prev => {
+          const next = prev.filter(id => id !== Number(taskId));
+          if (currentUser?.id) {
+            try { localStorage.setItem(`pinned_tasks_${currentUser.id}`, JSON.stringify(next)); } catch (e) {}
+          }
+          return next;
+        });
         triggerFullConfetti();
       }
       fetchWorkspaceTasks();
@@ -6205,8 +6232,8 @@ const SalePortalInner = ({ location, activeTabProp, embedMode = false }: SalePor
                     {t("Bàn làm việc")}
                   </h1>
                   
-                  {/* Completed Calls Count Pill */}
-                  {isSaleUser && (
+                  {/* Completed Calls Count Pill (Desktop only to prevent clutter on mobile) */}
+                  {isSaleUser && !isMobile && (
                     <div 
                       onClick={handleOpenCallsModal}
                       className="hover-lift"

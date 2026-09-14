@@ -883,6 +883,8 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                 flex: 1, 
                 overflowY: 'auto', 
                 overflowX: 'hidden', 
+                WebkitOverflowScrolling: 'touch',
+                touchAction: 'pan-y',
                 position: 'relative', 
                 zIndex: 10,
                 ...(isWorkspaceRoute ? { padding: 0 } : {})
